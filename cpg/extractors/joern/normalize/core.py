@@ -71,7 +71,7 @@ def kw_head(name: str) -> str:
 
 class SourceRefused(RuntimeError):
     """A source file the normalizer will not read: its name leaves the stage (``..``, an absolute name, a symlink out), or its
-    bytes are not UTF-8. The unit fails; nothing is skipped silently."""
+    bytes are not UTF-8, or it cannot be read. The unit fails; nothing is skipped silently."""
 
 
 class Source:
@@ -95,7 +95,10 @@ class Source:
 
     def raw(self, rel: str) -> bytes:
         if rel not in self._b:
-            self._b[rel] = self._path(rel).read_bytes()
+            try:
+                self._b[rel] = self._path(rel).read_bytes()
+            except OSError as e:
+                raise SourceRefused(f"{rel!r} cannot be read ({type(e).__name__})") from None
         return self._b[rel]
 
     def text(self, rel: str) -> str:
@@ -117,13 +120,12 @@ class Source:
 class Scope:
     __slots__ = ("key", "kind", "name", "line", "col", "lineEnd", "parent", "file", "cpg_ids",
                  "base", "dup", "qname", "sid", "accessor", "jname", "is_type", "decos",
-                 "synthetic_alias", "node", "owned", "lambda_decos")
+                 "synthetic_alias", "node", "owned")
 
     def __init__(self, **kw):
         self.accessor = None
         self.dup = 1
         self.decos = []
-        self.lambda_decos = []   # `deco(<lambda>)` applications recorded against a lambda: emitted, but they never widen its span
         self.cpg_ids = []   # CPG METHOD ids whose own code belongs to this symbol
         self.owned = []     # ownedRegions (spec3 §5.3): extra (first, last) line pairs that belong to the symbol; none in P1's frontends
         self.qname = None
@@ -223,12 +225,21 @@ def span_start(B: Builder, s: Scope) -> int:
     return start
 
 
+def owned_regions(s: Scope) -> list[tuple[int, int]]:
+    """``ownedRegions`` of a symbol (spec3 §5.3): its ``(first, last)`` line pairs, sorted and de-duplicated."""
+    return sorted({(int(a), int(b)) for a, b in s.owned})
+
+
 def fingerprint(B: Builder, s: Scope) -> str:
-    """sha256 of the symbol's non-blank lines, stripped, joined by \\n (the span is decorator-inclusive)."""
+    """sha256 of the symbol's non-blank lines, stripped, joined by \\n: the span (decorator-inclusive) plus every line of its
+    ``ownedRegions``, as the sorted de-duplicated union of line numbers (spec3 §5.3)."""
     ls = span_start(B, s)
     le = max(s.lineEnd, ls)
     lines = B.src.lines(s.file)
-    text = "\n".join(x for x in (l.strip() for l in lines[ls - 1:le]) if x)
+    wanted = set(range(ls, le + 1))
+    for a, b in owned_regions(s):
+        wanted.update(range(max(a, 1), min(b, len(lines)) + 1))      # bounded by the file, whatever a frontend hands in
+    text = "\n".join(x for x in (lines[n - 1].strip() for n in sorted(wanted) if n <= len(lines)) if x)
     return sha256(text.encode("utf-8"))
 
 

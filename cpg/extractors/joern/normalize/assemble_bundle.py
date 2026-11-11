@@ -25,11 +25,11 @@ from ccg.units import Unit
 from . import blame as blame_mod
 from . import javascript, python
 from .core import (FIELD_CAP, Builder, Resolver, Source, collapse, fingerprint, import_symbol_id, kw_head, lang_files,
-                   load_facts, name_norm, path_from, sha256, span_start, sym_name)
+                   load_facts, name_norm, owned_regions, path_from, sha256, span_start, sym_name)
 
 #: The slice profile's header identity. A later step that changes output renames or re-versions it (the stamp reads it).
 NORMALIZER = "ccg-slice-normalize"
-NORMALIZER_VERSION = "0.1"
+NORMALIZER_VERSION = "0.2"     # bumped with each registered delta of tests/slice/test_normalize_equivalence.py (the last delta pins the same literal)
 JOERN_VERSION = "v4.0.579"
 DEFAULT_VENDORED = ["_vendor", "node_modules", "third-party", "third_party", "vendor", "vendored"]
 
@@ -121,7 +121,7 @@ def is_vendored(rel: str) -> bool:
 
 def _blame_regions(s, ls: int, le: int) -> list[tuple[int, int]]:
     """A symbol's span plus its ``ownedRegions`` (spec3 §5.3): the lines ``lastChanged*`` is read from."""
-    return [(ls, le)] + [tuple(r) for r in s.owned]
+    return [(ls, le)] + owned_regions(s)
 
 
 # -- assembly --------------------------------------------------------------------------------
@@ -199,6 +199,8 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
                "complexity": 1 + len(cond_by_scope[s.sid]), "lastChangedAt": at, "lastChangedCommit": commit_id}
         if s.parent is not None and s.kind != "module":
             rec["parentId"] = s.parent.sid
+        if s.owned:
+            rec["ownedRegions"] = [list(r) for r in owned_regions(s)]
         records.append(rec)
     S = scope_by_sid
 
@@ -381,7 +383,7 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
 
     # decorators: from each scope's own, owner-resolved ``decos`` (never by fullName, which two owners can share)
     for s in scopes.values():
-        for name, d in s.decos + s.lambda_decos:
+        for name, d in s.decos:
             name = re.sub(r"\s+", "", name)
             args = {}
             for ar in canonical_args(d["args"]):

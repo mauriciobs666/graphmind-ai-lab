@@ -97,3 +97,15 @@ def builder(tmp_path: Path, files: dict[str, str], *, root: str = ".", shuffle: 
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text, encoding="utf-8")
     return core.Builder("python", root, REPO, py_facts(files, shuffle=shuffle), core.Source(tmp_path))
+
+
+def run_bounded(code: str, *, mem: int = 600_000_000, seconds: int = 20):
+    """Run ``code`` in a fresh interpreter (cwd = cpg/) under an address-space cap and a wall-clock limit, so that an unbounded
+    loop fails the calling test by an assertion on the result instead of exhausting the host. Returns the CompletedProcess."""
+    import resource
+    import subprocess
+    import sys
+    from pathlib import Path
+    cpg = Path(__file__).resolve().parent.parent
+    return subprocess.run([sys.executable, "-B", "-c", code], cwd=cpg, capture_output=True, text=True, timeout=seconds,
+                          preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_AS, (mem, mem)))

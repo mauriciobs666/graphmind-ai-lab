@@ -69,21 +69,26 @@ def test_decorator_records_do_not_depend_on_the_order_of_deco_m_and_t(repo, seed
     assert decorators(records) == WANT_DECORATORS
 
 
-def test_a_call_that_takes_a_lambda_is_a_decorator_of_the_lambda_and_does_not_widen_its_span(tmp_path):
-    src = "def run(f):\n    pass\n\n\nx = run(\n    lambda: 1)\n"
+def test_a_call_that_takes_a_lambda_is_no_decorator_record_and_does_not_widen_its_span_but_a_real_decorator_beside_it_stays(tmp_path):
+    src = "def run(f):\n    pass\n\n\n@deco\ndef g():\n    pass\n\n\nx = run(\n    lambda: 1)\n"
     path = tmp_path / "repo"
     commit = git_repo(path, {"l.py": src})
     from normalize_helpers import py_facts
     facts = py_facts({"l.py": src})
     lam = next(m for m in facts["m"] if m["name"] == "<lambda>0")
-    assert lam["l"] == 6
-    facts["deco"].append({"k": "deco", "m": lam["id"], "target": lam["full"], "o": 0, "name": "run", "code": "run(lambda: 1)",
-                          "l": 5, "c": 5, "args": []})
-    records, _ = assemble_bundle.assemble(lang="python", unit_root=".", repo_id="r", facts=facts, stage=path, astgen_dir=None,
-                                          repo=path, commit=commit, audit_ids=[UUID], extract_script=joern_run.EXTRACT_SC)
+    assert lam["l"] == 11
+    for o in (0, 1):                                                               # two applications on the lambda
+        facts["deco"].append({"k": "deco", "m": lam["id"], "target": lam["full"], "o": o, "name": "run", "code": "run(lambda: 1)",
+                              "l": 10, "c": 5, "args": []})
+    records, report = assemble_bundle.assemble(lang="python", unit_root=".", repo_id="r", facts=facts, stage=path, astgen_dir=None,
+                                               repo=path, commit=commit, audit_ids=[UUID], extract_script=joern_run.EXTRACT_SC)
     [deco] = of(records, "decorator")
-    sym = next(r for r in of(records, "symbol") if r["id"] == deco["targetId"])
-    assert (sym["kind"], deco["name"], deco["line"], sym["lineStart"]) == ("lambda", "run", 5, 6)
+    sym = {r["id"]: r for r in of(records, "symbol")}
+    assert (sym[deco["targetId"]]["qname"], deco["name"], deco["line"]) == ("l.py::g", "deco", 5)
+    [lam_sym] = [r for r in sym.values() if r["kind"] == "lambda"]
+    assert lam_sym["lineStart"] == 11                                              # not widened to the call's line 10
+    assert records[0]["counts"]["decorator"] == 1
+    assert report["lambdaDecoratorsDropped"] == 2
 
 
 # --- determinism: shuffles of every kind assemble reads --------------------------------------------------------------
@@ -984,3 +989,83 @@ def test_a_git_failure_is_an_error_not_an_empty_history(history, tmp_path):
         blame.require_full_history(tmp_path)                     # not a repository
     with pytest.raises(subprocess.CalledProcessError):
         blame.path_last_commit(path, "0" * 40, "h.py")
+
+
+# --- 5c (a): a source file that is not UTF-8 fails its unit (D12) --------------------------------------------------------
+def build_with_raw_bytes(tmp_path, lang, name, facts, text_bytes):
+    """`build_bundle` of a unit whose one source file holds ``text_bytes`` (not necessarily UTF-8); returns (error, work dir)."""
+    from ccg.units import Unit
+    path = tmp_path / "repo"
+    commit = git_repo(path, {name: "x = 1\n"})
+    (path / name).write_bytes(text_bytes)
+    facts_file = tmp_path / "facts.jsonl"
+    facts_file.write_text("".join(json.dumps(r) + "\n" for k in KINDS for r in facts[k]), encoding="utf-8")
+    unit = Unit(ids.unit_id("r", ".", lang), "r", ".", lang)
+    raw = joern_run.RawFacts(unit, commit, facts_file, (UUID,), path, tmp_path, None, tmp_path / "x", 1)
+    work = tmp_path / "work"
+    work.mkdir(mode=0o700)
+    with pytest.raises(core.SourceRefused) as err:
+        assemble_bundle.build_bundle(unit, raw, path, commit, system="sys1", root=work, built_at=BUILT_AT)
+    return err.value, work
+
+
+LATIN1_PY = "# caf\xe9 \xff\nx = 1\n".encode("latin-1")
+LATIN1_TS = "const s = 'caf\xe9 \xff';\n".encode("latin-1")
+
+
+@pytest.mark.parametrize("lang, name, text_bytes", [("python", "l.py", LATIN1_PY), ("javascript", "l.ts", LATIN1_TS)])
+def test_a_latin1_source_file_fails_its_unit_naming_the_file_and_writes_no_bundle(tmp_path, lang, name, text_bytes):
+    from normalize_helpers import py_facts
+    facts = py_facts({name: "x = 1\n"}) if lang == "python" else {**ts_facts(), "f": [{"k": "f", "name": name}]}
+    if lang == "javascript":
+        for kind in ("m", "t"):
+            for r in facts[kind]:
+                r["file"] = name
+    err, work = build_with_raw_bytes(tmp_path, lang, name, facts, text_bytes)
+    msg = str(err)
+    assert name in msg and "not UTF-8" in msg
+    for leak in ("\xe9", "\xff", "\\xe9", "\\xff", "0xe9", "0xff", "xe9", "xff"):                    # position only, never its bytes
+        assert leak not in msg.lower()
+    assert [p for p in work.rglob("*") if p.is_file()] == []                                         # nothing partial under bundles/
+
+
+# --- 5c (c): ownedRegions is emitted and fingerprinted (spec3 §5.3) ----------------------------------------------------
+OWNED_SRC = "def f():\n    a = 1\n\nX = 'xx'\nY = 'yy'\nZ = 'zz'\n"
+
+
+def assemble_owned(tmp_path, monkeypatch, owned):
+    """The assembly of `OWNED_SRC` with ``owned`` set on `f`'s scope (no P1 frontend sets it: a synthetic producer)."""
+    from normalize_helpers import py_facts
+    path = tmp_path / "repo"
+    commit = git_repo(path, {"o.py": OWNED_SRC})
+    real = python.build_scopes
+
+    def with_owned(B):
+        out = real(B)
+        for s in out[0].values():
+            if s.base == "f":
+                s.owned = list(owned)
+        return out
+
+    monkeypatch.setattr(python, "build_scopes", with_owned)
+    records, _ = assemble_bundle.assemble(lang="python", unit_root=".", repo_id="r", facts=py_facts({"o.py": OWNED_SRC}), stage=path,
+                                          astgen_dir=None, repo=path, commit=commit, audit_ids=[UUID],
+                                          extract_script=joern_run.EXTRACT_SC, built_at=BUILT_AT)
+    return {r["qname"]: r for r in of(records, "symbol")}, records
+
+
+def test_a_symbol_with_owned_regions_carries_them_sorted_and_a_fingerprint_that_covers_them(tmp_path, monkeypatch):
+    plain, _ = assemble_owned(tmp_path / "a", monkeypatch, [])
+    owned, records = assemble_owned(tmp_path / "b", monkeypatch, [(6, 6), (4, 5), (6, 6)])
+    f = owned["o.py::f"]
+    assert f["ownedRegions"] == [[4, 5], [6, 6]]                       # sorted pairs; the repeated pair once (the validator wants strictly sorted)
+    assert f["lineStart"] == 1 and f["lineEnd"] == 2                  # the span itself is unchanged
+    assert f["fingerprint"] != plain["o.py::f"]["fingerprint"]
+    import hashlib
+    assert f["fingerprint"] == hashlib.sha256("def f():\na = 1\nX = 'xx'\nY = 'yy'\nZ = 'zz'".encode()).hexdigest()
+    bundle.dumps(records)                                              # and the validator accepts the record
+
+
+def test_a_symbol_without_owned_regions_has_no_ownedregions_field_at_all(tmp_path, monkeypatch):
+    plain, _ = assemble_owned(tmp_path, monkeypatch, [])
+    assert all("ownedRegions" not in r for r in plain.values())

@@ -106,11 +106,12 @@ def build_scopes(B: Builder):
     owned = decorators_by_owner(scopes, deco_by_target)
 
     # property accessors, overload stubs
+    lambda_dropped = 0
     for s in list(scopes.values()):
         if s.kind == "lambda":
-            # extract.sc reports a call that takes a lambda (`f(lambda: ...)`) as a decorator application of the lambda; the
-            # slice emits it as a `decorator` record (3 of the stored 213) without letting it widen the lambda's span
-            s.lambda_decos = [(decorator_name(B, s.file, d), d) for d in owned.get(s.key, [])]
+            # extract.sc reports a call that takes a lambda (`f(lambda: ...)`) as a decorator application of the lambda; that is
+            # no decorator (spec3 §5.12: a function, method or type), so no record is written: only counted
+            lambda_dropped += len(owned.get(s.key, []))
             continue
         if s.kind != "function":
             continue
@@ -135,6 +136,7 @@ def build_scopes(B: Builder):
         elif s.kind == "function" and s.parent is not None and s.parent.is_type:
             s.kind = "method"
 
+    B.report["lambdaDecoratorsDropped"] = lambda_dropped
     number_and_qualify(B, scopes)
     return scopes, m2s, deco_by_target
 

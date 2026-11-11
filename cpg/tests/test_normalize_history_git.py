@@ -229,3 +229,35 @@ def test_a_git_call_that_times_out_is_a_history_error(repo, monkeypatch):
     monkeypatch.setattr(blame.subprocess, "run", hang)
     with pytest.raises(blame.HistoryError, match="git blame in .* timed out after"):
         blame.blame(repo[0], repo[1][0], "h.py")
+
+
+def test_git_does_not_inherit_variables_that_redirect_it_to_another_repository(tmp_path, monkeypatch):
+    mine, other = tmp_path / "mine", tmp_path / "other"
+    (c1,) = git_history(mine, [(D[0], {"a.py": "a\n"})])
+    git_history(other, [(D[1], {"b.py": "b\n"})])
+    monkeypatch.setenv("GIT_DIR", str(other / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(other))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(other / ".git" / "index"))
+    monkeypatch.setenv("GIT_OBJECT_DIRECTORY", str(other / ".git" / "objects"))
+    monkeypatch.setenv("GIT_NAMESPACE", "elsewhere")
+    bare = subprocess.run(["git", "-C", str(mine), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    assert bare != c1                                                              # premise: a bare git is redirected
+    assert blame.git(mine, "rev-parse", "HEAD").decode().strip() == c1
+    assert not [k for k in blame._env() if k.startswith("GIT_") and k not in
+                ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM")]
+
+
+def test_last_changed_over_a_region_far_beyond_the_blamed_lines_is_bounded_and_ignores_the_unblamed_ones():
+    from normalize_helpers import run_bounded
+    code = """
+import pytest
+from extractors.joern.normalize import blame
+per, times = {1: "a" * 40, 2: "b" * 40}, {"a" * 40: 100, "b" * 40: 200}
+assert blame.last_changed(per, times, [(2, 10**12), (-10**12, 1)]) == ("1970-01-01T00:03:20Z", "b" * 40)
+try:
+    blame.last_changed(per, times, [(5, 10**12)])
+except ValueError:
+    print("ok")
+"""
+    r = run_bounded(code)                                              # an unbounded walk dies of the address-space cap: returncode != 0
+    assert (r.returncode, r.stdout.strip()) == (0, "ok"), r.stderr[-300:]

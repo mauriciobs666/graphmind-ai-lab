@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from ccg import atrest, ids
+from ccg import atrest, bundle, ids
 from ccg.units import Unit
 from extractors.joern import run
 from extractors.joern.normalize import assemble_bundle, core, python
@@ -157,6 +157,57 @@ def stored_lines(tag: str) -> list[bytes]:
     return need(UNITS[tag][2]).read_bytes().split(b"\n")[:-1]
 
 
+# -- the delta list: how a later step changes the output without ever editing a stored bundle ------------------------------
+#: ORDERED list of ``(name, normalizerVersion, function)``. The expected bundle is the stored one with every delta applied in
+#: order (P1-05 behaviour (2)). **To register a delta, append one entry:** a ``@delta("name", "<version>")`` function
+#: ``fn(header: dict, records: list[dict]) -> int`` that edits both in place (remove or change records, add header fields,
+#: lower the ``counts`` it affected) and returns how many records it touched. The framework itself sets the header's
+#: ``tools.normalizerVersion`` to the entry's literal (a delta PINS its version; the step that adds it bumps
+#: ``assemble_bundle.NORMALIZER_VERSION`` to the same value, and the last entry must equal that constant), and fails if the
+#: ``counts`` no longer equal a recount of the records (a delta that forgets its counts). Landing order: 5c ("0.2"), P1-06
+#: ("0.3"), P1-08 ("0.4"). A stored record that no delta explains makes the byte comparison below fail.
+DELTAS: list = []
+
+
+def delta(name: str, version: str):
+    def register(fn):
+        DELTAS.append((name, version, fn))
+        return fn
+    return register
+
+
+@delta("drop-lambda-decorators", "0.2")
+def _drop_lambda_decorators(header, records):
+    """5c (b): a call that takes a lambda is no decorator (spec3 §5.12); the normalizer stops writing the record."""
+    lambdas = {r["id"] for r in records if r["type"] == "symbol" and r["kind"] == "lambda"}
+    kept = [r for r in records if not (r["type"] == "decorator" and r["targetId"] in lambdas)]
+    removed = len(records) - len(kept)
+    records[:] = kept
+    header["counts"]["decorator"] -= removed
+    return removed
+
+
+def apply_deltas(lines: list[bytes], deltas=None) -> tuple[list[bytes], dict[str, int]]:
+    """``lines`` (a stored bundle, header first) through ``deltas`` (default: ``DELTAS``); returns the expected canonical
+    lines and, per delta name, how many records it touched."""
+    header, *records = [json.loads(x) for x in lines]
+    touched = {}
+    for name, version, fn in (DELTAS if deltas is None else deltas):
+        touched[name] = fn(header, records)
+        header["tools"]["normalizerVersion"] = version
+        recount = collections.Counter(r["type"] for r in records)
+        assert header["counts"] == {t: recount.get(t, 0) for t in header["counts"]}, f"delta {name!r} left the counts wrong"
+    return [bundle.canonical_line(r).rstrip(b"\n") for r in [header, *records]], touched
+
+
+def expected_lines(tag: str) -> list[bytes]:
+    return apply_deltas(stored_lines(tag))[0]
+
+
+def expected_bytes(tag: str) -> bytes:
+    return b"".join(x + b"\n" for x in expected_lines(tag))
+
+
 @pytest.fixture(scope="module", params=["fcs", "sp"])
 def written(request, tmp_path_factory):
     """(tag, written bytes, written path) of the unit's bundle, built by `build_bundle` through `ccg.atrest`, with the stored
@@ -183,7 +234,7 @@ def test_the_stored_bundles_are_the_artifacts_recorded_with_their_sha256(tag):
 def test_whole_bundle_is_byte_identical_to_the_stored_one(written):
     """Definition 1 (strict): every byte, the header included; the inputs the stamps come from are the stored header's."""
     tag, data, _ = written
-    assert data == need(UNITS[tag][2]).read_bytes()
+    assert data == expected_bytes(tag)
 
 
 @pytest.mark.slice
@@ -193,11 +244,13 @@ def test_whole_bundle_is_identical_with_the_ported_extract_script_but_for_its_ha
     header = json.loads(stored_lines(tag)[0])
     raw = raw_of(tag, header["builtCommit"], header["sandboxAuditIds"])
     os.chmod(tmp_path, 0o700)
+    script = tmp_path / "extract.sc"                          # a snapshot: the build hashes this copy, so an edit of the shipped
+    script.write_bytes(run.EXTRACT_SC.read_bytes())           # script while the test runs cannot split the hash from what was built
     path = assemble_bundle.build_bundle(raw.unit, raw, REPO, header["builtCommit"], system="slice", root=tmp_path,
-                                        built_at=header["builtAt"])
-    got, want = path.read_bytes().split(b"\n")[:-1], stored_lines(tag)
+                                        built_at=header["builtAt"], extract_script=script)
+    got, want = path.read_bytes().split(b"\n")[:-1], expected_lines(tag)
     gh, wh = json.loads(got[0]), json.loads(want[0])
-    assert gh["tools"].pop("extractScriptHash") == hashlib.sha256(run.EXTRACT_SC.read_bytes()).hexdigest()
+    assert gh["tools"].pop("extractScriptHash") == hashlib.sha256(script.read_bytes()).hexdigest()
     assert wh["tools"].pop("extractScriptHash") == hashlib.sha256(SLICE_SCRIPT.read_bytes()).hexdigest()
     assert gh == wh
     assert got[1:] == want[1:]
@@ -212,10 +265,10 @@ def test_whole_bundle_records_are_the_same_multiset_per_type(written):
         for ln in lines[1:]:
             out[json.loads(ln)["type"]][ln] += 1
         return out
-    got, want = by_type(data.split(b"\n")[:-1]), by_type(stored_lines(tag))
+    got, want = by_type(data.split(b"\n")[:-1]), by_type(expected_lines(tag))
     assert {t: sum(c.values()) for t, c in got.items()} == {t: sum(c.values()) for t, c in want.items()}
     assert got == want
-    assert json.loads(data.split(b"\n")[0])["counts"] == json.loads(stored_lines(tag)[0])["counts"]
+    assert json.loads(data.split(b"\n")[0])["counts"] == json.loads(expected_lines(tag)[0])["counts"]
 
 
 @pytest.mark.slice
@@ -224,6 +277,47 @@ def test_the_written_bundle_is_private_0600_in_a_0700_directory(written):
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
     assert path.parent.name == "slice" and path.parent.parent.name == "bundles"
+
+
+@pytest.mark.slice
+def test_no_delta_at_all_reproduces_the_stored_bundles_bytes_through_the_same_serializer():
+    for tag in UNITS:
+        assert apply_deltas(stored_lines(tag), [])[0] == stored_lines(tag)
+
+
+@pytest.mark.slice
+def test_the_lambda_decorator_delta_removes_exactly_3_records_all_of_falkor_chat_server_and_none_of_salesperson():
+    fcs, fcs_touched = apply_deltas(stored_lines("fcs"))
+    sp, sp_touched = apply_deltas(stored_lines("sp"))
+    assert fcs_touched == {"drop-lambda-decorators": 3} and sp_touched == {"drop-lambda-decorators": 0}
+    assert json.loads(fcs[0])["counts"]["decorator"] == 210 == json.loads(stored_lines("fcs")[0])["counts"]["decorator"] - 3
+    assert sum(json.loads(x)["type"] == "decorator" for x in fcs[1:]) == 210
+    assert json.loads(sp[0])["counts"]["decorator"] == 0
+
+
+@pytest.mark.slice
+def test_each_delta_pins_its_version_and_the_last_one_is_the_normalizers_current_version():
+    versions = [v for _, v, _ in DELTAS]
+    assert len(set(versions)) == len(versions) and len({n for n, _, _ in DELTAS}) == len(DELTAS)
+    assert versions[-1] == assemble_bundle.NORMALIZER_VERSION
+    for tag in UNITS:
+        assert json.loads(stored_lines(tag)[0])["tools"]["normalizerVersion"] == "0.1"
+        assert json.loads(expected_lines(tag)[0])["tools"]["normalizerVersion"] == assemble_bundle.NORMALIZER_VERSION
+
+
+@pytest.mark.slice
+def test_a_delta_that_leaves_the_counts_wrong_is_refused_by_the_mechanism():
+    lazy = [("lazy", "9.9", lambda header, records: records.pop() and 1)]
+    with pytest.raises(AssertionError, match="counts wrong"):
+        apply_deltas(stored_lines("sp"), lazy)
+
+
+@pytest.mark.slice
+def test_ownedregions_changes_nothing_on_the_slice_bundles(written):
+    """5c (c): no P1 frontend sets the slot, so neither the stored nor the written bundle carries the field."""
+    tag, data, _ = written
+    for raw in (*stored_lines(tag), *data.split(b"\n")[:-1]):
+        assert b"ownedRegions" not in raw
 
 
 # -- 5b live tier: two real Joern runs of one stage ------------------------------------------------------------------
@@ -262,4 +356,4 @@ def test_two_real_joern_runs_of_one_unit_give_one_bundle_and_it_is_the_stored_on
         out.append(path.read_bytes())
     assert raws[0].sandbox_audit_ids != raws[1].sandbox_audit_ids          # every run has its own audit ids ...
     assert _without_exempt(out[0]) == _without_exempt(out[1])             # ... and they are all that tells the bundles apart
-    assert _without_exempt(out[0]) == _without_exempt(out[1]) == _without_exempt(need(SP_BUNDLE).read_bytes())
+    assert _without_exempt(out[0]) == _without_exempt(out[1]) == _without_exempt(expected_bytes("sp"))

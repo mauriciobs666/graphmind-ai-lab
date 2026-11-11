@@ -30,9 +30,9 @@ def is_commit_id(commit) -> bool:
 
 
 def _env() -> dict[str, str]:
-    """The environment of every git call: no host or system configuration and no ``GIT_CONFIG_*`` injection, so a result
+    """The environment of every git call: no host or system configuration and no ``GIT_*`` variable (``GIT_CONFIG_*`` injection, ``GIT_DIR``-style redirection), so a result
     depends on the repository's content only (the source repository is not trusted, spec3 §8.5)."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_CONFIG")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}     # GIT_DIR, GIT_WORK_TREE, ... redirect git over `-C`
     env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull, GIT_CONFIG_NOSYSTEM="1")
     return env
 
@@ -95,8 +95,9 @@ def last_changed(per_line, times, regions):
     """The latest committer time over the blamed lines of ``regions`` (inclusive ``(first, last)`` pairs: a symbol's span
     plus its ``ownedRegions``); a tie takes the lower commit id. ``ValueError`` when no line of them is blamed."""
     best = None
+    top = max(per_line, default=0)
     for a, b in regions:
-        for ln in range(a, b + 1):
+        for ln in range(max(a, 1), min(b, top) + 1):               # bounded by the blamed lines, whatever a region says
             c = per_line.get(ln)
             if c is None:
                 continue

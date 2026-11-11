@@ -89,6 +89,47 @@ def test_source_refuses_bytes_that_are_not_utf8(tmp_path):
         core.Source(tmp_path).text("a.py")
 
 
+def test_source_of_a_missing_or_unreadable_file_is_a_typed_error_naming_it_not_a_bare_oserror(tmp_path):
+    (tmp_path / "d").mkdir()
+    src = core.Source(tmp_path)
+    for name in ("nope.py", "d"):
+        for read in (src.raw, src.text, src.lines):
+            with pytest.raises(core.SourceRefused, match=name):
+                read(name)
+
+
+def test_source_raw_refuses_a_name_that_leaves_the_stage_before_any_read_whatever_the_caller_checked(tmp_path):
+    (tmp_path.parent / "outside.py").write_text("x")
+    with pytest.raises(core.SourceRefused, match="outside"):
+        core.Source(tmp_path).raw("../outside.py")
+
+
+def test_a_region_far_beyond_the_file_neither_hangs_nor_changes_the_fingerprint(tmp_path):
+    from normalize_helpers import run_bounded
+    (tmp_path / "a.py").write_text("def f():\n    pass\n")
+    code = f"""
+from pathlib import Path
+from extractors.joern.normalize import core
+B = core.Builder("python", ".", "r", {{}}, core.Source(Path({str(tmp_path)!r})))
+s = core.Scope(key=("function", "0"), kind="function", name="f", base="f", line=1, col=1, lineEnd=2, parent=None, file="a.py",
+               jname="f", node={{"id": "0"}})
+want = core.fingerprint(B, s)
+s.owned = [(2, 10**12), (-10**12, 1)]
+assert core.fingerprint(B, s) == want
+print("ok")
+"""
+    r = run_bounded(code)                                              # an unbounded walk dies of the address-space cap: returncode != 0
+    assert (r.returncode, r.stdout.strip()) == (0, "ok"), r.stderr[-300:]
+
+
+def test_a_region_ending_on_the_last_line_of_a_file_without_a_final_newline_is_included(tmp_path):
+    (tmp_path / "a.py").write_text("def f():\n    a = 1\nX = 'xx'\nY = 'yy'")        # no trailing newline: 4 lines, the last is "Y = 'yy'"
+    B = core.Builder("python", ".", "r", {}, core.Source(tmp_path))
+    s = scope("function", "f", line=1)
+    s.file, s.lineEnd, s.owned = "a.py", 2, [(3, 4)]
+    assert core.fingerprint(B, s) == "7acb805f086c681f0fce172520a5dafc21c9e829413c60a0247b1757b9deea46"   # sha256 of the 4 lines, computed outside the code
+
+
 def test_source_exists_means_a_regular_file(tmp_path):
     (tmp_path / "d").mkdir()
     (tmp_path / "f.py").write_text("")
@@ -235,6 +276,25 @@ def test_fingerprint_hashes_the_stripped_nonblank_lines_of_the_decorator_inclusi
     s.lineEnd = 5
     s.decos = []                          # without the decorator line the hash differs
     assert core.fingerprint(B, s) == "f4c1dc7477122951937dc3c02ba03b2b4d603d045286fdd8accfa74b5b50ff83"
+
+
+def _sha(text):
+    import hashlib
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def test_fingerprint_adds_every_line_of_the_owned_regions_as_a_sorted_deduplicated_union(tmp_path):
+    (tmp_path / "a.py").write_text("def f():\n    a = 1\n\nX = 'xx'\nY = 'yy'\nZ = 'zz'\n")
+    B = core.Builder("python", ".", "r", {}, core.Source(tmp_path))
+    s = scope("function", "f", line=1)
+    s.file, s.lineEnd = "a.py", 2
+    assert core.fingerprint(B, s) == _sha("def f():\na = 1")                             # no regions: the span alone
+    s.owned = [(6, 6), (2, 4)]                                                         # unsorted; (2, 4) overlaps the span's line 2
+    assert core.fingerprint(B, s) == _sha("def f():\na = 1\nX = 'xx'\nZ = 'zz'")        # lines 1-2 + 2-4 + 6, each once, in line order
+    s.owned = [(2, 4), (6, 6), (6, 6)]
+    assert core.fingerprint(B, s) == _sha("def f():\na = 1\nX = 'xx'\nZ = 'zz'")        # order and repeats of the regions do not matter
+    s.owned = [(5, 5)]
+    assert core.fingerprint(B, s) == _sha("def f():\na = 1\nY = 'yy'")                  # a region outside the span
 
 
 # --- Resolver (value sets) ------------------------------------------------------------------------------------------
