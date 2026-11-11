@@ -39,7 +39,7 @@ list, written for **option C** (index §6): no in-system git fetch.
   becomes `jsonschema==4.26.0` and `pyyaml==6.0.3` (the `dev` pins verbatim, no new pin; `-egress-spec3.md` §10.2),
   with the file's header comment (lines 9–10, "No other step edits this file") and the `broker = []` comment (line 53,
   "stdlib only unless P1-28 decides otherwise") reworded in the same edit so the file does not contradict itself;
-  index D8 permits this edit. Two dispatches (policy+runs first).
+  index D8 permits this edit. Delivered whole in one dispatch (commit 12d8c5aa).
 - **Behaviours (each row of `-egress-spec3.md` §8.2 that needs no proxy is a unit test over audit records; the
   spec's §10.1 tests (10)–(20) are added to this list; `teco` re-checks the dispatch split):**
   (1) `open_run(runKind, systemId, codebases | "*", override)`: a `vulndb` run has no codebase, `refresh`/`answer`
@@ -65,8 +65,7 @@ list, written for **option C** (index §6): no in-system git fetch.
 - **Behaviours:** (1) with no allow possible for a proxied stream (option C), the main run passes only with zero
   `conn` records; a separate detector control scenario shows a `conn` (and one outside the window) fails the verdict
   (`-egress-spec3.md` §8.1); (2) preconditions P-a–P-g and the in-run controls of `-egress-spec3.md` §8.1, and each
-  row computed, vacuous or unrun as its §8.2 table says (row 8.16 runs only if `devops` provisions `strace`, which this
-  host lacks, and its trace parser carries §8.2's positive control); (3) UDP and DNS, which `conn` cannot record, are covered by
+  row computed, vacuous or unrun as its §8.2 table says (row 8.16 runs with `strace`, which `devops` installs on this host, and its trace parser carries §8.2's positive control; P1-40 needs it too); (3) UDP and DNS, which `conn` cannot record, are covered by
   P-a and P-b from each component container; (4) the sandbox-side escape probes (`-egress-spec3.md` §7.3) run inside
   the scenario.
 - **Gate:** `analyst`. **Needs:** 29, 18.
@@ -131,8 +130,7 @@ row; TP-014) and the ACs of the P1 row, listing for each row the build it needs 
 
 Execute, on the materialized fixture system (`cpg/fixtures/materialize.py`) built through P1-20: the **92 rows
 whose earliest gate is P1** (`docs/test-plans/connected-code-graph-fixtures.md` §6) — every link kind and status P1
-builds, including LNK-19/LNK-20 (P1-46's pack), the cross-repo Compose context → unit case (`LNK-15`; the
-`JobPanel` binding is asserted through it, `OV-2` is P3; `-p0-compose-binding.md`), the 8000/8200 URL binding with the example config `possible`, mount composition, the
+builds, including LNK-19/LNK-20 (P1-46's pack), the cross-repo Compose context → unit case (asserted by `test_linker_bind.py` on real extractor records, not by a fixture row at P1: `LNK-15`'s own binding needs the environment-variable name, a P2 item, so `LNK-13` and `LNK-15` expect `confirmed`/`key-match` here; `OV-2` is P3; `-p0-compose-binding.md`), the 8000/8200 URL binding with the example config `possible`, mount composition, the
 AC-1 lifting chain (field path, two levels) and multi-candidate links (first real cases),
 stale-kept and not-mapped (AB-*); **B1's four assertions**, those the fixtures plan gates at P1 (writer W's change
 lists reader R; W does not list another writer W2; the RCA assertion cannot run before P5). **Prerequisites checked
@@ -166,7 +164,7 @@ Index §5 is the design; `-p1-ml.md` question 2 fixes the numbers. Python only u
    counts side by side, and the old-join count is diagnostic only, never a gate input (C7). **The rule is unchanged and is met:** the
    measured dev recall with the new join is 464/480 (465/481 with the omission), the entry value exactly, on the methods the fixes
    were designed on, so it carries that optimism and has zero margin. **Entering is an explicit `teco`/stakeholder decision, not
-   automatic.** The 0.80 pass probability assumes the fresh recall equals the dev recall; the F2 curve gives about 0.55 at a true
+   automatic (2026-11-11: the stakeholder decided to enter; the fresh draw is spent).** The 0.80 pass probability assumes the fresh recall equals the dev recall; the F2 curve gives about 0.55 at a true
    recall of 0.95 and about 0.2 at 0.93. The recommendation is to enter: the pre-registered draw (§3.3) is the only unbiased
    estimate. If it is not entered, `flowAvailable` stays false, reported not closed with the figure. The report states the
    four-cell table (shipped/old, shipped/new, fixed/old, fixed/new; the old-join cells diagnostic) and the residual misses by

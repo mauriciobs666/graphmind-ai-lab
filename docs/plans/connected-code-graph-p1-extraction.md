@@ -563,8 +563,7 @@ its output to the bundle as a **resolution source**, never as a new schema eleme
   `load_provisioned(system, unit_id) -> Provisioned | None` (root = that directory, `env_json`, `lockfile` from `provision.json`; `None`
   when the directory is absent, which is the "not provisioned" outcome, reported to `teco` and never provisioned by `cpg/`);
   `Provisioned(root, env_json=, lockfile=)` is what `run_indexer(..., provisioned, ...)` takes. P1-44 calls `load_provisioned` and passes
-  the result only if the indexer is adopted. A manifest key instead would be a manifest-schema change, which this convention avoids
-  (stakeholder may prefer it). The operator-facing text is a section "Indexer dependencies (operator-provisioned)" in `cpg/README.md`
+  the result only if the indexer is adopted. The stakeholder chose this convention over a manifest key (2026-11-11; closed). The operator-facing text is a section "Indexer dependencies (operator-provisioned)" in `cpg/README.md`
   (the contract above in a few lines, authority `-egress-spec3.md` §7.4), written in this step.
 - **Behaviours:** parser golden on a stored tiny SCIP index; merge cases (agree, upgrade, disagree, SCIP-only);
   the run's argv is the §7.4 grammar and the runner's own refusals enforce it (a test replays a non-grammar argv through
