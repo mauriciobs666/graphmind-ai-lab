@@ -55,6 +55,8 @@ CCG_FALKORDB_PORT=6390 .venv/bin/python -m pytest -m live     # needs infra/ccg-
 | `pyproject.toml` | package `ccg`; pytest `testpaths=["tests"]`; marker `live` |
 | `ccg/ids.py` | canonical tuple → 32-hex id: the one place hashing is defined (bundle spec §3.1–§3.2) |
 | `ccg/bundle.py` | bundle JSONL read, validate and write with deterministic order; the reference validator, and the one implementation of the BS2 gates (bundle spec §2, §5, §8 as amended by BS2) |
+| `ccg/valuehash.py` | `entry_hmac(key, domain, value)`: the keyed, domain-separated hash of `-bundle-spec5.md` §2 (conformance: §9.1); computes only, never reads a key |
+| `extractors/common/writer_rules.py` | the writer done-condition (P1-07, F-10), the only place an extractor decides W2, W3, W4, the `launchFact` argv through `gate_argv` (SA-1) and `valueHash`/`defaultHash` (an AST tripwire plus the `audit_records` backstop); tests `tests/test_writer_rules.py`, `tests/test_valuehash.py` |
 | `ccg/schemas/bundle-v1.schema.json` | per-record shapes (JSON Schema 2020-12), one `$defs` entry per record type: necessary, not sufficient |
 | `ccg/broker/` | the egress broker (P1-29, `docs/plans/connected-code-graph-egress-spec3.md` §2–§5): `policy.py` rule table and mode resolution, `runs.py` tokens, `audit.py` the single writer of `egress.jsonl`, `addr.py` address validation and S6, `structured.py` the upstream exchange, `framing.py`, `server.py` the process, `client.py` `BrokerClient` (the only module another component imports) |
 | `ccg/schemas/egress-audit-v1.schema.json` | the broker's `policy`, `decision` and `close` records, closed enums, P1 values only |

@@ -18,6 +18,7 @@ import ipaddress
 import json
 import os
 import re
+import secrets
 import unicodedata
 from collections.abc import Iterable
 from functools import cache
@@ -91,12 +92,34 @@ def dumps(records: Iterable[dict]) -> bytes:
 
 
 def write_bundle(path: str | os.PathLike, records: Iterable[dict]) -> None:
-    """Write a bundle file atomically (temp file + rename), deterministic bytes."""
+    """Write a bundle file atomically (an ``O_EXCL`` 0600 temp file + rename), deterministic bytes.
+
+    Custody of the parent directory is ``ccg.atrest``'s job, not checked here. A crash between create and rename
+    leaves a hidden 0600 ``.<name>.<hex>.tmp`` (complete, already-gated bytes; never a ``*.bundle.jsonl``); leftovers
+    accumulate until the refresh sweeps them (owner: the P1 architect's call), and a later write never collides with
+    one (64 random bits in the name, and ``O_EXCL``). The temp name is 22 characters longer than the target's (the old ``<name>.tmp``: 4)."""
     data = dumps(records)
     target = Path(path)
-    tmp = target.with_name(target.name + ".tmp")
-    tmp.write_bytes(data)
-    os.replace(tmp, target)
+    tmp = target.with_name(f".{target.name}.{secrets.token_hex(8)}.tmp")
+    # Defence in depth: a caller (or an umask) cannot widen a bundle, and a planted name is never written through.
+    # (O_NOFOLLOW is redundant with O_EXCL, which already refuses a symlink at the name.)
+    created = False
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        created = True                       # never unlink a name we did not create (O_EXCL refused it)
+        try:
+            f = os.fdopen(fd, "wb")
+        except BaseException:
+            os.close(fd)
+            raise
+        with f:
+            os.fchmod(f.fileno(), 0o600)
+            f.write(data)
+        os.replace(tmp, target)
+    except BaseException:
+        if created:
+            tmp.unlink(missing_ok=True)
+        raise
 
 
 # --- parsing --------------------------------------------------------------------------------
@@ -431,6 +454,11 @@ def _portmap(s: str) -> bool:
         m.group(3) is None or _port(m.group(3)))
 
 
+def value_grammar_ok(value: str) -> bool:
+    """The public form of §1.7.2's value grammar, for the writer rules."""
+    return _bind_grammar(value)
+
+
 def _bind_grammar(value: str) -> bool:
     """§1.7.2 ``bindValue = port / host / ipv6 / hostport / url``, every label and segment
     screened on its own (§1.7.1's scope rule), fewer than 512 characters."""
@@ -442,17 +470,28 @@ _KEYPATH_PART = re.compile(r'\[(?:(?P<i>0|[1-9][0-9]*)|(?P<q>"(?:[^"\\]|\\.)*"))
                            r"|(?P<n>[^.\[]+)|\.")
 
 
+def cap_repr(text: object, limit: int = 80) -> str:
+    """``text`` as an escaped, ASCII-only repr of at most ``limit`` characters of it, for error messages: repo-derived
+    text is never echoed whole (it may be the secret-bearing part of an entry)."""
+    t = str(text)
+    r = ascii(t[:limit])
+    return r + ("..." if len(t) > limit else "")
+
+
 def _keypath_segments(key_path: str) -> list[tuple[str, str]]:
     """§5.17's ``keyPath`` as (kind, text) pairs, kind ``name`` or ``index``."""
     out, pos = [], 0
     while pos < len(key_path):
         m = _KEYPATH_PART.match(key_path, pos)
         if not m:
-            raise BundleError(f"keyPath {key_path!r} does not parse (§5.17)")
+            raise BundleError(f"keyPath {cap_repr(key_path)} does not parse (§5.17)")
         if m.group("i") is not None:
             out.append(("index", m.group("i")))
         elif m.group("q") is not None:
-            out.append(("name", json.loads(m.group("q"))))
+            try:
+                out.append(("name", json.loads(m.group("q"))))
+            except ValueError:
+                raise BundleError(f"keyPath {cap_repr(key_path)} has a bad quoted segment (§5.17)") from None
         elif m.group("n") is not None:
             out.append(("name", m.group("n")))
         pos = m.end()
