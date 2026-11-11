@@ -149,8 +149,8 @@ PINNED_SHAS = {
         "branches": {},
     },
     'fx-svc': {
-        "commits": {'H0': 'e9eaec94de55c6e3f6f48bde9943dc7541bc8c71', 'H1': 'f07306e5e04f4be2d82529ee5e8d26e60be7e9b0', 'H2': '72543cc6fd3b76a34b097777d29003481babacbe', 'H3': '0c826e7677a69ad75abb4c936fdfd64ae8b6f802', 'H4': '3547b6ffbedb6826ff59c2922f0f4749bda60787'},
-        "branches": {'ov-svc': '3a6312f2df7b95fd9adb4b0ff7ddacb9bcbe72a4', 'tf-mid': '4ccf96f30043835fccb038f33b7241221ece991f', 'tf-sink': '4cc6371be31f2c67ca3c597c45254920653fc1de', 'tf-src': '9007d1e83d5bcfd1e7be9a0a9b8caa6272e9cdc8'},
+        "commits": {'H0': '571fa94250209450f7812c3a091cd1bb547b5d0b', 'H1': '746bbf83929a689cf55ee064022d1003a975747a', 'H2': '734b3025a87ea6e0320d55c2ad30189ad2d0b2e0', 'H3': '998df3e89909261876fe8dcf168b7a109e980990', 'H4': '58b340135ca9c25fbd7120fa1c1ab5a051a09e5c'},
+        "branches": {'ov-svc': '35bf304b210123b1a98cc0a5e79e03b6dc26e6d9', 'tf-mid': 'd22486d4e675e4544966953e3320b8e98a77a405', 'tf-sink': 'ec8c4d8ed599a2f2fe3598570e2bbffb1c782736', 'tf-src': '87d5f5bdd548bfe0d702bcb49aa2f9c4b59bbd31'},
     },
     'fx-web': {
         "commits": {'H0': '83926b1ce6a603de66e276a666bccdf5714d53ad', 'H1': '26ecd3c6e93ab35ad0744f905a89115688850b3e'},
@@ -934,7 +934,7 @@ def plan_figures():
             if m and cells[i + 1].isdigit():
                 key = "B1" if m.group(1).startswith("B1") else "DFCD" if m.group(1) in ("DF", "CD") else m.group(1)
                 prefix[key] = int(cells[i + 1])
-    gates = {g: int(n) for g, n in re.findall(r"(P[1-5]) (\d+)", re.search(r"By earliest gate: ([^\n]*?)\(= 133\)", PLAN_TEXT).group(1))}
+    gates = {g: int(n) for g, n in re.findall(r"(P[1-5]) (\d+)", re.search(r"By earliest gate: ([^\n]*?)\(= 134\)", PLAN_TEXT).group(1))}
     shapes = {}
     for line in PLAN_TEXT.split("**Difficulty shapes, instances by earliest gate**")[1].split("Skew is below 3")[0].splitlines():
         m = re.match(r"\|\s*([A-Za-z][A-Za-z \-]*?)(?: \(cross-repository\))?\s*\|\s*(\*{0,2}\d\*{0,2})\s*\|\s*(\d)\s*\|\s*(\d)\s*\|", line)
@@ -954,14 +954,14 @@ def census_violations(manifests):
             vals = {r[attr] for r in h.values() if r.get(attr) is not None}
             if len(vals) > 1:
                 bad.append(f"{rid}: holders disagree on {attr}: {sorted(vals)}")
-    if fig["rows"] != 133:
-        bad.append(f"rows {fig['rows']} != 133")
+    if fig["rows"] != 134:
+        bad.append(f"rows {fig['rows']} != 134")
     if fig["prefix"] != plan["prefix"]:
         bad.append(f"prefix counts {fig['prefix']} != plan {plan['prefix']}")
     if fig["gate"] != plan["gate"]:
         bad.append(f"gate counts {fig['gate']} != plan {plan['gate']}")
-    if fig["positives"] != 121:
-        bad.append(f"positives {fig['positives']} != 121")
+    if fig["positives"] != 122:
+        bad.append(f"positives {fig['positives']} != 122")
     for shape, (p1, p2, p3) in plan["shapes"].items():
         key = shape if shape in fig["shape"] else next((k for k in fig["shape"] if k == shape), None)
         got = fig["shape"].get(shape, [])
@@ -991,7 +991,7 @@ def census_violations(manifests):
 
 def test_tp004_census_equals_section_6_and_meets_every_floor(manifests):
     plan = plan_figures()
-    assert sum(plan["prefix"].values()) == 133 and len(plan["shapes"]) == 10 and sum(plan["gate"].values()) == 133
+    assert sum(plan["prefix"].values()) == 134 and len(plan["shapes"]) == 10 and sum(plan["gate"].values()) == 134
     assert census_violations(manifests) == []
 
 
@@ -1014,7 +1014,7 @@ def test_tp004_planted_failing_inputs(manifests):
     bad = copy.deepcopy(manifests)
     bad["fx-svc"]["rows"] = [r for r in bad["fx-svc"]["rows"] if r["id"] != "AC6-PM-2"]
     v = census_violations(bad)
-    assert any("AC6-PM" in x or "rows 132" in x for x in v), v
+    assert any("AC6-PM" in x or "rows 133" in x for x in v), v
     bad = copy.deepcopy(manifests)
     row = next(r for r in bad["fx-svc"]["rows"] if r.get("shape") == "client wrapper")
     row["shape"] = "template literal"
@@ -1037,7 +1037,7 @@ def test_tp004_planted_failing_inputs(manifests):
     bad["fx-svc"]["rows"] = [r for r in bad["fx-svc"]["rows"] if r["id"] != "LNK-26"]
     bad["fx-job"]["rows"] = [r for r in bad["fx-job"]["rows"] if r["id"] != "LNK-26"]
     bad["fx-lib"]["rows"] = [r for r in bad["fx-lib"]["rows"] if r["id"] != "LNK-26"]
-    assert any("rows 132" in x for x in census_violations(bad))
+    assert any("rows 133" in x for x in census_violations(bad))
 
 
 # ======================================================================================== plan <-> manifest row tie (F-3)
@@ -1173,7 +1173,7 @@ def plan_tie_probe(manifests):
 
 def test_f3_every_manifest_row_equals_its_plan_row_on_status_reason_gate_and_key(manifests):
     plan = plan_row_table()
-    assert len(plan) == 133 and set(plan) == set(M.holders(manifests))
+    assert len(plan) == 134 and set(plan) == set(M.holders(manifests))
     assert plan_row_violations(manifests, plan) == []
     assert plan["AC6-PM-2"]["gate"] == "P1" and plan["SQC-PY"]["gate"] == "P4" and plan["KN-4"]["keyNorm"] == "GET /api/files/a%2Fb"
 
@@ -1212,7 +1212,7 @@ def test_tp013_every_row_is_fixture_dev_and_in_no_held_out_split(manifests):
             if re.search(r"\bfx-(svc|web|lib|job)\b", t):
                 hits.append(str(p.relative_to(CPG)))
     assert hits == []
-    assert len(ids) == 133
+    assert len(ids) == 134
 
 
 def test_tp013_planted_failing_inputs(manifests):

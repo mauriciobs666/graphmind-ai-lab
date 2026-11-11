@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (P1) · **Reviews:** `docs/reviews/connected-code-graph-p1-test-plan.md`
 
-*2026-11-10 (rev. after the analyst gate, F1 to F8): counts 92 of 133 after the third P1 example-config row (AC6-EX-4, now `http`, a Python `os.environ[...]` consumer bound in `deploy/compose.example.yaml`); DF-3 P1 form and locator/distance in the `p1Form` tie; P1T-20 `key-error` class; P1-23 `function`-state note; statuses asserted in index §5's P1 form; AC-10, AC-1/2/4 and the proving-system build get items; the resolved source disagreements are removed.*
+*2026-11-11: P1 rows 93 of 134 (LNK-45, P1-11b's `bash -c exec` launch binding, added to P1T-09). 2026-11-10 (rev. after the analyst gate, F1 to F8): counts 92 of 133 after the third P1 example-config row (AC6-EX-4, now `http`, a Python `os.environ[...]` consumer bound in `deploy/compose.example.yaml`); DF-3 P1 form and locator/distance in the `p1Form` tie; P1T-20 `key-error` class; P1-23 `function`-state note; statuses asserted in index §5's P1 form; AC-10, AC-1/2/4 and the proving-system build get items; the resolved source disagreements are removed.*
 
 ## 1. Scope and objective
 
@@ -17,7 +17,7 @@ builds and runs the AC-8 harness (P1-31, P1-40) and records the result; `qa-engi
 section from that record and checks it against §8.
 
 **In scope.** The ACs of the proposal's P1 row (`docs/plans/connected-code-graph.md` §4, the "Closes" cell of the
-P1 row) and the 92 fixture rows the fixtures plan gates at P1 (§6 below). **Out of scope:** §12.
+P1 row) and the 93 fixture rows the fixtures plan gates at P1 (§6 below). **Out of scope:** §12.
 
 **Item ids.** Items are `P1T-NN`. The fixtures plan already owns `TP-001..019`
 (`docs/test-plans/connected-code-graph-fixtures.md` §9); this plan cites those by their own ids and never
@@ -39,10 +39,10 @@ renumbers them. Row ids (`LNK-nn`, `AB-n`) are the fixtures plan's.
 
 | Count | Value | Source and method |
 |---|---|---|
-| Fixture rows, all gates | 133 | distinct row ids over `cpg/fixtures/system1/expected/*.yaml` (the five manifests, ids deduplicated), by a `yaml.safe_load` script run with `cpg/.venv/bin/python` |
-| Rows gated P1 / P2 / P3 / P4 / P5 | 92 / 16 / 21 / 1 / 3 | same script, grouped by each row's `gate`; no id carries two gates |
-| P1 rows by family | AB 2, AC6 12, B1F 4, CD 4, DF 4, FT 2, KN 5, LNK 27, MR 2, NC 6, RV 3, SK 18, TW 3 (= 92) | same script, by id prefix |
-| Same counts from the fixtures plan | 92 P1 of 133, matching | `docs/test-plans/connected-code-graph-fixtures.md` §6 "By earliest gate" (P1 92 · P2 16 · P3 21 · P4 1 · P5 3 = 133); `cpg/tests/test_fixtures.py` TP-004 recomputes the census from the manifests and compares it to that line (83 passed in `tests/test_fixtures.py` plus `tests/test_fixture_keynorm_mutants.py`, this run) |
+| Fixture rows, all gates | 134 | distinct row ids over `cpg/fixtures/system1/expected/*.yaml` (the five manifests, ids deduplicated), by a `yaml.safe_load` script run with `cpg/.venv/bin/python` |
+| Rows gated P1 / P2 / P3 / P4 / P5 | 93 / 16 / 21 / 1 / 3 | same script, grouped by each row's `gate`; no id carries two gates |
+| P1 rows by family | AB 2, AC6 12, B1F 4, CD 4, DF 4, FT 2, KN 5, LNK 28, MR 2, NC 6, RV 3, SK 18, TW 3 (= 93) | same script, by id prefix |
+| Same counts from the fixtures plan | 93 P1 of 134, matching | `docs/test-plans/connected-code-graph-fixtures.md` §6 "By earliest gate" (P1 93 · P2 16 · P3 21 · P4 1 · P5 3 = 134); `cpg/tests/test_fixtures.py` TP-004 recomputes the census from the manifests and compares it to that line (85 passed in `tests/test_fixtures.py` (78) plus `tests/test_fixture_keynorm_mutants.py` (7), 2026-11-11 run) |
 | ACs in the proposal's P1 "Closes" cell | 16 | `grep -o 'AC-[0-9]*[ab]\?'` over that cell of `docs/plans/connected-code-graph.md` (line 1035): AC-1, 2, 4, 5, 6, 8, 9, 9b, 10, 11, 16, 17, 18, 21, 24, 25 |
 | Rows of egress-spec3 §8.2 | 16 (8.1 to 8.16) | script over the table: 8 plain `computed`, 4 headed `vacuous` (8.13 with a computed residue), 3 mixed (8.3, 8.5, 8.15), 1 conditional (8.16) |
 | Dev AC-24 items | 14 (12 unambiguous, 2 ambiguity; 6 + 6 unambiguous by language) | `cpg/eval/dev/ac24.jsonl`, `outcome` and `lang` fields |
@@ -60,7 +60,7 @@ must be true before the next is worth running.
 | Level | Question it answers | Where it runs | Owner steps | Data |
 |---|---|---|---|---|
 | **L0 Unit and contract suites** | Does each module meet its own contract, including its mutants? | `cpg/tests/**` (`.venv/bin/python -m pytest` from `cpg/`), `cpg/sandbox/tests/` (shell) | every build step, with a mutation check on its contract boundary (index §8) | goldens, `cpg/tests/golden/`, slice bundles (marker `slice`) |
-| **L1 Fixture gate** | Does the built system emit the planted links, statuses, reasons and answer shapes? | the materialized fixture system, built through P1-20, throwaway instance | P1-41 (the 92 rows), P1-42 (AC-level) | `cpg/fixtures/system1/` and its manifests; dev anchors `cpg/eval/dev/` for the proving-repo asks |
+| **L1 Fixture gate** | Does the built system emit the planted links, statuses, reasons and answer shapes? | the materialized fixture system, built through P1-20, throwaway instance | P1-41 (the 93 rows), P1-42 (AC-level) | `cpg/fixtures/system1/` and its manifests; dev anchors `cpg/eval/dev/` for the proving-repo asks |
 | **L2 Policy and trust harness (AC-8)** | Does a full refresh plus queries of a mixed system make zero connections outside the allow-list? | one sandboxed scenario, no route out, a detector | P1-31 builds, P1-40 runs | the mixed fixture system (`cpg/fixtures/system1`) |
 | **L3 Evaluation** | Does the system find the impacts of the proving repo it has never seen, and understand the questions? | the gate harness over frozen blind items | P1-32 (tooling and harness), P1-47 and P1-36 (oracle, noise), P1-34 (flow), P1-35 (AC-24 smoke), P1-37 (AC-5 first gate), P1-43 (re-gate) | held-out items (custodian root, harness only) and dev items |
 | **L4 Review-only** | Is a behaviour that cannot be executed described correctly? | `analyst` and `cobb` reading | P1-27 (AC-10), the `analyst` gates, P1-38's implementation review | the prompt and skill text, the diff |
@@ -140,10 +140,10 @@ test and owns the evidence. The report records, per AC, executor, evidence secti
 `grep -o '^- AC-[0-9]*[ab]\?'` over `docs/requirements/connected-code-graph.md`): AC-3, 7, 9a, 12, 13, 14, 15, 19, 20,
 21a, 22, 23, 26. No item below targets them.
 
-## 6. P1-41: the 92 P1 rows
+## 6. P1-41: the 93 P1 rows
 
 **What the index and the gates require P1-41 to contain** (`docs/plans/connected-code-graph-p1.md` §2, §4.2, §7;
-`-p1-gates.md` P1-41), mapped to rows. The 92 are the rows whose `gate` is P1 in the fixtures plan §6 and in
+`-p1-gates.md` P1-41), mapped to rows. The 93 are the rows whose `gate` is P1 in the fixtures plan §6 and in
 `cpg/fixtures/system1/expected/*.yaml` (§2). Rows asserted but red are defects, reported by id.
 
 | Required content (source phrase) | Rows | Item |
@@ -151,7 +151,7 @@ test and owns the evidence. The report records, per AC, executor, evidence secti
 | every link kind and status P1 builds (kinds with a P1 row: `http`, `mcp_tool`, `script_tool`, `launch`, `library_api`) | the P1 rows of the fixtures plan §7 matrix | P1T-05 (closed-world) and the family items |
 | LNK-19 and LNK-20 (P1-46's pack) | LNK-19, LNK-20 | P1T-11 |
 | cross-repo Compose context to unit (`-p0-compose-binding.md`) | LNK-15; the `JobPanel` binding is asserted through it, `OV-2` is a P3 row | P1T-09 |
-| the 8000/8200 URL binding, and the example config `possible` | LNK-18 and LNK-21 (one unit, two launch configs); AC6-EX-1 (`File.role = example`) | P1T-09, P1T-12 |
+| the 8000/8200 URL binding, and the example config `possible` | LNK-18 and LNK-21 (one unit, two launch configs); LNK-45 (the P1-11b `bash -c exec` server, `.mcp.json` to script to unit); AC6-EX-1 (`File.role = example`) | P1T-09, P1T-12 |
 | mount composition | LNK-04 (router `prefix` mounted at `/api`) | P1T-06 |
 | the AC-1 lifting chain, field path, two levels | LNK-10 (`api.search.query` through `request()`) | P1T-08 |
 | `ownedRegions` | no fixture row names it; P1-05's synthetic test is its only P1 test (index §4.2) | none |
@@ -162,7 +162,7 @@ test and owns the evidence. The report records, per AC, executor, evidence secti
 
 **Rows by item, build state and supplier.** Build states are the fixtures plan §8 scenarios: `SC-STEADY` is a
 fresh build at H4 (`svc-tools` never built, `svc-legacy` unbuildable); `SC-FAIL-UNIT` and `SC-NEVER-UNIT` as named.
-Every id below is a P1 row; the union of this column is the 92, and P1T-05 asserts that equality. The supplier column
+Every id below is a P1 row; the union of this column is the 93, and P1T-05 asserts that equality. The supplier column
 names the candidate steps; a red row is triaged to one step by the layer its evidence shows (extraction, linking,
 assembly, engine), and the report records that layer with the row id.
 
@@ -171,7 +171,7 @@ assembly, engine), and the report records that layer with the row id.
 | P1T-06 | LNK-01, 02, 04, 06, 07, 08, 36, 37, 38 | 9 | SC-STEADY | P1-05, P1-16, P1-17, P1-18, P1-19 |
 | P1T-07 | KN-1, 2, 3, 4, 5 | 5 | SC-STEADY | P1-17 (`matchers.py`), P1-21 (anchors); `ccg.keynorm` |
 | P1T-08 | LNK-10, 11, 12 | 3 | SC-STEADY | P1-05, P1-16, P1-17 |
-| P1T-09 | LNK-13, 14, 15, 18, 21, 22 | 6 | SC-STEADY | P1-11, P1-14, P1-17, P1-18 (with P1-20's cross-repo unit index) |
+| P1T-09 | LNK-13, 14, 15, 18, 21, 22, 45 | 7 | SC-STEADY | P1-11, P1-14, P1-17, P1-18 (with P1-20's cross-repo unit index) |
 | P1T-10 | LNK-16, 17, 30, 39, 40 | 5 | SC-STEADY | P1-16, P1-17, P1-18, P1-22 |
 | P1T-11 | LNK-19, 20 | 2 | SC-STEADY | P1-10, P1-46, P1-17 |
 | P1T-12 | AC6-URL-1, 2, 3; AC6-DYN-1, 2, 3; AC6-EX-1, 2, 4; AC6-PM-1, 2, 3 | 12 | SC-STEADY | P1-05, P1-11, P1-12, P1-17 |
@@ -181,10 +181,10 @@ assembly, engine), and the report records that layer with the row id.
 | P1T-16 | AB-1; AB-2; LNK-42; LNK-43 | 4 | SC-FAIL-UNIT (AB-1); SC-NEVER-UNIT (AB-2); SC-STEADY (LNK-42, 43); built by P1T-04 | P1-20, P1-44, P1-22, P1-39 |
 | P1T-17 | DF-1, 2, 3, 4; CD-1, 2, 3, 4 | 8 | SC-STEADY | P1-22, P1-23, P1-39; P1-09 if a flag turns true |
 | P1T-18 | RV-1, 2, 3 | 3 | SC-STEADY | P1-23 |
-| | **Total** | **92** | | |
+| | **Total** | **93** | | |
 
-The totals column recomputed: 9+5+3+6+5+2+12+4+13+18+4+8+3 = 92, and the per-family counts equal §2's family
-counts (LNK 9+3+6+5+2+2 = 27 across items; AC6 12; SK 18; AB 2; B1F 4; KN 5; NC 6; TW 3; MR 2; FT 2; DF 4; CD 4;
+The totals column recomputed: 9+5+3+7+5+2+12+4+13+18+4+8+3 = 93, and the per-family counts equal §2's family
+counts (LNK 9+3+7+5+2+2 = 28 across items; AC6 12; SK 18; AB 2; B1F 4; KN 5; NC 6; TW 3; MR 2; FT 2; DF 4; CD 4;
 RV 3).
 
 **Prerequisites, checked first** (`-p1-gates.md` P1-41): P1-02 (F-1) and P1-06 (F-9) done, and the build ran with
@@ -274,11 +274,11 @@ Type: C contract, F functional, I integration, L live, E evaluation, review. Pri
 | P1T-02 | Slice gates not skipped | P1-04's regenerated slice artifact | run the `slice`-marked tests; record artifact sha256 | `0 skipped`, sha256 recorded (index D9) | absent artifact: the gate must report unrun | high | L0 | P1-41 |
 | P1T-03 | P1-41 prerequisites and fixture hygiene | P1-02, P1-06, P1-08, P1-10, P1-12, P1-14 done | check F-1 and F-9 test evidence; run fixtures `TP-001..004, 013, 014, 016`; confirm `header.history` is available in the build | all true; else P1-41 is blocked and returned | a manifest copy without `AC6-EX-4` turns `TP-004` red (the AC-6 floor is read per gate); a row moved to gate P1 that needs Java turns `TP-014` red | high | C | P1-41 |
 | P1T-04 | Fixture builds: SC-STEADY, SC-FAIL-UNIT, SC-NEVER-UNIT, with cost | P1T-03; a throwaway instance per build (`infra/ccg-falkordb.sh --throwaway`); fixture system materialized (`cpg/fixtures/materialize.py`) | `qa-engineer` runs, through P1-20: SC-STEADY (a fresh build at H4); SC-FAIL-UNIT (H1, then H4: `svc-legacy` fails with a previous refresh); SC-NEVER-UNIT (`svc-tools` excluded from the build set); record per-unit status, wall time, peak RSS | SC-STEADY: `svc-tools` not mapped, `svc-legacy` failed with no previous refresh, all other units built; SC-FAIL-UNIT and SC-NEVER-UNIT as fixtures plan §8; one unit at a time; times recorded (index R-4) | a fixture with the failure marker removed: `svc-legacy` must then build, so the AB expectations flip | high | I/L | P1-41 |
-| P1T-05 | Closed-world comparison and P1-form statuses of the 92 | P1T-04 | emit every link, status and reason; compare with the 92 P1 rows: status and reason as the P1 form of index §5 where a row carries `p1Form` (fixtures plan §5.5), the manifest form otherwise; list the assertions run; then a flag-true re-run, when one exists, asserting the manifest form | the asserted set equals the 92 ids of §6 exactly; no *unplanted* link, where unplanted means matching no row of any manifest, whatever its gate; a link of a row gated P2 or later is reported "planted, not asserted at P1", never red; every `possible` has its reason | a stub emitting a link that matches no manifest row; one with a wrong reason; a row dropped from the asserted set (fixtures `TP-010`); DF-2 or DF-3 emitted `confirmed` under a false flag (`p1Form` says `possible`/`flow-unavailable:python`); a form with the wrong locator or distance (fixtures `p1_form_violations`) | high | I | P1-41 |
+| P1T-05 | Closed-world comparison and P1-form statuses of the 93 | P1T-04 | emit every link, status and reason; compare with the 93 P1 rows: status and reason as the P1 form of index §5 where a row carries `p1Form` (fixtures plan §5.5), the manifest form otherwise; list the assertions run; then a flag-true re-run, when one exists, asserting the manifest form | the asserted set equals the 93 ids of §6 exactly; no *unplanted* link, where unplanted means matching no row of any manifest, whatever its gate; a link of a row gated P2 or later is reported "planted, not asserted at P1", never red; every `possible` has its reason | a stub emitting a link that matches no manifest row; one with a wrong reason; a row dropped from the asserted set (fixtures `TP-010`); DF-2 or DF-3 emitted `confirmed` under a false flag (`p1Form` says `possible`/`flow-unavailable:python`); a form with the wrong locator or distance (fixtures `p1_form_violations`) | high | I | P1-41 |
 | P1T-06 | Key-match families, mount composition | P1T-04 | assert LNK-01, 02, 04, 06, 07, 08, 36, 37, 38: status, reason, provider and consumer locators, evidence chain | all `confirmed`/`key-match` as planted; LNK-04 resolves the `/api` mount prefix | a stub that drops the mount prefix; a consumer with an unresolved interpolation (must become `possible`/`partial-key`) | high | I | P1-41 |
 | P1T-07 | Key normalization order (F-13) | P1T-04 | assert KN-1 to KN-5 through every P1 consumer (matcher, anchor, assembler) | expected `keyNorm` per fixtures §5.2; KN-5 masked and `possible`/`partial-key` | resolve-before-decode fails KN-1, KN-2; mask-before-decode fails KN-5 (the mutants of `cpg/tests/test_fixture_keynorm_mutants.py`) | high | F | P1-41 |
 | P1T-08 | Wrappers and the lifting chain | P1T-04 | assert LNK-10, 11, 12; the ordered `LIFTED_VIA` entries of LNK-10 (two-level field path) | `confirmed`; `Link.reason` `key-match` (LNK-10, 11) and `binding-confirmed` (LNK-12), never `lifted-role` (the `CONSUMES` edge's reason); chain order and `siteId` as the graph note states | a linker that drops the second level (LNK-10 must then go `possible` or unresolved) | high | I | P1-41 |
-| P1T-09 | Bindings, launch chain, cross-repo Compose | P1T-04 | assert LNK-13, 14, 15, 18, 21, 22; for LNK-15 the context `../../fx-job` resolves to unit `job`; LNK-18 one unit for 8000 and 8200 | `confirmed`/`binding-confirmed`; `BOUND_BY` chain in `ord` order | a build context pointing at an unmapped repo: LNK-15 must not stay confirmed; a red LNK-15 is an escalation (index §4.2), not a fixture patch | high | I | P1-41 |
+| P1T-09 | Bindings, launch chain, cross-repo Compose | P1T-04 | assert LNK-13, 14, 15, 18, 21, 22, 45; for LNK-15 the context `../../fx-job` resolves to unit `job`; LNK-18 one unit for 8000 and 8200; LNK-45 (prompt mention `mcp__fx-svc-exec__list_orders`) binds through the server `fx-svc-exec` (`bash -c exec` form, emitted by the writer as `command = scripts/run-mcp.sh`) to `scripts/run-mcp.sh` to unit `svc`, with `BOUND_BY` ord 0 the `.mcp.json @mcpServers.fx-svc-exec` entry | `confirmed`/`binding-confirmed`; `BOUND_BY` chain in `ord` order | a build context pointing at an unmapped repo: LNK-15 must not stay confirmed; the `fx-svc-exec` server's `-c` string altered to a disallowed shape (writer keeps the redaction): LNK-45 must fall to the unbound outcome (an edit of `.mcp.json` in a scratch copy, not a planted row); a red LNK-15 is an escalation (index §4.2), not a fixture patch | high | I | P1-41 |
 | P1T-10 | Port-shared, partial key, multi-candidate | P1T-04 | assert LNK-16, 17, 30, 39, 40: status, reason, and that the candidate set contains the named true target (fixtures `TP-019`) | `possible` with the stated reason; candidates contain the target; none collapsed | a stub with an empty or wrong candidate set; one collapsing candidates to a single link | high | I | P1-41 |
 | P1T-11 | Script to tool | P1T-04 | assert LNK-19 (bound, `key-match`) and LNK-20 (`shell-dynamic`, one link per `mcp_tool` provider, including `job:job/mcp_admin.py::reindex`, NC-5) | as planted | a pack lacking the dynamic-`mcp-call` negative: LNK-20 would become confirmed | high | I | P1-41 |
 | P1T-12 | AC-6 rows | P1T-04 | assert the 12 P1 AC6 rows: `possible`, the stated edge or link reason, not `confirmed`; AC6-EX-4 is an `http` link from `svc:clients/peer.py::peer_health` (`os.environ["FX_PEER_BASE"]`) bound only through service `svc` of `deploy/compose.example.yaml`; EX-2 and EX-4 are two instances of one linker rule (P1-17 rules (5) and (7)), so a defect there turns both red, and fixtures `TP-004`, which counts distinct `item` strings, cannot tell the mechanism apart (accepted) | as planted | an engine stub that confirms one instance; one emitting `possible` with no reason (fixtures `TP-009`) | high | F | P1-41 |
@@ -350,7 +350,7 @@ recommendations. Written by `qa-engineer`, one section per gate step.
 
 - **ACs P1 does not close:** AC-3, 7, 9a, 12, 13, 14, 15, 19, 20, 21a, 22, 23, 26 (§5), and the parts of AC-17
   beyond code location and contract point.
-- **Fixture rows not gated at P1:** 41 of 133 (P2 16, P3 21, P4 1, P5 3): `fx-lib` rows, AB-3, AB-4, `OV-*`, `B1S-*`,
+- **Fixture rows not gated at P1:** 41 of 134 (P2 16, P3 21, P4 1, P5 3): `fx-lib` rows, AB-3, AB-4, `OV-*`, `B1S-*`,
   `SQC-*`, `TF-*`, AC6-EX-3, AC6-TOP, AC6-QL. They are not asserted and not counted.
 - **The git-fetch path** (`R2`, `R8`, `R9`, proxy listener): not built in P1 (option C). Only the controls and
   vacuous rows of `-egress-spec3.md` §8.2 are in scope.

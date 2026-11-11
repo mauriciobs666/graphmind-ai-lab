@@ -3,6 +3,10 @@
     "fx-svc": {
       "command": "scripts/run-mcp.sh",
       "args": ["--port", "8200"]
+    },
+    "fx-svc-exec": {
+      "command": "bash",
+      "args": ["-c", "exec \"$CLAUDE_PROJECT_DIR/scripts/run-mcp.sh\""]
     }
   }
 }

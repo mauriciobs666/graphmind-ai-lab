@@ -633,6 +633,31 @@ rows:
   serves:
   - LNK
   stratum: fixture-dev
+- id: LNK-45
+  kind: mcp_tool
+  item: 'launch binding through the P1-11b bash -c exec form: prompt mention mcp__fx-svc-exec__list_orders; .mcp.json server fx-svc-exec (command bash, args -c exec "$CLAUDE_PROJECT_DIR/scripts/run-mcp.sh", emitted as command scripts/run-mcp.sh) to scripts/run-mcp.sh (exec python -m fx_svc.mcp.server, targetArg) to unit svc'
+  provider:
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::list_orders
+  consumer:
+  - repoId: fx-svc
+    path: .claude/agents/exec.md
+    qname: .claude/agents/exec.md::<document>
+  aux:
+  - repoId: fx-svc
+    path: .mcp.json
+    keyPath: mcpServers.fx-svc-exec
+  - repoId: fx-svc
+    path: scripts/run-mcp.sh
+    qname: scripts/run-mcp.sh::<script>
+  keyNorm: list_orders
+  status: confirmed
+  reason: binding-confirmed
+  gate: P1
+  serves:
+  - LNK
+  stratum: fixture-dev
 - id: LNK-23
   kind: rpc
   item: '/acme.fxlib.Pricing/Quote: .proto service, Java impl, Python stub call with a literal method'

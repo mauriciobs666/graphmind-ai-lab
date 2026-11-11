@@ -1,8 +1,8 @@
 # Connected code graph — fixture system test plan (S35)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.5 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.6 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
 
-*2026-11-11 (v1.5): AC6-PM-1/-2 re-pathed to `.claude/agents/agent.md` and `.claude/agents/tools.md`, so the files match a `promptBearingMarkdown` glob and classify `prompt-md`.*
+*2026-11-11 (v1.6): LNK-45 added (P1-11b's `bash -c 'exec "$CLAUDE_PROJECT_DIR/scripts/run-mcp.sh"'` `.mcp.json` server `fx-svc-exec`, with prompt mention `.claude/agents/exec.md`); census 134 rows, positives 122, P1 93, LNK 45; fx-svc SHAs repinned. AC6-PM-1/-2 stay re-pathed to `.claude/agents/agent.md` and `.claude/agents/tools.md` (`prompt-md`).*
 
 *2026-11-10 (v1.4): the AC-6 example-config floor is met at P1 by a third row (AC6-EX-4, `http`, a Python `os.environ[...]` consumer; census 133 rows, P1 92); the P1 form of the flow-dependent rows (DF-1 to DF-3, CD, RV) is added with locator and distance (§5.5); the `OV-2` sentence of §5.1 corrected.*
 
@@ -85,7 +85,7 @@ at P2**; every row that needs Java is `P2` and none is promoted earlier.
 are in §5.2; every other key in this plan contains no `%`.
 
 **Provenance.** Rows modelled on a proving-repo shape (so a later disagreement is attributable; protocol §8
-contacts anchors, not shapes): LNK-18 and LNK-21 (the `.mcp.json` / 8000-8200 chain), SK-5 (the
+contacts anchors, not shapes): LNK-18, LNK-21 and LNK-45 (the `.mcp.json` / 8000-8200 chain and the `bash -c exec` server), SK-5 (the
 `salesperson/src/i18n/` case).
 
 ## 4. Repositories and units
@@ -161,6 +161,7 @@ answer must contain.
 | LNK-20 | script_tool | `scripts/dyn.sh` runs `eval "mcp-call $TOOL"`, no binding. By the `unknown-key` rule (one link per provider of the kind, spec3 §7.2) the candidates are **every** `mcp_tool` provider in the system, including `fx-job`'s second `reindex` (NC-5). True targets: any | P `svc:mcp/server.py::get_item`, `svc:mcp/server.py::reindex`, `svc:mcp/server.py::list_orders`, `job:job/mcp_admin.py::reindex` · C `svc:scripts/dyn.sh::<script>` | p | shell-dynamic | P1 | | LNK |
 | LNK-21 | launch | `.mcp.json` server `fx-svc` to `scripts/run-mcp.sh` to `python -m fx_svc.mcp.server` to unit `svc` | P `unit fx-svc:. python` · C `svc:.mcp.json @mcpServers.fx-svc` | c | binding-confirmed | P1 | | LNK |
 | LNK-22 | launch | Compose service `api`: build context to unit `svc`, port 8000 | P `unit fx-svc:. python` · C `svc:deploy/compose.yaml @services.api` | c | binding-confirmed | P1 | | LNK |
+| LNK-45 | mcp_tool | **P1-11b launch binding:** prompt mention `mcp__fx-svc-exec__list_orders` in `.claude/agents/exec.md`; `.mcp.json` server `fx-svc-exec` is `bash -c 'exec "$CLAUDE_PROJECT_DIR/scripts/run-mcp.sh"'` (no URL), which the writer allow-list (`mcp_exec_launch_path`) emits as `command = scripts/run-mcp.sh`; chain: server entry, `scripts/run-mcp.sh` (`exec python -m fx_svc.mcp.server`, `targetArg`), unit `svc`. `BOUND_BY` entry ord 0 is `.mcp.json @mcpServers.fx-svc-exec`, the script hop rides the `LAUNCHES` edge (`-p1-linking.md` P1-17 (6)); a bound confirmed site is `binding-confirmed` | P `svc:mcp/server.py::list_orders` · C `svc:.claude/agents/exec.md::<document>` (aux `svc:.mcp.json @mcpServers.fx-svc-exec`, `svc:scripts/run-mcp.sh::<script>`) | c | binding-confirmed | P1 | | LNK |
 | LNK-23 | rpc | `/acme.fxlib.Pricing/Quote`: `.proto` service, Java impl, Python stub call with a literal method | P `fx-lib:pricing/src/main/java/com/acme/fxlib/PricingService.java::PricingService.quote(QuoteRequest,StreamObserver<QuoteReply>)` (declared in `pricing/src/main/proto/pricing.proto`) · C `svc:clients/pricing.py::quote` | c | key-match | P2 | | LNK |
 | LNK-24 | topic | `inhouse-fxbus:price.updated`: `FxBus.publish("price.updated", e)` in `Pricing.quote` and a listener | P `fx-lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String,Currency)` (publish call `fx-lib:pricing/src/main/java/com/acme/fxlib/bus/FxBus.java::FxBus.publish(String,Object)` as the wrapper) · C `fx-lib:pricing/src/main/java/com/acme/fxlib/bus/AuditListener.java::AuditListener.onPrice(PriceEvent)` | c | key-match | P2 | | LNK |
 | LNK-25 | library_api | `java:com.acme.fxlib.Pricing.quote(int,String,Currency)`, consumer `quote-cli` on the same version; `Pricing` also has the distinct overload `quote(int,String,Currency,Locale)` | P `fx-lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String,Currency)` · C `fx-lib:quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java::QuoteCli.quoteDefault()` | c | key-match | P2 | | LNK |
@@ -182,6 +183,8 @@ answer must contain.
 | LNK-44 | data_entity | `sql:table:order_report`: written by `INSERT INTO order_report` in `fx-job`, read by `SELECT * FROM order_report` (no column key, so no column link); no DDL in any repository | P `job:job/run_report.py::write_report` · C `svc:api/reports.py::report_view` | c | key-match | P3 | | LNK, OV-1 |
 
 A Compose build context that leaves its own repository and resolves to a sibling repository's unit (`../../fx-job`, LNK-15) is a P1 check owed to the S30 owner; `OV-2` plants the same binding as a P3 overlay assertion and is not a P1 row.
+
+**LNK-45 (v1.6).** The one fixture for P1-11b's `bash -c 'exec "$CLAUDE_PROJECT_DIR/<path>"'` `.mcp.json` form: server `fx-svc-exec` beside the direct-command server `fx-svc` (LNK-21), the same script `scripts/run-mcp.sh` (no `hooks/` segment, 18 characters, no secret segment), so the unit is `svc` through the script's own `targetArg` (`python -m fx_svc.mcp.server`). The consumer is a prompt mention in the new `.claude/agents/exec.md`, because a `.mcp.json` entry alone produces no `Link`; the manifest row is derived by reading `ccg/linker/bind.py` `_launch_chains` and `link.py` (a confirmed bound site is `binding-confirmed`), not run: the live build of this chain is `P1T-09`'s. No negative row (a disallowed `-c` string staying redacted) is planted: it would need a new `NC-8`, the `NEGATIVES` set, `TP-012` and four family counts for one writer unit test that `cpg/tests/test_writer_rules.py` already pins; `P1T-09` carries the variant as a scratch-copy mutation.
 
 Reasons for the skew rows (LNK-33..35, 41), LNK-32 and LNK-31 are this plan's decisions (OI-3): bundle spec3 §7.2
 has no skew code, and `versionSkew` is a property on the link (graph note `Link.versionSkew`). The skew shape is
@@ -498,16 +501,16 @@ the 12 negatives, twins and controls (NC-1..7, TW-1..3, OV-3, FT-2).
 
 | Category | Rows | Category | Rows |
 |---|---|---|---|
-| Link rows (`LNK`) | 44 | Mis-resolved call (`MR`) | 2 |
+| Link rows (`LNK`) | 45 | Mis-resolved call (`MR`) | 2 |
 | Key normalization (`KN`) | 5 | Partial failure (`AB`) | 4 |
 | AC-6 unprovable (`AC6`) | 19 | Overlay (`OV`) | 5 |
 | Look-alike twins (`TW`) | 3 | Signature change (`SQC`) | 2 |
 | B1 four assertions (`B1F`, `B1S`) | 8 | Taint edits (`TF`) | 3 |
 | AC-25 forward (`DF`, `CD`) | 8 | Omitted files (`SK`) | 18 |
 | AC-25 reverse (`RV`) | 3 | Field depth (`FT`) | 2 |
-| Negative controls (`NC`) | 7 | **Rows** | **133** |
+| Negative controls (`NC`) | 7 | **Rows** | **134** |
 
-Positive items: **121** (LNK-41, KN-3 and KN-4 are controls by purpose but are asserted links, so they count). By earliest gate: P1 92 · P2 16 · P3 21 · P4 1 · P5 3 (= 133). `fx-lib` rows are all P2
+Positive items: **122** (LNK-41, KN-3 and KN-4 are controls by purpose but are asserted links, so they count). By earliest gate: P1 93 · P2 16 · P3 21 · P4 1 · P5 3 (= 134). `fx-lib` rows are all P2
 (LNK-23, 24, 25, 31, AC6-TOP-3, SQC-JAVA); no P3 row needs Java.
 
 The AC-25 set is **60 distinct assertions** (§3). DF-3 (via LNK-36) and OV-2 plant a UI consumer
@@ -522,9 +525,9 @@ Every kind x status cell has at least one row; every `possible` row carries its 
 | Kind | confirmed | possible |
 |---|---|---|
 | http | LNK-01, 04, 07, 08, 10, 11, 13, 14, 15, 18, 36, 37, 38; KN-1..4; TW-2 | LNK-16 (port-shared), 17 (partial-key), 42, 43 (target-not-mapped); KN-5; AC6-URL-1..3; AC6-EX-2, 4 |
-| mcp_tool | LNK-02, 06, 12 | AC6-PM-1..3 (prompt-mention) |
+| mcp_tool | LNK-02, 06, 12, 45 | AC6-PM-1..3 (prompt-mention) |
 | script -> tool | LNK-19 | LNK-20 (shell-dynamic) |
-| launch chain | LNK-21, 22 | AC6-EX-1 (example-config) |
+| launch chain | LNK-21, 22 (LNK-45 is its `mcp_tool` Link through the `bash -c exec` form) | AC6-EX-1 (example-config) |
 | rpc | LNK-23 | LNK-32 (runtime-built / unknown-key) |
 | topic (Kafka, in-house bus) | LNK-05, 09 (Kafka), 24 (in-house) | AC6-TOP-1..3 (config-derived) |
 | library_api | LNK-25, 41; TW-1 | LNK-33..35 (name-only-provider, skew) |
