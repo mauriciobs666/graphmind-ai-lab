@@ -51,7 +51,7 @@ from ccg.valuehash import entry_hmac
 
 __all__ = ["encodable", "bind_value", "bind_fields", "bind_parts_allowed", "bind_parts_fields", "bind_header_fields",
            "launch_default", "default_fields", "launch_argv_fields", "value_hash", "value_hash_fields", "default_hash",
-           "config_entry_value_hash", "system_key", "audit_records"]
+           "config_entry_value_hash", "system_key", "audit_records", "mcp_exec_launch_path"]
 
 _RECORD_ID = re.compile(r"[0-9a-f]{32}")
 _HASH = re.compile(r"[0-9a-f]{64}")
@@ -281,6 +281,48 @@ def launch_argv_fields(argv: list[str], *, program_known: bool = True) -> dict:
     no_program = not program_known or argv[0].startswith("-")
     gated = bundle.gate_argv([bundle.REDACTED, *argv] if no_program else list(argv))
     return {"command": gated[0], "args": gated[1:]}
+
+
+# P1-11b: the ONE allow-listed exception to the redaction of a `bash -c` string (the first loosening of SA-1). A whole-string match
+# of two literal shapes over one ASCII character class (no nested or overlapping quantifier, so linear), length-capped first.
+_EXEC_SHELLS = ("bash", "sh")
+_EXEC_PATH = r"([A-Za-z0-9._/@+-]{1,128})"
+_EXEC_SHAPE = re.compile(r'exec (?:"\$CLAUDE_PROJECT_DIR/' + _EXEC_PATH + r'"|\$CLAUDE_PROJECT_DIR/' + _EXEC_PATH + r")")
+_EXEC_MAX_CHARS = 600
+
+
+_DENIED_DOT_SEGMENTS = frozenset((".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker", ".netrc", ".npmrc", ".pypirc",
+                                  ".git-credentials", ".git"))
+_DENIED_STEMS = frozenset(("id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "credentials", "secrets", "secret", "token", "tokens",
+                           "password", "passwd"))
+
+
+def _secret_segment(seg: str) -> bool:
+    """A path segment that names a secret-bearing file or directory (case-insensitive): ``.env``/``.env.*``, a denylisted dot
+    entry, or a denylisted name as the whole segment or its dot-stem (``secrets.sh``). Other dot segments (``.claude``) pass."""
+    low = seg.lower()
+    return (low == ".env" or low.startswith(".env.") or low in _DENIED_DOT_SEGMENTS or low.split(".", 1)[0] in _DENIED_STEMS)
+
+
+def mcp_exec_launch_path(command: object, args: object) -> str | None:
+    """The repo-relative script path of an ``.mcp.json`` server launched as ``bash|sh -c 'exec "$CLAUDE_PROJECT_DIR/<path>"'``
+    (quotes optional, balanced), else ``None``: every other ``bash -c`` string keeps the argv gate's redaction. ``command`` must be
+    exactly ``bash`` or ``sh``, ``args`` exactly ``["-c", S]``; ``<path>`` is relative, has no empty, ``.`` or ``..`` segment,
+    is at most 128 characters (the gate's ``argv[0]`` cap), does not start with ``-`` (it becomes ``argv[0]``), passes ``bundle.screen_fails`` whole, and has no segment that fails the name rule (``bundle.name_fails``) or names a secret-bearing file or directory (``_secret_segment``). The caller emits
+    ``command = <path>`` with no args (through ``launch_argv_fields``). Never raises on input."""
+    if command not in _EXEC_SHELLS or not isinstance(args, list) or len(args) != 2 or args[0] != "-c" \
+            or not isinstance(args[1], str) or len(args[1]) > _EXEC_MAX_CHARS:
+        return None
+    m = _EXEC_SHAPE.fullmatch(args[1])
+    if m is None:
+        return None
+    path = m.group(1) or m.group(2)
+    segments = path.split("/")
+    if path[0] == "-" or any(seg in ("", ".", "..") for seg in segments):
+        return None
+    if bundle.screen_fails(path) or any(_secret_segment(seg) or bundle.name_fails(seg) for seg in segments):
+        return None
+    return path
 
 
 def _record_id(record_id: str) -> str:

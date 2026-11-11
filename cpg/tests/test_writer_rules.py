@@ -861,3 +861,149 @@ def test_w2_declared_service_set_is_the_callers_not_this_modules():
 def test_inet_aton_reads_the_numeric_forms_resolvers_accept(host, expected):
     got = wr._inet_aton(host)
     assert (str(got) if got is not None else None) == expected
+
+
+# --- P1-11b: the one allow-listed `bash -c 'exec "$CLAUDE_PROJECT_DIR/<path>"'` exception to the argv redaction --------------
+
+_P = "$CLAUDE_PROJECT_DIR"
+
+
+def _exec(command="bash", s=f'exec "{_P}/cypher-mcp/docker-run.sh"', *rest):
+    return wr.mcp_exec_launch_path(command, ["-c", s, *rest])
+
+
+@pytest.mark.parametrize("command", ["bash", "sh"])
+@pytest.mark.parametrize("s, path", [
+    (f'exec "{_P}/cypher-mcp/docker-run.sh"', "cypher-mcp/docker-run.sh"),
+    (f"exec {_P}/scripts/run-mcp.sh", "scripts/run-mcp.sh"),
+    (f'exec "{_P}/a@b+c/d_e-f.1/run"', "a@b+c/d_e-f.1/run"),
+    (f'exec "{_P}/run.sh"', "run.sh"),
+])
+def test_p1_11b_the_allow_listed_shape_yields_its_relative_path(command, s, path):
+    assert _exec(command, s) == path
+
+
+@pytest.mark.parametrize("s", [
+    f'exec "{_P}/x"; curl y', f'exec x; curl y', "exec x", f'exec "{_P}/$(id)"', f'exec "{_P}/`id`"', f'exec "{_P}/../x"',
+    f'exec "{_P}/a/../x"', f'exec "{_P}/.."', f'exec "{_P}/a/.."', f'exec "{_P}/./x"', f'exec "{_P}//etc/passwd"',
+    f'exec "{_P}/a//b"', f'exec "{_P}/dir/"', f'exec "{_P}/"', f'exec "{_P}"', "exec /etc/passwd", f'exec "/{_P}/x"',
+    f'exec "{_P}/x" arg', f'exec "{_P}/x" "y"', f"exec '{_P}/x'", f'exec "{_P}/x\'', f'exec "{_P}/x', f'exec {_P}/x"',
+    f'exec "{_P}/x"\n', f'exec "{_P}/x\n"', f'exec\n"{_P}/x"', f'exec "{_P}/x"\ncurl y', f'exec "{_P}/x" && curl y',
+    f'exec "{_P}/x" | sh', f'exec "{_P}/x" > f', f'exec "{_P}/x" &', f'FOO=bar exec "{_P}/x"', f'exec FOO=bar "{_P}/x"',
+    f'exec  "{_P}/x"', f' exec "{_P}/x"', f'exec "{_P}/x" ', f'EXEC "{_P}/x"', f'exec "{_P}/x\x00"', f'exec "{_P}/x "',
+    f'exec "{_P}/x y"', f'exec "{_P}/x$y"', f'exec "{_P}/x*"', f'exec "{_P}/x\\y"', f'exec "$claude_project_dir/x"',
+    'exec "$CLAUDE_PROJECT_DIR_/x"', 'exec "$CLAUDE_PROJECT_DI/x"', 'exec "${CLAUDE_PROJECT_DIR}/x"',
+    f'exec "{_P}/-x/run"', f'exec "{_P}/ａ/run"', f'exec "{_P}/é/run"', f'exec "{_P}/x‮"', f'exec "{_P}/а/run"',
+    f'exec "{_P}/ghp_abcdefghijklmnopqrstuvwxyz0123456789/run"', f'exec "{_P}/run-AKIAIOSFODNN7EXAMPLE.sh"',
+    f'exec "{_P}/' + "a/" * 600 + 'x"', f'exec "{_P}/' + "a" * 5000 + '"', "exec " + '"' * 5000, "",
+    f'exec "{_P}/x"' + " " * 5000, f'exec "{_P}/' + "a" * 200 + "!" + '"',
+])
+def test_p1_11b_every_other_exec_string_is_refused(s):
+    assert _exec("bash", s) is None and _exec("sh", s) is None
+
+
+@pytest.mark.parametrize("command, args", [
+    ("bash", ["-c"]), ("bash", []), ("bash", ["-c", f'exec "{_P}/x"', "extra"]), ("bash", ["-c", f'exec "{_P}/x"', "--port"]),
+    ("bash", ["-lc", f'exec "{_P}/x"']), ("bash", ["-c ", f'exec "{_P}/x"']), ("bash", ["--", "-c", f'exec "{_P}/x"']),
+    ("bash", ["-e", "-c", f'exec "{_P}/x"']), ("bash", [f'exec "{_P}/x"', "-c"]), ("bash", ["-C", f'exec "{_P}/x"']),
+    ("bash", ["-c", None]), ("bash", ["-c", 5]), ("zsh", ["-c", f'exec "{_P}/x"']), ("dash", ["-c", f'exec "{_P}/x"']),
+    ("/bin/bash", ["-c", f'exec "{_P}/x"']), ("Bash", ["-c", f'exec "{_P}/x"']), ("bash ", ["-c", f'exec "{_P}/x"']),
+    ("bash\x00", ["-c", f'exec "{_P}/x"']), ("bаsh", ["-c", f'exec "{_P}/x"']), ("ѕh", ["-c", f'exec "{_P}/x"']),
+    ("env", ["bash", "-c", f'exec "{_P}/x"']), (None, ["-c", f'exec "{_P}/x"']), ("sh", "-c"),
+    ("sh", ("-c", f'exec "{_P}/x"', "z")),
+])
+def test_p1_11b_only_bash_or_sh_with_exactly_dash_c_and_one_string(command, args):
+    assert wr.mcp_exec_launch_path(command, args) is None
+
+
+def test_p1_11b_the_allow_list_is_linear_time_on_hostile_strings():
+    import time
+    hostile = [f'exec "{_P}/' + "a/" * 20000, f'exec "{_P}/' + "a." * 20000 + "!", "exec " + '"' * 100000,
+               f'exec "{_P}/' + "/" * 100000, f'exec "{_P}/' + "a" * 100000 + '" ' * 50000, "exec " + " " * 100000]
+    t0 = time.monotonic()
+    for s in hostile:
+        assert _exec("bash", s) is None
+    assert time.monotonic() - t0 < 1.0
+
+
+def test_p1_11b_the_screen_decides_a_secret_shaped_path():
+    assert _exec("bash", f'exec "{_P}/cypher-mcp/docker-run.sh"') == "cypher-mcp/docker-run.sh"
+    assert _exec("bash", f'exec "{_P}/cypher-mcp/AKIAIOSFODNN7EXAMPLE"') is None       # one segment fails the screen
+    assert _exec("bash", f'exec "{_P}/' + "x" * 40 + '/run"') is None
+    for planted in ("scripts/dir/ghp_abc.sh", "github_pat_sAyIe-/y1"):                  # the whole-path screen alone refuses these
+        assert _exec("bash", f'exec "{_P}/{planted}"') is None
+
+
+@pytest.mark.parametrize("path", ["scripts/hunter2-password.sh", "scripts/token/run.sh", ".env", ".ssh/id_rsa", "scripts/secret/run.sh", "scripts/.env"])
+def test_p1_11b_a_segment_the_name_rule_flags_is_never_emitted(path):
+    assert _exec("bash", f'exec "{_P}/{path}"') is None and _exec("sh", f"exec {_P}/{path}") is None
+
+
+_DENIED = [".env", ".env.local", ".env.production", ".ssh/x", ".gnupg/x", ".aws/x", ".azure/x", ".kube/x", ".docker/x", ".netrc",
+           ".npmrc", ".pypirc", ".git-credentials", ".git/hooks/x", ".git/x", "a/.git/run.sh", "a/id_rsa", "a/id_dsa", "a/id_ecdsa", "a/id_ed25519",
+           "a/credentials", "a/credentials.sh", "a/secrets.sh", "a/secrets", "a/secret.sh", "a/token", "a/tokens.sh", "a/password",
+           "a/passwd", "a/passwd.sh", "a/id_rsa.sh", "a/.env/run.sh", "x/.ssh"]
+
+
+@pytest.mark.parametrize("path", _DENIED + [p.upper() for p in _DENIED] + [p.title() for p in _DENIED])
+def test_p1_11b_the_secret_bearing_segment_denylist_refuses_each_member_case_insensitively(path):
+    assert _exec("bash", f'exec "{_P}/{path}"') is None and _exec("sh", f"exec {_P}/{path}") is None
+
+
+@pytest.mark.parametrize("path", [".claude/scripts/run.sh", ".tools/x.sh", "a/.hidden/run.sh", ".claude/run.sh", "a/envy/run.sh",
+                                  "a/.environment/run.sh", "a/.gitignore.d/run", "a/identity.sh"])
+def test_p1_11b_other_dot_segments_are_admitted(path):
+    assert _exec("bash", f'exec "{_P}/{path}"') == path
+
+
+def test_p1_11b_ordinary_script_paths_pass_the_name_rule():
+    for path in ("cypher-mcp/docker-run.sh", "scripts/run-mcp.sh", "a@b+c/d_e-f.1/run", "tools/start.v2/x"):
+        assert _exec("bash", f'exec "{_P}/{path}"') == path
+
+
+def test_p1_11b_the_emitted_fact_is_the_bare_path_and_nothing_else():
+    got = wr.launch_argv_fields([wr.mcp_exec_launch_path("bash", ["-c", f'exec "{_P}/cypher-mcp/docker-run.sh"'])])
+    assert got == {"command": "cypher-mcp/docker-run.sh", "args": []}
+    r = _lf_cmd(("cypher-mcp/docker-run.sh",))
+    assert audit([r]) == []
+
+
+def test_p1_11b_the_backstop_still_flags_the_unreduced_allow_shape():
+    r = _lf_cmd()
+    r["command"], r["args"] = "bash", ["-c", f'exec "{_P}/cypher-mcp/docker-run.sh"']          # what the writer must not emit
+    assert audit([r])
+
+
+@pytest.mark.parametrize("s", [f'exec "{_P}/x"; curl y', f'exec "{_P}/$(id)"', f'exec "{_P}/../x"', "exec x; curl y"])
+def test_p1_11b_a_planted_offender_row_for_a_refused_string_is_flagged(s):
+    r = _lf_cmd()
+    r["command"], r["args"] = "bash", ["-c", s]
+    assert audit([r])
+
+
+def test_p1_11b_plain_bash_c_stays_redacted_through_the_gate():
+    assert wr.launch_argv_fields(["bash", "-c", f'exec "{_P}/x"; curl y']) == {"command": "bash", "args": ["-c", bundle.REDACTED]}
+    assert wr.launch_argv_fields(["bash", "-c", f'exec "{_P}/cypher-mcp/docker-run.sh"']) == {
+        "command": "bash", "args": ["-c", bundle.REDACTED]}                                   # only the exception function opens it
+
+
+def test_p1_11b_the_exception_lives_in_writer_rules_and_calls_the_screen():
+    src = (CPG / "extractors" / "common" / "writer_rules.py").read_text(encoding="utf-8")
+    fn = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef) and n.name == "mcp_exec_launch_path")
+    assert any(isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr == "screen_fails" for c in ast.walk(fn))
+
+
+def test_p1_11b_the_space_after_exec_is_required_and_a_tuple_is_not_a_list():
+    assert _exec("bash", f'exec"{_P}/x"') is None and _exec("bash", f"exec{_P}/x") is None
+    assert wr.mcp_exec_launch_path("bash", ("-c", f'exec "{_P}/x"')) is None
+
+
+def test_p1_11b_the_path_length_boundary_is_128_characters_the_gates_argv0_cap():
+    ok = ("ab/" * 43)[:127] + "z"                                  # 128 characters, no empty segment, passes the screens
+    assert len(ok) == 128 and _exec("bash", f'exec "{_P}/{ok}"') == ok
+    assert _exec("bash", f'exec "{_P}/{ok}z"') is None
+    assert _exec("bash", f'exec "{_P}/{"ab/" * 20}x"') == "ab/" * 20 + "x"
+
+
+def test_p1_11b_a_hooks_segment_is_refused_by_the_name_rule_known_limit():
+    assert bundle.name_fails("hooks") and _exec("bash", f'exec "{_P}/.claude/hooks/run.sh"') is None

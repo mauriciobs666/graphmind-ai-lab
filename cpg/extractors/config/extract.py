@@ -168,7 +168,7 @@ def _format_drafts(fmt: str, tree: F.Node, text: str) -> list[L.Draft]:
     if fmt == "compose":
         return L.compose_drafts(tree)
     if fmt in ("mcp-json", "kiro-agent"):
-        return L.mcp_drafts(tree)
+        return L.mcp_drafts(tree, exec_launch=fmt == "mcp-json")
     return []
 
 

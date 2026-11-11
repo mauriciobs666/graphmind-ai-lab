@@ -13,7 +13,7 @@ expands or interpolates: a shell-form command is only split, and ``${VAR:-x}`` i
 | Compose ``expose[i]`` | ``port``, origin ``compose`` |
 | Compose ``entrypoint``/``command`` | ``command``, origin ``compose``, ``service`` |
 | Compose ``build.context`` (or ``build:``) | ``mount`` with ``mountPath`` the relative path as written, origin ``compose``, ``service`` |
-| ``.mcp.json`` / Kiro agent ``mcpServers.<s>.command`` + ``args`` | ``command``, origin ``explicit``, ``service`` is the server name |
+| ``.mcp.json`` / Kiro agent ``mcpServers.<s>.command`` + ``args`` | ``command``, origin ``explicit``, ``service`` is the server name; the allow-listed ``bash``/``sh -c 'exec "$CLAUDE_PROJECT_DIR/<path>"'`` (P1-11b) is ``command = <path>``, no args |
 | any scalar holding ``${VAR:-default}`` or ``${VAR-default}`` | ``env-default``, origin ``env-default`` |
 
 The ``uvicorn --port`` case is a ``command`` whose ``args`` hold the flag (the linker reads the port from the gated argv);
@@ -26,6 +26,7 @@ import shlex
 from dataclasses import dataclass
 
 from ccg import bundle
+from extractors.common import writer_rules as wr
 
 from . import formats as F
 
@@ -193,8 +194,9 @@ def _safe_context(text: str) -> bool:
 
 # --- .mcp.json and Kiro agents ---------------------------------------------------------------------------------
 
-def mcp_drafts(root: F.Node) -> list[Draft]:
-    """The launch chain's first link: each server's ``command`` + ``args`` (the server name is the ``service``)."""
+def mcp_drafts(root: F.Node, *, exec_launch: bool = False) -> list[Draft]:
+    """The launch chain's first link: each server's ``command`` + ``args`` (the server name is the ``service``). ``exec_launch`` (an
+    ``.mcp.json`` only, never a Kiro agent) admits the P1-11b allow-listed ``bash -c 'exec "$CLAUDE_PROJECT_DIR/<path>"'``."""
     out: list[Draft] = []
     servers = _child(root, "mcpServers")
     if servers is None or servers.kind != "m":
@@ -205,7 +207,8 @@ def mcp_drafts(root: F.Node) -> list[Draft]:
             continue
         args = _child(srv, "args")
         tail = [] if args is None else _scalar_list(args)
-        argv = _argv([command.text, *tail]) if tail is not None else None
+        script = wr.mcp_exec_launch_path(command.text, tail) if exec_launch else None      # P1-11b: `bash -c 'exec "$CLAUDE_PROJECT_DIR/<path>"'`, the one allow-listed shape
+        argv = _argv([script] if script is not None else [command.text, *tail]) if tail is not None else None
         if argv:
             out.append(Draft("command", command.line, "explicit", _service_name(name), argv=argv))
     return out

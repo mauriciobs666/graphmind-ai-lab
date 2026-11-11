@@ -1157,3 +1157,84 @@ def test_audit_over_an_adhoc_run_with_urls_covers_every_parts_entry():
     for rec in parts:                                                                  # link-local, 6to4, capability: never a clear host
         if rec["keyPath"] in ("a_url", "b_url", "notify.url"):
             assert rec["bindParts"]["hostKind"] == "external" and "host" not in rec["bindParts"]
+
+
+# --- P1-11b: the `.mcp.json` exec-path launch fact (the allow-listed `bash -c` exception) ------------------------
+
+_PD = "$CLAUDE_PROJECT_DIR"
+
+
+def _mcp_facts(command, args, name="cypher"):
+    r = run({".mcp.json": json.dumps({"mcpServers": {name: {"command": command, "args": args}}})})
+    assert wr.audit_records(r.records, key=KEY, declared_services=frozenset(), texts=None) == []
+    bundle.validate(_bundle_for(r, ".mcp.json"))
+    return facts(r, ".mcp.json", "command")
+
+
+def test_p1_11b_the_repos_own_mcp_json_names_its_script():
+    real = (CPG.parent / ".mcp.json").read_bytes()                         # read-only golden: this repo's own file
+    r = X.extract_config(REPO, {".mcp.json": real}, key=KEY)
+    f = facts(r, ".mcp.json", "command")
+    cypher = [x for x in f if x["service"] == "cypher"]
+    assert len(cypher) == 1 and (cypher[0]["command"], cypher[0]["args"]) == ("cypher-mcp/docker-run.sh", [])
+    assert not any(a == "-c" or bundle.REDACTED in a for x in f for a in x["args"])
+    assert wr.audit_records(r.records, key=KEY, declared_services=frozenset()) == []
+
+
+@pytest.mark.parametrize("shell", ["bash", "sh"])
+def test_p1_11b_an_allow_listed_launch_emits_the_bare_path_with_its_service_and_line(shell):
+    (f,) = _mcp_facts(shell, ["-c", f'exec "{_PD}/scripts/run-mcp.sh"'])
+    assert (f["command"], f["args"], f["service"], f["origin"], f["kind"]) == ("scripts/run-mcp.sh", [], "cypher", "explicit", "command")
+
+
+@pytest.mark.parametrize("s", [
+    f'exec x; curl y', f'exec "{_PD}/x"; curl y', f'exec "{_PD}/$(id)"', f'exec "{_PD}/`id`"', f'exec "{_PD}/../x"',
+    f'exec "{_PD}/ghp_abcdefghijklmnopqrstuvwxyz0123456789/run"', "exec /etc/passwd", f'exec "{_PD}/x" extra',
+    f"exec '{_PD}/x'", f'exec "{_PD}/x"\n', f'exec "{_PD}/x" && curl y', f'exec "{_PD}/x" | sh', f'exec "{_PD}/x" > f',
+    f'FOO=bar exec "{_PD}/x"', f'exec "{_PD}/\u0430/x"', f'exec "{_PD}/x\x00"', f'exec "{_PD}/x "', "exec " + "a" * 4000,
+    f'exec "{_PD}//etc/passwd"',
+])
+@pytest.mark.parametrize("shell", ["bash", "sh"])
+def test_p1_11b_every_other_bash_c_string_stays_redacted(shell, s):
+    (f,) = _mcp_facts(shell, ["-c", s])
+    assert f["command"] == shell and f["args"][0] == "-c" and len(f["args"]) == 2          # the gate's own result, never the bare path
+    assert f["args"] == bundle.gate_argv([shell, "-c", s])[1:]
+
+
+@pytest.mark.parametrize("s", ["exec x; curl y", f'exec "{_PD}/$(id)"', f'exec "{_PD}/../x"', f'exec "{_PD}/`id`"'])
+def test_p1_11b_the_headline_negatives_are_redacted_not_merely_gated(s):
+    (f,) = _mcp_facts("bash", ["-c", s])
+    assert (f["command"], f["args"]) == ("bash", ["-c", bundle.REDACTED])
+
+
+@pytest.mark.parametrize("args", [["-c", f'exec "{_PD}/x"', "extra"], ["-lc", f'exec "{_PD}/x"'], ["-e", "-c", f'exec "{_PD}/x"']])
+def test_p1_11b_extra_or_different_args_stay_gated(args):
+    (f,) = _mcp_facts("bash", args)
+    assert f["command"] == "bash" and f["args"] and f["args"] != []
+    assert not any("CLAUDE_PROJECT_DIR" in a for a in f["args"])
+
+
+def test_p1_11b_the_exception_is_mcp_json_only():
+    s = f'exec "{_PD}/x/run.sh"'
+    r = run({"compose.yaml": f"services:\n  a:\n    command: [\"bash\", \"-c\", {json.dumps(s)}]\n",
+             "Dockerfile": f"FROM x\nENTRYPOINT [\"bash\", \"-c\", {json.dumps(s)}]\n"})
+    for p in ("compose.yaml", "Dockerfile"):
+        (f,) = facts(r, p, "command")
+        assert (f["command"], f["args"]) == ("bash", ["-c", bundle.REDACTED])
+
+
+def test_p1_11b_a_kiro_agent_gets_the_same_rule_as_mcp_json_or_none():
+    s = f'exec "{_PD}/x/run.sh"'
+    r = run({".kiro/agents/a.json": json.dumps({"mcpServers": {"s": {"command": "bash", "args": ["-c", s]}}})})
+    (f,) = facts(r, ".kiro/agents/a.json", "command")
+    assert (f["command"], f["args"]) == ("bash", ["-c", bundle.REDACTED])
+
+
+def test_p1_11b_an_over_long_exec_string_yields_no_fact_at_all():
+    assert _mcp_facts("bash", ["-c", "exec " + "a" * 5000]) == []
+
+
+def test_p1_11b_a_path_over_128_characters_keeps_the_full_redaction_not_a_bare_redacted_command():
+    path = ("ab/" * 43)[:128] + "z"                                # 129 characters
+    (f,) = _mcp_facts("bash", ["-c", f'exec "{_PD}/{path}"'])
+    assert (f["command"], f["args"]) == ("bash", ["-c", bundle.REDACTED])
