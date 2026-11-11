@@ -389,14 +389,19 @@ def test_the_pack_file_is_marked_paper(pid):
     assert rulepack.load_pack(CPG / "packs" / pid / "pack.yaml")["status"] == "paper"
 
 
-def test_the_packs_directory_holds_exactly_the_seven_spec_packs():
-    """No pack directory beyond the spec's seven, and no file in one beyond its pack (plus the infra negatives)."""
+# Packs that are files only, with no block in the rule-pack spec: id -> the files beside `pack.yaml` (P1-46).
+NON_SPEC_PACKS = {"shell-mcp-call": {NEGATIVES_FILE}}
+
+
+def test_the_packs_directory_holds_exactly_the_seven_spec_packs_and_the_files_only_packs():
+    """No pack directory beyond the spec's seven and `NON_SPEC_PACKS`, and no file in one beyond its pack (plus its negatives)."""
     assert len(REAL_PACKS) == 7
     on_disk = {p.name for p in (CPG / "packs").iterdir()}
-    assert on_disk == set(REAL_PACKS)
-    for pid in REAL_PACKS:
+    assert on_disk == set(REAL_PACKS) | set(NON_SPEC_PACKS)
+    for pid in on_disk:
         files = {p.name for p in (CPG / "packs" / pid).iterdir()}
-        assert files == {"pack.yaml"} | ({NEGATIVES_FILE} if pid == "infra-signatures" else set()), (pid, files)
+        beside = {NEGATIVES_FILE} if pid == "infra-signatures" else NON_SPEC_PACKS.get(pid, set())
+        assert files == {"pack.yaml"} | beside, (pid, files)
 
 
 # ---------------------------------------------------------------- the topic knock-on (O-16)

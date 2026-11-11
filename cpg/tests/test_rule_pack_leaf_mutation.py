@@ -760,3 +760,52 @@ def test_each_leaf_behaves_as_classified():
     result = run_all()
     survivors = {k for k, alive in result.items() if alive}
     assert survivors == UNEXERCISED_UNTIL_P1, (sorted(survivors - UNEXERCISED_UNTIL_P1), sorted(UNEXERCISED_UNTIL_P1 - survivors))
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# P1-46: packs that are files only (no block in the spec text) are mutated in the loaded pack instead. Every scalar leaf of
+# `cpg/packs/shell-mcp-call/pack.yaml` is edited in a deep copy (the same `Z` / +1 / flip rule as `mutate`) and the pack's
+# behavioural contract, `behaviour_failures` of `test_pack_shell_mcp_call.py` (the validator, the positive and negative cases),
+# must report something. In-process: no scratch repository and no subprocess. `FILE_PACK_SURVIVORS` is the agreed list of
+# leaves the contract cannot see; it is empty.
+# ---------------------------------------------------------------------------------------------------------------------
+
+FILE_PACK_SURVIVORS: set[str] = set()
+
+
+def _file_pack_leaves(node, path=()):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield from _file_pack_leaves(v, path + (k,))
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from _file_pack_leaves(v, path + (i,))
+    else:
+        yield path, node
+
+
+def _file_pack_mutant(pack: dict, path: tuple):
+    import copy
+    out = copy.deepcopy(pack)
+    parent = out
+    for p in path[:-1]:
+        parent = parent[p]
+    v = parent[path[-1]]
+    parent[path[-1]] = (not v) if isinstance(v, bool) else v + 1 if isinstance(v, int) else v + "Z"
+    return out
+
+
+def file_pack_survivors(pid: str = "shell-mcp-call") -> tuple[int, set[str]]:
+    """``(leaf count, leaves whose mutation leaves the pack's behavioural contract green)``."""
+    import test_pack_shell_mcp_call as shell
+    from ccg.rulepack import load_pack
+    base = load_pack(CPG / "packs" / pid / "pack.yaml")
+    assert shell.behaviour_failures(base) == []          # the unmutated pack passes: a failure below is the edit's
+    found = [(fmt(p), p) for p, _ in _file_pack_leaves(base)]
+    return len(found), {name for name, p in found if shell.behaviour_failures(_file_pack_mutant(base, p)) == []}
+
+
+def test_every_leaf_of_the_files_only_shell_pack_is_caught_by_its_behavioural_contract():
+    count, alive = file_pack_survivors()
+    assert count == 24
+    assert alive == FILE_PACK_SURVIVORS, sorted(alive ^ FILE_PACK_SURVIVORS)

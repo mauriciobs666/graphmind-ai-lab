@@ -1,0 +1,34 @@
+# Shell text the pack must NOT turn into a consumer, per rule id (P1-46). Each script goes through the real shell extractor
+# (tests/test_pack_shell_mcp_call.py), so a comment is a comment to the parser, not to a regex. Not the N-22 signature
+# negatives of `ccg.rulepack.negative_lines` (this pack has no `signatures`).
+# Known limit (not a negative): `mcp-call --json reindex` yields key `--json`; pinned in test_pack_shell_mcp_call.py.
+negatives:
+  call:
+    comment: |
+      # mcp-call reindex
+      echo done  # mcp-call reindex
+    string-containing-the-word: |
+      echo "run mcp-call reindex first"
+      printf '%s\n' 'mcp-call reindex'
+    argument-of-another-command: |
+      command -v mcp-call
+      which mcp-call
+      type mcp-call
+      xargs mcp-call reindex
+    similar-name: |
+      mcp-calls reindex
+      xmcp-call reindex
+      my-mcp-call reindex
+      ./mcp-call reindex
+  eval-call:
+    comment: |
+      # eval mcp-call reindex
+    other-command: |
+      eval echo reindex
+      eval "$cmd" reindex
+    word-as-argument: |
+      eval echo mcp-call reindex
+      eval ssh-agent mcp-call
+      eval 'echo mcp-call' reindex
+    no-tool-argument: |
+      eval mcp-call

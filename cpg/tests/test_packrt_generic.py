@@ -19,7 +19,7 @@ from packrt_helpers import CPG, PACKS
 from ccg.rulepack import load_pack
 
 SRC = sorted((CPG / "ccg" / "packrt").glob("*.py"))
-SERVED = ("fastapi", "fetch", "fastmcp")
+SERVED = ("fastapi", "fetch", "fastmcp", "shell-mcp-call")
 SCHEMA = CPG / "ccg" / "schemas" / "rule-pack-v1.schema.json"
 TOKEN = re.compile(r"[A-Za-z_]\w*")
 # Tokens the runtime has to spell although a served pack also spells them: (file, kind, token); "*" is any file.
@@ -146,7 +146,8 @@ def test_the_forbidden_words_are_derived_from_the_shipped_packs_and_leave_out_th
     tokens, literals = forbidden()
     assert {"fastapi", "fetch", "fastmcp", "include_router", "APIRouter", "FastAPI", "call_tool", "uvicorn",
             "mcpServers", "streamable_http_app", "streamablehttp_client", "mount", "tool"} <= tokens
-    assert {"--port", "kw.prefix"} <= literals
+    assert {"--port", "kw.prefix", "mcp-call"} <= literals
+    assert "eval" in tokens                                             # P1-46: `shell-mcp-call` is a served pack too
     assert not ({"callee", "regex", "provides", "kind", "decorator", "firstOf", "arg"} & tokens)   # the format's words
 
 

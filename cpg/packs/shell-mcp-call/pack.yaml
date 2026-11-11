@@ -1,0 +1,24 @@
+# P1-46: the shell consumer of an MCP tool. A script runs `mcp-call <tool> ...`; the tool is the first argument.
+# Not in the rule-pack spec (docs/plans/connected-code-graph-rule-pack-spec.md): `status: paper` is the only value
+# the v1 format allows, not a claim that no runtime exists (docs/plans/connected-code-graph-p1-linking.md, P1-16 Also).
+# `callKind: command` is the shell extractor's call kind (bundle spec3 section 5.6), which scopes the rules to shell
+# scripts: the format has no language scope, and `scope.imports` (as `fastmcp` uses) can never hold for a script.
+packFormat: 1
+id: shell-mcp-call
+version: 0.1.0
+kind: protocol
+vocabVersion: "1.0"
+status: paper
+link: [{kind: mcp_tool, matcher: exact}]
+# Known limit: the tool is `a0` blindly, so a leading option word (`mcp-call --json reindex`) becomes the key; pinned by a test.
+rules:
+  - id: call
+    match: {callsite: {callee: mcp-call, callKind: command}}
+    extract: {tool: {arg: a0}}
+    emit: [{consumes: {kind: mcp_tool, key: "{tool}"}}]
+  # `eval mcp-call <tool>`: the command is assembled at run time, so the consumer is `possible` whatever the tool.
+  # Only the unquoted form is expressible: `eval "mcp-call $T"` is one template argument (see test_pack_shell_mcp_call.py).
+  - id: eval-call
+    match: {callsite: {callee: eval, callKind: command, args: [{arg: a0, value: mcp-call}]}}
+    extract: {tool: {arg: a1}}
+    emit: [{consumes: {kind: mcp_tool, key: "{tool}", status: possible, reason: runtime-built}}]
