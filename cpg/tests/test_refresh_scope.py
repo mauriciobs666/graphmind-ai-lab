@@ -176,16 +176,67 @@ def test_a_scoped_refresh_writes_no_state_for_a_carried_unit(tmp_path, rows):
     assert atrest.unit_state_path(SYSTEM, VICTIM, w.work).read_bytes() == before
 
 
-def test_the_state_is_written_only_after_the_swap(tmp_path, rows):
+class Crash(BaseException):
+    """A hard stop planted in a window (not an ``Exception``: nothing in the refresh may swallow it)."""
+
+
+def test_the_state_is_written_once_the_rows_are_built_before_the_load(tmp_path, rows):
+    w = World(tmp_path, repos=("r1",))
+    RF.refresh(SYSTEM, **w.kw(make_target()[0]))
+    c2 = commit(w.repo("r1"), {"conf/app.yaml": "name: app\nport: 9090\n"})
+    with pytest.raises(Boom):                                          # a failing load: the record is already true of the stored bundles
+        RF.refresh(SYSTEM, **w.kw(make_target(fail_on=fail_at(3))[0]))
+    assert atrest.read_unit_state(SYSTEM, VICTIM, w.work) == {"status": "fresh", "builtCommit": c2, "failedAt": None, "failReason": None}
+
+
+def test_a_refresh_that_dies_before_the_rows_are_built_leaves_the_previous_records(tmp_path, monkeypatch):
     w = World(tmp_path, repos=("r1",))
     first = RF.refresh(SYSTEM, **w.kw(make_target()[0]))
     commit(w.repo("r1"), {"conf/app.yaml": "name: app\nport: 9090\n"})
-    with pytest.raises(Boom):                                          # a failing load: no swap, so no new state either
-        RF.refresh(SYSTEM, **w.kw(make_target(fail_on=fail_at(3))[0]))
+    monkeypatch.setattr(RF, "build_rows", lambda *a, **k: (_ for _ in ()).throw(Crash()))
+    with pytest.raises(Crash):
+        RF.refresh(SYSTEM, **w.kw(make_target()[0]))
     assert atrest.read_unit_state(SYSTEM, VICTIM, w.work)["builtCommit"] == first.heads["r1"]
 
 
-@pytest.mark.parametrize("damage", ["garbage", "extra-field", "unknown-code", "marker-without-status", "other-build", "link", "empty", "bad-stamp"])
+def test_a_failed_swap_after_a_good_rebuild_leaves_a_record_true_of_the_store(tmp_path, rows, monkeypatch):
+    w, _, _ = failed_world(tmp_path, rows)                             # the unit is stale-kept at c1
+    c2 = commit(w.repo("r1"), {"conf/app.yaml": "name: app\nport: 9090\n"})
+    monkeypatch.setattr(RF, "swap", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("swap failed")))
+    with pytest.raises(RuntimeError):
+        RF.refresh(SYSTEM, ["r1"], **w.kw(make_target()[0], now=NOW + 500))
+    monkeypatch.undo()
+    u = only(RF.refresh(SYSTEM, ["r2"], **w.kw(make_target()[0], now=NOW + 900)), VICTIM)
+    assert (u.status, u.built_commit, u.failed_at, u.fail_reason) == ("fresh", c2, None, None)
+
+
+def test_a_crash_between_the_state_write_and_the_swap_leaves_a_stale_marker_not_a_lost_one(tmp_path, rows, monkeypatch):
+    w = World(tmp_path, repos=("r1", "r2"))
+    RF.refresh(SYSTEM, **w.kw(make_target()[0]))
+    monkeypatch.setattr(RF, "swap", lambda *a, **k: (_ for _ in ()).throw(Crash()))
+    with pytest.raises(Crash):
+        RF.refresh(SYSTEM, **w.kw(make_target()[0], build=failing((VICTIM, "extract:timeout"))))
+    monkeypatch.undo()
+    u = only(RF.refresh(SYSTEM, ["r2"], **w.kw(make_target()[0], now=NOW + 500)), VICTIM)
+    assert (u.status, u.fail_reason, u.failed_at) == ("stale-kept", "extract:timeout", NOW_Z)       # the safe direction
+
+
+@pytest.mark.parametrize("fails", [True, False])
+def test_a_crash_after_the_swap_loses_no_marker(tmp_path, rows, monkeypatch, fails):
+    w = World(tmp_path, repos=("r1", "r2"))
+    RF.refresh(SYSTEM, **w.kw(make_target()[0]))
+    if not fails:                                                      # previously stale-kept, rebuilt fresh at a new commit
+        RF.refresh(SYSTEM, **w.kw(make_target()[0], build=failing((VICTIM, "extract:timeout"))))
+        commit(w.repo("r1"), {"conf/app.yaml": "name: app\nport: 9090\n"})
+    monkeypatch.setattr(RF.atrest, "prune_unit", lambda *a, **k: (_ for _ in ()).throw(Crash()))
+    with pytest.raises(Crash):
+        RF.refresh(SYSTEM, **w.kw(make_target()[0], build=failing((VICTIM, "extract:timeout")) if fails else None))
+    monkeypatch.undo()
+    u = only(RF.refresh(SYSTEM, ["r2"], **w.kw(make_target()[0], now=NOW + 500)), VICTIM)
+    assert (u.status, u.fail_reason) == (("stale-kept", "extract:timeout") if fails else ("fresh", None))
+
+
+@pytest.mark.parametrize("damage", ["garbage", "extra-field", "unknown-code", "marker-without-status", "other-build", "link", "dangling-link", "empty", "bad-stamp"])
 def test_a_damaged_state_record_fails_closed_value_free_for_a_carried_unit(tmp_path, rows, damage):
     w = World(tmp_path, repos=("r1", "r2"))
     first = RF.refresh(SYSTEM, **w.kw(make_target()[0]))
@@ -194,7 +245,7 @@ def test_a_damaged_state_record_fails_closed_value_free_for_a_carried_unit(tmp_p
     good = {"status": "stale-kept", "builtCommit": commit_id, "failedAt": NOW_Z, "failReason": "extract:timeout"}
     bad = {"garbage": None, "extra-field": {**good, "note": "SECRET-text"}, "unknown-code": {**good, "failReason": "boom:unlisted"},
            "marker-without-status": {**good, "status": "fresh"}, "other-build": {**good, "builtCommit": "0" * 40},
-           "link": None, "empty": None, "bad-stamp": {**good, "failedAt": "yesterday"}}[damage]
+           "link": None, "dangling-link": None, "empty": None, "bad-stamp": {**good, "failedAt": "yesterday"}}[damage]
     path.unlink()
     if damage == "garbage":
         path.write_bytes(b"\xff\x00 not json SECRET")
@@ -202,6 +253,8 @@ def test_a_damaged_state_record_fails_closed_value_free_for_a_carried_unit(tmp_p
         path.write_bytes(b"")
     elif damage == "link":
         path.symlink_to(w.root)
+    elif damage == "dangling-link":
+        path.symlink_to(tmp_path / "nowhere")
     else:
         path.write_text(json.dumps(bad))
     if not path.is_symlink():
@@ -252,6 +305,18 @@ def test_a_unit_with_no_bundle_after_the_refresh_has_no_state_record(tmp_path, r
         p.unlink()
     RF.refresh(SYSTEM, **w.kw(make_target()[0], build=failing((VICTIM, "extract:failed"))))
     assert not atrest.unit_state_path(SYSTEM, VICTIM, w.work).exists()
+
+
+def test_a_dangling_link_where_a_bundleless_units_record_was_is_refused_and_counted_not_followed(tmp_path):
+    w = World(tmp_path, repos=("r1",))
+    RF.refresh(SYSTEM, **w.kw(make_target()[0]))
+    path = atrest.unit_state_path(SYSTEM, VICTIM, w.work)
+    for p in atrest.bundle_dir(SYSTEM, w.work).glob(VICTIM + ".*" + atrest.BUNDLE_SUFFIX):
+        p.unlink()
+    path.unlink()
+    path.symlink_to(tmp_path / "nowhere")
+    rep = RF.refresh(SYSTEM, **w.kw(make_target()[0], build=failing((VICTIM, "extract:failed"))))
+    assert rep.state_errors == 1 and path.is_symlink() and not (tmp_path / "nowhere").exists()
 
 
 # --- the state record in atrest ----------------------------------------------------------------------------------------------------------

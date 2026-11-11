@@ -361,7 +361,7 @@ def read_unit_state(system: str, unit: str, root: str | os.PathLike | None = Non
 
 
 def clear_unit_state(system: str, unit: str, root: str | os.PathLike | None = None) -> bool:
-    """Remove ``unit``'s record (a link is unlinked itself, never followed); True if one existed."""
+    """Remove ``unit``'s record; True if one existed. A link in its place (dangling or not) raises :class:`AtRestError` and is left alone."""
     p = unit_state_path(system, unit, root)
     if not os.path.lexists(p):
         return False

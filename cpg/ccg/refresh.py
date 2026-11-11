@@ -21,12 +21,17 @@ selects which units are **rebuilt**, never which units the graph holds (plan (2a
 out-of-scope unit from its last good bundle with its own ``builtCommit`` and its **previous status and failure marker carried** (the
 staleness reader shows any commit drift; it cannot show that the last refresh of the unit failed) or ``not-mapped``/``manifest:never-built`` when
 it has none, so a scoped refresh never swaps a partial graph over the live key. The marker is read from the work directory, not the live graph
-(the build credential holds the live key write-only): after each refresh ``atrest.write_unit_state`` records the status of every unit that
-refresh rebuilt (``fresh``, or ``stale-kept`` with ``failedAt`` and its code), and a carried unit reads only its own record. A unit that was
+(the build credential holds the live key write-only): once the rows are assembled and before ``load`` and ``swap``, ``atrest.write_unit_state``
+records the status of every unit that refresh rebuilt (``fresh``, or ``stale-kept`` with ``failedAt`` and its code), and a carried unit reads only its own record. A unit that was
 ``stale-kept`` therefore stays ``stale-kept`` with the same ``failedAt`` and ``failReason`` across scoped refreshes until it is rebuilt; a rebuild
 overwrites the record; a unit with no record is ``fresh``. A record that is unreadable, a link, malformed, names a code outside ``FAIL_REASONS``
 or belongs to another build than the bundle carried **fails closed**: the unit is ``stale-kept`` with ``extract:failed`` and the refresh time.
 The record is a bind-key-mismatch-blind snapshot of the rebuild only (a mismatch is recomputed on every refresh and never recorded).
+The record belongs with the bundle store the carry reads, not with the swap, so every window left by a failure or a crash reads in the safe
+direction: a failed load or swap leaves a record true of the stored bundles (a unit rebuilt fresh reads ``fresh`` at its new build); a crash between
+the write and the swap leaves a ``stale-kept`` record for a graph that does not show it yet, which the next refresh rebuilds from the store anyway; a
+crash after the swap loses nothing (the record is already there). A refresh that dies before the write (a build or assembly error) leaves the previous
+records, which name an older build than a bundle the failed refresh wrote and so fail closed (``stale-kept``/``extract:failed``).
 Scoped or full, the build stage always sees the whole system: the carried fresh code bundles join ``known_tools`` and ``ctx.units`` is the full
 unit list, so a Markdown unit rebuilt in a scoped refresh matches the bytes a full refresh builds. A carried code unit that is ``stale-kept``
 adds no tools, as a failed code build adds none in a full refresh.
@@ -519,6 +524,15 @@ def _run(report: RefreshReport, mf: Manifest, manifest_path: Path, root: Path, t
             ur.staleness = unit_staleness(SimpleNamespace(rootPath=ur.root_path, builtCommit=ur.built_commit), report.heads[ur.repo_id],
                                           repo=repos[ur.repo_id], mode=staleness_mode)
 
+    for u in rebuilt:                                              # the carry reads the bundle store, so the record is written with it, before the swap; a rebuilt unit overwrites its own (none: no bundle, no state)
+        try:
+            if u.unitId in rebuilt_state:
+                status, commit, when, reason = rebuilt_state[u.unitId]
+                atrest.write_unit_state(system, u.unitId, status, commit, when, reason, work_root)
+            else:
+                atrest.clear_unit_state(system, u.unitId, work_root)
+        except atrest.AtRestError:
+            report.state_errors += 1
     del bundles, records_by_unit, facts, binder, links         # the rows are all the load needs (6 GB host)
     with _Timed(report, "load", clock):
         report.load = load(target.store, rows, system, drop_stale=True)
@@ -531,15 +545,6 @@ def _run(report: RefreshReport, mf: Manifest, manifest_path: Path, root: Path, t
             report.pruned += len(atrest.prune_unit(system, unit_id, build_id, work_root))
         except atrest.AtRestError:
             report.prune_errors += 1
-    for u in rebuilt:                                              # a rebuilt unit overwrites its own carried state (none: no bundle, no state)
-        try:
-            if u.unitId in rebuilt_state:
-                status, commit, when, reason = rebuilt_state[u.unitId]
-                atrest.write_unit_state(system, u.unitId, status, commit, when, reason, work_root)
-            else:
-                atrest.clear_unit_state(system, u.unitId, work_root)
-        except atrest.AtRestError:
-            report.state_errors += 1
     if scope_ids is None:                                          # a full refresh knows every live unit: the rest are orphans
         try:
             report.pruned += len(atrest.prune_orphans(system, {u.unitId for u in units}, work_root))
