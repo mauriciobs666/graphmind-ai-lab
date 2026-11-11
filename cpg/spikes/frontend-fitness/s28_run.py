@@ -11,6 +11,7 @@ Opens no label, truth or adjudication file.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -31,8 +32,13 @@ def main() -> int:
     ap.add_argument("--only", choices=["off", "on"])
     ap.add_argument("--guard", action="store_true", help="run s28-extract-bodiless-guard.sc (extract.sc + a one-line bodiless-METHOD guard); records under the *.extract-guard keys")
     ap.add_argument("--stats", action="store_true", help="run s28-cpg-stats.sc (whole-CPG node/edge counts) on each CPG; record key <cfg>.cpg-stats")
+    ap.add_argument("--extract", default=str(EXTRACT), help="projection script (default: the old spikes/vertical-slice/extract.sc); its sha256 is recorded as extractSha256")
     a = ap.parse_args()
     lang = a.lang
+    extract = Path(a.extract)
+    if not extract.is_absolute() and not extract.exists():
+        extract = CPG.parent / extract  # repo-root-relative, e.g. cpg/extractors/joern/extract.sc
+    extract = extract.resolve()
     base = WORK / lang
     stage = base / "stage"
     s27rec = json.loads((base / "s27-run.json").read_text())
@@ -68,13 +74,16 @@ def main() -> int:
             print(f"{cfg}: content check failed -> no projection", flush=True)
             continue
         import time
+        sc = GUARD if a.guard else extract
         t = time.time()
         r = s27.run([s27.RUNNER, "--backend", "container", "--mode", "offline", "--frontend", "joern",
-                     "--script-file", str(GUARD if a.guard else EXTRACT), "--source", str(stage), "--output", str(out), "--",
-                     "--script", "/scripts/" + (GUARD if a.guard else EXTRACT).name, "--param", f"cpgFile=/out/{cpgname}",
+                     "--script-file", str(sc), "--source", str(stage), "--output", str(out), "--",
+                     "--script", "/scripts/" + sc.name, "--param", f"cpgFile=/out/{cpgname}",
                      "--param", "out=/out/@AUDIT_ID@.facts.jsonl", "--param", f"lang={lang}"],
                     out / ("s28-extract-guard.log" if a.guard else "s28-extract.log"), f"{cfg}.extract" + ("-guard" if a.guard else ""))
         f = s27.newest(out, "*.facts.jsonl", t)
+        r["extractScript"] = str(sc)
+        r["extractSha256"] = hashlib.sha256(sc.read_bytes()).hexdigest()
         r["factsFile"] = str(f) if f else None
         r["factsMB"] = round(f.stat().st_size / 1e6, 2) if f else None
         r["cpgFile"] = p["cpgFile"]
