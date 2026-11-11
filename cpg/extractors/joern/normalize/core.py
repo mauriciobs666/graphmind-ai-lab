@@ -139,6 +139,11 @@ def seg(scope: Scope) -> str:
     return base + (f"#{scope.dup}" if scope.dup > 1 else "")
 
 
+def repo_relative(root: str, rel: str) -> str:
+    """A parse-root-relative path as a repo-relative POSIX path: ``rel`` for the root unit ``.``, else ``root/rel``."""
+    return rel if root == "." else f"{root}/{rel}"
+
+
 class Builder:
     """Per-unit state: the raw facts by kind, the staged source, the unit's identity."""
 
@@ -157,7 +162,7 @@ class Builder:
 
     def P(self, rel: str) -> str:
         """Joern parse-root-relative -> repo-relative POSIX path (spec §8.2)."""
-        return rel if self.root == "." else f"{self.root}/{rel}"
+        return repo_relative(self.root, rel)
 
 
 # -- reading facts ---------------------------------------------------------------------------

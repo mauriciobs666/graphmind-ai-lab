@@ -198,3 +198,39 @@ New findings:
   "not mapped"): harmless, spec4's "non-empty sources" baseline; say so in the README if wanted.
 
 Route: `teco` -> `architect` (plan § P1-08 text still names the 4-arg form: align to `skipped_files(unit, parsed, override)` + `candidate_sources`/`parsed_map`, add the override-contradiction clause); N1 into the wiring step's brief. No `REVIEW.md` additions.
+
+## Pass 3 (wiring)
+
+Gate of the uncommitted wiring (`git diff` of `assemble_bundle.py`, `tests/test_normalize_assemble.py`, `tests/slice/test_normalize_equivalence.py`).
+Executed: `test_normalize_assemble.py` + `test_skipped_files.py` 376 passed (`ulimit -v 1500000`); slice file `-k "hand_listed or lambda_decorator_delta or last_delta or version"`
+3 passed (`ulimit -v 2500000`; the Joern-running slice tests were not run); a direct comparison of `Builder.P` against the inlined rule
+(roots `.`, `web`, `a/b`; names `x.ts`, `src/deep/y.tsx`: identical); a script classifying the 33 paths from the stage; 8 mutants in fresh copies. Read: all other per-file record sources.
+
+**Verdict: approve with suggestions.** No blocker. One minor test gap (W1).
+
+(1) Wiring, verified:
+- `assemble(..., skipped=None)` drops by `B.P(f) not in skip_paths` (repo-relative vs stage-relative, non-root unit tested); `header["skippedFiles"]` only when non-empty; `report["skippedFiles"]` always set; `NORMALIZER_VERSION` "0.4" equals the last delta.
+- `build_bundle` imports `skipped` inside the function (N1 fixed: disposition fixed), computes for `javascript` units only, `override=False`.
+- Record sources: read every `facts[...]` loop (`c`, `p` via `scopes`, `r`, `cs`, `const`, `d`, `cb`): each goes through `m2s`/`scopes`/`files`, all filtered by `fileset`; a call whose target sits in a dropped file loses that target (`m2s.get(t["id"])` is `None`, so it becomes unresolved/external, never a dangling `symbolId`), imports and blame loops iterate `files`. The tests assert absence for file, symbol, cond, ret and constant of a parsed `e2e/x.ts`; callsite, data, decorator, `ownedRegions` and import rest on the same `m2s`/`files` filter by reading, not by a planted record. Acceptable; plant a `d`/`cb`/`cs` fact in `extra` if you want it executed.
+- The inlined `repo_rel` lambda is textually `Builder.P`'s rule (verified equal on the cases above), but is a copy; nit.
+
+(2) Delta `p1-08-skipped-files` "0.4": independently verified by execution against `.ccg-work/vertical-slice/s14a`: staged JS/TS sources 74 (non-empty, regular),
+stored `file` records 41, `stored <= staged`, difference 33; I classified each by the spec4 §1 pattern: 28 `test` (all `*.test.*`/`*.spec.*`, two under `tests/e2e/`), 5 `frontend-ignore` (`src/i18n/{LanguageChooser,Provider,config,format,useLocale}`);
+my list equals `P1_08_SKIPPED_SP` exactly, in byte order. No `.d.ts` or vendored file in that stage, so the "in neither" rule is not exercised by the slice (it is by the unit tests). falkor-chat/server: delta returns 0, header unchanged (test asserts).
+`test_the_stored_files_are_the_staged_sources_less_the_hand_listed_33` does not call `skipped_files`; it re-implements the stage predicate and compares to stored paths, so it is independent. The `last delta == constant` assertion (line ~428) ran and passes.
+
+(3) Mutants (fresh copies, `assemble` + `skipped` tests):
+| mutant | result |
+|---|---|
+| K1 ARGUMENT: drop by `f` instead of `B.P(f)` | killed (5) |
+| K2 ARGUMENT: `repo_rel` without the unit-root prefix | killed (3) |
+| K3 ARGUMENT: `parsed_map` marks parsed paths False | killed (4) |
+| K4 header written even when empty | killed (7 failed, 51 errors) |
+| K5 skipped computed for python instead of javascript | killed (4) |
+| K6 last entry dropped from the list | killed (1) |
+| K8 report count wrong | killed (4) |
+| **K7** `repo_rel` always prefixes `unit.rootPath` (wrong for a `.` unit) | **survives** |
+
+- **W1 (minor, executed)** K7 survives: no test builds a root-`.` JS unit through `build_bundle`. For such a unit the mutant would produce `./src/a.ts` keys, so parsed files look unparsed and get false `frontend-ignore` entries with nothing dropped. Real risk for any repo whose JS unit is the repository root. Fix: one `build_bundle` test with a `.` root unit (parsed `src/a.ts`, staged `e2e/x.ts`), expecting header `src/...` paths; or have `build_bundle` call a shared rebasing function used by `Builder.P` so the copy cannot drift.
+
+Route: `tdd-engineer` for W1 (small). `teco`: plan § P1-08 text still needs the architect's alignment noted in Pass 2 (3-arg form, `parsed_map`, override clause), then the feature-close spec check. No `REVIEW.md` additions.

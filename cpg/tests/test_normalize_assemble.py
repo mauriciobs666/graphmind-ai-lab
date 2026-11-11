@@ -1069,3 +1069,136 @@ def test_a_symbol_with_owned_regions_carries_them_sorted_and_a_fingerprint_that_
 def test_a_symbol_without_owned_regions_has_no_ownedregions_field_at_all(tmp_path, monkeypatch):
     plain, _ = assemble_owned(tmp_path, monkeypatch, [])
     assert all("ownedRegions" not in r for r in plain.values())
+
+
+# --- P1-08: header.skippedFiles ----------------------------------------------------------------------------------------
+def ts_facts_for(names):
+    """`ts_facts()` for several files: one `:program` method and one `I` type each (ids made from the file's position)."""
+    out = {**{k: [] for k in KINDS}, "f": [{"k": "f", "name": n} for n in names]}
+    for i, n in enumerate(names):
+        meta = dict(file=n, pfull="")
+        out["m"].append({"k": "m", "id": f"m{i}", "name": ":program", "full": f"{n}::program", "l": 1, "le": 3, "c": 0,
+                         "pk": "TYPE_DECL", "pid": f"t{i}a", "code": "", **meta})
+        out["t"] += [{"k": "t", "id": f"t{i}a", "name": ":program", "full": f"{n}::program", "l": 1, "c": 0,
+                      "pk": "NAMESPACE_BLOCK", "pid": "x", **meta},
+                     {"k": "t", "id": f"t{i}b", "name": "I", "full": f"{n}::program:I", "l": 1, "c": 0, "pk": "BLOCK",
+                      "pid": "x", **meta}]
+    return out
+
+
+WEB_FILES = {"web/src/a.ts": TS_SRC, "web/e2e/x.ts": TS_SRC, "web/src/i18n/y.ts": TS_SRC, "web/src/c.test.ts": TS_SRC,
+             "web/README.md": "docs\n"}
+WEB_SKIPPED = [{"path": "web/e2e/x.ts", "reason": "test"}, {"path": "web/src/c.test.ts", "reason": "test"},
+               {"path": "web/src/i18n/y.ts", "reason": "frontend-ignore"}]
+
+
+def web_unit_and_raw(tmp_path, parsed=("src/a.ts", "e2e/x.ts"), extra=()):
+    """A `web` unit (root not `.`): `src/a.ts` and `e2e/x.ts` parsed; `src/i18n/y.ts` and `src/c.test.ts` staged but not."""
+    from ccg import ids
+    from ccg.units import Unit
+    path = tmp_path / "repo"
+    commit = git_repo(path, WEB_FILES)
+    facts_file = tmp_path / "facts.jsonl"
+    facts = ts_facts_for(list(parsed))
+    facts_file.write_text("".join(json.dumps(r) + "\n" for k in KINDS for r in facts[k])
+                         + "".join(json.dumps(r) + "\n" for r in extra), encoding="utf-8")
+    unit = Unit(ids.unit_id("r", "web", "javascript"), "r", "web", "javascript")
+    raw = joern_run.RawFacts(unit, commit, facts_file, (UUID,), path / "web", tmp_path, None, tmp_path / "x", 4)
+    work = tmp_path / "work"
+    work.mkdir(mode=0o700)
+    return unit, raw, path, commit, work
+
+
+def build_web(tmp_path, **kw):
+    unit, raw, path, commit, work = web_unit_and_raw(tmp_path, **kw)
+    report = {}
+    written = assemble_bundle.build_bundle(unit, raw, path, commit, system="sys1", root=work, built_at=BUILT_AT, report=report)
+    return bundle.read_bundle(written), report
+
+
+def test_build_bundle_lists_test_shaped_and_unparsed_sources_in_the_header_of_a_non_root_unit(tmp_path):
+    records, report = build_web(tmp_path)
+    assert records[0]["skippedFiles"] == WEB_SKIPPED
+    assert report["skippedFiles"] == 3
+
+
+def test_a_parsed_test_shaped_file_gets_no_file_record_symbol_or_point(tmp_path):
+    records, report = build_web(tmp_path)
+    assert [r["path"] for r in of(records, "file")] == ["web/src/a.ts"]
+    assert of(records, "symbol") and all("src/a.ts" in r["qname"] for r in of(records, "symbol"))
+    assert not any("x.ts" in r["qname"] for r in of(records, "symbol"))
+    assert report["filesParsed"] == 1
+
+
+def test_the_parsed_names_are_rebased_to_repo_relative_before_the_skip_decision(tmp_path):
+    records, _ = build_web(tmp_path)
+    assert "web/src/a.ts" not in [e["path"] for e in records[0]["skippedFiles"]]       # parsed production file: not listed
+
+
+def test_a_unit_with_nothing_to_skip_has_no_skipped_files_key(tmp_path):
+    records, report = assemble_ts(tmp_path, None)
+    assert "skippedFiles" not in records[0] and report["skippedFiles"] == 0
+
+
+def test_assemble_drops_the_listed_repo_relative_paths_from_the_files_of_a_non_root_unit(tmp_path):
+    path = tmp_path / "repo"
+    commit = git_repo(path, WEB_FILES)
+    records, report = assemble_bundle.assemble(
+        lang="javascript", unit_root="web", repo_id="r", facts=ts_facts_for(["src/a.ts", "e2e/x.ts"]), stage=path / "web",
+        astgen_dir=None, repo=path, commit=commit, audit_ids=[UUID], extract_script=joern_run.EXTRACT_SC, built_at=BUILT_AT,
+        skipped=[{"path": "web/e2e/x.ts", "reason": "test"}])
+    assert [r["path"] for r in of(records, "file")] == ["web/src/a.ts"]
+    assert records[0]["skippedFiles"] == [{"path": "web/e2e/x.ts", "reason": "test"}]
+    assert report["skippedFiles"] == 1 and report["filesParsed"] == 1
+
+
+def test_a_python_unit_has_no_skipped_files(repo):
+    records, report = assemble(repo)
+    assert "skippedFiles" not in records[0] and report["skippedFiles"] == 0
+
+
+def test_no_condition_return_or_constant_of_a_dropped_file_reaches_the_bundle(tmp_path):
+    x_method = "m1"                                                   # the `:program` method of `e2e/x.ts` (second parsed file)
+    extra = [{"k": "c", "m": x_method, "id": "9001", "l": 1, "c": 1, "code": "a", "lab": "CALL"},
+             {"k": "r", "m": x_method, "id": "9002", "l": 1, "c": 1},
+             {"k": "const", "m": x_method, "name": "K", "l": 1, "e": {"o": "lit", "c": "1"}}]
+    records, _ = build_web(tmp_path, extra=extra)
+    for kind in ("cond", "ret", "constant"):
+        assert of(records, kind) == [], kind
+
+
+# --- one rebasing rule for Builder.P and build_bundle ---------------------------------------------------------------------
+@pytest.mark.parametrize("root, rel, want", [(".", "src/a.ts", "src/a.ts"), ("web", "src/a.ts", "web/src/a.ts"),
+                                             ("a/b", "x.ts", "a/b/x.ts")])
+def test_builder_p_and_the_shared_rebasing_function_agree(root, rel, want):
+    from extractors.joern.normalize import core
+    assert core.repo_relative(root, rel) == want
+    assert builder_for(root).P(rel) == want
+
+
+def builder_for(root):
+    from pathlib import Path
+    from extractors.joern.normalize.core import Builder, Source
+    return Builder("javascript", root, "r", {}, Source(Path(".")))
+
+
+def test_a_root_unit_through_build_bundle_has_unprefixed_keys_and_the_same_skips(tmp_path):
+    from ccg import ids
+    from ccg.units import Unit
+    files = {"src/a.ts": TS_SRC, "e2e/x.ts": TS_SRC, "src/i18n/y.ts": TS_SRC}
+    path = tmp_path / "repo"
+    commit = git_repo(path, files)
+    facts_file = tmp_path / "facts.jsonl"
+    facts = ts_facts_for(["src/a.ts", "e2e/x.ts"])
+    facts_file.write_text("".join(json.dumps(r) + "\n" for k in KINDS for r in facts[k]), encoding="utf-8")
+    unit = Unit(ids.unit_id("r", ".", "javascript"), "r", ".", "javascript")
+    raw = joern_run.RawFacts(unit, commit, facts_file, (UUID,), path, tmp_path, None, tmp_path / "x", 3)
+    work = tmp_path / "work"
+    work.mkdir(mode=0o700)
+    written = assemble_bundle.build_bundle(unit, raw, path, commit, system="sys1", root=work, built_at=BUILT_AT)
+    records = bundle.read_bundle(written)
+    assert records[0]["skippedFiles"] == [{"path": "e2e/x.ts", "reason": "test"},
+                                          {"path": "src/i18n/y.ts", "reason": "frontend-ignore"}]
+    assert [r["path"] for r in of(records, "file")] == ["src/a.ts"]
+    assert not any("x.ts" in r["qname"] or "./" in r["qname"] for r in of(records, "symbol"))
+    assert not any(str(v).startswith("./") for r in records for v in r.values() if isinstance(v, str))

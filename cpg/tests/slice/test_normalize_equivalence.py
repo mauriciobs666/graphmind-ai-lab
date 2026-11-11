@@ -138,8 +138,8 @@ SP_ROOT = "salesperson"
 SP_BUNDLE = S14A / "c2341bca0404a6a3eadab1d72ba5f4db.bundle.jsonl"
 SP_BUNDLE_SHA = "f2ef6f5add18691d94cecfcb05a742e03d3e06f00cf3fedea462d79886e13e65"
 UNITS = {"fcs": (FCS_ROOT, "python", FCS_BUNDLE, FCS_BUNDLE_SHA), "sp": (SP_ROOT, "javascript", SP_BUNDLE, SP_BUNDLE_SHA)}
-#: header fields that are an input or a stamp, not content: spec3 §8.5 (`builtAt`, `sandboxAuditIds`) and the hash of the
-#: script file, which differs between the slice's `extract.sc` and P1-04's port by its header comment alone.
+#: header fields that are an input or a stamp, not content: spec3 §8.5 (`builtAt`, `sandboxAuditIds`). The hash of the script file is
+#: exempt in definition 2 only: the shipped `extract.sc` is no longer the slice's but for its header comment (P1-09 changed the projection).
 EXEMPT = ("builtAt", "sandboxAuditIds")
 
 
@@ -259,6 +259,57 @@ def _mask_cond_code(header, records):
     return touched
 
 
+# P1-08: `header.skippedFiles` of the stored `salesperson` bundle, written BY HAND from its stage: of the 74 JS/TS sources staged
+# under `salesperson/`, 41 are stored `file` records and these 33 are not: 28 match the closed `test` pattern (`*.test.*`,
+# `*.spec.*`, a segment `e2e`) and 5 are the `src/i18n/` production files the frontend drops (`jssrc2cpg` 4.0.579 has no
+# override, `extractors/joern/README.md`). Byte order. `falkor-chat/server` is Python: none.
+P1_08_SKIPPED_SP = [
+    {"path": "salesperson/src/api/dispatch.test.ts", "reason": "test"},
+    {"path": "salesperson/src/api/hooks.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/components/message/Composer.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/components/message/DeadTurnNotice.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/components/message/MessageBubble.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/components/message/Transcript.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/components/message/TurnIndicator.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/components/message/composerNotice.test.ts", "reason": "test"},
+    {"path": "salesperson/src/components/message/optimistic.test.ts", "reason": "test"},
+    {"path": "salesperson/src/components/message/welcome.test.ts", "reason": "test"},
+    {"path": "salesperson/src/components/sheets/BottomSheet.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/components/sheets/ResetControl.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/i18n/LanguageChooser.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/i18n/LanguageChooser.tsx", "reason": "frontend-ignore"},
+    {"path": "salesperson/src/i18n/Provider.tsx", "reason": "frontend-ignore"},
+    {"path": "salesperson/src/i18n/config.ts", "reason": "frontend-ignore"},
+    {"path": "salesperson/src/i18n/format.test.ts", "reason": "test"},
+    {"path": "salesperson/src/i18n/format.ts", "reason": "frontend-ignore"},
+    {"path": "salesperson/src/i18n/locales.test.ts", "reason": "test"},
+    {"path": "salesperson/src/i18n/useLocale.ts", "reason": "frontend-ignore"},
+    {"path": "salesperson/src/layout/Header.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/layout/Shell.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/session/storage.test.ts", "reason": "test"},
+    {"path": "salesperson/src/views/CartPanel.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/views/CatalogPanel.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/views/ChatView.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/views/OrderPanel.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/views/PresenterKeyScreen.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/views/PresenterResetAllControl.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/views/PresenterRoster.test.tsx", "reason": "test"},
+    {"path": "salesperson/src/views/ProfilePanel.test.tsx", "reason": "test"},
+    {"path": "salesperson/tests/e2e/mobile-shell.spec.ts", "reason": "test"},
+    {"path": "salesperson/tests/e2e/presenter.spec.ts", "reason": "test"},
+]
+
+
+@delta("p1-08-skipped-files", "0.4")
+def _skipped_files(header, records):
+    """P1-08: a JS unit's header gains `skippedFiles`; header-only, the stored bundle already lacks these files' records."""
+    if header["unit"]["rootPath"] != "salesperson":
+        return 0
+    assert not {e["path"] for e in P1_08_SKIPPED_SP} & {r["path"] for r in records if r["type"] == "file"}
+    header["skippedFiles"] = [dict(e) for e in P1_08_SKIPPED_SP]
+    return len(P1_08_SKIPPED_SP)
+
+
 def apply_deltas(lines: list[bytes], deltas=None) -> tuple[list[bytes], dict[str, int]]:
     """``lines`` (a stored bundle, header first) through ``deltas`` (default: ``DELTAS``); returns the expected canonical
     lines and, per delta name, how many records it touched."""
@@ -363,6 +414,8 @@ def test_the_lambda_decorator_delta_removes_exactly_3_records_all_of_falkor_chat
     sp, sp_touched = apply_deltas(stored_lines("sp"))
     assert (fcs_touched["drop-lambda-decorators"], sp_touched["drop-lambda-decorators"]) == (3, 0)
     assert (fcs_touched["p1-06-mask-cond-code"], sp_touched["p1-06-mask-cond-code"]) == (41, 2)
+    assert (fcs_touched["p1-08-skipped-files"], sp_touched["p1-08-skipped-files"]) == (0, 33)
+    assert "skippedFiles" not in json.loads(fcs[0]) and len(json.loads(sp[0])["skippedFiles"]) == 33
     assert json.loads(fcs[0])["counts"]["decorator"] == 210 == json.loads(stored_lines("fcs")[0])["counts"]["decorator"] - 3
     assert sum(json.loads(x)["type"] == "decorator" for x in fcs[1:]) == 210
     assert json.loads(sp[0])["counts"]["decorator"] == 0
@@ -430,3 +483,22 @@ def test_two_real_joern_runs_of_one_unit_give_one_bundle_and_it_is_the_stored_on
     assert raws[0].sandbox_audit_ids != raws[1].sandbox_audit_ids          # every run has its own audit ids ...
     assert _without_exempt(out[0]) == _without_exempt(out[1])             # ... and they are all that tells the bundles apart
     assert _without_exempt(out[0]) == _without_exempt(out[1]) == _without_exempt(expected_bytes("sp"))
+
+
+@pytest.mark.slice
+def test_the_stored_files_are_the_staged_sources_less_the_hand_listed_33():
+    """Independent of `skipped_files`: staged JS/TS sources (non-empty, not symlinks) minus the hand-written list = the stored `file` set."""
+    stage = need(S14A / "sp" / "stage")
+    exts = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts")
+    staged = set()
+    for d, _, names in os.walk(stage):
+        for n in names:
+            p = Path(d, n)
+            if n.endswith(exts) and not p.is_symlink() and p.stat().st_size > 0:
+                staged.add("salesperson/" + p.relative_to(stage).as_posix())
+    listed = {e["path"] for e in P1_08_SKIPPED_SP}
+    stored_files = {json.loads(x)["path"] for x in stored_lines("sp") if json.loads(x).get("type") == "file"}
+    assert (len(staged), len(listed), len(stored_files)) == (74, 33, 41)
+    assert listed <= staged and staged - listed == stored_files
+    assert sorted(listed, key=lambda s: s.encode()) == [e["path"] for e in P1_08_SKIPPED_SP]
+    assert sum(e["reason"] == "test" for e in P1_08_SKIPPED_SP) == 28

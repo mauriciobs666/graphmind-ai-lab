@@ -25,12 +25,12 @@ from ccg.units import Unit
 from . import blame as blame_mod
 from . import javascript, python
 from .core import (FIELD_CAP, Builder, Resolver, Source, collapse, fingerprint, import_symbol_id, kw_head, lang_files,
-                   load_facts, name_norm, owned_regions, path_from, sha256, span_start, sym_name)
+                   load_facts, name_norm, owned_regions, path_from, repo_relative, sha256, span_start, sym_name)
 from .mask import mask_cond_code
 
 #: The slice profile's header identity. A later step that changes output renames or re-versions it (the stamp reads it).
 NORMALIZER = "ccg-slice-normalize"
-NORMALIZER_VERSION = "0.3"     # bumped with each registered delta of tests/slice/test_normalize_equivalence.py (the last delta pins the same literal)
+NORMALIZER_VERSION = "0.4"     # bumped with each registered delta of tests/slice/test_normalize_equivalence.py (the last delta pins the same literal)
 JOERN_VERSION = "v4.0.579"
 DEFAULT_VENDORED = ["_vendor", "node_modules", "third-party", "third_party", "vendor", "vendored"]
 
@@ -127,18 +127,21 @@ def _blame_regions(s, ls: int, le: int) -> list[tuple[int, int]]:
 
 # -- assembly --------------------------------------------------------------------------------
 def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_dir, repo, commit: str,
-             audit_ids, extract_script, built_at: str | None = None) -> tuple[list[dict], dict]:
+             audit_ids, extract_script, built_at: str | None = None, skipped=None) -> tuple[list[dict], dict]:
     """The header and the records of one unit's bundle, plus a measurement report.
 
     ``facts`` is ``core.load_facts``' result, ``stage`` the staged unit, ``astgen_dir`` the Babel ASTs (JS/TS; ``None``
     for Python), ``repo`` the source repository whose history ``lastChanged*`` reads, ``commit`` the built commit.
-    ``builtAt`` (exempt from determinism, spec3 §8.5) defaults to now."""
+    ``builtAt`` (exempt from determinism, spec3 §8.5) defaults to now. ``skipped`` is ``header.skippedFiles`` (P1-08, repo-relative
+    paths, computed by ``build_bundle``): written exactly when non-empty, and each listed path is dropped from the files."""
     if not blame_mod.is_commit_id(commit):
         raise BuildError(f"the built commit {commit!r} is not a commit id (40 or 64 lowercase hex digits)")
     B = Builder(lang, unit_root, repo_id, facts, Source(Path(stage)))       # asserts CPython 3.12 first
     blame_mod.require_full_history(repo)
     frontend = python if lang == "python" else javascript
-    files = [f for f in lang_files(facts, lang) if B.src.exists(f) and not is_vendored(f)]
+    skipped = list(skipped or [])
+    skip_paths = {e["path"] for e in skipped}                # repo-relative; ``files`` is stage-relative, so compare ``B.P(f)``
+    files = [f for f in lang_files(facts, lang) if B.src.exists(f) and not is_vendored(f) and B.P(f) not in skip_paths]
     fileset = set(files)
     scopes, m2s, _ = frontend.build_scopes(B)
     scopes = {k: s for k, s in scopes.items() if s.file in fileset}
@@ -490,6 +493,9 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
         "fieldDepthCap": FIELD_CAP, "vendoredDirs": sorted(DEFAULT_VENDORED), "history": "available",
         "counts": {t: counts.get(t, 0) for t in bundle.RECORD_TYPES[1:]},
     }
+    if skipped:
+        header["skippedFiles"] = skipped
+    report["skippedFiles"] = len(skipped)
     report["counts"] = header["counts"]
     report["filesParsed"] = len(files)
     report["symbols"] = len(scopes)
@@ -505,9 +511,16 @@ def build_bundle(unit: Unit, raw, repo, commit: str, *, system: str, root=None, 
     ``build`` defaults to ``commit``. ``report``, when given, is filled with the measurement report; ``extract_script`` (default the shipped
     ``extract.sc``) is the file whose sha256 the header records. Returns the path."""
     from extractors.joern.run import EXTRACT_SC                    # deferred: the runner is not needed to normalize
+    from extractors.joern import skipped as skipped_mod            # deferred for the same reason (it imports the runner)
     if raw.commit != commit:
         raise BuildError(f"the raw facts were extracted at {raw.commit}, not {commit}")
-    records, rep = assemble(lang=unit.language, unit_root=unit.rootPath, repo_id=unit.repoId, facts=load_facts(raw.facts),
+    facts = load_facts(raw.facts)
+    skipped = []
+    if unit.language == "javascript":                              # `skipped_files` is [] for any other language
+        parsed = skipped_mod.parsed_map(raw.stage, unit.rootPath,
+                                        [repo_relative(unit.rootPath, f) for f in lang_files(facts, "javascript")])
+        skipped = skipped_mod.skipped_files(unit, parsed, override=False)
+    records, rep = assemble(lang=unit.language, unit_root=unit.rootPath, repo_id=unit.repoId, facts=facts, skipped=skipped,
                             stage=raw.stage, astgen_dir=raw.astgen_dir, repo=repo, commit=commit,
                             audit_ids=raw.sandbox_audit_ids, extract_script=extract_script or EXTRACT_SC, built_at=built_at)
     if report is not None:
