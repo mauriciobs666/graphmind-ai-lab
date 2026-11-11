@@ -77,6 +77,11 @@ def locate_callees(B: Builder, file: str, calls: list[dict]):
     return pos
 
 
+def _astral_before(B: Builder, file: str, pos: tuple[int, int]) -> bool:
+    """A character above U+FFFF before the callee on its line: an indexer's UTF-16 columns then differ from ours."""
+    return any(ord(ch) > 0xFFFF for ch in B.src.lines(file)[pos[0] - 1][:pos[1]])
+
+
 # -- G-4, ordering ---------------------------------------------------------------------------
 def g4_filter(edges):
     """-spec2 §1.4 (G-4): drop CDG self-edges (``point == cond``) and de-duplicate (point, cond) pairs, in
@@ -310,6 +315,9 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
                         rec.update(resolution="unresolved", targets=[], status="possible", reason="name-match")
                 records.append(rec)
     report["syntheticCallsDropped"] = {"total": sum(synthetic.values()), "byName": dict(synthetic.most_common(12))}
+    # P1-15: where each call site's callee identifier sits, for merging an indexer's references (merge_scip.positions_from_bundle)
+    report["callsitePositions"] = {cid: [S[sid].file, pos[0], pos[1], _astral_before(B, S[sid].file, pos)]
+                                   for cid, sid, pos in cs_info.values()}
 
     # imports (source-derived) and constants
     imports_by_file = {}
