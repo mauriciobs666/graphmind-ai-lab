@@ -1,0 +1,11 @@
+[
+  [3, "mcp__cypher__query"],
+  [7, "mcp__falkor-chat-agent-team__search_documents"],
+  [7, "mcp__cypher__query"],
+  [8, "./scripts/test_queries.sh"],
+  [8, "scripts/other.sh"],
+  [8, "docker"],
+  [9, "git"],
+  [25, "mcp__cypher__query"],
+  [25, "pytest"]
+]
