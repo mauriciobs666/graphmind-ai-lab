@@ -27,9 +27,26 @@ lineEnd)])` returns `(lastChangedAt, lastChangedCommit)`; without it symbols car
 | a command naming a function of the same file | `resolved`, `confirmed`/`resolved-call`, `targets` = its definitions |
 | any other command | `unresolved`, `possible`/`name-match` |
 | `eval`, a computed command name, a computed `source`/`.` path, an argument using `${!name}` | `possible`/`shell-dynamic` |
+| the leading literal of the one argument of `eval` (`eval "mcp-call $TOOL"`, `eval 'a "b c"'`) | the `eval` site as above **plus** one inner call site per complete simple command in it (below) |
 | each argument `a0`.. (at most 32) | a `valueSet`: `const`, `template`, `ref`, `unknown` alternatives |
 | a once-assigned script variable | a `constant` (`path::NAME`); functions read it as `{"ref": ...}` |
 | a value that comes from `$N`, `$@` or a command substitution, through assignments | `data` (use = the call site `a<i>`, def = the `param` `p<k>` or the inner call site `r`), `confirmed`/`intra-flow`; `possible`/`shell-dynamic` through `${!n}` or into `eval` |
+
+**`eval` strings** (P1-10 10b). `eval` joins its arguments and runs the result as shell, so the leading literal of an `eval`
+with exactly one argument is parsed with tree-sitter-bash (never split on spaces: `eval 'a "b c"'` is `a` with the one argument
+`b c`) and each complete simple command in it becomes a call site of its own: `calleeName` the command word, arguments `a0`..
+(literal, or `unknown`/`runtime-built` for an expansion), `possible`/`shell-dynamic` whatever the arguments (a command naming a
+function of the file resolves to it, `confirmed`/`resolved-call`, as the schema ties `resolved` to `confirmed`). `eval "mcp-call
+$TOOL"` is `mcp-call` with `a0` unknown, the shape `mcp-call $TOOL` has. Numbering: inner sites come after every written site
+of the scope and take the next ordinal of their callee, in source order of the `eval`s, so a written site is never renumbered
+and a file with no `eval` string is numbered as before. Rules: the literal is cut at `MAX_EVAL_CHARS` (4 096) and at most
+`MAX_EVAL_COMMANDS` (8) commands are taken; a word is complete only when a delimiter follows it inside the literal (an open
+argument becomes one `unknown`, an open command name gives no site); a command followed by a space and then an expansion takes
+one trailing `unknown` argument. No inner site for an argument that starts with an expansion (`eval "$(ssh-agent)"`,
+`eval "$CMD x"`; a variable's value is never substituted), a literal that does not parse cleanly (an open quote, a trailing
+`&&`), a command name that is not a plain literal, an `eval` inside the string, an `eval` with several arguments
+(`eval mcp-call reindex`: the pack reads that form from the written command), or a compound command's body
+(`if`/`for`/`while`). Only the `eval` site gets `data` records; an inner site has none.
 
 **Values.** Quoting is resolved: single quotes are verbatim, `"\$1"` is the text `$1`, `a"b"c` is `abc`. An interpolated
 string is a `template`. A variable resolves, within its own scope, to the assignments that reach the use (an
@@ -47,7 +64,7 @@ nothing in the scope defines is `unresolved-ref`.
 
 A script is parsed, never run, `source`d or `eval`-ed, and a `source`d file is not followed. Bounds (module constants):
 file size `MAX_FILE_BYTES` (2 MiB), tree nesting `MAX_DEPTH` (120), arguments per command 32, positional index 64,
-records per file 100 000, one literal 8 192 characters, an interpolated string 64 parts, 16 alternatives, variable chains 8 deep,
+records per file 100 000, one literal 8 192 characters, an `eval` string 4 096 characters and 8 commands, an interpolated string 64 parts, 16 alternatives, variable chains 8 deep,
 parse time 20 s. Walks use an explicit stack.
 
 | Condition | Outcome |
@@ -67,7 +84,7 @@ Warnings go to the `warnings` list as `{path, code, line, detail}`; the shell `s
   `<>/dev/tcp` and `<<<`. An error-tolerant extractor is a P2 backlog item.
 
 - No `cond`/`ret` records, so `complexity` is 1 (spec4 §2: 1 + own `cond` records).
-- `shift`, `set --`, `getopts`, `$#`, arrays, `declare -n`, `export -f`, functions defined by `eval` and `bash -c` strings.
+- `shift`, `set --`, `getopts`, `$#`, arrays, `declare -n`, `export -f`, functions defined by `eval` and `bash -c` strings (an `eval` string's commands are call sites only).
 - Positional parameters are per scope; argument positions are the written ones (a word that expands to several, such as `"$@"`,
   does not shift the later ones).
 - A function's script-level variable is read only when it is a once-assigned `constant`; other script variables are `unresolved-ref`.

@@ -591,7 +591,7 @@ def test_the_extractor_never_runs_or_follows_what_it_reads(tmp_path):
     assert not marker.exists() and w == []
     assert {r["path"] for r in of(recs, "file")} == {"s.sh"}               # `source` is not followed
     assert Counter(c["calleeName"] for c in of(recs, "callsite")) == \
-        Counter({"touch": 2, "eval": 1, "source": 1, ".": 1})
+        Counter({"touch": 3, "eval": 1, "source": 1, ".": 1})          # the third `touch` is the inner site of the eval string
 
 
 _CHILD = """
@@ -661,6 +661,184 @@ def test_a_multi_file_unit_validates_as_one_bundle():
     assert w == []
     assert {r["path"] for r in of(recs, "file")} == {"gquery.sh", "flow.sh", "dynamic.sh", "positional.sh", "quoting.sh"}
     assert_valid(recs)
+
+
+# --- an `eval` string is shell source (P1-10 10b) ----------------------------------------------------------
+
+S = "s.sh::<script>"
+T = ("possible", "shell-dynamic", "unresolved")
+
+
+def inner(recs, callee, ordinal=0):
+    """(status, reason, resolution) of a call site and its argument value sets as `(a0, a1, ..)` lists."""
+    c = call(recs, S, callee, ordinal)
+    vs = sorted((v["arg"], v["values"]) for v in of(recs, "valueSet") if v["callSiteId"] == c["id"])
+    return (c["status"], c["reason"], c["resolution"]), [v for _, v in vs]
+
+
+_U = {"unknown": "runtime-built"}
+
+
+def callees(recs):
+    return [(c["calleeName"], c["ordinal"]) for c in sorted(of(recs, "callsite"), key=lambda r: (r["line"], r["calleeName"], r["ordinal"]))]
+
+
+def test_a_double_quoted_eval_string_gives_the_inner_command_with_an_unknown_argument_beside_the_eval_site():
+    recs, w = run("cpg/fixtures/system1/fx-svc/scripts/dyn.sh", root=REPO_ROOT)
+    ev = call(recs, "cpg/fixtures/system1/fx-svc/scripts/dyn.sh::<script>", "eval")
+    assert ev["ordinal"] == 0 and (ev["status"], ev["reason"]) == ("possible", "shell-dynamic")
+    assert values(recs, ev, "a0") == [{"template": [{"const": "mcp-call "}, {"unknown": "point-derived"}]}] or \
+        values(recs, ev, "a0")[0]["template"][0] == {"const": "mcp-call "}          # the eval site itself is as before
+    mc = call(recs, "cpg/fixtures/system1/fx-svc/scripts/dyn.sh::<script>", "mcp-call")
+    assert (mc["ordinal"], mc["status"], mc["reason"], mc["resolution"], mc["targets"]) == (0, "possible", "shell-dynamic",
+                                                                                           "unresolved", [])
+    assert mc["id"] == ids.callsite_id(mc["symbolId"], "mcp-call", 0) and mc["line"] == 4
+    assert [(v["arg"], v["values"]) for v in of(recs, "valueSet") if v["callSiteId"] == mc["id"]] == \
+        [("a0", [{"unknown": "runtime-built"}])]
+    assert w == [] and flows(recs, mc) == []
+    assert_valid(recs)
+
+
+def test_a_single_const_eval_string_gives_a_literal_argument(tmp_path):
+    recs, _ = snippet(tmp_path, "eval 'mcp-call reindex'\n")
+    assert inner(recs, "mcp-call") == (T, [[{"const": "reindex"}]])
+    assert len(of(recs, "callsite")) == 2 and call(recs, S, "eval")["reason"] == "shell-dynamic"
+    assert_valid(recs)
+
+
+def test_the_string_is_parsed_as_shell_never_split_on_spaces(tmp_path):
+    recs, _ = snippet(tmp_path, "eval 'a \"b c\"'\neval \"x 'y z' w\\ v\"\n")
+    assert inner(recs, "a") == (T, [[{"const": "b c"}]])
+    assert inner(recs, "x") == (T, [[{"const": "y z"}], [{"const": "w v"}]])
+
+
+def test_every_complete_command_of_the_string_is_a_site_and_a_terminated_last_one_takes_no_unknown(tmp_path):
+    recs, _ = snippet(tmp_path, 'eval "a 1; b 2 | c && d $X; "\n')
+    assert [(n, o) for n, o in callees(recs) if n != "eval"] == [("a", 0), ("b", 0), ("c", 0), ("d", 0)]
+    assert inner(recs, "a")[1] == [[{"const": "1"}]] and inner(recs, "b")[1] == [[{"const": "2"}]]
+    assert inner(recs, "c")[1] == []
+    assert inner(recs, "d")[1] == [[{"unknown": "runtime-built"}]]
+
+
+def test_a_word_counts_only_when_a_delimiter_follows_it_in_the_literal(tmp_path):
+    recs, _ = snippet(tmp_path, 'eval "mcp-call$X"\neval "mcp-call re$X"\neval "mcp-call re $X"\neval "mcp-call ;$X"\n')
+    assert [(n, o) for n, o in callees(recs) if n == "mcp-call"] == [("mcp-call", 0), ("mcp-call", 1), ("mcp-call", 2)]
+    assert inner(recs, "mcp-call", 0)[1] == [[{"unknown": "runtime-built"}]]              # `re$X`: the open word is one unknown
+    assert inner(recs, "mcp-call", 1)[1] == [[{"const": "re"}], [{"unknown": "runtime-built"}]]
+    assert inner(recs, "mcp-call", 2)[1] == []                                              # `;` ended it; `$X` starts another
+
+
+@pytest.mark.parametrize("src, written", [
+    ('eval "$(ssh-agent)"', ["eval", "ssh-agent"]),     # starts with a non-const
+    ('eval "$CMD x"', ["eval"]),
+    ('eval "mcp-call$X"', ["eval"]),                    # the command word is open
+    ("eval 'a \"b c'", ["eval"]),                       # an unparseable prefix: an open quote
+    ("eval 'eval a b'", ["eval"]),                      # an eval inside the string
+    ('eval "eval a $X"', ["eval"]),
+    ("eval '$CMD x'", ["eval"]),                        # a literal `$CMD`: the name is not a plain literal
+    ('eval ""', ["eval"]),
+    ('eval mcp-call reindex', ["eval"]),                # several arguments: the pack reads that form itself
+    ('eval "mcp-call" "$X"', ["eval"]),
+    ("eval 'if t; then m x; fi'", ["eval"]),             # a compound command's body is not entered
+    ("eval 'for i in a; do m $i; done'", ["eval"]),
+    ("eval 'a $(b c)'", ["eval", "a"]),                 # a nested substitution is not a site
+    ("eval 'x=1'", ["eval"]),                           # an assignment is not a command
+    ('eval a"$X"b c', ["eval"]),
+    ("CMD='mcp-call x'; eval \"$CMD\"", ["eval"]),       # a variable's value is never substituted
+])
+def test_no_inner_site_where_the_string_has_no_complete_literal_command(tmp_path, src, written):
+    recs, _ = snippet(tmp_path, src + "\n")
+    assert sorted(c["calleeName"] for c in of(recs, "callsite")) == sorted(written)
+
+
+def test_the_eval_site_itself_is_unchanged_and_inner_ordinals_follow_every_written_site(tmp_path):
+    recs, _ = snippet(tmp_path, 'mcp-call a\neval "mcp-call $T"\nmcp-call b\neval "mcp-call x; mcp-call y"\n')
+    got = sorted((c["calleeName"], c["ordinal"], c["line"]) for c in of(recs, "callsite"))
+    assert got == [("eval", 0, 2), ("eval", 1, 4), ("mcp-call", 0, 1), ("mcp-call", 1, 3),
+                   ("mcp-call", 2, 2), ("mcp-call", 3, 4), ("mcp-call", 4, 4)]
+    for c in of(recs, "callsite"):
+        assert c["id"] == ids.callsite_id(c["symbolId"], c["calleeName"], c["ordinal"])
+    assert inner(recs, "mcp-call", 0) == (("possible", "name-match", "unresolved"), [[{"const": "a"}]])
+    assert inner(recs, "mcp-call", 2)[1] == [[{"unknown": "runtime-built"}]]
+    assert inner(recs, "mcp-call", 4)[1] == [[{"const": "y"}]]
+
+
+def test_an_inner_sites_line_is_the_line_of_its_command_inside_the_string(tmp_path):
+    recs, _ = snippet(tmp_path, "echo\neval 'a 1\nb 2\n\nc'\n")
+    assert [(c["calleeName"], c["line"]) for c in sorted(of(recs, "callsite"), key=lambda r: r["calleeName"])] == \
+        [("a", 2), ("b", 3), ("c", 5), ("echo", 1), ("eval", 2)]
+
+
+def test_a_file_without_an_eval_string_is_numbered_as_before(tmp_path):
+    recs, _ = snippet(tmp_path, "mcp-call a\neval $X\nmcp-call b\nmcp-call c\n")
+    assert [(c["calleeName"], c["ordinal"]) for c in of(recs, "callsite")
+            if c["calleeName"] == "mcp-call"] == [("mcp-call", 0), ("mcp-call", 1), ("mcp-call", 2)]
+    assert len(of(recs, "callsite")) == 4
+
+
+def test_an_inner_command_naming_a_function_resolves_to_it_as_the_schema_requires(tmp_path):
+    recs, _ = snippet(tmp_path, 'f() { :; }\neval "f $X"\n')
+    c = call(recs, S, "f")
+    assert (c["status"], c["reason"], c["resolution"], len(c["targets"])) == ("confirmed", "resolved-call", "resolved", 1)
+    assert_valid(recs)
+
+
+def test_an_inner_secret_and_a_secret_named_flag_are_withheld_as_in_any_command(tmp_path):
+    recs, _ = snippet(tmp_path, "eval 'curl --password hunter2 --user=bob --token=abc x'\n")
+    assert inner(recs, "curl")[1] == [[{"const": "--password"}], [_U], [{"const": "--user=bob"}], [_U], [{"const": "x"}]]
+    assert_valid(recs)
+
+
+def test_the_eval_string_is_bounded_in_characters_and_commands(tmp_path):
+    many = "eval '" + "; ".join(f"c{i} x" for i in range(20)) + "'\n"
+    recs, _ = snippet(tmp_path, many)
+    assert [c["calleeName"] for c in of(recs, "callsite") if c["calleeName"] != "eval"] == [f"c{i}" for i in range(8)]
+    pad = "a " * 2048                                              # 4,096 characters: all of it is parsed
+    recs, _ = snippet(tmp_path, f"eval '{pad}; late x'\n")
+    assert [c["calleeName"] for c in of(recs, "callsite")] == ["eval", "a"]            # `late` is past the cap
+    recs, _ = snippet(tmp_path, "eval 'first 1; " + "#" * 5000 + "\nlate x'\n")
+    assert [c["calleeName"] for c in of(recs, "callsite")] == ["eval", "first"]
+
+
+def test_the_character_cap_is_exact(tmp_path):
+    def sites(n):                                                  # `late` ends at character n of the string
+        recs, _ = snippet(tmp_path, "eval 'first;" + " " * (n - len("first;") - len("late")) + "late'\n")
+        return [c["calleeName"] for c in of(recs, "callsite")]
+    assert shell.MAX_EVAL_CHARS == 4096
+    assert sites(4096) == ["eval", "first", "late"]
+    assert sites(4097) == ["eval", "first"]    # cut inside the word: an open command name
+
+
+def test_only_the_leading_const_is_read_and_arguments_per_inner_command_are_capped(tmp_path):
+    recs, _ = snippet(tmp_path, 'eval "a b $X; c d"\n')
+    assert [c["calleeName"] for c in of(recs, "callsite")] == ["eval", "a"]
+    recs, _ = snippet(tmp_path, "eval 'cmd " + " ".join(f"w{i}" for i in range(500)) + "'\n")
+    c = call(recs, S, "cmd")
+    assert len([v for v in of(recs, "valueSet") if v["callSiteId"] == c["id"]]) == shell.MAX_ARGS
+
+
+def test_inner_sites_count_against_the_record_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(shell, "MAX_RECORDS", 20)
+    recs, w = snippet(tmp_path, "".join(f"eval 'c{i} a b c d'\n" for i in range(10)))
+    assert [x["code"] for x in w] == ["record-cap"] and len(recs) <= 20
+    assert_valid(recs)
+
+
+def test_an_eval_string_is_never_run_and_the_records_are_deterministic(tmp_path):
+    marker = tmp_path / "ran"
+    text = f'eval "touch {marker}; mcp-call $T"\n'
+    a, _ = snippet(tmp_path, text)
+    b, _ = snippet(tmp_path, text)
+    assert not marker.exists() and a == b
+
+
+def test_hostile_eval_strings_stay_within_a_memory_bound(tmp_path):
+    for hostile in ("eval '" + 'a "' * 100_000 + "'\n",                       # 100k open quotes
+                    'eval "' + "$(" * 100_000 + 'x"\n',                        # nested substitutions
+                    "eval '" + "a" * 1_000_000 + "'\n",                       # a 1 MB const
+                    "eval '" + "a; " * 300_000 + "'\n",                       # many commands
+                    "eval '" + "(" * 100_000 + "'\n"):
+        assert int(_bounded(tmp_path, hostile)) >= 2
 
 
 # --- corpus smoke ----------------------------------------------------------------------------------------------
