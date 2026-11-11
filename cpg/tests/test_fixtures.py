@@ -2158,8 +2158,10 @@ def expected_symbol_names(manifests, unit, root_dir: Path):
 # of which present in the parsed CPG). A drop is a red, not an allowance. S39 owns this rule only: S25/S28 (and S11)
 # must apply a named-symbol rule themselves, because `cpg-content-check.sc` (S08, unchanged) passes any unit whose
 # files each emit the synthetic `<module>` METHOD, including a comments-only unit (planted test below).
-# svc is (65, 64): `db/settings.py::Settings` is a class without methods; classes are TYPE_DECLs, not METHODs.
-UNIT_FLOORS = {"job": (15, 15), "lib-cli": (3, 3), "lib-pricing": (5, 5), "svc": (65, 64), "svc-common": (4, 4),
+# svc is (67, 66): `db/settings.py::Settings` is a class without methods; classes are TYPE_DECLs, not METHODs. The 2026-11-04 floor
+# was (65, 64); commit 5de3f269 (DF-3 p1Form, the LNK-10/11/12 and flow rows) gave the manifest two more callables in svc,
+# `clients/peer.py::peer_health` and `core/flow.py::finalize`, both real functions that parse; re-pinned 2026-11-11.
+UNIT_FLOORS = {"job": (15, 15), "lib-cli": (3, 3), "lib-pricing": (5, 5), "svc": (67, 66), "svc-common": (4, 4),
                "svc-legacy": (1, 1), "svc-tools": (1, 1), "web": (33, 33)}
 
 
