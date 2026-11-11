@@ -156,7 +156,8 @@ def test_capture_three_list_example():
     assert e["binds"] == "chao" and e["chaoBinds"] is True
     assert e["perSession"] == {"KA": 35, "KA2": 32, "KB": 31}
     assert abs(e["nChao"] - a_chao(45, 12, 13, 3)) < 1e-9
-    assert e["trigger"] is True                      # 0.935 < 0.95
+    assert e["belowThreshold"] is True               # 0.935 < 0.95
+    assert e["trigger"] is False                     # KA2 already ran (t = 3): nothing owed (P1-32a, the P0 nit)
 
 
 def test_capture_degenerate_interval_n2_equals_m():

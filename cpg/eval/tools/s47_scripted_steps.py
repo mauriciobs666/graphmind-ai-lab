@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """s47_scripted_steps.py — replay record of the S47 scripted steps.
 
-UNTESTED. This is the code that was run for S47 (eval-protocol §7.4 correction, §10.3 ambiguity join,
-§10.2 AC-24 split), saved so the run can be replayed. It is to be replaced by `split_manifest.py` verbs
-(`apply-corrections`, `ambiguity`, the AC-24 half of `split`) in P1. Paths and the eval commit are
+This is the code that was run for S47 (eval-protocol §7.4 correction, §10.3 ambiguity join,
+§10.2 AC-24 split), kept as the replay record. Replaced in P1-32a by the `split_manifest.py` verbs
+`apply-corrections`, `ambiguity` and `split-ac24`; `cpg/tests/test_eval_tools_verbs.py` runs this script and the verbs
+on the same synthetic inputs and compares every output byte. Do not use it for new runs. Paths and the eval commit are
 arguments; the script holds no keys, item ids or question text.
 
     s47_scripted_steps.py --work WORK --eval-commit SHA --heldout-dir D --dev-dir D \\

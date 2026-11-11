@@ -12,6 +12,9 @@ Input: ``match.json`` from ``match_keys.py match`` (``records[].history`` is a b
 part of the census and is left out). Per stratum: list P = items found by KA or KA2, list C = items
 found by KB; t is the per-stratum ``t`` of ``match.json`` (3 iff KA2 ran there; EP §6.4, §13.5).
 
+Per stratum, ``belowThreshold`` is completeness < 0.95 (the report caveat, EP §6.5) and ``trigger`` is "KA2 is
+still owed": ``belowThreshold`` and ``t == 2``; it is cleared once KA2 ran (``t == 3``).
+
 Output is counts and estimates only, no locators. Exit: 0 ok, 2 usage, 4 missing/invalid input.
 """
 from __future__ import annotations
@@ -71,19 +74,21 @@ def estimate(hist: dict[str, int], t: int) -> dict:
     out = dict(c, t=t, informative=r >= INFORMATIVE_MIN_R)
     if r == 0:
         out.update(nChapman=0.0, var=0.0, chapmanInterval=None, nChao=0.0, nStar=0.0, binds=None,
-                   chaoBinds=False, completeness=None, trigger=True)
+                   chaoBinds=False, completeness=None, belowThreshold=True, trigger=(t == 2))
         return out
     Nc, var = chapman(n1, n2, m)
     Nh = chao_mh(r, c["f1"], c["f2"], t)
     lo, hi, degenerate = lognormal_ci(r, Nc, var)
     Ns = max(Nc, Nh)
     chao_binds = Nh > Nc
+    below = r * TRIGGER_DEN < TRIGGER_NUM * Ns
     out.update(
         nChapman=Nc, var=var,
         chapmanInterval={"lo": lo, "hi": hi, "degenerate": degenerate},
         nChao=Nh, nStar=Ns, binds="chao" if chao_binds else "chapman", chaoBinds=chao_binds,
         completeness=r / Ns,
-        trigger=r * TRIGGER_DEN < TRIGGER_NUM * Ns,
+        belowThreshold=below,
+        trigger=below and t == 2,      # EP §6.5: one KA2 pass at most; once it ran (t = 3) nothing is owed
     )
     return out
 
