@@ -20,6 +20,9 @@ negatives:
       xmcp-call reindex
       my-mcp-call reindex
       ./mcp-call reindex
+    quoted-eval-of-another-command: |
+      eval "$(ssh-agent)"
+      eval 'echo mcp-call reindex'
   eval-call:
     comment: |
       # eval mcp-call reindex

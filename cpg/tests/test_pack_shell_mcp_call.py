@@ -10,7 +10,7 @@ Three kinds of evidence:
   to fail for each.
 
 The one fixture row this pack cannot yet derive is LNK-20's quoted form `eval "mcp-call $TOOL"` (one template argument): see
-`test_a_quoted_eval_template_is_not_derivable_by_the_current_pack_format`.
+`test_the_fixture_dyn_script_is_lnk_20_...` (via the P1-10b inner call site).
 """
 from __future__ import annotations
 
@@ -139,6 +139,11 @@ def test_eval_whose_first_word_only_contains_mcp_call_is_not_a_consumer():
     assert consumers(planted("eval", "MCP-CALL", a1="reindex")) == []            # shell command names are case-sensitive
 
 
+def test_a_direct_mcp_call_is_never_read_by_the_eval_rule():
+    got = consumers(planted("mcp-call", "mcp-call", a1="reindex"))
+    assert [(c["key"], c["ruleId"]) for c in got] == [("mcp-call", "call")]
+
+
 def test_eval_with_no_tool_argument_gives_no_consumer():
     assert consumers(planted("eval", "mcp-call")) == []
 
@@ -194,13 +199,41 @@ def test_known_limit_a_leading_flag_is_taken_as_the_tool_and_the_real_tool_is_lo
     assert [view(c)[1:4] for c in got] == [("--json", "confirmed", "key-match")]
 
 
-def test_a_quoted_eval_template_is_not_derivable_by_the_current_pack_format():
-    """LNK-20 (`eval "mcp-call $TOOL"`, `scripts/dyn.sh`) reaches the pack as ONE template argument `a0 = ["mcp-call ",
-    unknown]` on an `eval` call. Rule-pack spec 1.2: `args.value` tests only a `const` alternative, and `group` reads only the
-    clause's callee matcher, so neither the match (a prefix of a template) nor the tool (its remainder) can be expressed. Finding
-    returned to the architect (report); this test pins the present outcome and goes red, deliberately, when the format learns it."""
+def test_the_fixture_dyn_script_is_lnk_20_one_possible_runtime_built_consumer_with_no_key_at_its_script_symbol():
+    """LNK-20 (`eval "mcp-call $TOOL"`): P1-10b emits an inner `mcp-call` site (a0 unknown). The Link reason `shell-dynamic` is the
+    linker's (P1-17 (3)); it reads the call-site shape asserted in the next test."""
     recs = extract_shell(FIXTURE, ["scripts/dyn.sh"], repo_id="fx-svc", unit_id="svc", history=HISTORY, warnings=[])
-    assert consumers(recs) == []
+    assert [view(c) for c in consumers(recs)] == [("mcp_tool", None, "possible", "runtime-built", "scripts/dyn.sh::<script>")]
+    assert [c["ruleId"] for c in consumers(recs)] == ["call"]
+
+
+def test_the_call_site_shape_the_linker_reads_for_lnk_20_is_an_inner_mcp_call_and_an_eval_both_possible_shell_dynamic():
+    recs = extract_shell(FIXTURE, ["scripts/dyn.sh"], repo_id="fx-svc", unit_id="svc", history=HISTORY, warnings=[])
+    sites = {r["calleeName"]: (r["status"], r["reason"]) for r in recs if r["type"] == "callsite" and r["calleeName"] in ("eval", "mcp-call")}
+    assert sites == {"eval": ("possible", "shell-dynamic"), "mcp-call": ("possible", "shell-dynamic")}
+    inner = next(r for r in recs if r["type"] == "callsite" and r["calleeName"] == "mcp-call")
+    assert [r["values"] for r in recs if r["type"] == "valueSet" and r["callSiteId"] == inner["id"] and r["arg"] == "a0"] == [[{"unknown": "runtime-built"}]]
+
+
+@pytest.mark.parametrize("script", ["eval 'mcp-call reindex'\n", 'eval "mcp-call reindex"\n'])
+def test_a_quoted_single_argument_eval_of_a_literal_tool_is_a_confirmed_key_match_consumer(script):
+    assert [view(c)[1:4] for c in consumers(real_records(script))] == [("reindex", "confirmed", "key-match")]
+
+
+@pytest.mark.parametrize("script,rule,want", [
+    ("eval mcp-call reindex\n", "eval-call", [("reindex", "possible")]),            # multi-argument: no inner site
+    ("eval 'mcp-call reindex'\n", "call", [("reindex", "confirmed")]),
+    ('eval "mcp-call $T"\n', "call", [(None, "possible")]),
+])
+def test_each_eval_form_yields_exactly_one_consumer_from_one_rule_no_double_count(script, rule, want):
+    got = consumers(real_records(script))
+    assert [(c["key"], c["status"]) for c in got] == want and [c["ruleId"] for c in got] == [rule]
+
+
+@pytest.mark.parametrize("script", ['eval "$(ssh-agent)"\n', "eval \"$(ssh-agent -s)\"\n", "eval 'echo mcp-call reindex'\n",
+                                    'eval "echo $T"\n', "eval '# mcp-call reindex'\n"])
+def test_eval_strings_that_do_not_run_mcp_call_are_not_consumers(script):
+    assert consumers(real_records(script)) == []
 
 
 # ---------------------------------------------------------------------------------------------
