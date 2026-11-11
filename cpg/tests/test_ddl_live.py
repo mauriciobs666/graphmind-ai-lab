@@ -1,6 +1,7 @@
-"""S17 (P0-14): ``ccg/store/ddl_v1.cypher`` against the live ``ccg-falkordb`` (127.0.0.1:6390).
+"""S17 (P0-14) and P1-19: ``ccg/store/ddl_v1.cypher`` against the live ``ccg-falkordb`` (127.0.0.1:6390).
 
-Spec: ``docs/plans/connected-code-graph-p0-graph.md`` section 1.6 (the table below is its transcription).
+Spec: ``docs/plans/connected-code-graph-p0-graph.md`` section 1.6 plus the ``ConfigEntry`` additions of
+``docs/plans/connected-code-graph-p1-graph.md`` section 4 (both are parsed from the documents, not transcribed).
 Pure tests (parser, static order) run everywhere; the live test is ``-m live`` and skips, with the
 reason, when the instance or its credential is missing. Touches only a fresh
 ``ccg_p0slice__build_ddl<N>`` key, deleted at the end (R-B)."""
@@ -17,6 +18,7 @@ HOST, PORT = "127.0.0.1", 6390
 POLL_TIMEOUT_S = 60
 
 PLAN = Path(__file__).resolve().parents[2] / "docs" / "plans" / "connected-code-graph-p0-graph.md"
+PLAN_P1 = Path(__file__).resolve().parents[2] / "docs" / "plans" / "connected-code-graph-p1-graph.md"
 
 
 def parse_plan_table(text):
@@ -33,7 +35,17 @@ def parse_plan_table(text):
     return idx, con
 
 
-EXPECTED_INDEX_PAIRS, EXPECTED_CONSTRAINT_PAIRS = parse_plan_table(PLAN.read_text())
+def parse_p1_additions(text):
+    """``-p1-graph.md`` section 4's DDL block -> (index pairs, constraint pairs) it adds."""
+    block = text.split("## 4. DDL and load groups", 1)[1].split("```", 2)[1]
+    idx = set(re.findall(r"CREATE INDEX FOR \(n:(\w+)\) ON \(n\.(\w+)\)", block))
+    con = set(re.findall(r"UNIQUE NODE (\w+) PROPERTIES 1 (\w+)", block))
+    return idx, con
+
+
+_BASE_IDX, _BASE_CON = parse_plan_table(PLAN.read_text())
+_P1_IDX, _P1_CON = parse_p1_additions(PLAN_P1.read_text())
+EXPECTED_INDEX_PAIRS, EXPECTED_CONSTRAINT_PAIRS = _BASE_IDX | _P1_IDX, _BASE_CON | _P1_CON
 EXPECTED_CONSTRAINTS = dict(EXPECTED_CONSTRAINT_PAIRS)
 
 
@@ -62,7 +74,7 @@ def static_problems(stmts):
 def test_ddl_file_matches_section_1_6_statically():
     assert static_problems(parse_ddl()) == []
     stmts = parse_ddl()
-    assert sum(s[0] == "index" for s in stmts) == 18 and sum(s[0] == "constraint" for s in stmts) == 11
+    assert sum(s[0] == "index" for s in stmts) == 20 and sum(s[0] == "constraint" for s in stmts) == 12
 
 
 def test_ddl_header_documents_order_and_apply_protocol():
@@ -187,7 +199,7 @@ def run_against(db, stmts, *, load=True):
 
 @pytest.mark.live
 def test_ddl_applies_to_empty_key_indexes_match_table_and_constraints_reach_operational(db):
-    assert len(run_against(db, parse_ddl())) == 18
+    assert len(run_against(db, parse_ddl())) == 20
 
 
 def _mutant(name):
@@ -285,7 +297,7 @@ class _RecDb:
 def test_every_statement_carries_the_timeout_when_timeout_max_is_nonzero(timeout_max):
     db = _RecDb()
     apply_ddl(db, "ccg_p0slice__build_ddl1", parse_ddl(), between=lambda q: q("CREATE (:Unit {unitId: 'u'})"), timeout_max=timeout_max)
-    assert len(db.calls) == 18 + 1 + 1 and len(db.raw) == 11  # indexes, the load query, one poll; constraints are raw commands
+    assert len(db.calls) == 20 + 1 + 1 and len(db.raw) == 12  # indexes, the load query, one poll; constraints are raw commands
     assert {t for _, t in db.calls} == ({1000} if timeout_max else {None})
 
 
@@ -310,6 +322,8 @@ def test_parser_accepts_whole_line_comments_and_blank_lines():
 
 
 def test_plan_table_parse_is_the_spec_not_a_transcription():
-    assert len(EXPECTED_INDEX_PAIRS) == 18 and len(EXPECTED_CONSTRAINT_PAIRS) == 11
+    assert len(_BASE_IDX) == 18 and len(_BASE_CON) == 11
+    assert _P1_IDX == {("ConfigEntry", "entryId"), ("ConfigEntry", "path")} and _P1_CON == {("ConfigEntry", "entryId")}
+    assert len(EXPECTED_INDEX_PAIRS) == 20 and len(EXPECTED_CONSTRAINT_PAIRS) == 12
     assert ("Dependency", "depId") in EXPECTED_INDEX_PAIRS and ("Dependency", "depId") in EXPECTED_CONSTRAINT_PAIRS
     assert ("SkippedFile", "repoId") in EXPECTED_INDEX_PAIRS and ("Cond", "pointId") in EXPECTED_CONSTRAINT_PAIRS

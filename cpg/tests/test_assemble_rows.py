@@ -27,7 +27,7 @@ from ccg.assemble import rows as R  # noqa: E402
 from ccg.assemble import snapshot as SN  # noqa: E402
 from ccg.linker import Link, Links, Via  # noqa: E402
 from ccg.packrt import PackFacts  # noqa: E402
-from ccg.sandbox_audit import check_sandbox_ids  # noqa: E402
+from ccg.sandbox_audit import attestation, check_sandbox_ids  # noqa: E402
 from ccg.staleness import FAIL_REASONS  # noqa: E402
 
 REPO = "repo1"
@@ -118,16 +118,70 @@ def test_empty_audit_ids_pass_exactly_for_host_languages(tmp_path):
 
 def test_host_langs_is_the_three_host_extractor_languages():
     from ccg.sandbox_audit import HOST_LANGS
-    assert sorted(HOST_LANGS) == ["config", "markdown", "shell"]
+    assert HOST_LANGS is bundle.HOST_LANGS and HOST_LANGS == ("shell", "config", "markdown")
+
+
+def test_a_planted_unhashable_lang_returns_an_error_and_does_not_raise(tmp_path):
+    d = audit_dir(tmp_path, [])
+    for lang in (["shell"], {"a": 1}, None, 7):
+        assert check_sandbox_ids(_lang_header(lang, []), d) != [], lang
+        assert attestation(_lang_header(lang, []), d) == "invalid", lang
+
+
+def test_attestation_is_total_and_fail_closed_on_garbage_headers_that_name_a_valid_id(tmp_path):
+    d = audit_dir(tmp_path, [sbx(UUID(1))])
+    base = {"sandboxAuditIds": [UUID(1)], "egressMode": "offline"}
+    garbage = [base, {**base, "unit": "x"}, {**base, "unit": {}}, {**base, "unit": None}, {**base, "unit": []},
+               {**base, "unit": {"lang": ["shell"]}}, {**base, "unit": {"lang": None}}, {**base, "unit": {"lang": 7}},
+               {**base, "unit": {"lang": {"a": 1}}}, None, [], "h", 3]
+    for h in garbage:
+        assert attestation(h, d) == "invalid", h
+
+
+def test_empty_ids_per_language_and_mode(tmp_path):
+    d = audit_dir(tmp_path, [])
+    for lang in bundle.HOST_LANGS:
+        assert check_sandbox_ids(_lang_header(lang, []), d) == []
+        errs = check_sandbox_ids({**_lang_header(lang, []), "egressMode": "controlled"}, d)
+        assert errs == ["egressMode: the header's mode is not 'offline' (the only mode P1 accepts)"]
+    for lang in ("python", "javascript", "java"):
+        assert check_sandbox_ids(_lang_header(lang, []), d) == ["sandboxAuditIds: none named (only a host-extractor unit may name none)"]
+    assert check_sandbox_ids({**_lang_header("shell", None)}, d) == ["sandboxAuditIds: none named (only a host-extractor unit may name none)"]
+
+
+def test_attestation_has_three_outcomes(tmp_path):
+    d = audit_dir(tmp_path, [sbx(UUID(1))])
+    assert attestation(_lang_header("shell", []), d) == "host-unattested"
+    assert attestation(_lang_header("python", [UUID(1)]), d) == "sandboxed"
+    assert attestation(_lang_header("shell", [UUID(1)]), d) == "host-unattested"      # a host extractor never runs in the sandbox: ids do not attest
+    assert attestation(_lang_header("config", [UUID(1)]), d) == "host-unattested"
+    assert attestation(_lang_header("markdown", [UUID(1)]), d) == "host-unattested"
+    assert attestation(_lang_header("shell", [UUID(2)]), d) == "invalid"              # named ids are still checked
+    assert attestation(_lang_header("python", []), d) == "invalid"
+    assert attestation(_lang_header("python", [UUID(2)]), d) == "invalid"
+    assert attestation({**_lang_header("shell", []), "egressMode": "controlled"}, d) == "invalid"
+    assert attestation("not a header", d) == "invalid"
+
+
+def test_a_host_bundle_with_no_ids_lands_in_unattested_units_and_a_sandboxed_one_does_not(tmp_path):
+    h = world()
+    h[1][0]["sandboxAuditIds"] = []
+    rows = build(tmp_path, bundles=h)
+    unit = h[1][0]["unitId"]
+    assert rows.unattested_units == [unit] and rows.unattested_count() == 1
+    assert h[1][0]["unit"]["lang"] in bundle.HOST_LANGS
+    named = world()                                                                    # U2 is a config unit that names ids: still unattested
+    assert build(tmp_path, bundles=named).unattested_units == [named[1][0]["unitId"]]
+    assert b"unattested" not in R.canonical_rows(rows)                                 # no graph property, no row change
 
 
 def test_a_code_bundle_with_no_audit_ids_is_refused_and_a_host_bundle_with_none_is_assembled(tmp_path):
     b = world()
     b[0][0]["sandboxAuditIds"] = []
-    assert R.classify_bundle(b[0], all_audit(tmp_path)) == "bundle:audit-missing"
+    assert R.classify_bundle(b[0], all_audit(tmp_path)) == "bundle:invalid"        # the schema's conditional refuses it first
     with pytest.raises(R.BundleRefused) as e:
         build(tmp_path, bundles=b)
-    assert e.value.code == "bundle:audit-missing"
+    assert e.value.code == "bundle:invalid"
     h = world()
     h[1][0]["sandboxAuditIds"] = []
     assert R.classify_bundle(h[1], all_audit(tmp_path)) is None
@@ -1428,3 +1482,29 @@ def test_via_lifted_via_and_bound_by_rows_do_not_depend_on_the_links_site_or_evi
         else:
             rng.shuffle(s), rng.shuffle(e)
         assert R.canonical_rows(mk(s, e)) == want, k
+
+
+def test_classify_bundle_refuses_a_host_bundle_whose_files_are_relabelled_code(tmp_path):
+    """Security review A: the assembler does not rely on ``bundle.loads``; S6a is checked at ``classify_bundle`` and ``build_rows``."""
+    h = world()
+    assert R.classify_bundle(h[1], all_audit(tmp_path)) is None
+    h[1][0]["sandboxAuditIds"] = []
+    assert R.classify_bundle(h[1], all_audit(tmp_path)) is None
+    assert any(r["type"] == "file" for r in h[1])
+    for r in h[1]:
+        if r["type"] == "file":
+            r["lang"] = "python"
+    assert R.classify_bundle(h[1], all_audit(tmp_path)) == "bundle:invalid"
+    with pytest.raises(R.BundleRefused) as e:
+        build(tmp_path, bundles=h)
+    assert e.value.code == "bundle:invalid"
+    h[1][0]["sandboxAuditIds"] = [UUID(2)]                                              # S6a is for the empty list only
+    assert R.classify_bundle(h[1], all_audit(tmp_path)) is None
+
+
+def test_classify_bundle_s6a_checks_every_file_not_only_the_first(tmp_path):
+    h = world()
+    h[1][0]["sandboxAuditIds"] = []
+    first = next(r for r in h[1] if r["type"] == "file")
+    h[1].append({**first, "id": "f" * 32, "path": "x/other.yaml", "lang": "python"})       # a later file, after every other record
+    assert R.classify_bundle(h[1], all_audit(tmp_path)) == "bundle:invalid"

@@ -2630,3 +2630,106 @@ def test_a_non_js_ts_unit_has_no_test_pattern_so_no_test_entry():
                                   _sk("svc/tests/a.test.ts", "frontend-ignore")]))
     with pytest.raises(bundle.BundleError, match="skippedFiles.*test"):
         bundle.validate(_python_unit([_sk("svc/a.test.ts", "test")]))
+
+
+# --- spec6 (P1-44a): sandboxAuditIds of host-extractor bundles ------------------------------
+
+def _host_unit(lang: str, files: list[tuple[str, str]], audit_ids: list[str], root: str = "svc") -> list[dict]:
+    """A bundle of ``lang`` whose ``file`` records are ``(path, file lang)``; the unit's own language is ``lang``."""
+    uid = ids.unit_id(REPO, root, lang)
+    recs = [file_rec(id=ids.file_id(REPO, p), unitId=uid, path=p, lang=fl, kind="code", role="primary") for p, fl in files]
+    return ordered(counted(recs, unit={"repoId": REPO, "rootPath": root, "lang": lang}, unitId=uid, sandboxAuditIds=audit_ids))
+
+
+def _schema_errors(record: dict) -> list:
+    return list(bundle._validator().iter_errors(record))
+
+
+def test_host_langs_is_the_one_tuple_and_bundle_imports_no_audit_module():
+    assert bundle.HOST_LANGS == ("shell", "config", "markdown") and isinstance(bundle.HOST_LANGS, tuple)
+    from ccg import sandbox_audit
+    assert sandbox_audit.HOST_LANGS is bundle.HOST_LANGS
+    src = Path(bundle.__file__).read_text(encoding="utf-8")
+    assert not re.search(r"^\s*(from|import)\s.*sandbox_audit", src, re.M)
+
+
+def test_schema_if_enum_equals_host_langs():
+    """The drift test: the schema's conditional names exactly ``HOST_LANGS``."""
+    allof = bundle.load_schema()["$defs"]["header"]["allOf"]
+    enums = [set(c["if"]["properties"]["unit"]["properties"]["lang"]["enum"]) for c in allof if "if" in c]
+    assert enums == [set(bundle.HOST_LANGS)]
+
+
+@pytest.mark.parametrize("lang", bundle.HOST_LANGS)
+def test_a_host_bundle_with_empty_audit_ids_validates(lang):
+    recs = _host_unit(lang, [("svc/a", lang)], [])
+    bundle.validate(recs)
+    assert bundle.loads(to_bytes(recs)) == recs
+    bundle.validate(_host_unit(lang, [], []))                                     # a header-only host bundle too
+
+
+def test_the_schema_alone_refuses_an_empty_list_for_a_code_unit():
+    for lang in ("python", "javascript", "java", "kotlin", "csharp", "go", "c", "cpp"):
+        h = _host_unit(lang, [], [])[0]
+        assert _schema_errors(h), lang
+        with pytest.raises(bundle.BundleError, match="sandboxAuditIds"):
+            bundle.validate([h])
+    assert not _schema_errors(_host_unit("python", [], [AUDIT])[0])
+    assert not _schema_errors(_host_unit("shell", [], [])[0])
+
+
+def test_a_planted_unhashable_lang_does_not_raise_in_the_schema():
+    h = header(sandboxAuditIds=[])
+    h["unit"] = {**h["unit"], "lang": ["shell"]}
+    assert _schema_errors(h)                                                     # refused (lang enum), never a TypeError
+
+
+def test_s6a_refuses_a_non_host_file_wherever_it_sits_in_the_bundle():
+    files = [("svc/a", "shell"), ("svc/b", "shell"), ("svc/c", "shell")]
+    for bad in range(3):
+        recs = _host_unit("shell", files, [])
+        recs[1 + bad]["lang"] = "python"                                          # records are in id order: first, middle, last
+        with pytest.raises(bundle.BundleError, match=r"^line 1: header\.sandboxAuditIds: S6a \(an empty list needs every file in the unit's host language\)$"):
+            bundle.validate(recs)
+        with pytest.raises(bundle.BundleError, match="S6a"):
+            bundle.loads(to_bytes(recs))
+
+
+def test_s6a_is_equality_not_membership():
+    with pytest.raises(bundle.BundleError, match="S6a"):
+        bundle.validate(_host_unit("shell", [("svc/a", "shell"), ("svc/b", "config")], []))
+    with pytest.raises(bundle.BundleError, match="S6a"):
+        bundle.validate(_host_unit("config", [("svc/a", "markdown")], []))
+
+
+def test_s6a_applies_to_the_empty_list_only():
+    bundle.validate(_host_unit("shell", [("svc/a", "shell"), ("svc/b", "python")], [AUDIT]))
+
+
+def test_s6a_message_carries_no_value():
+    recs = _host_unit("shell", [("svc/secret-path", "python")], [])
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.validate(recs)
+    assert "secret-path" not in str(e.value) and "python" not in str(e.value)
+
+
+def test_s6a_is_a_body_rule_the_header_schema_does_not_enforce_and_classify_bundle_runs_it_through_s6a_holds():
+    """The header alone passes the schema (S6a needs the file records); ``bundle.s6a_holds`` is the one rule that both ``bundle.validate``
+    and ``ccg.assemble.rows.classify_bundle`` apply to the records."""
+    assert bundle.s6a_holds({"sandboxAuditIds": [], "unit": {"lang": "shell"}}, ["shell", "shell"])
+    assert not bundle.s6a_holds({"sandboxAuditIds": [], "unit": {"lang": "shell"}}, ["shell", "python"])
+    assert bundle.s6a_holds({"sandboxAuditIds": [AUDIT], "unit": {"lang": "shell"}}, ["python"])
+    assert not _schema_errors(_host_unit("shell", [("svc/a", "python")], [])[0])
+
+
+def test_audit_ids_are_capped_at_64():
+    uid = "0f8fad5b-d9cb-469f-a165-70867728950e"
+    assert not _schema_errors(_host_unit("python", [], [uid] * 64)[0])
+    assert _schema_errors(_host_unit("python", [], [uid] * 65)[0])
+    assert _schema_errors(_host_unit("shell", [], [uid] * 65)[0])
+
+
+def test_build_host_kinds_equal_host_langs():
+    """Drift guard: the builder's host-branch dispatch (``ccg.build.HOST_KINDS``) is the set ``bundle.HOST_LANGS`` names."""
+    from ccg import build
+    assert set(build.HOST_KINDS) == set(bundle.HOST_LANGS)

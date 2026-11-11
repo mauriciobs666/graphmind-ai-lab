@@ -20,7 +20,6 @@ decides it. Step 8a of the ``http`` ``keyNorm`` (:func:`ccg.keynorm.mask_http_se
 from __future__ import annotations
 
 import ast
-import copy
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
@@ -35,7 +34,7 @@ from ccg.assemble import snapshot as SN
 from ccg.assemble.snapshot import AssembleError
 from ccg.keynorm import PROVIDER, mask_http_segments
 from ccg.rulepack import load_yaml
-from ccg.sandbox_audit import check_sandbox_ids, default_audit_dir
+from ccg.sandbox_audit import attestation, check_sandbox_ids, default_audit_dir
 from ccg.staleness import FAIL_REASONS
 from ccg.sysname import check_system_name
 
@@ -121,6 +120,12 @@ class GraphRows:
     units: list[dict] = field(default_factory=list)
     files: dict[str, int] = field(default_factory=dict)
     snapshot: dict = field(default_factory=dict)
+    #: sorted ids of the loaded units of a host-extractor language (no sandboxed invocation produced them, whatever ids the header names) (``attestation`` is ``host-unattested``;
+    #: ``-bundle-spec6.md`` §2). A report field, not a graph property: it is not in ``canonical_rows``.
+    unattested_units: list[str] = field(default_factory=list)
+
+    def unattested_count(self) -> int:
+        return len(self.unattested_units)
 
     def node_count(self) -> int:
         return sum(len(v) for v in self.nodes.values())
@@ -170,11 +175,7 @@ def load_flow_availability(path: Path | None = None) -> dict[str, bool]:
 # ---------------------------------------------------------------------------------------------------------------------
 def _header_validator() -> jsonschema.protocols.Validator:
     schema = bundle.load_schema()
-    defs = copy.deepcopy(schema["$defs"])
-    # bundle-v1.schema.json still says minItems 1; the host-language ruling (empty iff HOST_LANGS) is enforced by check_sandbox_ids,
-    # which classify_bundle calls next, until the spec6 schema amendment lands.
-    defs["header"]["properties"]["sandboxAuditIds"].pop("minItems", None)
-    sub = {"$schema": schema["$schema"], "$defs": defs, "$ref": "#/$defs/header"}
+    sub = {"$schema": schema["$schema"], "$defs": schema["$defs"], "$ref": "#/$defs/header"}
     return jsonschema.validators.validator_for(sub)(sub)
 
 
@@ -184,7 +185,7 @@ _HEADER_VALIDATOR = None
 def classify_bundle(records: Sequence[Mapping], audit_dir: Path) -> str | None:
     """``None`` when the assembler accepts the bundle, else the one code of ``FAIL_REASONS`` that names why. Value-free by construction:
     nothing of the bundle or of an exception is put in the result. Checks the header (version rule, schema) and every
-    ``sandboxAuditIds`` entry (``ccg.sandbox_audit.check_sandbox_ids``). Input is ``bundle.read_bundle`` output: record bodies are not
+    ``sandboxAuditIds`` entry (``ccg.sandbox_audit.check_sandbox_ids``), and rule S6a of ``bundle.py`` for an empty list (the one body check made here). Input is ``bundle.read_bundle`` output: record bodies are not
     checked here (that validation is ``read_bundle``'s), so a malformed body passes this function and fails later in ``build_rows``."""
     global _HEADER_VALIDATOR
     try:
@@ -202,6 +203,8 @@ def classify_bundle(records: Sequence[Mapping], audit_dir: Path) -> str | None:
             return "bundle:invalid"
         if check_sandbox_ids(h, Path(audit_dir)):
             return "bundle:audit-missing"
+        if not bundle.s6a_holds(h, (r.get("lang") for r in records[1:] if isinstance(r, Mapping) and r.get("type") == "file")):
+            return "bundle:invalid"                                  # S6a: a caller that skipped bundle.loads is refused too
         return None
     except Exception:                                                # noqa: BLE001 - any failure is "invalid", with no text
         return "bundle:invalid"
@@ -440,6 +443,8 @@ def build_rows(bundles: Sequence[Sequence[dict]], links: Any, facts: Any, *, sys
         minor = int(_VERSION.fullmatch(header["bundleSchemaVersion"])[2])
         max_minor = max(max_minor, minor)
         audit_ids += header["sandboxAuditIds"]
+        if attestation(header, audit_dir) == "host-unattested":
+            rows.unattested_units.append(unit_id)
         b.node("Repo", {"repoId": repo_id, "headCommit": repo_head[repo_id]})
         unit = {"unitId": unit_id, "repoId": repo_id, "rootPath": header["unit"]["rootPath"], "language": lang, "buildStatus": status,
                 "flowAvailable": flow.get(lang, False), "builtCommit": header["builtCommit"], "builtTree": header["builtTree"],
@@ -478,6 +483,7 @@ def build_rows(bundles: Sequence[Sequence[dict]], links: Any, facts: Any, *, sys
     for p_id, version, content in triples:
         b.node("Pack", {"packId": p_id, "version": version, "contentHash": content})
     check_edge_groups(rows)
+    rows.unattested_units.sort()
 
     fresh_built = [u["builtAt"] for u in rows.nodes["Unit"] if u["buildStatus"] == "fresh"]
     pack_set = SN.pack_set_hash(triples)

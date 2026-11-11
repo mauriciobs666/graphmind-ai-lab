@@ -8,7 +8,8 @@ bundle is refused unless, for **every** id in ``header.sandboxAuditIds``:
 3. it has ``refused: false`` and ``exitCode: 0``;
 4. its ``egressMode`` equals ``header.egressMode``, and in P1 both are ``offline``.
 
-An empty list is valid exactly when ``header.unit.lang`` is in :data:`HOST_LANGS`. The check is presence-only: it proves a successful offline invocation with that id exists, not that the bundle's inputs came from it
+An empty list is valid exactly when ``header.unit.lang`` is in :data:`HOST_LANGS` (a host extractor runs on the host: no sandbox
+invocation exists) and the mode is ``offline``; ``[]`` from this function means *valid*, never *attested* (:func:`attestation` says what a valid header is). The check is presence-only: it proves a successful offline invocation with that id exists, not that the bundle's inputs came from it
 (the record carries no output digest). Each error names the id (a validated UUIDv4) or the list index, and the failed condition; never a header string of unchecked shape, never record content.
 
 **Exit 124.** The runner's ``124`` means "an indexer ran past its wall-clock cap (``SBX_INDEXER_WALL_S``, 1800 s) **or** a tool that
@@ -26,13 +27,10 @@ from pathlib import Path
 
 import jsonschema
 
+from ccg.bundle import HOST_LANGS
+
 SCHEMA_PATH = Path(__file__).parent / "schemas" / "sandbox-record-v1.schema.json"
 INDEXER_WALL_CAP_MS = 1800 * 1000
-#: Host-extractor languages: their extractors run on the host, never in the sandbox, so no ``sandbox`` record exists and the header's
-#: ``sandboxAuditIds`` may be an explicit empty list exactly for these (plan ruling, ``-p1-linking.md`` P1-44; a spec successor,
-#: ``-bundle-spec6.md``, amends spec3 §2.2, the schema's ``minItems`` and egress §5.4). A code-language bundle with ``[]`` is refused.
-#: Stop-gap: ``-bundle-spec6.md`` §2 moves this constant to ``ccg/bundle.py`` (P1-44a, a separate unit); this tuple stays until that lands.
-HOST_LANGS = ("shell", "config", "markdown")
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 
 
@@ -107,3 +105,18 @@ def check_sandbox_ids(header: Mapping, audit_dir: Path) -> list[str]:
         elif rec["egressMode"] != header.get("egressMode"):
             errors.append(f"auditId {i}: the record's egressMode differs from the header's")
     return errors
+
+
+def attestation(header: Mapping, audit_dir: Path) -> str:
+    """``invalid`` (``check_sandbox_ids`` returned errors), else ``host-unattested`` for any valid header of a ``HOST_LANGS`` unit and
+    ``sandboxed`` for a valid code-language header. The language decides, not the list: a host extractor never runs in the sandbox, so
+    ids a host header names (checked as for any bundle) are not an attestation that a sandboxed run produced its inputs."""
+    try:
+        if check_sandbox_ids(header, audit_dir):
+            return "invalid"
+        lang = header["unit"]["lang"]
+        if not isinstance(lang, str):
+            return "invalid"
+        return "host-unattested" if lang in HOST_LANGS else "sandboxed"
+    except Exception:                                                # noqa: BLE001 - total and fail-closed: a garbage header is invalid
+        return "invalid"

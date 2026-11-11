@@ -45,6 +45,24 @@ _ORDER = {t: i for i, t in enumerate(RECORD_TYPES)}
 JS_TEST_EXTENSIONS: tuple[str, ...] = ("ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs")
 
 
+#: The host-extractor languages (``-bundle-spec6.md`` §1): their extractors run on the host, never in the sandbox, so a bundle of such a
+#: unit may carry ``sandboxAuditIds: []``. Defined once, here, as a tuple (``in`` never hashes, so an unhashable ``lang`` in an
+#: unvalidated header cannot raise); ``bundle-v1.schema.json``'s ``if`` enum names the same three (a drift test compares them) and
+#: ``ccg.sandbox_audit`` imports this. This module imports nothing from the audit module.
+HOST_LANGS: tuple[str, ...] = ("shell", "config", "markdown")
+
+
+S6A_MESSAGE = "line 1: header.sandboxAuditIds: S6a (an empty list needs every file in the unit's host language)"
+
+
+def s6a_holds(header: dict, file_langs: Iterable) -> bool:
+    """Rule S6a (``-bundle-spec6.md`` §1), the one implementation (``validate`` and ``ccg.assemble.rows.classify_bundle`` both call it):
+    when ``header.sandboxAuditIds`` is ``[]`` (valid only for ``HOST_LANGS`` units, by the schema) every ``file`` record's ``lang``
+    (``file_langs``) equals ``header.unit.lang``; any other list passes. A label comparison only: the control that a unit is
+    host-built is the builder (P1-44)."""
+    return header["sandboxAuditIds"] != [] or all(lang == header["unit"]["lang"] for lang in file_langs)
+
+
 class BundleError(ValueError):
     """A bundle (or a record in it) violates the bundle-v1 spec."""
 
@@ -903,7 +921,12 @@ class _Semantics:
         if h["history"] != "available":
             raise BundleError("line 1: history must be 'available' in P0 (§2.2)")
         self._bind_version(h)
+        self._s6a(h)
         self._skipped_files(h.get("skippedFiles", []))
+
+    def _s6a(self, h: dict) -> None:
+        if not s6a_holds(h, (r["lang"] for _, r in self.by_type["file"].values())):
+            raise BundleError(S6A_MESSAGE)
 
     def _bind_version(self, h: dict) -> None:
         """-spec5 §6.4 V1a-V1d: the version rule and the cross-record pairing of ``bindParts`` and ``bindKeyCheck``."""
