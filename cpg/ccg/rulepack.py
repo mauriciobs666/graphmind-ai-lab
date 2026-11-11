@@ -180,13 +180,15 @@ def allows(row: dict, edge: str, kind: str) -> bool:
 # ---------------------------------------------------------------- the RE2 subset (spec 1.3)
 
 def regex_problem(rx: str) -> str | None:
-    """Why ``rx`` is outside the RE2 subset (lookaround, backreference, atomic or possessive group, length), or None."""
+    """Why ``rx`` is outside the RE2 subset (lookaround, backreference, atomic or possessive group, length), or None. Never raises."""
     if len(rx) > 256:
         return "longer than 256 characters"
     try:
         re.compile(rx)
     except re.error as e:
         return f"not a regex: {e}"
+    except Exception as e:  # OverflowError, RecursionError, ValueError, MemoryError ...: a reason, never a raise
+        return f"not a regex: {type(e).__name__}: {str(e)[:80]}"
     i, n, in_class = 0, len(rx), False
     while i < n:
         c = rx[i]

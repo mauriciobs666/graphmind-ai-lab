@@ -337,6 +337,33 @@ def test_regex_problem_names_each_outside_the_subset_form_directly():
     assert rulepack.regex_problem("(").startswith("not a regex")
 
 
+_HOSTILE_REGEXES = ["a{99999999999}", "a{1,99999999999}", "(a){,99999999999}", "(" * 10_000 + ")" * 10_000, "a" * 1_000_000]
+
+
+@pytest.mark.parametrize("rx", _HOSTILE_REGEXES)
+def test_regex_problem_never_raises_on_hostile_patterns_and_validate_pack_reports_them(rx):
+    why = rulepack.regex_problem(rx)
+    assert isinstance(why, str) and why
+    assert len(why) <= 200  # a bounded reason: never the pattern echoed back
+    assert rx[:50] not in why or len(rx) <= 50
+    errs = accepted("fastapi", lambda p: p["rules"][0]["match"]["decorator"].update(name={"regex": rx}))
+    assert errs  # over-length ones are refused by the schema's maxLength before the validator code runs
+    if len(rx) <= 256:
+        assert any(why in e for e in errs)
+
+
+def test_a_huge_repetition_count_names_its_failure_class():
+    assert rulepack.regex_problem("a{99999999999}").startswith("not a regex: OverflowError")
+
+
+@pytest.mark.parametrize("exc", [OverflowError("big"), RecursionError("deep"), ValueError("bad"), MemoryError("mem")])
+def test_regex_problem_turns_any_compiler_exception_into_a_reason(monkeypatch, exc):
+    def boom(rx, *a, **k):
+        raise exc
+    monkeypatch.setattr(rulepack.re, "compile", boom)
+    assert rulepack.regex_problem("abc").startswith(f"not a regex: {type(exc).__name__}")
+
+
 @pytest.mark.parametrize("rx", [r"[(?=]x", r"[(?!a]", r"[a(?=]x", r"[ab(?<=]x", r"[a*+]", r"[*+]+", r"[^]+]", r"[]+]+", r"[a-z]\++"])
 def test_regex_syntax_inside_a_character_class_is_literal(rx):
     assert rulepack.regex_problem(rx) is None
