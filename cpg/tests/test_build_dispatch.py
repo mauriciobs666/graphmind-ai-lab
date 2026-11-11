@@ -73,7 +73,6 @@ def ctx_for(tmp_path):
     keys = tmp_path / "keys"
 
     def make(units=(), **kw):
-        kw.setdefault("audit_ids", (AUDIT,))
         kw.setdefault("built_at", BUILT_AT)
         kw.setdefault("globs", EVAL_GLOBS)               # the eval manifest's list: the system manifest's block is another unit's
         return build.BuildContext(units=tuple(units), root=work, keys_root=keys, **kw)
@@ -202,12 +201,6 @@ def test_an_unknown_kind_is_a_typed_error_and_reaches_no_extractor(monkeypatch, 
     with pytest.raises(build.UnknownUnitKind):
         build.build_unit(unit("go", "a.go"), path, sha, SYSTEM, ctx_for())
     assert all(s.calls == [] for s in spies)
-
-
-def test_a_host_unit_without_audit_ids_is_refused_before_any_work(tmp_path, ctx_for):
-    path, sha = make_repo(tmp_path / "x", {"a.json": "{}\n"})
-    with pytest.raises(build.MissingAuditIds):
-        build.build_unit(unit("config", "a.json"), path, sha, SYSTEM, ctx_for(audit_ids=()))
 
 
 # --- (3) the failure mapping, value-free ---------------------------------------------------------------------------------
@@ -1292,3 +1285,52 @@ def test_the_real_system_manifest_is_the_default_glob_source(tmp_path, ctx_for):
     rep = build.build_units(units, {"r": path}, {"r": sha}, SYSTEM, ctx)
     mentioned = {r.unit.rootPath: bool(of(read(ctx, r), "callsite")) for r in rep.results}
     assert mentioned == {"claude/agents/a.md": True, "claude/README.md": False, "notes/b.md": False}
+
+
+# --- bundle spec6: host bundles carry `sandboxAuditIds = []`, code bundles never do (P1-44a) ----------------------------------------
+
+
+HOST_FILES = {"shell": ("s.sh", "echo hi\n"), "config": ("a.json", '{"name": "x"}\n'), "markdown": ("claude/a.md", "hi\n")}
+
+
+@pytest.mark.parametrize("lang", sorted(HOST_FILES))
+def test_a_host_bundle_has_no_audit_ids_validates_is_assembled_and_is_host_unattested(tmp_path, ctx_for, lang):
+    from ccg import sandbox_audit
+    from ccg.assemble import rows
+    name, text = HOST_FILES[lang]
+    path, sha = make_repo(tmp_path / "h", {name: text})
+    u = unit(lang, name)
+    ctx = ctx_for([u])
+    res = build.build_unit(u, path, sha, SYSTEM, ctx)
+    recs = read(ctx, res)                                                     # `loads` runs bundle.validate (incl. S6a)
+    audit_dir = tmp_path / "empty-audit"
+    audit_dir.mkdir()
+    assert recs[0]["sandboxAuditIds"] == []
+    assert rows.classify_bundle(recs, audit_dir) is None
+    assert sandbox_audit.attestation(recs[0], audit_dir) == "host-unattested"
+    assert {f["lang"] for f in of(recs, "file")} == {lang}
+
+
+def test_the_audit_id_gate_is_gone(tmp_path, ctx_for):
+    path, sha = make_repo(tmp_path / "h", {"a.json": "{}\n"})
+    u = unit("config", "a.json")
+    ctx = ctx_for([u])
+    assert not hasattr(build, "MissingAuditIds") and not hasattr(ctx, "audit_ids")
+    assert build.build_unit(u, path, sha, SYSTEM, ctx).ok
+
+
+def test_a_code_bundle_never_gets_an_empty_audit_id_list(monkeypatch, tmp_path, py_repo, ctx_for):
+    """The ids of a code bundle are the sandbox runs' (`RawFacts.sandbox_audit_ids`); the host branch must not touch it."""
+    from ccg import sandbox_audit
+    joern_stub(monkeypatch, tmp_path)
+    path, sha = py_repo
+    u = unit("python", ".")
+    ctx = ctx_for([u])
+    h = read(ctx, build.build_unit(u, path, sha, SYSTEM, ctx))[0]
+    assert h["sandboxAuditIds"] == [AUDIT]
+    errors = sandbox_audit.check_sandbox_ids({**h, "sandboxAuditIds": []}, tmp_path)     # positive control: `[]` is refused for code
+    assert errors and "none named" in errors[0]
+
+
+def test_the_host_kinds_are_the_bundle_modules_host_languages():
+    assert build.HOST_KINDS == bundle.HOST_LANGS

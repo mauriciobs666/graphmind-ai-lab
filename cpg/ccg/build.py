@@ -23,7 +23,8 @@ a config blob over 8 MiB is skipped and counted in ``skippedFiles`` and gets **n
 one file (``rootPath`` names a blob) or a directory of files of its language; directories are walked with no special case for
 dot directories (``.claude/agents/*.md`` are prompt files).
 
-Header: the non-Joern header is built from the unit's *merged* record set; ``writer_rules.bind_header_fields`` decides
+Header: a host bundle (shell, config, markdown) never runs in the sandbox, so its ``sandboxAuditIds`` is ``[]`` (bundle spec6 §2; a code
+bundle's ids come from its sandbox runs and are never empty: ``attestation`` reports a host bundle ``host-unattested``). The non-Joern header is built from the unit's *merged* record set; ``writer_rules.bind_header_fields`` decides
 ``bundleSchemaVersion`` (``"1.1"`` iff some entry carries ``bindParts``) and ``bindKeyCheck``. A Joern bundle is written by
 ``assemble_bundle.build_bundle`` and carries no config entry, so it is ``"1.0"`` by construction.
 """
@@ -90,10 +91,6 @@ class InvalidCommit(ValueError):
     """``commit`` is not a full lowercase object id: a caller bug (a ref or a prefix could move between git calls)."""
 
 
-class MissingAuditIds(ValueError):
-    """A host-extractor bundle (shell, config, markdown) needs ``BuildContext.audit_ids``: the schema requires one id."""
-
-
 @dataclass(frozen=True)
 class BundleResult:
     """The outcome of one unit. ``fail_reason`` is one code of ``FAIL_CODES`` (``ok`` False) or None; ``report`` holds counts only."""
@@ -111,11 +108,10 @@ class BuildContext:
     """What one build shares between its units; every field has a default, so a single ``build_unit`` call needs none.
 
     ``units`` is every unit of the system (descendant roots for Joern; the config files of a repository for W2).
-    ``audit_ids`` is the ``header.sandboxAuditIds`` of the host-extractor bundles. ``known_tools`` is the markdown vocabulary."""
+    ``known_tools`` is the markdown vocabulary."""
     units: Sequence[Unit] = ()
     root: str | Path | None = None
     keys_root: str | Path | None = None
-    audit_ids: tuple[str, ...] = ()
     built_at: str | None = None
     known_tools: frozenset[str] = frozenset()
     globs: Globs | None = None
@@ -378,7 +374,7 @@ def _header(ctx: BuildContext, unit: Unit, sha: str, tree_id: str, records: list
         "tools": {"joern": "none", "frontend": _FRONTEND[unit.language], "frontendVersion": front_version,
                   "normalizer": _NORMALIZER[unit.language], "normalizerVersion": norm_version, "extractScript": "extract.py",
                   "extractScriptHash": _extractor_hash(unit.language)},
-        "sandboxAuditIds": list(ctx.audit_ids), "egressMode": "offline", "flowProjected": False,
+        "sandboxAuditIds": [], "egressMode": "offline", "flowProjected": False,
         "fieldDepthCap": 3, "vendoredDirs": sorted(units_mod.SKIP_DIRS), "history": "available",
         "counts": {t: counts.get(t, 0) for t in bundle.RECORD_TYPES[1:]},
     }
@@ -421,14 +417,12 @@ def build_unit(unit: Unit, repo: str | Path, commit: str, system: str, ctx: Buil
     """Build ``unit`` of the git work tree ``repo`` at ``commit`` into system ``system``'s bundle area.
 
     Returns a failed ``BundleResult`` (one code of ``FAIL_CODES``) for any extraction failure; raises ``UnknownUnitKind`` for a
-    kind with no extractor, ``InvalidCommit`` for a commit that is not a full object id and ``MissingAuditIds`` for a host unit built without ``ctx.audit_ids``."""
+    kind with no extractor, ``InvalidCommit`` for a commit that is not a full object id; a host unit needs no audit id."""
     ctx = ctx or BuildContext(units=(unit,))
     if unit.language not in KINDS:
         raise UnknownUnitKind(f"unit language {unit.language!r} has no extractor (known: {', '.join(KINDS)})")
     if not blame.is_commit_id(commit):
         raise InvalidCommit("commit must be a full lowercase object id")
-    if unit.language in HOST_KINDS and not ctx.audit_ids:
-        raise MissingAuditIds(f"a {unit.language} bundle needs BuildContext.audit_ids (header.sandboxAuditIds has minItems 1)")
     repo = Path(repo)
     report: Counter | dict = Counter() if unit.language in HOST_KINDS else {}
     try:
