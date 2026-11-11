@@ -1,0 +1,147 @@
+{"args":[],"c":12,"code":"__ecma.Array.factory()","dt":"STATIC_DISPATCH","id":"30064771119","in":[],"k":"cs","l":8,"m":"107374182410","mfn":"__ecma.Array.factory","name":"__ecma.Array.factory","out":["__ecma.Array.factory"]}
+{"args":[],"c":9,"code":"__ecma.Array.factory()","dt":"STATIC_DISPATCH","id":"30064771130","in":[],"k":"cs","l":10,"m":"107374182410","mfn":"__ecma.Array.factory","name":"__ecma.Array.factory","out":["__ecma.Array.factory"]}
+{"args":[{"an":"","e":{"n":"_iterator_0","o":"name"},"f":[],"i":1}],"c":2,"code":"_iterator_0.next()","dt":"DYNAMIC_DISPATCH","id":"30064771087","in":[],"k":"cs","l":5,"m":"107374182410","mfn":"<unknownFullName>","name":"next","out":[]}
+{"args":[{"an":"","e":{"n":"_iterator_1","o":"name"},"f":[],"i":1}],"c":2,"code":"_iterator_1.next()","dt":"DYNAMIC_DISPATCH","id":"30064771090","in":[],"k":"cs","l":6,"m":"107374182410","mfn":"<unknownFullName>","name":"next","out":[]}
+{"args":[{"an":"","e":{"n":"_tmp_0","o":"name"},"f":[],"i":0},{"an":"","e":{"n":"p","o":"name"},"f":[],"i":1}],"c":12,"code":"new Foo(p)","dt":"DYNAMIC_DISPATCH","id":"30064771077","in":[{"full":"ctor.ts::program:Foo:<init>","id":"107374182401"}],"k":"cs","l":3,"m":"107374182403","mfn":"ctor.ts::program:Foo:<init>","name":"<operator>.new","out":[]}
+{"args":[{"an":"","e":{"n":"_tmp_0","o":"name"},"f":[],"i":0},{"an":"","e":{"n":"p","o":"name"},"f":[],"i":1}],"c":12,"code":"new Foo(p)","dt":"DYNAMIC_DISPATCH","id":"30064771096","in":[{"full":"iter.ts::program:Foo:<init>","id":"107374182407"}],"k":"cs","l":3,"m":"107374182410","mfn":"iter.ts::program:Foo:<init>","name":"<operator>.new","out":[]}
+{"args":[{"an":"","e":{"n":"it","o":"name"},"f":[],"i":0},{"an":"","e":{"n":"it","o":"name"},"f":[],"i":1}],"c":12,"code":"it.next(it)","dt":"DYNAMIC_DISPATCH","id":"30064771144","in":[],"k":"cs","l":19,"m":"107374182412","mfn":"<unknownFullName>","name":"next","out":[]}
+{"args":[{"an":"","e":{"n":"it","o":"name"},"f":[],"i":0}],"c":12,"code":"it.next()","dt":"DYNAMIC_DISPATCH","id":"30064771140","in":[],"k":"cs","l":15,"m":"107374182411","mfn":"<unknownFullName>","name":"next","out":[]}
+{"args":[{"an":"","e":{"n":"o","o":"name"},"f":[],"i":0},{"an":"","e":{"c":"1","o":"lit"},"f":[],"i":1}],"c":9,"code":"o.run(1)","dt":"DYNAMIC_DISPATCH","id":"30064771078","in":[{"full":"ctor.ts::program:Foo:run","id":"107374182402"}],"k":"cs","l":4,"m":"107374182403","mfn":"<unknownFullName>","name":"run","out":[]}
+{"args":[{"an":"","e":{"n":"o","o":"name"},"f":[],"i":0},{"an":"","e":{"n":"p","o":"name"},"f":[],"i":1}],"c":12,"code":"o.run(p)","dt":"DYNAMIC_DISPATCH","id":"30064771098","in":[{"full":"iter.ts::program:Foo:run","id":"107374182408"}],"k":"cs","l":4,"m":"107374182410","mfn":"<unknownFullName>","name":"run","out":[]}
+{"args":[{"an":"","e":{"n":"this","o":"name"},"f":[],"i":0},{"an":"","e":{"n":"k","o":"name"},"f":[],"i":1}],"c":24,"code":"use(k)","dt":"DYNAMIC_DISPATCH","id":"30064771113","in":[{"full":"iter.ts::program:use","id":"107374182404"}],"k":"cs","l":6,"m":"107374182410","mfn":"iter.ts::program:use","name":"use","out":[]}
+{"args":[{"an":"","e":{"n":"this","o":"name"},"f":[],"i":0},{"an":"","e":{"n":"v","o":"name"},"f":[],"i":1},{"an":"","e":{"n":"p","o":"name"},"f":[],"i":2}],"c":27,"code":"g(v, p)","dt":"DYNAMIC_DISPATCH","id":"30064771092","in":[{"full":"iter.ts::program:g","id":"107374182406"}],"k":"cs","l":7,"m":"107374182409","mfn":"iter.ts::program:g","name":"g","out":[]}
+{"args":[{"an":"","e":{"n":"this","o":"name"},"f":[],"i":0},{"an":"","e":{"n":"v","o":"name"},"f":[],"i":1}],"c":9,"code":"use(v)","dt":"DYNAMIC_DISPATCH","id":"30064771142","in":[{"full":"iter.ts::program:use","id":"107374182404"}],"k":"cs","l":16,"m":"107374182411","mfn":"iter.ts::program:use","name":"use","out":[]}
+{"args":[{"an":"","e":{"n":"this","o":"name"},"f":[],"i":0},{"an":"","e":{"n":"w","o":"name"},"f":[],"i":1}],"c":9,"code":"use(w)","dt":"DYNAMIC_DISPATCH","id":"30064771146","in":[{"full":"iter.ts::program:use","id":"107374182404"}],"k":"cs","l":20,"m":"107374182412","mfn":"iter.ts::program:use","name":"use","out":[]}
+{"args":[{"an":"","e":{"n":"this","o":"name"},"f":[],"i":0},{"an":"","e":{"n":"x","o":"name"},"f":[],"i":1}],"c":24,"code":"use(x)","dt":"DYNAMIC_DISPATCH","id":"30064771106","in":[{"full":"iter.ts::program:use","id":"107374182404"}],"k":"cs","l":5,"m":"107374182410","mfn":"iter.ts::program:use","name":"use","out":[]}
+{"args":[{"an":"","e":{"n":"xs","o":"name"},"f":[],"i":0},{"an":"","e":{"l":"METHOD_REF","o":"unk"},"f":[],"i":1}],"c":13,"code":"xs.map((v) => g(v, p))","dt":"DYNAMIC_DISPATCH","id":"30064771115","in":[],"k":"cs","l":7,"m":"107374182410","mfn":"__ecma.Array:map","name":"map","out":["__ecma.Array:map"]}
+{"c":0,"code":":program","file":"ctor.ts","full":"ctor.ts::program","id":"107374182400","k":"m","l":1,"le":6,"name":":program","pfull":"ctor.ts::program","pid":"167503724548","pk":"TYPE_DECL"}
+{"c":0,"code":":program","file":"iter.ts","full":"iter.ts::program","id":"107374182405","k":"m","l":1,"le":22,"name":":program","pfull":"iter.ts::program","pid":"167503724558","pk":"TYPE_DECL"}
+{"c":0,"code":"function g(a: unknown, b: unknown) { return a; }","file":"iter.ts","full":"iter.ts::program:g","id":"107374182406","k":"m","l":13,"le":13,"name":"g","pfull":"iter.ts::program","pid":"107374182405","pk":"METHOD"}
+{"c":0,"code":"function use(v: unknown) { return v; }","file":"iter.ts","full":"iter.ts::program:use","id":"107374182404","k":"m","l":12,"le":12,"name":"use","pfull":"iter.ts::program","pid":"107374182405","pk":"METHOD"}
+{"c":0,"code":"this","i":0,"k":"p","l":1,"m":"107374182400","name":"this"}
+{"c":0,"code":"this","i":0,"k":"p","l":1,"m":"107374182405","name":"this"}
+{"c":0,"code":"this","i":0,"k":"p","l":12,"m":"107374182404","name":"this"}
+{"c":0,"code":"this","i":0,"k":"p","l":13,"m":"107374182406","name":"this"}
+{"c":0,"file":"ctor.ts","full":"ctor.ts::program","id":"167503724548","k":"t","l":1,"name":":program","pfull":"ctor.ts:<global>","pid":"137438953472","pk":"NAMESPACE_BLOCK"}
+{"c":0,"file":"ctor.ts","full":"ctor.ts::program:Foo","id":"167503724544","k":"t","l":1,"name":"Foo","pfull":"ctor.ts::program","pid":"107374182400","pk":"METHOD"}
+{"c":0,"file":"iter.ts","full":"iter.ts::program","id":"167503724558","k":"t","l":1,"name":":program","pfull":"iter.ts:<global>","pid":"137438953473","pk":"NAMESPACE_BLOCK"}
+{"c":0,"file":"iter.ts","full":"iter.ts::program:Foo","id":"167503724551","k":"t","l":1,"name":"Foo","pfull":"iter.ts::program","pid":"107374182405","pk":"METHOD"}
+{"c":0,"file":"iter.ts","full":"iter.ts::program:g","id":"167503724550","k":"t","l":13,"name":"g","pfull":"iter.ts::program","pid":"107374182405","pk":"METHOD"}
+{"c":0,"file":"iter.ts","full":"iter.ts::program:use","id":"167503724549","k":"t","l":12,"name":"use","pfull":"iter.ts::program","pid":"107374182405","pk":"METHOD"}
+{"c":11,"code":"a: unknown","i":1,"k":"p","l":13,"m":"107374182406","name":"a"}
+{"c":12,"code":"constructor(public a: number) {}","file":"ctor.ts","full":"ctor.ts::program:Foo:<init>","id":"107374182401","k":"m","l":1,"le":1,"name":"<init>","pfull":"ctor.ts::program:Foo","pid":"167503724544","pk":"TYPE_DECL"}
+{"c":12,"code":"constructor(public a: number) {}","file":"iter.ts","full":"iter.ts::program:Foo:<init>","id":"107374182407","k":"m","l":1,"le":1,"name":"<init>","pfull":"iter.ts::program:Foo","pid":"167503724551","pk":"TYPE_DECL"}
+{"c":12,"code":"this","i":0,"k":"p","l":1,"m":"107374182401","name":"this"}
+{"c":12,"code":"this","i":0,"k":"p","l":1,"m":"107374182407","name":"this"}
+{"c":12,"file":"ctor.ts","full":"ctor.ts::program:Foo:<init>","id":"167503724545","k":"t","l":1,"name":"<init>","pfull":"ctor.ts::program:Foo","pid":"167503724544","pk":"TYPE_DECL"}
+{"c":12,"file":"iter.ts","full":"iter.ts::program:Foo:<init>","id":"167503724552","k":"t","l":1,"name":"<init>","pfull":"iter.ts::program:Foo","pid":"167503724551","pk":"TYPE_DECL"}
+{"c":13,"code":"v: unknown","i":1,"k":"p","l":12,"m":"107374182404","name":"v"}
+{"c":18,"code":"p: number","i":1,"k":"p","l":2,"m":"107374182403","name":"p"}
+{"c":18,"code":"xs: number[]","i":1,"k":"p","l":2,"m":"107374182410","name":"xs"}
+{"c":2,"code":"!(_result_0 = _iterator_0.next()).done","id":"30064771102","k":"c","l":5,"lab":"CALL","m":"107374182410"}
+{"c":2,"code":"!(_result_1 = _iterator_1.next()).done","id":"30064771109","k":"c","l":6,"lab":"CALL","m":"107374182410"}
+{"c":2,"id":"141733920769","k":"r","l":4,"m":"107374182403"}
+{"c":2,"id":"141733920774","k":"r","l":10,"m":"107374182410"}
+{"c":2,"id":"141733920775","k":"r","l":16,"m":"107374182411"}
+{"c":2,"id":"141733920776","k":"r","l":20,"m":"107374182412"}
+{"c":20,"code":"(v) => g(v, p)","file":"iter.ts","full":"iter.ts::program:f:<lambda>0","id":"107374182409","k":"m","l":7,"le":7,"name":"<lambda>0","pfull":"iter.ts::program:f","pid":"107374182410","pk":"METHOD"}
+{"c":20,"code":"this","i":0,"k":"p","l":7,"m":"107374182409","name":"this"}
+{"c":20,"file":"iter.ts","full":"iter.ts::program:f:<lambda>0","id":"167503724554","k":"t","l":7,"name":"<lambda>0","pfull":"iter.ts::program:f","pid":"107374182410","pk":"METHOD"}
+{"c":21,"code":"v","i":1,"k":"p","l":7,"m":"107374182409","name":"v"}
+{"c":23,"code":"b: unknown","i":2,"k":"p","l":13,"m":"107374182406","name":"b"}
+{"c":24,"code":"public a: number","i":1,"k":"p","l":1,"m":"107374182401","name":"a"}
+{"c":24,"code":"public a: number","i":1,"k":"p","l":1,"m":"107374182407","name":"a"}
+{"c":25,"code":"it: any","i":1,"k":"p","l":14,"m":"107374182411","name":"it"}
+{"c":25,"code":"it: any","i":1,"k":"p","l":18,"m":"107374182412","name":"it"}
+{"c":27,"id":"141733920770","k":"r","l":12,"m":"107374182404"}
+{"c":27,"id":"141733920773","k":"r","l":7,"m":"107374182409"}
+{"c":32,"code":"p: number","i":2,"k":"p","l":2,"m":"107374182410","name":"p"}
+{"c":37,"id":"141733920771","k":"r","l":13,"m":"107374182406"}
+{"c":45,"code":"run(x: number) { return x; }","file":"ctor.ts","full":"ctor.ts::program:Foo:run","id":"107374182402","k":"m","l":1,"le":1,"name":"run","pfull":"ctor.ts::program:Foo","pid":"167503724544","pk":"TYPE_DECL"}
+{"c":45,"code":"run(x: number) { return x; }","file":"iter.ts","full":"iter.ts::program:Foo:run","id":"107374182408","k":"m","l":1,"le":1,"name":"run","pfull":"iter.ts::program:Foo","pid":"167503724551","pk":"TYPE_DECL"}
+{"c":45,"code":"this","i":0,"k":"p","l":1,"m":"107374182402","name":"this"}
+{"c":45,"code":"this","i":0,"k":"p","l":1,"m":"107374182408","name":"this"}
+{"c":45,"file":"ctor.ts","full":"ctor.ts::program:Foo:run","id":"167503724546","k":"t","l":1,"name":"run","pfull":"ctor.ts::program:Foo","pid":"167503724544","pk":"TYPE_DECL"}
+{"c":45,"file":"iter.ts","full":"iter.ts::program:Foo:run","id":"167503724553","k":"t","l":1,"name":"run","pfull":"iter.ts::program:Foo","pid":"167503724551","pk":"TYPE_DECL"}
+{"c":49,"code":"x: number","i":1,"k":"p","l":1,"m":"107374182402","name":"x"}
+{"c":49,"code":"x: number","i":1,"k":"p","l":1,"m":"107374182408","name":"x"}
+{"c":62,"id":"141733920768","k":"r","l":1,"m":"107374182402"}
+{"c":62,"id":"141733920772","k":"r","l":1,"m":"107374182408"}
+{"c":7,"code":"function f(xs: number[], p: number) {\n  const o = new Foo(p);\n  const r = o.run(","file":"iter.ts","full":"iter.ts::program:f","id":"107374182410","k":"m","l":2,"le":11,"name":"f","pfull":"iter.ts::program","pid":"107374182405","pk":"METHOD"}
+{"c":7,"code":"function h(p: number) {\n  const o = new Foo(p);\n  return o.run(1);\n}","file":"ctor.ts","full":"ctor.ts::program:h","id":"107374182403","k":"m","l":2,"le":5,"name":"h","pfull":"ctor.ts::program","pid":"107374182400","pk":"METHOD"}
+{"c":7,"code":"function realNext(it: any) {\n  const v = it.next();\n  return use(v);\n}","file":"iter.ts","full":"iter.ts::program:realNext","id":"107374182411","k":"m","l":14,"le":17,"name":"realNext","pfull":"iter.ts::program","pid":"107374182405","pk":"METHOD"}
+{"c":7,"code":"function selfNext(it: any) {\n  const w = it.next(it);\n  return use(w);\n}","file":"iter.ts","full":"iter.ts::program:selfNext","id":"107374182412","k":"m","l":18,"le":21,"name":"selfNext","pfull":"iter.ts::program","pid":"107374182405","pk":"METHOD"}
+{"c":7,"code":"this","i":0,"k":"p","l":14,"m":"107374182411","name":"this"}
+{"c":7,"code":"this","i":0,"k":"p","l":18,"m":"107374182412","name":"this"}
+{"c":7,"code":"this","i":0,"k":"p","l":2,"m":"107374182403","name":"this"}
+{"c":7,"code":"this","i":0,"k":"p","l":2,"m":"107374182410","name":"this"}
+{"c":7,"file":"ctor.ts","full":"ctor.ts::program:h","id":"167503724547","k":"t","l":2,"name":"h","pfull":"ctor.ts::program","pid":"107374182400","pk":"METHOD"}
+{"c":7,"file":"iter.ts","full":"iter.ts::program:f","id":"167503724555","k":"t","l":2,"name":"f","pfull":"iter.ts::program","pid":"107374182405","pk":"METHOD"}
+{"c":7,"file":"iter.ts","full":"iter.ts::program:realNext","id":"167503724556","k":"t","l":14,"name":"realNext","pfull":"iter.ts::program","pid":"107374182405","pk":"METHOD"}
+{"c":7,"file":"iter.ts","full":"iter.ts::program:selfNext","id":"167503724557","k":"t","l":18,"name":"selfNext","pfull":"iter.ts::program","pid":"107374182405","pk":"METHOD"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771087","pk":"cs"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771087","pk":"cs"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771087","pk":"cs"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771087","pk":"cs"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771087","pk":"cs"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771102","pk":"c"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771102","pk":"c"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771102","pk":"c"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771102","pk":"c"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771102","pk":"c"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771106","pk":"cs"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771106","pk":"cs"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771106","pk":"cs"}
+{"cond":"30064771102","k":"cb","m":"107374182410","pid":"30064771106","pk":"cs"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771090","pk":"cs"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771090","pk":"cs"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771090","pk":"cs"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771090","pk":"cs"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771090","pk":"cs"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771109","pk":"c"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771109","pk":"c"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771109","pk":"c"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771109","pk":"c"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771109","pk":"c"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771113","pk":"cs"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771113","pk":"cs"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771113","pk":"cs"}
+{"cond":"30064771109","k":"cb","m":"107374182410","pid":"30064771113","pk":"cs"}
+{"di":0,"did":"107374182409","dk":"p","ff":[],"h":"p0","k":"d","m":"107374182409","tf":[],"th":"recv","uid":"30064771092","uk":"cs"}
+{"di":0,"did":"107374182410","dk":"p","ff":[],"h":"p0","k":"d","m":"107374182410","tf":[],"th":"recv","uid":"30064771106","uk":"cs"}
+{"di":0,"did":"107374182410","dk":"p","ff":[],"h":"p0","k":"d","m":"107374182410","tf":[],"th":"recv","uid":"30064771113","uk":"cs"}
+{"di":0,"did":"107374182410","dk":"p","ff":[],"h":"p0","k":"d","m":"107374182410","tf":[],"th":"recv","uid":"30064771113","uk":"cs"}
+{"di":0,"did":"107374182411","dk":"p","ff":[],"h":"p0","k":"d","m":"107374182411","tf":[],"th":"recv","uid":"30064771142","uk":"cs"}
+{"di":0,"did":"107374182412","dk":"p","ff":[],"h":"p0","k":"d","m":"107374182412","tf":[],"th":"recv","uid":"30064771146","uk":"cs"}
+{"di":1,"did":"107374182402","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182402","tf":[],"th":"ret","uid":"141733920768","uk":"r"}
+{"di":1,"did":"107374182403","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182403","tf":[],"th":"a0","uid":"30064771077","uk":"cs"}
+{"di":1,"did":"107374182404","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182404","tf":[],"th":"ret","uid":"141733920770","uk":"r"}
+{"di":1,"did":"107374182406","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182406","tf":[],"th":"ret","uid":"141733920771","uk":"r"}
+{"di":1,"did":"107374182408","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182408","tf":[],"th":"ret","uid":"141733920772","uk":"r"}
+{"di":1,"did":"107374182409","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182409","tf":[],"th":"a0","uid":"30064771092","uk":"cs"}
+{"di":1,"did":"107374182410","dk":"p","ff":["done"],"h":"p1","k":"d","m":"107374182410","tf":[],"th":"","uid":"30064771102","uk":"c"}
+{"di":1,"did":"107374182410","dk":"p","ff":["done"],"h":"p1","k":"d","m":"107374182410","tf":[],"th":"","uid":"30064771109","uk":"c"}
+{"di":1,"did":"107374182410","dk":"p","ff":["value"],"h":"p1","k":"d","m":"107374182410","tf":[],"th":"a0","uid":"30064771106","uk":"cs"}
+{"di":1,"did":"107374182410","dk":"p","ff":["value"],"h":"p1","k":"d","m":"107374182410","tf":[],"th":"a0","uid":"30064771113","uk":"cs"}
+{"di":1,"did":"107374182410","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182410","tf":[],"th":"a0","uid":"30064771087","uk":"cs"}
+{"di":1,"did":"107374182410","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182410","tf":[],"th":"a0","uid":"30064771090","uk":"cs"}
+{"di":1,"did":"107374182410","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182410","tf":[],"th":"recv","uid":"30064771115","uk":"cs"}
+{"di":1,"did":"107374182411","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182411","tf":[],"th":"recv","uid":"30064771140","uk":"cs"}
+{"di":1,"did":"107374182412","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182412","tf":[],"th":"a0","uid":"30064771144","uk":"cs"}
+{"di":1,"did":"107374182412","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182412","tf":[],"th":"a0","uid":"30064771144","uk":"cs"}
+{"di":1,"did":"107374182412","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182412","tf":[],"th":"recv","uid":"30064771144","uk":"cs"}
+{"di":1,"did":"107374182412","dk":"p","ff":[],"h":"p1","k":"d","m":"107374182412","tf":[],"th":"recv","uid":"30064771144","uk":"cs"}
+{"di":2,"did":"107374182410","dk":"p","ff":[],"h":"p2","k":"d","m":"107374182410","tf":[],"th":"a0","uid":"30064771096","uk":"cs"}
+{"di":2,"did":"107374182410","dk":"p","ff":[],"h":"p2","k":"d","m":"107374182410","tf":[],"th":"a0","uid":"30064771098","uk":"cs"}
+{"did":"30064771077","dk":"cs","ff":[],"h":"r","k":"d","m":"107374182403","tf":[],"th":"recv","uid":"30064771078","uk":"cs"}
+{"did":"30064771078","dk":"cs","ff":[],"h":"r","k":"d","m":"107374182403","tf":[],"th":"ret","uid":"141733920769","uk":"r"}
+{"did":"30064771087","dk":"cs","ff":["done"],"h":"r","k":"d","m":"107374182410","tf":[],"th":"","uid":"30064771102","uk":"c"}
+{"did":"30064771087","dk":"cs","ff":["value"],"h":"r","k":"d","m":"107374182410","tf":[],"th":"a0","uid":"30064771106","uk":"cs"}
+{"did":"30064771090","dk":"cs","ff":["done"],"h":"r","k":"d","m":"107374182410","tf":[],"th":"","uid":"30064771109","uk":"c"}
+{"did":"30064771090","dk":"cs","ff":["value"],"h":"r","k":"d","m":"107374182410","tf":[],"th":"a0","uid":"30064771113","uk":"cs"}
+{"did":"30064771092","dk":"cs","ff":[],"h":"r","k":"d","m":"107374182409","tf":[],"th":"ret","uid":"141733920773","uk":"r"}
+{"did":"30064771096","dk":"cs","ff":[],"h":"r","k":"d","m":"107374182410","tf":[],"th":"recv","uid":"30064771098","uk":"cs"}
+{"did":"30064771140","dk":"cs","ff":[],"h":"r","k":"d","m":"107374182411","tf":[],"th":"a0","uid":"30064771142","uk":"cs"}
+{"did":"30064771142","dk":"cs","ff":[],"h":"r","k":"d","m":"107374182411","tf":[],"th":"ret","uid":"141733920775","uk":"r"}
+{"did":"30064771144","dk":"cs","ff":[],"h":"r","k":"d","m":"107374182412","tf":[],"th":"a0","uid":"30064771146","uk":"cs"}
+{"did":"30064771146","dk":"cs","ff":[],"h":"r","k":"d","m":"107374182412","tf":[],"th":"ret","uid":"141733920776","uk":"r"}

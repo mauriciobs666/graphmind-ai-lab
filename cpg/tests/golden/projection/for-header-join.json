@@ -1,0 +1,1204 @@
+{
+ "behavior": "for-header-join",
+ "corpus": "0caf85e3 (python corpus, cpg/.ccg-work/corpora/python/src)",
+ "fixtures": [
+  {
+   "name": "cond_synth.py",
+   "origin": "synthetic",
+   "startLine": 1,
+   "classHeader": false,
+   "lines": [
+    "def governed(keep, fn):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        opened = fn()",
+    "    except Exception:",
+    "        return 1",
+    "    if not opened:",
+    "        return 2",
+    "    return 3",
+    "",
+    "",
+    "def nested_synth(keep, fn, fn2):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        first = fn()",
+    "        second = fn2(first)",
+    "    except Exception:",
+    "        return 1",
+    "    return second",
+    "",
+    "",
+    "def ungoverned(fn):",
+    "    try:",
+    "        opened = fn()",
+    "    except Exception:",
+    "        return 1",
+    "    return opened",
+    "",
+    "",
+    "def real_intermediate(keep, fn):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        opened = fn()",
+    "    except Exception:",
+    "        return 1",
+    "    if opened:",
+    "        return fn()",
+    "    return 2",
+    "",
+    "",
+    "def comp_nested(keep, xs):",
+    "    if keep:",
+    "        total = all(check(x) for x in xs)",
+    "        return total",
+    "    return None",
+    "",
+    "",
+    "def for_header_real(xs):",
+    "    for x in xs:",
+    "        use(x)",
+    "    return 1",
+    "",
+    "",
+    "def nested_chain(keep, xs):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        total = all(check(x) for x in xs)",
+    "    except Exception:",
+    "        return 1",
+    "    return total",
+    "",
+    "",
+    "def real_under_synth(keep, items, fn):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        for item in items:",
+    "            out = fn(item)",
+    "    except Exception:",
+    "        return 1",
+    "    return 2",
+    "",
+    "",
+    "def real_if_in_try(keep, flag, fn):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        if flag:",
+    "            fn()",
+    "    except Exception:",
+    "        return 1",
+    "    return 2",
+    "",
+    "",
+    "def call_cond_loop(x):",
+    "    while check(x):",
+    "        x = step(x)",
+    "    return x"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_chunking_21.py",
+   "origin": "corpus slice",
+   "startLine": 21,
+   "classHeader": false,
+   "lines": [
+    "def split_into_chunks(text: str, *, size: int = 1000, overlap: int = 150) -> list[str]:",
+    "    \"\"\"Split `text` into chunks of at most ~`size` characters each.",
+    "",
+    "    Each chunk after the first is prefixed with the trailing `overlap`",
+    "    characters of the previous chunk, so a fact split across a chunk",
+    "    boundary is still extractable from at least one chunk. Empty or",
+    "    whitespace-only input yields ``[]`` — chunking is not the layer that",
+    "    rejects that (the service validates non-empty input upstream).",
+    "    \"\"\"",
+    "    if not text or not text.strip():",
+    "        return []",
+    "    pieces: list[str] = []",
+    "    for paragraph in _split_keep_delim(text, _PARAGRAPH_DELIMS):",
+    "        pieces.extend(_split_oversized(paragraph, size))",
+    "    return _pack_with_overlap(pieces, size=size, overlap=overlap)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_extraction_138.py",
+   "origin": "corpus slice",
+   "startLine": 138,
+   "classHeader": false,
+   "lines": [
+    "def _coerce_entities(raw: Any) -> list[dict[str, str]] | None:",
+    "    \"\"\"`None` ⇒ reject the whole payload (not a list at all — the one",
+    "    top-level shape failure this function can produce). A malformed",
+    "    **individual** item (no string `name`) is dropped, not fatal to the rest —",
+    "    losing one bad item is cheaper than discarding an otherwise-good chunk's",
+    "    extraction. An out-of-enum (or missing/non-string) `type` is coerced to",
+    "    `Other` rather than rejected (ML note §3.2: \"a wrong type is recoverable",
+    "    via fusion review; a missing key is not something to guess at\" — that",
+    "    \"missing key\" is about the top-level `entities`/`relationships` keys, not",
+    "    a per-item `type`).\"\"\"",
+    "    if not isinstance(raw, list):",
+    "        return None",
+    "    out: list[dict[str, str]] = []",
+    "    for item in raw:",
+    "        if not isinstance(item, dict):",
+    "            continue",
+    "        name = item.get(\"name\")",
+    "        if not isinstance(name, str) or not name.strip():",
+    "            continue",
+    "        etype = item.get(\"type\")",
+    "        if not isinstance(etype, str) or etype not in _ENTITY_TYPE_SET:",
+    "            etype = _FALLBACK_TYPE",
+    "        out.append({\"name\": name, \"type\": etype})",
+    "    return out"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_llm_263.py",
+   "origin": "corpus slice",
+   "startLine": 263,
+   "classHeader": false,
+   "lines": [
+    "def _parse_native_tool_calls(raw: Any) -> list[ToolCall]:",
+    "    \"\"\"Parse the structured OpenAI `message.tool_calls` list into `ToolCall`s.",
+    "",
+    "    Each entry nests the call under `function` with `arguments` as a JSON *string*",
+    "    (OpenAI shape); we decode it. LM Studio occasionally hands back an already-parsed",
+    "    dict — tolerated. Unparseable/nameless entries are skipped rather than raised.",
+    "    \"\"\"",
+    "    if not isinstance(raw, list):",
+    "        return []",
+    "    calls: list[ToolCall] = []",
+    "    for i, entry in enumerate(raw):",
+    "        if not isinstance(entry, dict):",
+    "            continue",
+    "        fn = entry.get(\"function\", entry)",
+    "        name = fn.get(\"name\") if isinstance(fn, dict) else None",
+    "        if not name:",
+    "            continue",
+    "        args = _coerce_arguments(fn.get(\"arguments\") if isinstance(fn, dict) else None)",
+    "        call_id = entry.get(\"id\") or f\"call_{i}\"",
+    "        calls.append(ToolCall(id=str(call_id), name=str(name), arguments=args))",
+    "    return calls"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_tools_1509.py",
+   "origin": "corpus slice",
+   "startLine": 1509,
+   "classHeader": true,
+   "lines": [
+    "    def register_into(self, registry: ToolRegistry) -> list[str]:",
+    "        \"\"\"Register every server tool into `registry` as an `McpTool`; returns their names.\"\"\"",
+    "        names: list[str] = []",
+    "        for schema in self.list_tools():",
+    "            tool_name = schema[\"function\"][\"name\"]",
+    "            registry.register(McpTool(self, name=tool_name, schema=schema))",
+    "            names.append(tool_name)",
+    "        return names"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_create_workspace_script_188.py",
+   "origin": "corpus slice",
+   "startLine": 188,
+   "classHeader": false,
+   "lines": [
+    "def test_create_workspace_is_idempotent(throwaway_ws, tmp_path):",
+    "    env = {",
+    "        **os.environ,",
+    "        **_model_config_env(tmp_path, default_embedding=_DEFAULT_EMBEDDING_REF),",
+    "    }",
+    "",
+    "    for _ in range(2):",
+    "        result = subprocess.run(",
+    "            [\"bash\", str(_CREATE_WORKSPACE), throwaway_ws],",
+    "            env=env,",
+    "            capture_output=True,",
+    "            text=True,",
+    "            timeout=60,",
+    "        )",
+    "        assert result.returncode == 0, (",
+    "            f\"create_workspace.sh failed:\\nSTDOUT:\\n{result.stdout}\\nSTDERR:\\n{result.stderr}\"",
+    "        )",
+    "",
+    "    repo = Repository(db.connect())",
+    "    overrides = repo.read_model_overrides(throwaway_ws)",
+    "    assert overrides[\"embeddingModel\"] == _DEFAULT_EMBEDDING_REF"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_embedding_migration_723.py",
+   "origin": "corpus slice",
+   "startLine": 723,
+   "classHeader": false,
+   "lines": [
+    "def test_migrate_count_check_reports_actual_unmigrated_counts(migrate_repo, conn):",
+    "    for i in range(3):",
+    "        _seed_row(conn, \"test\", label=\"Message\", id_prop=\"msgId\", id_value=f\"m{i}\",",
+    "                  text=f\"row {i}\", embedding=_old_embedding())",
+    "    unmigrated, total = embedding_migration._count_unmigrated(",
+    "        migrate_repo, \"test\", label=\"Message\", target_ref=_TARGET_REF,",
+    "    )",
+    "    assert (unmigrated, total) == (3, 3)",
+    "",
+    "    embedding_migration._write_embedding(",
+    "        migrate_repo, \"test\", label=\"Message\", id_prop=\"msgId\", id_value=\"m0\",",
+    "        embedding=[0.2] * _TARGET_DIM, target_ref=_TARGET_REF,",
+    "    )",
+    "    unmigrated, total = embedding_migration._count_unmigrated(",
+    "        migrate_repo, \"test\", label=\"Message\", target_ref=_TARGET_REF,",
+    "    )",
+    "    assert (unmigrated, total) == (2, 3)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_logging_config_120.py",
+   "origin": "corpus slice",
+   "startLine": 120,
+   "classHeader": false,
+   "lines": [
+    "def test_shipped_log_config_routes_each_logger_level_to_exactly_one_handler_or_none(tmp_path):",
+    "    reach, stdout, stderr = _run_child(tmp_path)",
+    "",
+    "    assert reach == EXPECTED_REACH",
+    "",
+    "    streams = {\"stdout\": stdout.splitlines(), \"stderr\": stderr.splitlines()}",
+    "    for marker, (stream, text) in PRINTED.items():",
+    "        other = \"stdout\" if stream == \"stderr\" else \"stderr\"",
+    "        hits = [ln for ln in streams[stream] if marker in ln]",
+    "        assert len(hits) == 1, f\"{marker}: {len(hits)} lines on {stream}: {hits}\"",
+    "        assert not [ln for ln in streams[other] if marker in ln], f\"{marker} leaked to {other}\"",
+    "        assert _TS.match(hits[0]), f\"{marker}: no ISO 8601 + offset timestamp: {hits[0]!r}\"",
+    "        assert hits[0][_TS.match(hits[0]).end():].startswith(text), hits[0]",
+    "    for marker in DROPPED:",
+    "        assert marker not in stdout + stderr, f\"{marker} should be dropped\""
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_provenance_19.py",
+   "origin": "corpus slice",
+   "startLine": 19,
+   "classHeader": false,
+   "lines": [
+    "def _seed_thread(repo, *, channel_id=\"c1\", thread_id=\"t1\", seeds=None):",
+    "    \"\"\"Create channel→thread + user u1 + agent bot1, post the seed messages.",
+    "",
+    "    `seeds` = [(msg_id, text)]; the first is a first-message write, the rest",
+    "    subsequent. Returns nothing — the graph is seeded in place.",
+    "    \"\"\"",
+    "    seeds = seeds or []",
+    "    repo.ensure_user(WS, user_id=\"u1\")",
+    "    repo.ensure_agent(WS, agent_id=\"bot1\", name=\"Bot\")",
+    "    repo.create_channel(WS, channel_id=channel_id, name=channel_id, created_at=1)",
+    "    repo.create_thread(",
+    "        WS, channel_id=channel_id, thread_id=thread_id, title=\"t\", created_at=1",
+    "    )",
+    "    first = True",
+    "    ts = 10",
+    "    for msg_id, text in seeds:",
+    "        write = repo.post_first_message if first else repo.post_subsequent_message",
+    "        write(",
+    "            WS, thread_id=thread_id, msg_id=msg_id, author_id=\"u1\",",
+    "            text=text, role=\"user\", created_at=ts,",
+    "        )",
+    "        first = False",
+    "        ts += 1"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_repository_4701.py",
+   "origin": "corpus slice",
+   "startLine": 4701,
+   "classHeader": false,
+   "lines": [
+    "def _load_method(name: str) -> ast.FunctionDef:",
+    "    tree = ast.parse(_REPOSITORY_PATH.read_text(encoding=\"utf-8\"), filename=str(_REPOSITORY_PATH))",
+    "    for node in ast.walk(tree):",
+    "        if isinstance(node, ast.FunctionDef) and node.name == name:",
+    "            return node",
+    "    raise AssertionError(f\"{name!r} not found in repository.py\")"
+   ],
+   "lang": "python"
+  }
+ ],
+ "pairs": [
+  {
+   "fixture": "tests_test_create_workspace_script_188.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "range",
+    "line": 194,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "code": "_ in range(2)",
+    "line": 194,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    188,
+    208
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_create_workspace_script_188.py",
+   "kind": "control",
+   "source": {
+    "code": "_ in range(2)",
+    "line": 194,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "run",
+    "line": 195,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    188,
+    208
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_create_workspace_script_188.py",
+   "kind": "control",
+   "source": {
+    "code": "_ in range(2)",
+    "line": 194,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "str",
+    "line": 196,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    188,
+    208
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_extraction_138.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "raw",
+    "point": "param"
+   },
+   "sink": {
+    "code": "item in raw",
+    "line": 151,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    138,
+    161
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_extraction_138.py",
+   "kind": "control",
+   "source": {
+    "code": "not isinstance(raw, list)",
+    "line": 148,
+    "point": "cond"
+   },
+   "sink": {
+    "code": "item in raw",
+    "line": 151,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    138,
+    161
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_extraction_138.py",
+   "kind": "control",
+   "source": {
+    "code": "item in raw",
+    "line": 151,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 152,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    138,
+    161
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_extraction_138.py",
+   "kind": "control",
+   "source": {
+    "code": "item in raw",
+    "line": 151,
+    "point": "cond"
+   },
+   "sink": {
+    "code": "not isinstance(item, dict)",
+    "line": 152,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    138,
+    161
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_chunking_21.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "_split_keep_delim",
+    "line": 33,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "code": "paragraph in _split_keep_delim(text, _PARAGRAPH_DELIMS)",
+    "line": 33,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    21,
+    35
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_chunking_21.py",
+   "kind": "control",
+   "source": {
+    "code": "not text or not text.strip()",
+    "line": 30,
+    "point": "cond"
+   },
+   "sink": {
+    "code": "paragraph in _split_keep_delim(text, _PARAGRAPH_DELIMS)",
+    "line": 33,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    21,
+    35
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_chunking_21.py",
+   "kind": "control",
+   "source": {
+    "code": "paragraph in _split_keep_delim(text, _PARAGRAPH_DELIMS)",
+    "line": 33,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "_split_oversized",
+    "line": 34,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    21,
+    35
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_chunking_21.py",
+   "kind": "control",
+   "source": {
+    "code": "paragraph in _split_keep_delim(text, _PARAGRAPH_DELIMS)",
+    "line": 33,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "extend",
+    "line": 34,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    21,
+    35
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "items",
+    "line": 126,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "code": "marker, (stream, text) in PRINTED.items()",
+    "line": 126,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "control",
+   "source": {
+    "code": "marker, (stream, text) in PRINTED.items()",
+    "line": 126,
+    "point": "cond"
+   },
+   "sink": {
+    "code": "stream == \"stderr\"",
+    "line": 127,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "control",
+   "source": {
+    "code": "marker, (stream, text) in PRINTED.items()",
+    "line": 126,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "len",
+    "line": 129,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "control",
+   "source": {
+    "code": "marker, (stream, text) in PRINTED.items()",
+    "line": 126,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "len",
+    "line": 129,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "control",
+   "source": {
+    "code": "marker, (stream, text) in PRINTED.items()",
+    "line": 126,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "match",
+    "line": 131,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "control",
+   "source": {
+    "code": "marker, (stream, text) in PRINTED.items()",
+    "line": 126,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "match",
+    "line": 132,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "control",
+   "source": {
+    "code": "marker, (stream, text) in PRINTED.items()",
+    "line": 126,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "end",
+    "line": 132,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "control",
+   "source": {
+    "code": "marker, (stream, text) in PRINTED.items()",
+    "line": 126,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "startswith",
+    "line": 132,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_repository_4701.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "walk",
+    "line": 4703,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "code": "node in ast.walk(tree)",
+    "line": 4703,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    4701,
+    4706
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_repository_4701.py",
+   "kind": "control",
+   "source": {
+    "code": "node in ast.walk(tree)",
+    "line": 4703,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 4704,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    4701,
+    4706
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_repository_4701.py",
+   "kind": "control",
+   "source": {
+    "code": "node in ast.walk(tree)",
+    "line": 4703,
+    "point": "cond"
+   },
+   "sink": {
+    "code": "isinstance(node, ast.FunctionDef) and node.name == name",
+    "line": 4704,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    4701,
+    4706
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_embedding_migration_723.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "range",
+    "line": 724,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "code": "i in range(3)",
+    "line": 724,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    723,
+    739
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_embedding_migration_723.py",
+   "kind": "control",
+   "source": {
+    "code": "i in range(3)",
+    "line": 724,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "_seed_row",
+    "line": 725,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    723,
+    739
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_embedding_migration_723.py",
+   "kind": "control",
+   "source": {
+    "code": "i in range(3)",
+    "line": 724,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "_old_embedding",
+    "line": 726,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    723,
+    739
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "enumerate",
+    "line": 273,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "code": "i, entry in enumerate(raw)",
+    "line": 273,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "control",
+   "source": {
+    "code": "not isinstance(raw, list)",
+    "line": 270,
+    "point": "cond"
+   },
+   "sink": {
+    "code": "i, entry in enumerate(raw)",
+    "line": 273,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "control",
+   "source": {
+    "code": "i, entry in enumerate(raw)",
+    "line": 273,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 274,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "control",
+   "source": {
+    "code": "i, entry in enumerate(raw)",
+    "line": 273,
+    "point": "cond"
+   },
+   "sink": {
+    "code": "not isinstance(entry, dict)",
+    "line": 274,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_provenance_19.py",
+   "kind": "data",
+   "source": {
+    "index": 3,
+    "name": "seeds",
+    "point": "param"
+   },
+   "sink": {
+    "code": "msg_id, text in seeds",
+    "line": 34,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    19,
+    41
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_provenance_19.py",
+   "kind": "control",
+   "source": {
+    "code": "msg_id, text in seeds",
+    "line": 34,
+    "point": "cond"
+   },
+   "sink": {
+    "code": "first",
+    "line": 35,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    19,
+    41
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_provenance_19.py",
+   "kind": "control",
+   "source": {
+    "code": "msg_id, text in seeds",
+    "line": 34,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "write",
+    "line": 36,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    19,
+    41
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_tools_1509.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "list_tools",
+    "line": 1512,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "code": "schema in self.list_tools()",
+    "line": 1512,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:sink:",
+   "span": [
+    1509,
+    1516
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_tools_1509.py",
+   "kind": "control",
+   "source": {
+    "code": "schema in self.list_tools()",
+    "line": 1512,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "McpTool",
+    "line": 1514,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    1509,
+    1516
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_tools_1509.py",
+   "kind": "control",
+   "source": {
+    "code": "schema in self.list_tools()",
+    "line": 1512,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "register",
+    "line": 1514,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    1509,
+    1516
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_tools_1509.py",
+   "kind": "control",
+   "source": {
+    "code": "schema in self.list_tools()",
+    "line": 1512,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "append",
+    "line": 1515,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:source:",
+   "span": [
+    1509,
+    1516
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "cond_synth.py",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 1,
+    "name": "xs"
+   },
+   "sink": {
+    "point": "cond",
+    "line": 46,
+    "code": "iteratorNonEmptyOrException"
+   },
+   "connected": false,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    44,
+    48
+   ],
+   "note": "negative: the iterable does NOT flow into a COMPREHENSION iterator cond (only into a for-statement's header cond)",
+   "resolved": true
+  },
+  {
+   "fixture": "cond_synth.py",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 0,
+    "name": "xs"
+   },
+   "sink": {
+    "point": "cond",
+    "line": 52,
+    "code": "iteratorNonEmptyOrException"
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    51,
+    54
+   ],
+   "note": "the iterable flows into the for-statement header cond (its condition point)",
+   "resolved": true
+  }
+ ]
+}

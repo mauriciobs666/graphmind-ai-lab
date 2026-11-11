@@ -1,0 +1,826 @@
+{
+ "behavior": "cond-transparency",
+ "corpus": "0caf85e3 (python corpus, cpg/.ccg-work/corpora/python/src)",
+ "fixtures": [
+  {
+   "name": "cond_synth.py",
+   "origin": "synthetic",
+   "startLine": 1,
+   "classHeader": false,
+   "lines": [
+    "def governed(keep, fn):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        opened = fn()",
+    "    except Exception:",
+    "        return 1",
+    "    if not opened:",
+    "        return 2",
+    "    return 3",
+    "",
+    "",
+    "def nested_synth(keep, fn, fn2):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        first = fn()",
+    "        second = fn2(first)",
+    "    except Exception:",
+    "        return 1",
+    "    return second",
+    "",
+    "",
+    "def ungoverned(fn):",
+    "    try:",
+    "        opened = fn()",
+    "    except Exception:",
+    "        return 1",
+    "    return opened",
+    "",
+    "",
+    "def real_intermediate(keep, fn):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        opened = fn()",
+    "    except Exception:",
+    "        return 1",
+    "    if opened:",
+    "        return fn()",
+    "    return 2",
+    "",
+    "",
+    "def comp_nested(keep, xs):",
+    "    if keep:",
+    "        total = all(check(x) for x in xs)",
+    "        return total",
+    "    return None",
+    "",
+    "",
+    "def for_header_real(xs):",
+    "    for x in xs:",
+    "        use(x)",
+    "    return 1",
+    "",
+    "",
+    "def nested_chain(keep, xs):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        total = all(check(x) for x in xs)",
+    "    except Exception:",
+    "        return 1",
+    "    return total",
+    "",
+    "",
+    "def real_under_synth(keep, items, fn):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        for item in items:",
+    "            out = fn(item)",
+    "    except Exception:",
+    "        return 1",
+    "    return 2",
+    "",
+    "",
+    "def real_if_in_try(keep, flag, fn):",
+    "    if keep is None:",
+    "        return 0",
+    "    try:",
+    "        if flag:",
+    "            fn()",
+    "    except Exception:",
+    "        return 1",
+    "    return 2",
+    "",
+    "",
+    "def call_cond_loop(x):",
+    "    while check(x):",
+    "        x = step(x)",
+    "    return x"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_retry_75.py",
+   "origin": "corpus slice",
+   "startLine": 75,
+   "classHeader": false,
+   "lines": [
+    "def is_transient(exc: BaseException, *, retry_timeouts: bool = False) -> bool:",
+    "    \"\"\"True when `exc` is a provider failure worth retrying in place (plan §3.1).\"\"\"",
+    "    if not isinstance(exc, ProviderCallError):",
+    "        return False",
+    "    if exc.kind == \"fallback_exhausted\":",
+    "        return bool(exc.causes) and all(",
+    "            is_transient(cause, retry_timeouts=retry_timeouts) for cause in exc.causes",
+    "        )",
+    "    if exc.kind in _CONNECTION_KINDS:",
+    "        return True",
+    "    if exc.kind == \"timeout\":",
+    "        return retry_timeouts",
+    "    if exc.kind == \"http\":",
+    "        return (",
+    "            exc.status in TRANSIENT_HTTP_STATUSES",
+    "            or (exc.status is not None and 500 <= exc.status <= 599)",
+    "            or _has_marker(exc.detail)",
+    "        )",
+    "    if exc.kind == \"body_error\":",
+    "        return _has_marker(exc.detail)",
+    "    # \"malformed_request\", \"invalid_json\", \"body_shape\", \"response_shape\", None",
+    "    return False",
+    "",
+    "",
+    "@dataclass(frozen=True)",
+    "class RetryPolicy:",
+    "    \"\"\"How many attempts, how long to wait before each retry, and whether a",
+    "    `timeout` counts as transient (plan §3.2).\"\"\"",
+    "",
+    "    max_attempts: int",
+    "    delays_s: tuple[float, ...]",
+    "    jitter: float = 0.5",
+    "    retry_timeouts: bool = False",
+    "",
+    "    def __post_init__(self) -> None:",
+    "        if self.max_attempts < 1:",
+    "            raise ValueError(f\"max_attempts must be >= 1, got {self.max_attempts}\")",
+    "        if len(self.delays_s) != self.max_attempts - 1:",
+    "            raise ValueError(",
+    "                f\"delays_s needs max_attempts - 1 = {self.max_attempts - 1} entries, \"",
+    "                f\"got {len(self.delays_s)}\"",
+    "            )",
+    "        if self.jitter < 0:",
+    "            raise ValueError(f\"jitter must be >= 0, got {self.jitter}\")",
+    "",
+    "",
+    "# Equal today; separate so plan §3.2.1 can flip the embed one alone.",
+    "DEFAULT_PROVIDER_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)",
+    "EMBED_CHUNK_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)",
+    "",
+    "",
+    "def _gate_open(",
+    "    keep_going: Callable[[], bool] | None, label: str, kind: object, status: object",
+    ") -> bool:",
+    "    \"\"\"One read of the liveness gate. A gate that raises is treated as open (logged):",
+    "    a flaky gate read must not turn a recoverable provider hiccup into a failure.\"\"\"",
+    "    if keep_going is None:",
+    "        return True",
+    "    try:",
+    "        open_ = keep_going()",
+    "    except Exception:",
+    "        _log.exception(\"%s: liveness gate read failed; continuing to retry\", label)",
+    "        return True",
+    "    if not open_:",
+    "        _log.info(",
+    "            \"%s: owning document no longer processing; abandoning retry \"",
+    "            \"(kind=%s, status=%s)\",",
+    "            label, kind, status,",
+    "        )",
+    "    return bool(open_)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_services_402.py",
+   "origin": "corpus slice",
+   "startLine": 402,
+   "classHeader": false,
+   "lines": [
+    "def _serialize_opaque(value: Any) -> str:",
+    "    \"\"\"Serialize a `config`/`guard` value to the opaque string stored in-graph.",
+    "",
+    "    §11 rule 8: `Step.config` and `TRANSITION.guard` are flat serialized strings",
+    "    stored verbatim and never queried inside. `None`/missing → `\"\"`; an existing",
+    "    string passes through unchanged (already-serialized); anything else is",
+    "    compact JSON (stable key order) so re-publishing the same spec is a no-op.",
+    "    \"\"\"",
+    "    if value is None:",
+    "        return \"\"",
+    "    if isinstance(value, str):",
+    "        return value",
+    "    return json.dumps(value, separators=(\",\", \":\"), sort_keys=True)",
+    "",
+    "",
+    "def _load_json_dict(raw: Any) -> dict[str, Any]:",
+    "    \"\"\"Deserialize an opaque stored `ctx` into a dict; `{}` for anything unusable.",
+    "",
+    "    A run's `ctx` is a flat serialized string (rule 8). Never raise here — a run",
+    "    whose ctx got corrupted must still be advanceable rather than permanently 500.",
+    "    \"\"\"",
+    "    parsed = _normalize_opaque(raw) if raw else None",
+    "    return parsed if isinstance(parsed, dict) else {}",
+    "",
+    "",
+    "def _str_values(value: Any) -> list[str]:",
+    "    \"\"\"A defensive list-of-strings view over author-supplied config data.\"\"\"",
+    "    if not isinstance(value, list):",
+    "        return []",
+    "    return [v for v in value if isinstance(v, str)]",
+    "",
+    "",
+    "def _normalize_opaque(value: Any) -> Any:",
+    "    \"\"\"The inverse of `_serialize_opaque`, for validating a spec before it is written.",
+    "",
+    "    `_validate_def_spec` sees `config`/`guard` **heterogeneously typed** (M-7), because",
+    "    serialization to opaque strings happens *after* it, in `publish_workflow_def`: the",
+    "    REST front door types both as `str` (`schemas.py`), while service-layer and MCP",
+    "    callers hand over dicts. Validating without normalizing would either blow up on a",
+    "    string (`AttributeError` → a 500 on `POST /workflow-defs`) or — worse — skip every",
+    "    string-shaped value, letting **every REST-published def escape the invariants**",
+    "    silently. So: a `str` is parsed as JSON when it can be, and returned unchanged when",
+    "    it cannot (an opaque `\"raw-string\"` config stays exactly that); anything else is",
+    "    already parsed and passes through.",
+    "    \"\"\"",
+    "    if isinstance(value, str):",
+    "        try:",
+    "            return json.loads(value)",
+    "        except (ValueError, TypeError):",
+    "            return value",
+    "    return value"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_repository_4701.py",
+   "origin": "corpus slice",
+   "startLine": 4701,
+   "classHeader": false,
+   "lines": [
+    "def _load_method(name: str) -> ast.FunctionDef:",
+    "    tree = ast.parse(_REPOSITORY_PATH.read_text(encoding=\"utf-8\"), filename=str(_REPOSITORY_PATH))",
+    "    for node in ast.walk(tree):",
+    "        if isinstance(node, ast.FunctionDef) and node.name == name:",
+    "            return node",
+    "    raise AssertionError(f\"{name!r} not found in repository.py\")"
+   ],
+   "lang": "python"
+  }
+ ],
+ "pairs": [
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "control",
+   "source": {
+    "code": "keep_going is None",
+    "line": 131,
+    "point": "cond"
+   },
+   "sink": {
+    "code": "not open_",
+    "line": 138,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "definition:cdg-indirect",
+   "span": [
+    126,
+    144
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "control",
+   "source": {
+    "code": "keep_going is None",
+    "line": 131,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "bool",
+    "line": 144,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "definition:cdg-indirect",
+   "span": [
+    126,
+    144
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "control",
+   "source": {
+    "code": "keep_going is None",
+    "line": 131,
+    "point": "cond"
+   },
+   "sink": {
+    "line": 144,
+    "ordinal": 2,
+    "point": "ret"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "definition:cdg-indirect",
+   "span": [
+    126,
+    144
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "control",
+   "source": {
+    "code": "keep_going is None",
+    "line": 131,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "exception",
+    "line": 136,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "definition:cdg-indirect",
+   "span": [
+    126,
+    144
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "control",
+   "source": {
+    "code": "keep_going is None",
+    "line": 131,
+    "point": "cond"
+   },
+   "sink": {
+    "line": 137,
+    "ordinal": 1,
+    "point": "ret"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "definition:cdg-indirect",
+   "span": [
+    126,
+    144
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_repository_4701.py",
+   "kind": "control",
+   "source": {
+    "code": "isinstance(node, ast.FunctionDef) and node.name == name",
+    "line": 4704,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "AssertionError",
+    "line": 4706,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": false,
+   "direct": false,
+   "cause": "definition:cdg-indirect",
+   "span": [
+    4701,
+    4706
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "control",
+   "source": {
+    "code": "bool(exc.causes)",
+    "line": 80,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "is_transient",
+    "line": 81,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "definition:cdg-indirect",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "control",
+   "source": {
+    "code": "isinstance(value, str)",
+    "line": 447,
+    "point": "cond"
+   },
+   "sink": {
+    "line": 449,
+    "ordinal": 0,
+    "point": "ret"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "definition:cdg-indirect",
+   "span": [
+    434,
+    452
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "control",
+   "source": {
+    "code": "isinstance(value, str)",
+    "line": 447,
+    "point": "cond"
+   },
+   "sink": {
+    "line": 451,
+    "ordinal": 1,
+    "point": "ret"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "definition:cdg-indirect",
+   "span": [
+    434,
+    452
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "cond_synth.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 2,
+    "code": "keep is None"
+   },
+   "sink": {
+    "point": "ret",
+    "ordinal": 1,
+    "line": 7
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "governed: the point under a try-lowering cond is edged to the governing real cond",
+   "resolved": true
+  },
+  {
+   "fixture": "cond_synth.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 2,
+    "code": "keep is None"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "fn",
+    "ordinal": 0,
+    "line": 5
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "governed: the call in the try body is edged to the real cond",
+   "resolved": true
+  },
+  {
+   "fixture": "cond_synth.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 58,
+    "code": "keep is None"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "check",
+    "ordinal": 0,
+    "line": 61
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "nested chain: comprehension iterator -> try-lowering cond -> real cond: the call inside is edged to the real cond",
+   "resolved": true
+  },
+  {
+   "fixture": "cond_synth.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 58,
+    "code": "keep is None"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "all",
+    "ordinal": 0,
+    "line": 61
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "nested chain: the call all() after the try-lowering cond",
+   "resolved": true
+  },
+  {
+   "fixture": "cond_synth.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 39,
+    "code": "opened"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "fn",
+    "ordinal": 1,
+    "line": 40
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "real intermediate cond keeps its direct edge",
+   "resolved": true
+  },
+  {
+   "fixture": "cond_synth.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 52,
+    "code": "iteratorNonEmptyOrException"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "use",
+    "ordinal": 0,
+    "line": 53
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "negative: a for-statement iterator is real: the body call keeps its direct edge to the iterator cond",
+   "resolved": true
+  },
+  {
+   "fixture": "cond_synth.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 82,
+    "code": "flag"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "fn",
+    "ordinal": 0,
+    "line": 83
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "negative: an `if flag:` directly in a try body is a REAL cond: its body call keeps the direct edge to `flag`",
+   "resolved": true
+  },
+  {
+   "fixture": "cond_synth.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 71,
+    "code": "iteratorNonEmptyOrException"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "fn",
+    "ordinal": 0,
+    "line": 72
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "negative: the real-for fixture inside a try keeps the iterator edge",
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 447,
+    "code": "isinstance(value, str)"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "loads",
+    "ordinal": 0,
+    "line": 449
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "joint",
+   "span": [
+    434,
+    452
+   ],
+   "note": "joint: 447 -> loads (the call point of the cond node)",
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 447,
+    "code": "isinstance(value, str)"
+   },
+   "sink": {
+    "point": "ret",
+    "ordinal": 0,
+    "line": 449
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "joint",
+   "span": [
+    434,
+    452
+   ],
+   "note": "joint: 447 -> return at 449",
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 447,
+    "code": "isinstance(value, str)"
+   },
+   "sink": {
+    "point": "ret",
+    "ordinal": 1,
+    "line": 451
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "joint",
+   "span": [
+    434,
+    452
+   ],
+   "note": "joint: 447 -> return at 451",
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 447,
+    "code": "isinstance(value, str)"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "isinstance",
+    "ordinal": 0,
+    "line": 447
+   },
+   "connected": false,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    434,
+    452
+   ],
+   "note": "negative: a call that is itself a CDG source is not controlled by its own cond (the self-edge gets no call-point twin)",
+   "resolved": true
+  },
+  {
+   "fixture": "cond_synth.py",
+   "kind": "control",
+   "source": {
+    "point": "cond",
+    "line": 90,
+    "code": "check(x)"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "check",
+    "ordinal": 0,
+    "line": 90
+   },
+   "connected": false,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    89,
+    92
+   ],
+   "note": "negative: a loop-condition call that is its own CDG source (self-edge) is not controlled by itself at the call point",
+   "resolved": true
+  }
+ ],
+ "syntheticConds": [
+  {
+   "fixture": "cond_synth.py",
+   "line": 5,
+   "code": "opened = fn()"
+  },
+  {
+   "fixture": "cond_synth.py",
+   "line": 18,
+   "code": "second = fn2(first)"
+  },
+  {
+   "fixture": "cond_synth.py",
+   "line": 26,
+   "code": "opened = fn()"
+  },
+  {
+   "fixture": "cond_synth.py",
+   "line": 36,
+   "code": "opened = fn()"
+  },
+  {
+   "fixture": "cond_synth.py",
+   "line": 61,
+   "code": "total = all(check(x) for x in xs)"
+  },
+  {
+   "fixture": "cond_synth.py",
+   "line": 61,
+   "code": "iteratorNonEmptyOrException"
+  },
+  {
+   "fixture": "cond_synth.py",
+   "line": 46,
+   "code": "iteratorNonEmptyOrException"
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "line": 134,
+   "code": "open_ = keep_going()"
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "line": 81,
+   "code": "iteratorNonEmptyOrException"
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "line": 449,
+   "code": "json.loads(value)"
+  }
+ ]
+}

@@ -1,0 +1,126 @@
+{
+ "behavior": "paren-join",
+ "corpus": "0caf85e3 (python corpus, cpg/.ccg-work/corpora/python/src)",
+ "fixtures": [
+  {
+   "name": "tests_test_storefront_api_5042.py",
+   "origin": "corpus slice",
+   "startLine": 5042,
+   "classHeader": true,
+   "lines": [
+    "    def run(self, ctx, *, run_id):  # noqa: ANN001, ARG002 — the executor's shape",
+    "        with self._cond:",
+    "            self.started.append(ctx.actor)",
+    "            self.threads.append(threading.current_thread().name)",
+    "            index = len(self.started) - 1",
+    "            self._cond.notify_all()",
+    "            deadline = time.monotonic() + TURN_GATE_S",
+    "            while not (self._open or index in self._released):",
+    "                remaining = deadline - time.monotonic()",
+    "                if remaining <= 0:",
+    "                    break",
+    "                self._cond.wait(remaining)",
+    "        time.sleep(self.work_s)",
+    "        with self._cond:",
+    "            self.finished.append(ctx.actor)",
+    "            self._cond.notify_all()",
+    "        return \"waiting\""
+   ],
+   "lang": "python"
+  }
+ ],
+ "pairs": [
+  {
+   "fixture": "tests_test_storefront_api_5042.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "len",
+    "line": 5046,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "code": "not (self._open or index in self._released)",
+    "line": 5049,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:cond-resolved-to-wrong-node",
+   "span": [
+    5042,
+    5058
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_storefront_api_5042.py",
+   "kind": "control",
+   "source": {
+    "code": "not (self._open or index in self._released)",
+    "line": 5049,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "monotonic",
+    "line": 5050,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:cond-resolved-to-wrong-node",
+   "span": [
+    5042,
+    5058
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_storefront_api_5042.py",
+   "kind": "control",
+   "source": {
+    "code": "not (self._open or index in self._released)",
+    "line": 5049,
+    "point": "cond"
+   },
+   "sink": {
+    "code": "remaining <= 0",
+    "line": 5051,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "join:cond-resolved-to-wrong-node",
+   "span": [
+    5042,
+    5058
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_storefront_api_5042.py",
+   "kind": "control",
+   "source": {
+    "code": "not (self._open or index in self._released)",
+    "line": 5049,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "wait",
+    "line": 5053,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": false,
+   "direct": false,
+   "cause": "join:cond-resolved-to-wrong-node",
+   "span": [
+    5042,
+    5058
+   ],
+   "note": "NOT FIXED: the endpoint now resolves to the whole condition, but wait@5053 is controlled by `remaining <= 0` (5051), a 2-step chain; the scorer requires a direct edge",
+   "resolved": true
+  }
+ ]
+}

@@ -29,9 +29,19 @@ DEFINITIONS = {
     "join": "param by spec index (the name is only a sanity diagnostic); ret by ordinal (line must equal the label's, else the "
             "unique ret on the label's line); call by (calleeName, ordinal) when that call site is on the label's line, else "
             "the unique call site of that calleeName on the label's line (tag `ordinalShift`), else unresolved; cond by line "
-            "and collapsed code (equal, else equal ignoring all whitespace [Joern re-spaces `(int, float)` as `(int,float)`], else one "
-            "contains the other, on that line; several candidates at the same tier = unresolved).  A pair with an unresolved endpoint is a miss, listed as `endpoint-unresolved`.",
+            "and collapsed code (equal, else equal ignoring all whitespace [Joern re-spaces `(int, float)` as `(int,float)`], else equal ignoring "
+            "whitespace AND parentheses [P1-09 (b): Joern drops redundant grouping parentheses, `not (a or b)` is printed `not a or b`; exactly one "
+            "match], else one contains the other, on that line; several candidates at the same tier = unresolved); and only when no tier resolved "
+            "or matched (P1-09 (a)), a label whose source line is the python `for <code>:` / `async for <code>:` header resolves to the line's UNIQUE "
+            "cond coded `iteratorNonEmptyOrException` (the `for` statement's condition point; several = unresolved, reason `cond-several-iterator`).  "
+            "`JOIN_P0_ONLY = True` restores the P0 join (the pinned P0 figures; a diagnostic, never a gate input).  A pair with an unresolved "
+            "endpoint is a miss, listed as `endpoint-unresolved`.",
 }
+
+
+#: True restores the P0 cond join (no paren-insensitive tier, no `for`-header rule): the figures P0 pinned. Diagnostic only.
+JOIN_P0_ONLY = False
+ITER_COND = "iteratorNonEmptyOrException"  # python: a `for` statement's header CDG node (and a comprehension's: see extract.sc 4b)
 
 
 def collapse(s: str, limit: int = 200) -> str:
@@ -204,6 +214,7 @@ def build_method(lang, F, src: Src, mid: str, file: str):
     M.rets = [(("r", r["id"]), k, r["l"]) for k, r in enumerate(rets)]
     M.conds = [(("c", c["id"]), c["l"], collapse(c["code"])) for c in F["c"].get(mid, [])]
     lines = src.lines(file) or []
+    M.srcLines = lines
     calls = [c for c in F["cs"].get(mid, []) if c["name"] or c["name"] == "<operator>.new"]
     pos = locate_callees(lines, calls)
     keyed = defaultdict(list)
@@ -331,14 +342,41 @@ def resolve_endpoint(M, ep: dict):
         if len(ew) > 1:
             det.update(reason="cond-several-equal", n=len(ew))
             return None, det
+        if not JOIN_P0_ONLY:  # P1-09 (b): the frontend prints the expression without redundant grouping parentheses
+            noparen = lambda x: "".join(x.replace("(", "").replace(")", "").split())  # noqa: E731
+            ep_ = [c for c in online if noparen(c[2]) == noparen(code)]
+            if len(ep_) == 1:
+                det["via"] = "equal-ignoring-whitespace-and-parentheses"
+                return ep_[0][0], det
+            if len(ep_) > 1:
+                det.update(reason="cond-several-equal", n=len(ep_))
+                return None, det
         ct = [c for c in online if c[2] and code and (nows(c[2]) in nows(code) or nows(code) in nows(c[2]))]
         if len(ct) == 1:
             det["via"] = "contains"
             return ct[0][0], det
+        if not ct and not JOIN_P0_ONLY and _for_header(M, line, code):  # P1-09 (a): only when no existing tier resolved or matched
+            its = [c for c in online if c[2] == ITER_COND]
+            if len(its) == 1:
+                det["via"] = "for-header-iterator"
+                return its[0][0], det
+            if len(its) > 1:
+                det.update(reason="cond-several-iterator", n=len(its))
+                return None, det
         det.update(reason="cond-several-contains" if ct else "cond-none",
                    projectionConds=[[c[1], c[2][:80]] for c in M.conds if abs(c[1] - line) <= 1][:8])
         return None, det
     raise ValueError(pt)
+
+
+def _for_header(M, line: int, code: str) -> bool:
+    """P1-09 (a) guard (iii): the label's source line IS the loop header, `for <code>:` or `async for <code>:` after whitespace collapse.
+    Without it a label on, say, a ternary inside a `for` header line would silently map to the iterator cond."""
+    lines = getattr(M, "srcLines", None) or []
+    if not (1 <= line <= len(lines)) or not code:
+        return False
+    text = " ".join(lines[line - 1].split())
+    return text.startswith(f"for {code}:") or text.startswith(f"async for {code}:")
 
 
 def point_label(M, key) -> str:

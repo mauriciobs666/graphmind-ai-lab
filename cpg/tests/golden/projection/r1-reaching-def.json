@@ -1,0 +1,1572 @@
+{
+ "behavior": "r1-reaching-def",
+ "corpus": "0caf85e3 (python corpus, cpg/.ccg-work/corpora/python/src)",
+ "fixtures": [
+  {
+   "name": "falkorchat_chunking_21.py",
+   "origin": "corpus slice",
+   "startLine": 21,
+   "classHeader": false,
+   "lines": [
+    "def split_into_chunks(text: str, *, size: int = 1000, overlap: int = 150) -> list[str]:",
+    "    \"\"\"Split `text` into chunks of at most ~`size` characters each.",
+    "",
+    "    Each chunk after the first is prefixed with the trailing `overlap`",
+    "    characters of the previous chunk, so a fact split across a chunk",
+    "    boundary is still extractable from at least one chunk. Empty or",
+    "    whitespace-only input yields ``[]`` — chunking is not the layer that",
+    "    rejects that (the service validates non-empty input upstream).",
+    "    \"\"\"",
+    "    if not text or not text.strip():",
+    "        return []",
+    "    pieces: list[str] = []",
+    "    for paragraph in _split_keep_delim(text, _PARAGRAPH_DELIMS):",
+    "        pieces.extend(_split_oversized(paragraph, size))",
+    "    return _pack_with_overlap(pieces, size=size, overlap=overlap)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_extraction_138.py",
+   "origin": "corpus slice",
+   "startLine": 138,
+   "classHeader": false,
+   "lines": [
+    "def _coerce_entities(raw: Any) -> list[dict[str, str]] | None:",
+    "    \"\"\"`None` ⇒ reject the whole payload (not a list at all — the one",
+    "    top-level shape failure this function can produce). A malformed",
+    "    **individual** item (no string `name`) is dropped, not fatal to the rest —",
+    "    losing one bad item is cheaper than discarding an otherwise-good chunk's",
+    "    extraction. An out-of-enum (or missing/non-string) `type` is coerced to",
+    "    `Other` rather than rejected (ML note §3.2: \"a wrong type is recoverable",
+    "    via fusion review; a missing key is not something to guess at\" — that",
+    "    \"missing key\" is about the top-level `entities`/`relationships` keys, not",
+    "    a per-item `type`).\"\"\"",
+    "    if not isinstance(raw, list):",
+    "        return None",
+    "    out: list[dict[str, str]] = []",
+    "    for item in raw:",
+    "        if not isinstance(item, dict):",
+    "            continue",
+    "        name = item.get(\"name\")",
+    "        if not isinstance(name, str) or not name.strip():",
+    "            continue",
+    "        etype = item.get(\"type\")",
+    "        if not isinstance(etype, str) or etype not in _ENTITY_TYPE_SET:",
+    "            etype = _FALLBACK_TYPE",
+    "        out.append({\"name\": name, \"type\": etype})",
+    "    return out"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_guards_425.py",
+   "origin": "corpus slice",
+   "startLine": 425,
+   "classHeader": false,
+   "lines": [
+    "def _validate_path(path: Any) -> None:",
+    "    if not isinstance(path, str) or not path:",
+    "        raise WorkflowConfigError(",
+    "            f\"guard `path` must be a non-empty string, got {path!r}\"",
+    "        )",
+    "    head, _, rest = path.partition(\".\")",
+    "    if head not in PATH_ROOTS:",
+    "        raise WorkflowConfigError(",
+    "            f\"guard path root {head!r} is not whitelisted \"",
+    "            f\"(allowed: {', '.join(sorted(PATH_ROOTS))})\"",
+    "        )",
+    "    if head == \"ctx\" and not rest:",
+    "        raise WorkflowConfigError(\"guard path 'ctx' must name a key, e.g. 'ctx.decision'\")",
+    "    if rest and any(not segment for segment in rest.split(\".\")):",
+    "        raise WorkflowConfigError(f\"guard path {path!r} has an empty segment\")"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_llm_263.py",
+   "origin": "corpus slice",
+   "startLine": 263,
+   "classHeader": false,
+   "lines": [
+    "def _parse_native_tool_calls(raw: Any) -> list[ToolCall]:",
+    "    \"\"\"Parse the structured OpenAI `message.tool_calls` list into `ToolCall`s.",
+    "",
+    "    Each entry nests the call under `function` with `arguments` as a JSON *string*",
+    "    (OpenAI shape); we decode it. LM Studio occasionally hands back an already-parsed",
+    "    dict — tolerated. Unparseable/nameless entries are skipped rather than raised.",
+    "    \"\"\"",
+    "    if not isinstance(raw, list):",
+    "        return []",
+    "    calls: list[ToolCall] = []",
+    "    for i, entry in enumerate(raw):",
+    "        if not isinstance(entry, dict):",
+    "            continue",
+    "        fn = entry.get(\"function\", entry)",
+    "        name = fn.get(\"name\") if isinstance(fn, dict) else None",
+    "        if not name:",
+    "            continue",
+    "        args = _coerce_arguments(fn.get(\"arguments\") if isinstance(fn, dict) else None)",
+    "        call_id = entry.get(\"id\") or f\"call_{i}\"",
+    "        calls.append(ToolCall(id=str(call_id), name=str(name), arguments=args))",
+    "    return calls"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_retry_75.py",
+   "origin": "corpus slice",
+   "startLine": 75,
+   "classHeader": false,
+   "lines": [
+    "def is_transient(exc: BaseException, *, retry_timeouts: bool = False) -> bool:",
+    "    \"\"\"True when `exc` is a provider failure worth retrying in place (plan §3.1).\"\"\"",
+    "    if not isinstance(exc, ProviderCallError):",
+    "        return False",
+    "    if exc.kind == \"fallback_exhausted\":",
+    "        return bool(exc.causes) and all(",
+    "            is_transient(cause, retry_timeouts=retry_timeouts) for cause in exc.causes",
+    "        )",
+    "    if exc.kind in _CONNECTION_KINDS:",
+    "        return True",
+    "    if exc.kind == \"timeout\":",
+    "        return retry_timeouts",
+    "    if exc.kind == \"http\":",
+    "        return (",
+    "            exc.status in TRANSIENT_HTTP_STATUSES",
+    "            or (exc.status is not None and 500 <= exc.status <= 599)",
+    "            or _has_marker(exc.detail)",
+    "        )",
+    "    if exc.kind == \"body_error\":",
+    "        return _has_marker(exc.detail)",
+    "    # \"malformed_request\", \"invalid_json\", \"body_shape\", \"response_shape\", None",
+    "    return False",
+    "",
+    "",
+    "@dataclass(frozen=True)",
+    "class RetryPolicy:",
+    "    \"\"\"How many attempts, how long to wait before each retry, and whether a",
+    "    `timeout` counts as transient (plan §3.2).\"\"\"",
+    "",
+    "    max_attempts: int",
+    "    delays_s: tuple[float, ...]",
+    "    jitter: float = 0.5",
+    "    retry_timeouts: bool = False",
+    "",
+    "    def __post_init__(self) -> None:",
+    "        if self.max_attempts < 1:",
+    "            raise ValueError(f\"max_attempts must be >= 1, got {self.max_attempts}\")",
+    "        if len(self.delays_s) != self.max_attempts - 1:",
+    "            raise ValueError(",
+    "                f\"delays_s needs max_attempts - 1 = {self.max_attempts - 1} entries, \"",
+    "                f\"got {len(self.delays_s)}\"",
+    "            )",
+    "        if self.jitter < 0:",
+    "            raise ValueError(f\"jitter must be >= 0, got {self.jitter}\")",
+    "",
+    "",
+    "# Equal today; separate so plan §3.2.1 can flip the embed one alone.",
+    "DEFAULT_PROVIDER_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)",
+    "EMBED_CHUNK_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)",
+    "",
+    "",
+    "def _gate_open(",
+    "    keep_going: Callable[[], bool] | None, label: str, kind: object, status: object",
+    ") -> bool:",
+    "    \"\"\"One read of the liveness gate. A gate that raises is treated as open (logged):",
+    "    a flaky gate read must not turn a recoverable provider hiccup into a failure.\"\"\"",
+    "    if keep_going is None:",
+    "        return True",
+    "    try:",
+    "        open_ = keep_going()",
+    "    except Exception:",
+    "        _log.exception(\"%s: liveness gate read failed; continuing to retry\", label)",
+    "        return True",
+    "    if not open_:",
+    "        _log.info(",
+    "            \"%s: owning document no longer processing; abandoning retry \"",
+    "            \"(kind=%s, status=%s)\",",
+    "            label, kind, status,",
+    "        )",
+    "    return bool(open_)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_services_402.py",
+   "origin": "corpus slice",
+   "startLine": 402,
+   "classHeader": false,
+   "lines": [
+    "def _serialize_opaque(value: Any) -> str:",
+    "    \"\"\"Serialize a `config`/`guard` value to the opaque string stored in-graph.",
+    "",
+    "    §11 rule 8: `Step.config` and `TRANSITION.guard` are flat serialized strings",
+    "    stored verbatim and never queried inside. `None`/missing → `\"\"`; an existing",
+    "    string passes through unchanged (already-serialized); anything else is",
+    "    compact JSON (stable key order) so re-publishing the same spec is a no-op.",
+    "    \"\"\"",
+    "    if value is None:",
+    "        return \"\"",
+    "    if isinstance(value, str):",
+    "        return value",
+    "    return json.dumps(value, separators=(\",\", \":\"), sort_keys=True)",
+    "",
+    "",
+    "def _load_json_dict(raw: Any) -> dict[str, Any]:",
+    "    \"\"\"Deserialize an opaque stored `ctx` into a dict; `{}` for anything unusable.",
+    "",
+    "    A run's `ctx` is a flat serialized string (rule 8). Never raise here — a run",
+    "    whose ctx got corrupted must still be advanceable rather than permanently 500.",
+    "    \"\"\"",
+    "    parsed = _normalize_opaque(raw) if raw else None",
+    "    return parsed if isinstance(parsed, dict) else {}",
+    "",
+    "",
+    "def _str_values(value: Any) -> list[str]:",
+    "    \"\"\"A defensive list-of-strings view over author-supplied config data.\"\"\"",
+    "    if not isinstance(value, list):",
+    "        return []",
+    "    return [v for v in value if isinstance(v, str)]",
+    "",
+    "",
+    "def _normalize_opaque(value: Any) -> Any:",
+    "    \"\"\"The inverse of `_serialize_opaque`, for validating a spec before it is written.",
+    "",
+    "    `_validate_def_spec` sees `config`/`guard` **heterogeneously typed** (M-7), because",
+    "    serialization to opaque strings happens *after* it, in `publish_workflow_def`: the",
+    "    REST front door types both as `str` (`schemas.py`), while service-layer and MCP",
+    "    callers hand over dicts. Validating without normalizing would either blow up on a",
+    "    string (`AttributeError` → a 500 on `POST /workflow-defs`) or — worse — skip every",
+    "    string-shaped value, letting **every REST-published def escape the invariants**",
+    "    silently. So: a `str` is parsed as JSON when it can be, and returned unchanged when",
+    "    it cannot (an opaque `\"raw-string\"` config stays exactly that); anything else is",
+    "    already parsed and passes through.",
+    "    \"\"\"",
+    "    if isinstance(value, str):",
+    "        try:",
+    "            return json.loads(value)",
+    "        except (ValueError, TypeError):",
+    "            return value",
+    "    return value"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_tools_1509.py",
+   "origin": "corpus slice",
+   "startLine": 1509,
+   "classHeader": true,
+   "lines": [
+    "    def register_into(self, registry: ToolRegistry) -> list[str]:",
+    "        \"\"\"Register every server tool into `registry` as an `McpTool`; returns their names.\"\"\"",
+    "        names: list[str] = []",
+    "        for schema in self.list_tools():",
+    "            tool_name = schema[\"function\"][\"name\"]",
+    "            registry.register(McpTool(self, name=tool_name, schema=schema))",
+    "            names.append(tool_name)",
+    "        return names"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_tools_492.py",
+   "origin": "corpus slice",
+   "startLine": 492,
+   "classHeader": true,
+   "lines": [
+    "    def run(self, arguments: dict[str, Any], *, ctx: CallContext,",
+    "            run: dict[str, Any]) -> str:",
+    "        row = self._services.lookup_product(ctx, name=arguments.get(\"name\", \"\"))",
+    "        if row is None:",
+    "            return json.dumps({",
+    "                \"found\": False, \"hint\": LOOKUP_MISS_HINT,",
+    "                \"catalog\": self._services.catalog_index(ctx),",
+    "            })",
+    "        return json.dumps({\"found\": True, **row})"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_eval_nlq_scoring_109.py",
+   "origin": "corpus slice",
+   "startLine": 109,
+   "classHeader": false,
+   "lines": [
+    "def _scalar_equal(expected: Any, actual: Any) -> bool:",
+    "    \"\"\"One value-vs-value comparison per the ml note's scalar rule: numeric",
+    "    epsilon for two numbers, case/whitespace-folded string equality otherwise.",
+    "    A numeric `expected` compared against a non-numeric `actual` (or vice",
+    "    versa) is a type mismatch, not stringified and matched — the ml note's own",
+    "    \"never string-equal on a formatted price\" caution generalizes to \"never",
+    "    coerce a differently-typed actual value into matching.\"\"\"",
+    "    if isinstance(expected, bool) or isinstance(actual, bool):",
+    "        return expected is actual",
+    "    if isinstance(expected, (int, float)) and isinstance(actual, (int, float)):",
+    "        # A tiny extra slop (1e-9) keeps the epsilon boundary itself inclusive",
+    "        # against float representation error (e.g. 25.00 - 24.99 does not",
+    "        # represent as exactly 0.01 in IEEE-754) — the epsilon is a tolerance",
+    "        # for rounding, not a razor's-edge cutoff.",
+    "        return abs(float(expected) - float(actual)) <= _NUMERIC_EPSILON + 1e-9",
+    "    if isinstance(expected, (int, float)) or isinstance(actual, (int, float)):",
+    "        return False  # one numeric, one not — never coerced",
+    "    return _canon_str(expected) == _canon_str(actual)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_embedding_migration_723.py",
+   "origin": "corpus slice",
+   "startLine": 723,
+   "classHeader": false,
+   "lines": [
+    "def test_migrate_count_check_reports_actual_unmigrated_counts(migrate_repo, conn):",
+    "    for i in range(3):",
+    "        _seed_row(conn, \"test\", label=\"Message\", id_prop=\"msgId\", id_value=f\"m{i}\",",
+    "                  text=f\"row {i}\", embedding=_old_embedding())",
+    "    unmigrated, total = embedding_migration._count_unmigrated(",
+    "        migrate_repo, \"test\", label=\"Message\", target_ref=_TARGET_REF,",
+    "    )",
+    "    assert (unmigrated, total) == (3, 3)",
+    "",
+    "    embedding_migration._write_embedding(",
+    "        migrate_repo, \"test\", label=\"Message\", id_prop=\"msgId\", id_value=\"m0\",",
+    "        embedding=[0.2] * _TARGET_DIM, target_ref=_TARGET_REF,",
+    "    )",
+    "    unmigrated, total = embedding_migration._count_unmigrated(",
+    "        migrate_repo, \"test\", label=\"Message\", target_ref=_TARGET_REF,",
+    "    )",
+    "    assert (unmigrated, total) == (2, 3)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_executor_agent_955.py",
+   "origin": "corpus slice",
+   "startLine": 955,
+   "classHeader": true,
+   "lines": [
+    "        def dispatch(self, name, arguments, *, ctx, run):",
+    "            self.dispatched.append((name, arguments))",
+    "            if \"mentions\" in arguments:",
+    "                raise UnknownMemberError([\"alice\"])",
+    "            return '{\"posted\": \"m7\", \"threadId\": \"t1\"}'",
+    "",
+    "    reg = _RecoveringRegistry()"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_executor_process_630.py",
+   "origin": "corpus slice",
+   "startLine": 630,
+   "classHeader": false,
+   "lines": [
+    "def test_publish_rejects_a_timer_key_on_a_non_waiting_step_type(",
+    "    wf_repo, step_type, timer_key,",
+    "):",
+    "    svc = Services(wf_repo)",
+    "    value = 60 if timer_key == \"waitForSeconds\" else 5_000_000_000",
+    "",
+    "    with pytest.raises(WorkflowDefSpecError, match=\"waitForSeconds/waitUntil\"):",
+    "        _publish(",
+    "            svc,",
+    "            steps=_steps(",
+    "                {\"key\": \"park\", \"type\": step_type, \"config\": {timer_key: value},",
+    "                 \"start\": True},",
+    "                SINK_STEP,",
+    "            ),",
+    "            transitions=[SINK_TRANSITION],",
+    "        )",
+    "",
+    "    assert wf_repo.get_def(key=\"access-request\", version=\"1\") is None"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_provenance_19.py",
+   "origin": "corpus slice",
+   "startLine": 19,
+   "classHeader": false,
+   "lines": [
+    "def _seed_thread(repo, *, channel_id=\"c1\", thread_id=\"t1\", seeds=None):",
+    "    \"\"\"Create channel→thread + user u1 + agent bot1, post the seed messages.",
+    "",
+    "    `seeds` = [(msg_id, text)]; the first is a first-message write, the rest",
+    "    subsequent. Returns nothing — the graph is seeded in place.",
+    "    \"\"\"",
+    "    seeds = seeds or []",
+    "    repo.ensure_user(WS, user_id=\"u1\")",
+    "    repo.ensure_agent(WS, agent_id=\"bot1\", name=\"Bot\")",
+    "    repo.create_channel(WS, channel_id=channel_id, name=channel_id, created_at=1)",
+    "    repo.create_thread(",
+    "        WS, channel_id=channel_id, thread_id=thread_id, title=\"t\", created_at=1",
+    "    )",
+    "    first = True",
+    "    ts = 10",
+    "    for msg_id, text in seeds:",
+    "        write = repo.post_first_message if first else repo.post_subsequent_message",
+    "        write(",
+    "            WS, thread_id=thread_id, msg_id=msg_id, author_id=\"u1\",",
+    "            text=text, role=\"user\", created_at=ts,",
+    "        )",
+    "        first = False",
+    "        ts += 1"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_storefront_api_5042.py",
+   "origin": "corpus slice",
+   "startLine": 5042,
+   "classHeader": true,
+   "lines": [
+    "    def run(self, ctx, *, run_id):  # noqa: ANN001, ARG002 — the executor's shape",
+    "        with self._cond:",
+    "            self.started.append(ctx.actor)",
+    "            self.threads.append(threading.current_thread().name)",
+    "            index = len(self.started) - 1",
+    "            self._cond.notify_all()",
+    "            deadline = time.monotonic() + TURN_GATE_S",
+    "            while not (self._open or index in self._released):",
+    "                remaining = deadline - time.monotonic()",
+    "                if remaining <= 0:",
+    "                    break",
+    "                self._cond.wait(remaining)",
+    "        time.sleep(self.work_s)",
+    "        with self._cond:",
+    "            self.finished.append(ctx.actor)",
+    "            self._cond.notify_all()",
+    "        return \"waiting\""
+   ],
+   "lang": "python"
+  }
+ ],
+ "pairs": [
+  {
+   "fixture": "tests_test_executor_agent_955.py",
+   "kind": "data",
+   "source": {
+    "index": 1,
+    "name": "arguments",
+    "point": "param"
+   },
+   "sink": {
+    "code": "\"mentions\" in arguments",
+    "line": 957,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    955,
+    959
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_tools_492.py",
+   "kind": "data",
+   "source": {
+    "index": 1,
+    "name": "ctx",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "catalog_index",
+    "line": 498,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    492,
+    500
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "keep_going",
+    "line": 134,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "bool",
+    "line": 144,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    126,
+    144
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_storefront_api_5042.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "monotonic",
+    "line": 5048,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "wait",
+    "line": 5053,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    5042,
+    5058
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_storefront_api_5042.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "monotonic",
+    "line": 5050,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "wait",
+    "line": 5053,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    5042,
+    5058
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_eval_nlq_scoring_109.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "expected",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 118,
+    "ordinal": 2,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    109,
+    126
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_eval_nlq_scoring_109.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "expected",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 124,
+    "ordinal": 4,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    109,
+    126
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_eval_nlq_scoring_109.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "expected",
+    "point": "param"
+   },
+   "sink": {
+    "line": 117,
+    "ordinal": 0,
+    "point": "ret"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    109,
+    126
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_eval_nlq_scoring_109.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "expected",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "float",
+    "line": 123,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    109,
+    126
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_eval_nlq_scoring_109.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "expected",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "_canon_str",
+    "line": 126,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    109,
+    126
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_extraction_138.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "get",
+    "line": 154,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "strip",
+    "line": 155,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    138,
+    161
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_extraction_138.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "get",
+    "line": 154,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "append",
+    "line": 160,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    138,
+    161
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_extraction_138.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "get",
+    "line": 157,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "append",
+    "line": 160,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    138,
+    161
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_chunking_21.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "text",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "strip",
+    "line": 30,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    21,
+    35
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_chunking_21.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "text",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "_split_keep_delim",
+    "line": 33,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    21,
+    35
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_executor_process_630.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "wf_repo",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "get_def",
+    "line": 647,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    630,
+    647
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "exc",
+    "point": "param"
+   },
+   "sink": {
+    "code": "exc.kind == \"fallback_exhausted\"",
+    "line": 79,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "exc",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "bool",
+    "line": 80,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "exc",
+    "point": "param"
+   },
+   "sink": {
+    "code": "exc.kind in _CONNECTION_KINDS",
+    "line": 83,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "exc",
+    "point": "param"
+   },
+   "sink": {
+    "code": "exc.kind == \"timeout\"",
+    "line": 85,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "exc",
+    "point": "param"
+   },
+   "sink": {
+    "code": "exc.kind == \"http\"",
+    "line": 87,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "exc",
+    "point": "param"
+   },
+   "sink": {
+    "code": "exc.status in TRANSIENT_HTTP_STATUSES",
+    "line": 89,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "exc",
+    "point": "param"
+   },
+   "sink": {
+    "code": "exc.status is not None and 500 <= exc.status <= 599",
+    "line": 90,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "exc",
+    "point": "param"
+   },
+   "sink": {
+    "code": "exc.kind == \"body_error\"",
+    "line": 93,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "exc",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "_has_marker",
+    "line": 94,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "exc",
+    "point": "param"
+   },
+   "sink": {
+    "line": 88,
+    "ordinal": 4,
+    "point": "ret"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "value",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "loads",
+    "line": 449,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    434,
+    452
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "value",
+    "point": "param"
+   },
+   "sink": {
+    "line": 451,
+    "ordinal": 1,
+    "point": "ret"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    434,
+    452
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "value",
+    "point": "param"
+   },
+   "sink": {
+    "line": 452,
+    "ordinal": 2,
+    "point": "ret"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    434,
+    452
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_embedding_migration_723.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "migrate_repo",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "_count_unmigrated",
+    "line": 736,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    723,
+    739
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_embedding_migration_723.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "migrate_repo",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "_write_embedding",
+    "line": 732,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    723,
+    739
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "raw",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "enumerate",
+    "line": 273,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "get",
+    "line": 276,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "get",
+    "line": 277,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "get",
+    "line": 276,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "get",
+    "line": 280,
+    "ordinal": 2,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "get",
+    "line": 276,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 280,
+    "ordinal": 3,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "get",
+    "line": 277,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "str",
+    "line": 282,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_provenance_19.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "repo",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "ensure_agent",
+    "line": 27,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    19,
+    41
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_provenance_19.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "repo",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "create_channel",
+    "line": 28,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    19,
+    41
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_provenance_19.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "repo",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "create_thread",
+    "line": 29,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    19,
+    41
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_provenance_19.py",
+   "kind": "data",
+   "source": {
+    "index": 1,
+    "name": "channel_id",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "create_thread",
+    "line": 29,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    19,
+    41
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_provenance_19.py",
+   "kind": "data",
+   "source": {
+    "index": 2,
+    "name": "thread_id",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "write",
+    "line": 36,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    19,
+    41
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_tools_1509.py",
+   "kind": "data",
+   "source": {
+    "index": -1,
+    "name": "self",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "McpTool",
+    "line": 1514,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    1509,
+    1516
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_guards_425.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "path",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "WorkflowConfigError",
+    "line": 427,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    425,
+    439
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_guards_425.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "path",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "partition",
+    "line": 430,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    425,
+    439
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_guards_425.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "path",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "WorkflowConfigError",
+    "line": 439,
+    "ordinal": 3,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    425,
+    439
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_guards_425.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "partition",
+    "line": 430,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "WorkflowConfigError",
+    "line": 432,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    425,
+    439
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "value",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 412,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    402,
+    414
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "value",
+    "point": "param"
+   },
+   "sink": {
+    "line": 413,
+    "ordinal": 1,
+    "point": "ret"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    402,
+    414
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "value",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "dumps",
+    "line": 414,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:defsOf-ignores-non-assignment-reaching-def",
+   "span": [
+    402,
+    414
+   ],
+   "resolved": true
+  }
+ ]
+}

@@ -78,9 +78,10 @@ import scala.collection.mutable.ArrayBuffer
     case _ => None
   }
 
+  val WILD = "*" // objFields' key for a computed dict key: flows into the whole object, never a field name
   // ---- object / dict literal lowering: BLOCK { tmp = {}; tmp.f = v; tmp["k"] = v; ...; tmp } ----
   // returns the (key, value-expression) pairs, in order, or None when `b` is not that shape.
-  def objFields(b: Block): Option[List[(String, Expression)]] = {
+  def objFields(b: Block, wild: Boolean = false): Option[List[(String, Expression)]] = {
     val cs = kids(b).collect { case e: Expression => e }
     if (cs.isEmpty) return None
     val assigns = cs.collect { case c: Call if isAssign(c) => c }
@@ -102,6 +103,8 @@ import scala.collection.mutable.ArrayBuffer
             case (Some(base: Identifier), Some(k)) if base.name == tmp =>
               val key = if (opName(t) == "fieldAccess") fieldOf(k) else litKey(k)
               key.foreach(kk => fs += ((kk, v)))
+              // a computed key (`{timer_key: value}`): both the key expression and the value flow into the object, whole
+              if (wild && key.isEmpty && opName(t) == "indexAccess") { fs += ((WILD, k)); fs += ((WILD, v)) }
             case _ =>
           }
         case _ =>
@@ -158,6 +161,38 @@ import scala.collection.mutable.ArrayBuffer
   def isCallSite(c: Call): Boolean =
     !decoSkip.contains(c.id) && ((!isOp(c) && c.name.nonEmpty) || c.name == "<operator>.new")
 
+  // R3 recognizer (closed, per language; the source text is not available here, so a call is recognised by the lowering shape
+  // and never by "its name is absent from the source"): the iterator-protocol call the frontend writes for a `for` /
+  // comprehension header. python: `__iter__` / `__next__` whose code starts with its receiver and either the receiver is a
+  // frontend temp (`tmpN.__next__()`) or the call is assigned to one (`tmpN = raw.__iter__()`); javascript: `_iterator_N.next()`.
+  // A user call `it.next()` or `next(it)` has a user receiver or none (and is not assigned to a temp), so it stays opaque.
+  def isSynthLowering(c: Call): Boolean = {
+    val recv = c.argument.l.filter(a => a.argumentIndex == (if (lang == "python") 0 else 1)).collectFirst { case i: Identifier => i }
+    recv.exists { r =>
+      if (!c.code.startsWith(r.name + ".")) false
+      else lang match {
+        case "python" =>
+          (c.name == "__iter__" || c.name == "__next__") && (r.name.matches("tmp\\d+") || (c.astParent match {
+            case a: Call if isOp(a) && isAssign(a) && arg(a, 2).exists(_.id == c.id) =>
+              arg(a, 1).exists { case t: Identifier => t.name.matches("tmp\\d+"); case _ => false }
+            case _ => false
+          }))
+        case "javascript" => c.name == "next" && r.name.matches("_iterator_\\d+")
+        case _ => false
+      }
+    }
+  }
+
+  // the arguments a lowering block adds to its temp (`tmpN.append(x)` of a comprehension/generator, `tmpN.update(spread)` of a dict
+  // literal): the block's value depends on them, so they are defs (defsOf) and use positions (usePositions) of the whole block
+  def tmpMutArgs(b: Block): List[Expression] = kids(b).collect { case x: Expression => x }.lastOption match {
+    case Some(t: Identifier) if t.name.matches("_?tmp_?\\d+") =>
+      ownWalk(b).collect { case c: Call if isCallSite(c) && Set("append", "add", "update").contains(c.name) &&
+        c.argument.l.exists(a => a.argumentIndex == 0 && a.isInstanceOf[Identifier] && a.asInstanceOf[Identifier].name == t.name) => c }
+        .toList.flatMap(c => c.argument.l.filter(_.argumentIndex == 1))
+    case _ => Nil
+  }
+
   type Def = (AstNode, String, List[String]) // def node (Call | MethodParameterIn), head, fields
   // the projection is intraprocedural (spec §5.10): a def must belong to the method being projected
   var curOwn: Set[Long] = Set.empty
@@ -166,7 +201,14 @@ import scala.collection.mutable.ArrayBuffer
   def defsOf(e: AstNode, fields: List[String], seen: mutable.Set[(Long, List[String])], depth: Int): List[Def] = {
     if (depth > 40 || !seen.add((e.id, fields))) return Nil
     e match {
-      case c: Call if isCallSite(c) => if (curOwn.contains(c.id)) List((c, "r", fields)) else Nil
+      case c: Call if isCallSite(c) =>
+        if (!curOwn.contains(c.id)) Nil
+        else if (isSynthLowering(c))
+          // R3 (-p1-ml.md §3.4's cond analogue is `controlledBy` below): a frontend-synthetic call is a transparent
+          // intermediate. The call stays a def (the shipped records are kept; the normalizer drops an edge that touches a
+          // non-point) and the walk also continues through its arguments, so the real source connects directly.
+          (c, "r", fields) :: c.argument.l.sortBy(_.argumentIndex).flatMap(a => defsOf(a, fields, seen, depth + 1))
+        else List((c, "r", fields))
       case c: Call if isOp(c) && opName(c) == "fieldAccess" =>
         (arg(c, 1), arg(c, 2)) match {
           case (Some(b), Some(f: FieldIdentifier)) => defsOf(b, f.canonicalName :: fields, seen, depth + 1)
@@ -189,15 +231,28 @@ import scala.collection.mutable.ArrayBuffer
         }
       case c: Call => Nil // decorator plumbing / unnamed
       case b: Block =>
-        objFields(b) match {
+        // what the block adds to its temp (see tmpMutArgs) is a def of the block's value too
+        val added0: List[Def] = tmpMutArgs(b).flatMap(a => defsOf(a, fields, seen, depth + 1))
+        // R2: the temp of a `new`-lowering block (`BLOCK { tmp = alloc; tmp.<init>(..) / <operator>.new(tmp, ..); tmp }`) is
+        // defined by the constructor call that takes it as its receiver
+        val ctor: List[Def] = kids(b).collect { case x: Expression => x }.lastOption match {
+          case Some(t: Identifier) =>
+            ownWalk(b).collect { case c: Call if (c.name == "<init>" || c.name == "<operator>.new") && isCallSite(c) && curOwn.contains(c.id) &&
+              c.argument.l.exists(a => a.argumentIndex == 0 && a.isInstanceOf[Identifier] && a.asInstanceOf[Identifier].name == t.name) => (c: AstNode, "r", fields) }.toList
+          case _ => Nil
+        }
+        val added: List[Def] = added0 ++ ctor
+        val base: List[Def] = objFields(b, true) match {
           case Some(fs) =>
+            val wild = fs.filter(_._1 == WILD).flatMap { case (_, v) => defsOf(v, fields, seen, depth + 1) }
             fields match {
-              case h :: t => fs.filter(_._1 == h).flatMap { case (_, v) => defsOf(v, t, seen, depth + 1) }
-              case Nil => fs.flatMap { case (_, v) => defsOf(v, Nil, seen, depth + 1) }
+              case h :: t => fs.filter(_._1 == h).flatMap { case (_, v) => defsOf(v, t, seen, depth + 1) } ++ wild
+              case Nil => fs.filter(_._1 != WILD).flatMap { case (_, v) => defsOf(v, Nil, seen, depth + 1) } ++ wild
             }
           case None =>
             kids(b).collect { case x: Expression => x }.lastOption.toList.flatMap(l => defsOf(l, fields, seen, depth + 1))
         }
+        base ++ added
       case i: Identifier =>
         i._reachingDefIn.l.flatMap {
           case p: MethodParameterIn => if (p.astParent.id == curM) List((p: AstNode, "p" + p.index, fields)) else Nil
@@ -205,7 +260,12 @@ import scala.collection.mutable.ArrayBuffer
             s.astParent match {
               case a: Call if isOp(a) && isAssign(a) && arg(a, 1).exists(_.id == s.id) =>
                 arg(a, 2).toList.flatMap(r => defsOf(r, fields, seen, depth + 1))
-              case _ => Nil
+              // R2: the receiver of an `<init>` call is defined by that call (the constructor result)
+              case ic: Call if ic.name == "<init>" && isCallSite(ic) && curOwn.contains(ic.id) && arg(ic, 0).exists(_.id == s.id) =>
+                List((ic, "r", fields))
+              // R1: an earlier same-name identifier that is not an assignment target: REACHING_DEF runs from one use to the
+              // next, so the definition is whatever reaches that earlier use (`seen` bounds loops)
+              case _ => defsOf(s, fields, seen, depth + 1)
             }
           case _ => Nil
         }
@@ -213,11 +273,15 @@ import scala.collection.mutable.ArrayBuffer
     }
   }
 
-  // use positions of an expression: flatten object literals into fields (cap 3 fields after the head)
-  def usePositions(e: Expression, fields: List[String]): List[(List[String], Expression)] = e match {
+  // use positions of an expression: flatten object literals into fields (cap 3 fields after the head). `ext = false` is the shipped
+  // behaviour, used for the `args` of `cs` / `deco` facts (which stay equal to the slice's); `ext = true` is the data-projection
+  // variant: a computed dict key and what a lowering block adds to its temp (`update(spread)`, `append`) are positions too.
+  def usePositions(e: Expression, fields: List[String], ext: Boolean = false): List[(List[String], Expression)] = e match {
     case b: Block if fields.size < 3 =>
-      objFields(b) match {
-        case Some(fs) if fs.nonEmpty => fs.flatMap { case (k, v) => usePositions(v, fields :+ k) }
+      objFields(b, ext) match {
+        case Some(fs) if fs.nonEmpty =>
+          fs.flatMap { case (k, v) => if (k == WILD) List((fields, v)) else usePositions(v, fields :+ k, ext) } ++
+            (if (ext) tmpMutArgs(b).map(a => (fields, a: Expression)) else Nil)
         case _ => List((fields, e))
       }
     case _ => List((fields, e))
@@ -228,6 +292,8 @@ import scala.collection.mutable.ArrayBuffer
   var projNs = 0L
   var cdgRaw = 0
   var cdgSelf = 0
+  var cbRewritten = 0
+  val cbRewrites = ArrayBuffer[ujson.Value]() // audit: [method, pk, pid, synthetic cond, [replacement conds]] (stats record)
   var dataRaw = 0
 
   val methods = cpg.method.isExternal(false).l.sortBy(m => (m.filename, line(m), col(m), m.id))
@@ -324,6 +390,16 @@ import scala.collection.mutable.ArrayBuffer
     }
 
     // ---- projection: data ----
+    def isCompIterator(n: AstNode): Boolean = {
+      if (code(n) != "iteratorNonEmptyOrException") return false
+      n.astParent match {
+        case w: ControlStructure if w.controlStructureType == "WHILE" =>
+          var cur: AstNode = w.astParent
+          while (cur != null && cur.isInstanceOf[Block]) cur = cur.astParent
+          cur.isInstanceOf[Call]
+        case _ => false
+      }
+    }
     val t0 = System.nanoTime
     def emitData(useKind: String, useId: Long, toHead: String, toFields: List[String], expr: AstNode): Unit = {
       val seen = mutable.Set[(Long, List[String])]()
@@ -343,15 +419,34 @@ import scala.collection.mutable.ArrayBuffer
     callSites.foreach { c =>
       c.argument.l.filter(isArg).sortBy(a => (a.argumentIndex, a.id)).foreach { a =>
         val head = if (a.argumentName.exists(_.nonEmpty)) "kw." + a.argumentName.get else if (a.argumentIndex == 0) "recv" else "a" + (a.argumentIndex - 1)
-        usePositions(a, Nil).foreach { case (fs, ee) => emitData("cs", c.id, head, fs, ee) }
+        usePositions(a, Nil, true).foreach { case (fs, ee) => emitData("cs", c.id, head, fs, ee) }
       }
     }
     returns.foreach { r =>
       kids(r).collect { case e: Expression => e }.headOption.foreach { e =>
-        usePositions(e, Nil).foreach { case (fs, ee) => emitData("r", r.id, "ret", fs, ee) }
+        usePositions(e, Nil, true).foreach { case (fs, ee) => emitData("r", r.id, "ret", fs, ee) }
       }
     }
     cdgSources.foreach { n => emitData("c", n.id, "", Nil, n) }
+    // the `for` STATEMENT's header cond (`iteratorNonEmptyOrException`, a WHILE lowering outside any expression) is the condition
+    // point of `for <target> in <iterable>`: what defines the iterable flows into it (`tmp = <iterable>.__iter__()` heads the lowering)
+    if (lang == "python") cdgSources.foreach { n =>
+      if (code(n) == "iteratorNonEmptyOrException" && !isCompIterator(n)) {
+        n.astParent match {
+          case w: ControlStructure if w.controlStructureType == "WHILE" =>
+            // the iterator call heads the lowering block: `tmp1 = x.__iter__()`, `tmp1 = BLOCK { tmp2 = x; tmp2.__iter__() }` or a statement
+            def iterCall(e: AstNode): Option[Call] = e match {
+              case c: Call if c.name == "__iter__" => Some(c)
+              case c: Call if isOp(c) && isAssign(c) => arg(c, 2).flatMap(iterCall)
+              case blk: Block => kids(blk).collect { case x: Expression => x }.lastOption.flatMap(iterCall)
+              case _ => None
+            }
+            kids(w.astParent).filterNot(_.isInstanceOf[ControlStructure]).flatMap(iterCall).flatMap(ic => arg(ic, 0))
+              .foreach(recv => emitData("c", n.id, "", Nil, recv))
+          case _ =>
+        }
+      }
+    }
 
     // ---- projection: controlledBy (CDG, raw) ----
     def pointOf(t: AstNode): Option[(String, Long)] = {
@@ -368,6 +463,30 @@ import scala.collection.mutable.ArrayBuffer
       }
       None
     }
+    // 4b, synthetic-cond transparency (-p1-ml.md §3.4). A cond is frontend-synthetic when it is (python only; the list is closed):
+    //  - a `try`-lowering cond: a CDG source that is a statement lying directly in a try body (not the condition of an if / while /
+    //    for / match, not a ternary or short-circuit operand): Joern prints it as the statement's code (`open_ = keep_going()`);
+    //  - a generator / comprehension iterator: `iteratorNonEmptyOrException` whose lowering sits in an expression (a call's
+    //    argument or an assignment's value). The `for`-STATEMENT iterator carries the same code and is NOT synthetic.
+    def isTryLowering(n: AstNode): Boolean = {
+      var cur: AstNode = n
+      while (cur != null && !cur.isInstanceOf[Block]) {
+        cur.astParent match {
+          case _: ControlStructure => return false
+          case c: Call if isOp(c) && Set("logicalAnd", "logicalOr", "logicalNot", "conditional").contains(opName(c)) => return false
+          case _ =>
+        }
+        cur = cur.astParent
+      }
+      cur match {
+        case b: Block => b.order == 1 && (b.astParent match { case cs: ControlStructure => cs.controlStructureType == "TRY"; case _ => false })
+        case _ => false
+      }
+    }
+    val synthCond: Set[Long] =
+      if (lang == "python") cdgSources.filter(n => isTryLowering(n) || isCompIterator(n)).map(_.id).toSet else Set.empty
+
+    val cbEdges = ArrayBuffer[(String, Long, Long)]() // (point kind, point id, cond id), raw
     cdgSources.foreach { k =>
       k._cdgOut.l.foreach { tgt =>
         tgt match {
@@ -375,10 +494,30 @@ import scala.collection.mutable.ArrayBuffer
             pointOf(ta).foreach { case (pk, pid) =>
               cdgRaw += 1
               if (pk == "c" && pid == k.id) cdgSelf += 1
-              emit(ujson.Obj("k" -> "cb", "m" -> m.id, "pk" -> pk, "pid" -> pid, "cond" -> k.id))
+              cbEdges += ((pk, pid, k.id))
+              // a call that is itself a CDG source is both a cond point and a call point; `pointOf` returns the cond, so the
+              // call point gets its own edge (never for the self-edge: a call is not controlled by its own cond)
+              if (pk == "c" && pid != k.id && csIds.contains(pid)) cbEdges += (("cs", pid, k.id))
             }
           case _ =>
         }
+      }
+    }
+    val ctrlOf = cbEdges.filter(_._1 == "c").groupBy(_._2).map { case (pid, es) => pid -> es.map(_._3).filter(_ != pid).distinct.toList.sorted }
+    // the nearest non-synthetic conds above a synthetic cond (one per governing real cond; none = ungoverned)
+    def nearestReal(s: Long, visited: Set[Long]): List[Long] =
+      ctrlOf.getOrElse(s, Nil).filterNot(visited.contains).flatMap { c =>
+        if (synthCond.contains(c)) nearestReal(c, visited + c) else List(c)
+      }.distinct.sorted
+    val emitted = mutable.Set[(String, Long, Long)]() // replacement edges only: raw edges (repeats included) are kept as shipped
+    cbEdges.foreach { case (pk, pid, cond) =>
+      val selfEdge = pk == "c" && pid == cond
+      if (selfEdge || !synthCond.contains(cond)) emit(ujson.Obj("k" -> "cb", "m" -> m.id, "pk" -> pk, "pid" -> pid, "cond" -> cond))
+      else {
+        val ends = nearestReal(cond, Set(cond))
+        cbRewritten += 1
+        cbRewrites += ujson.Arr(m.id, pk, pid, cond, ujson.Arr.from(ends))
+        ends.foreach { c2 => if (emitted.add((pk, pid, c2))) emit(ujson.Obj("k" -> "cb", "m" -> m.id, "pk" -> pk, "pid" -> pid, "cond" -> c2)) }
       }
     }
     val dt = System.nanoTime - t0
@@ -398,7 +537,7 @@ import scala.collection.mutable.ArrayBuffer
   val tEnd = System.nanoTime
   emit(ujson.Obj("k" -> "stats", "loadMs" -> ((tLoaded - tStart) / 1000000L), "projectionMs" -> (projNs / 1000000L),
     "totalMs" -> ((tEnd - tStart) / 1000000L), "methods" -> methodsSeen, "cdgRaw" -> cdgRaw, "cdgSelf" -> cdgSelf,
-    "dataRaw" -> dataRaw, "histogram" -> ujson.Obj.from(histogram.toList.sortBy(_._1).map { case (k, v) => k -> ujson.Num(v) })))
+    "dataRaw" -> dataRaw, "cbRewritten" -> cbRewritten, "cbRewrites" -> ujson.Arr.from(cbRewrites), "histogram" -> ujson.Obj.from(histogram.toList.sortBy(_._1).map { case (k, v) => k -> ujson.Num(v) })))
   w.close()
   println(s"EXTRACT lang=$lang methods=$methodsSeen cdgRaw=$cdgRaw cdgSelf=$cdgSelf dataRaw=$dataRaw projectionMs=${projNs / 1000000L}")
 }

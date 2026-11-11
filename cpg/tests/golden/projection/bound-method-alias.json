@@ -1,0 +1,63 @@
+{
+ "behavior": "bound-method-alias",
+ "corpus": "0caf85e3 (python corpus, cpg/.ccg-work/corpora/python/src)",
+ "fixtures": [
+  {
+   "name": "tests_test_provenance_19.py",
+   "origin": "corpus slice",
+   "startLine": 19,
+   "classHeader": false,
+   "lines": [
+    "def _seed_thread(repo, *, channel_id=\"c1\", thread_id=\"t1\", seeds=None):",
+    "    \"\"\"Create channel→thread + user u1 + agent bot1, post the seed messages.",
+    "",
+    "    `seeds` = [(msg_id, text)]; the first is a first-message write, the rest",
+    "    subsequent. Returns nothing — the graph is seeded in place.",
+    "    \"\"\"",
+    "    seeds = seeds or []",
+    "    repo.ensure_user(WS, user_id=\"u1\")",
+    "    repo.ensure_agent(WS, agent_id=\"bot1\", name=\"Bot\")",
+    "    repo.create_channel(WS, channel_id=channel_id, name=channel_id, created_at=1)",
+    "    repo.create_thread(",
+    "        WS, channel_id=channel_id, thread_id=thread_id, title=\"t\", created_at=1",
+    "    )",
+    "    first = True",
+    "    ts = 10",
+    "    for msg_id, text in seeds:",
+    "        write = repo.post_first_message if first else repo.post_subsequent_message",
+    "        write(",
+    "            WS, thread_id=thread_id, msg_id=msg_id, author_id=\"u1\",",
+    "            text=text, role=\"user\", created_at=ts,",
+    "        )",
+    "        first = False",
+    "        ts += 1"
+   ],
+   "lang": "python"
+  }
+ ],
+ "pairs": [
+  {
+   "fixture": "tests_test_provenance_19.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "repo",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "write",
+    "line": 36,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": false,
+   "direct": false,
+   "cause": "projection:bound-method-alias",
+   "span": [
+    19,
+    41
+   ],
+   "resolved": true
+  }
+ ]
+}

@@ -1,0 +1,464 @@
+{
+ "behavior": "comprehension-scope",
+ "corpus": "0caf85e3 (python corpus, cpg/.ccg-work/corpora/python/src)",
+ "fixtures": [
+  {
+   "name": "falkorchat_guards_425.py",
+   "origin": "corpus slice",
+   "startLine": 425,
+   "classHeader": false,
+   "lines": [
+    "def _validate_path(path: Any) -> None:",
+    "    if not isinstance(path, str) or not path:",
+    "        raise WorkflowConfigError(",
+    "            f\"guard `path` must be a non-empty string, got {path!r}\"",
+    "        )",
+    "    head, _, rest = path.partition(\".\")",
+    "    if head not in PATH_ROOTS:",
+    "        raise WorkflowConfigError(",
+    "            f\"guard path root {head!r} is not whitelisted \"",
+    "            f\"(allowed: {', '.join(sorted(PATH_ROOTS))})\"",
+    "        )",
+    "    if head == \"ctx\" and not rest:",
+    "        raise WorkflowConfigError(\"guard path 'ctx' must name a key, e.g. 'ctx.decision'\")",
+    "    if rest and any(not segment for segment in rest.split(\".\")):",
+    "        raise WorkflowConfigError(f\"guard path {path!r} has an empty segment\")"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_retry_75.py",
+   "origin": "corpus slice",
+   "startLine": 75,
+   "classHeader": false,
+   "lines": [
+    "def is_transient(exc: BaseException, *, retry_timeouts: bool = False) -> bool:",
+    "    \"\"\"True when `exc` is a provider failure worth retrying in place (plan §3.1).\"\"\"",
+    "    if not isinstance(exc, ProviderCallError):",
+    "        return False",
+    "    if exc.kind == \"fallback_exhausted\":",
+    "        return bool(exc.causes) and all(",
+    "            is_transient(cause, retry_timeouts=retry_timeouts) for cause in exc.causes",
+    "        )",
+    "    if exc.kind in _CONNECTION_KINDS:",
+    "        return True",
+    "    if exc.kind == \"timeout\":",
+    "        return retry_timeouts",
+    "    if exc.kind == \"http\":",
+    "        return (",
+    "            exc.status in TRANSIENT_HTTP_STATUSES",
+    "            or (exc.status is not None and 500 <= exc.status <= 599)",
+    "            or _has_marker(exc.detail)",
+    "        )",
+    "    if exc.kind == \"body_error\":",
+    "        return _has_marker(exc.detail)",
+    "    # \"malformed_request\", \"invalid_json\", \"body_shape\", \"response_shape\", None",
+    "    return False",
+    "",
+    "",
+    "@dataclass(frozen=True)",
+    "class RetryPolicy:",
+    "    \"\"\"How many attempts, how long to wait before each retry, and whether a",
+    "    `timeout` counts as transient (plan §3.2).\"\"\"",
+    "",
+    "    max_attempts: int",
+    "    delays_s: tuple[float, ...]",
+    "    jitter: float = 0.5",
+    "    retry_timeouts: bool = False",
+    "",
+    "    def __post_init__(self) -> None:",
+    "        if self.max_attempts < 1:",
+    "            raise ValueError(f\"max_attempts must be >= 1, got {self.max_attempts}\")",
+    "        if len(self.delays_s) != self.max_attempts - 1:",
+    "            raise ValueError(",
+    "                f\"delays_s needs max_attempts - 1 = {self.max_attempts - 1} entries, \"",
+    "                f\"got {len(self.delays_s)}\"",
+    "            )",
+    "        if self.jitter < 0:",
+    "            raise ValueError(f\"jitter must be >= 0, got {self.jitter}\")",
+    "",
+    "",
+    "# Equal today; separate so plan §3.2.1 can flip the embed one alone.",
+    "DEFAULT_PROVIDER_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)",
+    "EMBED_CHUNK_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)",
+    "",
+    "",
+    "def _gate_open(",
+    "    keep_going: Callable[[], bool] | None, label: str, kind: object, status: object",
+    ") -> bool:",
+    "    \"\"\"One read of the liveness gate. A gate that raises is treated as open (logged):",
+    "    a flaky gate read must not turn a recoverable provider hiccup into a failure.\"\"\"",
+    "    if keep_going is None:",
+    "        return True",
+    "    try:",
+    "        open_ = keep_going()",
+    "    except Exception:",
+    "        _log.exception(\"%s: liveness gate read failed; continuing to retry\", label)",
+    "        return True",
+    "    if not open_:",
+    "        _log.info(",
+    "            \"%s: owning document no longer processing; abandoning retry \"",
+    "            \"(kind=%s, status=%s)\",",
+    "            label, kind, status,",
+    "        )",
+    "    return bool(open_)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "spread.py",
+   "origin": "synthetic",
+   "startLine": 1,
+   "classHeader": false,
+   "lines": [
+    "def spread(ctx, kw, b):",
+    "    x = {\"ctx\": ctx, **kw}",
+    "    y = {\"k\": b}",
+    "    return x, y",
+    "",
+    "",
+    "def collect(xs):",
+    "    return [fn(c) for c in xs]"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_logging_config_120.py",
+   "origin": "corpus slice",
+   "startLine": 120,
+   "classHeader": false,
+   "lines": [
+    "def test_shipped_log_config_routes_each_logger_level_to_exactly_one_handler_or_none(tmp_path):",
+    "    reach, stdout, stderr = _run_child(tmp_path)",
+    "",
+    "    assert reach == EXPECTED_REACH",
+    "",
+    "    streams = {\"stdout\": stdout.splitlines(), \"stderr\": stderr.splitlines()}",
+    "    for marker, (stream, text) in PRINTED.items():",
+    "        other = \"stdout\" if stream == \"stderr\" else \"stderr\"",
+    "        hits = [ln for ln in streams[stream] if marker in ln]",
+    "        assert len(hits) == 1, f\"{marker}: {len(hits)} lines on {stream}: {hits}\"",
+    "        assert not [ln for ln in streams[other] if marker in ln], f\"{marker} leaked to {other}\"",
+    "        assert _TS.match(hits[0]), f\"{marker}: no ISO 8601 + offset timestamp: {hits[0]!r}\"",
+    "        assert hits[0][_TS.match(hits[0]).end():].startswith(text), hits[0]",
+    "    for marker in DROPPED:",
+    "        assert marker not in stdout + stderr, f\"{marker} should be dropped\""
+   ],
+   "lang": "python"
+  }
+ ],
+ "pairs": [
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "splitlines",
+    "line": 125,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "len",
+    "line": 129,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "splitlines",
+    "line": 125,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "len",
+    "line": 129,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "splitlines",
+    "line": 125,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "match",
+    "line": 131,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "splitlines",
+    "line": 125,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "match",
+    "line": 132,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "splitlines",
+    "line": 125,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "startswith",
+    "line": 132,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "splitlines",
+    "line": 125,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "len",
+    "line": 129,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "splitlines",
+    "line": 125,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "len",
+    "line": 129,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "splitlines",
+    "line": 125,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "match",
+    "line": 131,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "splitlines",
+    "line": 125,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "match",
+    "line": 132,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "splitlines",
+    "line": 125,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "startswith",
+    "line": 132,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "is_transient",
+    "line": 81,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "all",
+    "line": 80,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_guards_425.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "split",
+    "line": 438,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "any",
+    "line": 438,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:nested-scope",
+   "span": [
+    425,
+    439
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "spread.py",
+   "kind": "data",
+   "source": {
+    "point": "call",
+    "calleeName": "fn",
+    "ordinal": 0,
+    "line": 8
+   },
+   "sink": {
+    "point": "ret",
+    "ordinal": 0,
+    "line": 8
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "list comprehension element reaches the return",
+   "resolved": true
+  }
+ ]
+}

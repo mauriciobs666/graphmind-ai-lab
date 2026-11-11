@@ -1,0 +1,256 @@
+{
+ "behavior": "container-literal",
+ "corpus": "0caf85e3 (python corpus, cpg/.ccg-work/corpora/python/src)",
+ "fixtures": [
+  {
+   "name": "falkorchat_tools_492.py",
+   "origin": "corpus slice",
+   "startLine": 492,
+   "classHeader": true,
+   "lines": [
+    "    def run(self, arguments: dict[str, Any], *, ctx: CallContext,",
+    "            run: dict[str, Any]) -> str:",
+    "        row = self._services.lookup_product(ctx, name=arguments.get(\"name\", \"\"))",
+    "        if row is None:",
+    "            return json.dumps({",
+    "                \"found\": False, \"hint\": LOOKUP_MISS_HINT,",
+    "                \"catalog\": self._services.catalog_index(ctx),",
+    "            })",
+    "        return json.dumps({\"found\": True, **row})"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "spread.py",
+   "origin": "synthetic",
+   "startLine": 1,
+   "classHeader": false,
+   "lines": [
+    "def spread(ctx, kw, b):",
+    "    x = {\"ctx\": ctx, **kw}",
+    "    y = {\"k\": b}",
+    "    return x, y",
+    "",
+    "",
+    "def collect(xs):",
+    "    return [fn(c) for c in xs]"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_create_workspace_script_188.py",
+   "origin": "corpus slice",
+   "startLine": 188,
+   "classHeader": false,
+   "lines": [
+    "def test_create_workspace_is_idempotent(throwaway_ws, tmp_path):",
+    "    env = {",
+    "        **os.environ,",
+    "        **_model_config_env(tmp_path, default_embedding=_DEFAULT_EMBEDDING_REF),",
+    "    }",
+    "",
+    "    for _ in range(2):",
+    "        result = subprocess.run(",
+    "            [\"bash\", str(_CREATE_WORKSPACE), throwaway_ws],",
+    "            env=env,",
+    "            capture_output=True,",
+    "            text=True,",
+    "            timeout=60,",
+    "        )",
+    "        assert result.returncode == 0, (",
+    "            f\"create_workspace.sh failed:\\nSTDOUT:\\n{result.stdout}\\nSTDERR:\\n{result.stderr}\"",
+    "        )",
+    "",
+    "    repo = Repository(db.connect())",
+    "    overrides = repo.read_model_overrides(throwaway_ws)",
+    "    assert overrides[\"embeddingModel\"] == _DEFAULT_EMBEDDING_REF"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_executor_process_630.py",
+   "origin": "corpus slice",
+   "startLine": 630,
+   "classHeader": false,
+   "lines": [
+    "def test_publish_rejects_a_timer_key_on_a_non_waiting_step_type(",
+    "    wf_repo, step_type, timer_key,",
+    "):",
+    "    svc = Services(wf_repo)",
+    "    value = 60 if timer_key == \"waitForSeconds\" else 5_000_000_000",
+    "",
+    "    with pytest.raises(WorkflowDefSpecError, match=\"waitForSeconds/waitUntil\"):",
+    "        _publish(",
+    "            svc,",
+    "            steps=_steps(",
+    "                {\"key\": \"park\", \"type\": step_type, \"config\": {timer_key: value},",
+    "                 \"start\": True},",
+    "                SINK_STEP,",
+    "            ),",
+    "            transitions=[SINK_TRANSITION],",
+    "        )",
+    "",
+    "    assert wf_repo.get_def(key=\"access-request\", version=\"1\") is None"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_storefront_767.py",
+   "origin": "corpus slice",
+   "startLine": 767,
+   "classHeader": true,
+   "lines": [
+    "    def maybe_trigger(self, ctx, **kwargs):  # noqa: ANN001, ANN003",
+    "        self.calls.append({\"ctx\": ctx, **kwargs})",
+    "        try:",
+    "            if self._explode:",
+    "                raise RuntimeError(\"the LLM endpoint is down\")",
+    "        finally:",
+    "            self.done.set()"
+   ],
+   "lang": "python"
+  }
+ ],
+ "pairs": [
+  {
+   "fixture": "tests_test_storefront_767.py",
+   "kind": "data",
+   "source": {
+    "index": 1,
+    "name": "**kwargs",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "append",
+    "line": 768,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:container-literal/spread",
+   "span": [
+    767,
+    773
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_tools_492.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "lookup_product",
+    "line": 494,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "dumps",
+    "line": 500,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:container-literal/spread",
+   "span": [
+    492,
+    500
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_create_workspace_script_188.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "_model_config_env",
+    "line": 191,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "run",
+    "line": 195,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:container-literal/spread",
+   "span": [
+    188,
+    208
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_executor_process_630.py",
+   "kind": "data",
+   "source": {
+    "index": 2,
+    "name": "timer_key",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "_steps",
+    "line": 639,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:container-literal/spread",
+   "span": [
+    630,
+    647
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "spread.py",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 1,
+    "name": "kw"
+   },
+   "sink": {
+    "point": "ret",
+    "ordinal": 0,
+    "line": 4
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "dict spread `{**kw}` reaches the return",
+   "resolved": true
+  },
+  {
+   "fixture": "spread.py",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 2,
+    "name": "b"
+   },
+   "sink": {
+    "point": "ret",
+    "ordinal": 0,
+    "line": 4
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "dict literal value reaches the return",
+   "resolved": true
+  }
+ ]
+}

@@ -1,0 +1,958 @@
+{
+ "behavior": "r3-synthetic-call",
+ "corpus": "0caf85e3 (python corpus, cpg/.ccg-work/corpora/python/src)",
+ "fixtures": [
+  {
+   "name": "falkorchat_chunking_21.py",
+   "origin": "corpus slice",
+   "startLine": 21,
+   "classHeader": false,
+   "lines": [
+    "def split_into_chunks(text: str, *, size: int = 1000, overlap: int = 150) -> list[str]:",
+    "    \"\"\"Split `text` into chunks of at most ~`size` characters each.",
+    "",
+    "    Each chunk after the first is prefixed with the trailing `overlap`",
+    "    characters of the previous chunk, so a fact split across a chunk",
+    "    boundary is still extractable from at least one chunk. Empty or",
+    "    whitespace-only input yields ``[]`` — chunking is not the layer that",
+    "    rejects that (the service validates non-empty input upstream).",
+    "    \"\"\"",
+    "    if not text or not text.strip():",
+    "        return []",
+    "    pieces: list[str] = []",
+    "    for paragraph in _split_keep_delim(text, _PARAGRAPH_DELIMS):",
+    "        pieces.extend(_split_oversized(paragraph, size))",
+    "    return _pack_with_overlap(pieces, size=size, overlap=overlap)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_extraction_138.py",
+   "origin": "corpus slice",
+   "startLine": 138,
+   "classHeader": false,
+   "lines": [
+    "def _coerce_entities(raw: Any) -> list[dict[str, str]] | None:",
+    "    \"\"\"`None` ⇒ reject the whole payload (not a list at all — the one",
+    "    top-level shape failure this function can produce). A malformed",
+    "    **individual** item (no string `name`) is dropped, not fatal to the rest —",
+    "    losing one bad item is cheaper than discarding an otherwise-good chunk's",
+    "    extraction. An out-of-enum (or missing/non-string) `type` is coerced to",
+    "    `Other` rather than rejected (ML note §3.2: \"a wrong type is recoverable",
+    "    via fusion review; a missing key is not something to guess at\" — that",
+    "    \"missing key\" is about the top-level `entities`/`relationships` keys, not",
+    "    a per-item `type`).\"\"\"",
+    "    if not isinstance(raw, list):",
+    "        return None",
+    "    out: list[dict[str, str]] = []",
+    "    for item in raw:",
+    "        if not isinstance(item, dict):",
+    "            continue",
+    "        name = item.get(\"name\")",
+    "        if not isinstance(name, str) or not name.strip():",
+    "            continue",
+    "        etype = item.get(\"type\")",
+    "        if not isinstance(etype, str) or etype not in _ENTITY_TYPE_SET:",
+    "            etype = _FALLBACK_TYPE",
+    "        out.append({\"name\": name, \"type\": etype})",
+    "    return out"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_llm_263.py",
+   "origin": "corpus slice",
+   "startLine": 263,
+   "classHeader": false,
+   "lines": [
+    "def _parse_native_tool_calls(raw: Any) -> list[ToolCall]:",
+    "    \"\"\"Parse the structured OpenAI `message.tool_calls` list into `ToolCall`s.",
+    "",
+    "    Each entry nests the call under `function` with `arguments` as a JSON *string*",
+    "    (OpenAI shape); we decode it. LM Studio occasionally hands back an already-parsed",
+    "    dict — tolerated. Unparseable/nameless entries are skipped rather than raised.",
+    "    \"\"\"",
+    "    if not isinstance(raw, list):",
+    "        return []",
+    "    calls: list[ToolCall] = []",
+    "    for i, entry in enumerate(raw):",
+    "        if not isinstance(entry, dict):",
+    "            continue",
+    "        fn = entry.get(\"function\", entry)",
+    "        name = fn.get(\"name\") if isinstance(fn, dict) else None",
+    "        if not name:",
+    "            continue",
+    "        args = _coerce_arguments(fn.get(\"arguments\") if isinstance(fn, dict) else None)",
+    "        call_id = entry.get(\"id\") or f\"call_{i}\"",
+    "        calls.append(ToolCall(id=str(call_id), name=str(name), arguments=args))",
+    "    return calls"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_retry_75.py",
+   "origin": "corpus slice",
+   "startLine": 75,
+   "classHeader": false,
+   "lines": [
+    "def is_transient(exc: BaseException, *, retry_timeouts: bool = False) -> bool:",
+    "    \"\"\"True when `exc` is a provider failure worth retrying in place (plan §3.1).\"\"\"",
+    "    if not isinstance(exc, ProviderCallError):",
+    "        return False",
+    "    if exc.kind == \"fallback_exhausted\":",
+    "        return bool(exc.causes) and all(",
+    "            is_transient(cause, retry_timeouts=retry_timeouts) for cause in exc.causes",
+    "        )",
+    "    if exc.kind in _CONNECTION_KINDS:",
+    "        return True",
+    "    if exc.kind == \"timeout\":",
+    "        return retry_timeouts",
+    "    if exc.kind == \"http\":",
+    "        return (",
+    "            exc.status in TRANSIENT_HTTP_STATUSES",
+    "            or (exc.status is not None and 500 <= exc.status <= 599)",
+    "            or _has_marker(exc.detail)",
+    "        )",
+    "    if exc.kind == \"body_error\":",
+    "        return _has_marker(exc.detail)",
+    "    # \"malformed_request\", \"invalid_json\", \"body_shape\", \"response_shape\", None",
+    "    return False",
+    "",
+    "",
+    "@dataclass(frozen=True)",
+    "class RetryPolicy:",
+    "    \"\"\"How many attempts, how long to wait before each retry, and whether a",
+    "    `timeout` counts as transient (plan §3.2).\"\"\"",
+    "",
+    "    max_attempts: int",
+    "    delays_s: tuple[float, ...]",
+    "    jitter: float = 0.5",
+    "    retry_timeouts: bool = False",
+    "",
+    "    def __post_init__(self) -> None:",
+    "        if self.max_attempts < 1:",
+    "            raise ValueError(f\"max_attempts must be >= 1, got {self.max_attempts}\")",
+    "        if len(self.delays_s) != self.max_attempts - 1:",
+    "            raise ValueError(",
+    "                f\"delays_s needs max_attempts - 1 = {self.max_attempts - 1} entries, \"",
+    "                f\"got {len(self.delays_s)}\"",
+    "            )",
+    "        if self.jitter < 0:",
+    "            raise ValueError(f\"jitter must be >= 0, got {self.jitter}\")",
+    "",
+    "",
+    "# Equal today; separate so plan §3.2.1 can flip the embed one alone.",
+    "DEFAULT_PROVIDER_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)",
+    "EMBED_CHUNK_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)",
+    "",
+    "",
+    "def _gate_open(",
+    "    keep_going: Callable[[], bool] | None, label: str, kind: object, status: object",
+    ") -> bool:",
+    "    \"\"\"One read of the liveness gate. A gate that raises is treated as open (logged):",
+    "    a flaky gate read must not turn a recoverable provider hiccup into a failure.\"\"\"",
+    "    if keep_going is None:",
+    "        return True",
+    "    try:",
+    "        open_ = keep_going()",
+    "    except Exception:",
+    "        _log.exception(\"%s: liveness gate read failed; continuing to retry\", label)",
+    "        return True",
+    "    if not open_:",
+    "        _log.info(",
+    "            \"%s: owning document no longer processing; abandoning retry \"",
+    "            \"(kind=%s, status=%s)\",",
+    "            label, kind, status,",
+    "        )",
+    "    return bool(open_)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_tools_1509.py",
+   "origin": "corpus slice",
+   "startLine": 1509,
+   "classHeader": true,
+   "lines": [
+    "    def register_into(self, registry: ToolRegistry) -> list[str]:",
+    "        \"\"\"Register every server tool into `registry` as an `McpTool`; returns their names.\"\"\"",
+    "        names: list[str] = []",
+    "        for schema in self.list_tools():",
+    "            tool_name = schema[\"function\"][\"name\"]",
+    "            registry.register(McpTool(self, name=tool_name, schema=schema))",
+    "            names.append(tool_name)",
+    "        return names"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "iter.ts",
+   "origin": "synthetic",
+   "startLine": 1,
+   "classHeader": false,
+   "lines": [
+    "class Foo { constructor(public a: number) {} run(x: number) { return x; } }",
+    "export function f(xs: number[], p: number) {",
+    "  const o = new Foo(p);",
+    "  const r = o.run(p);",
+    "  for (const x of xs) { use(x); }",
+    "  for (const k in xs) { use(k); }",
+    "  const ys = xs.map((v) => g(v, p));",
+    "  const z = [...xs, p];",
+    "  const q = { ...o, k: p };",
+    "  return [r, ys, z, q];",
+    "}",
+    "function use(v: unknown) { return v; }",
+    "function g(a: unknown, b: unknown) { return a; }",
+    "export function realNext(it: any) {",
+    "  const v = it.next();",
+    "  return use(v);",
+    "}",
+    "export function selfNext(it: any) {",
+    "  const w = it.next(it);",
+    "  return use(w);",
+    "}"
+   ],
+   "lang": "javascript"
+  },
+  {
+   "name": "negatives.py",
+   "origin": "synthetic",
+   "startLine": 1,
+   "classHeader": false,
+   "lines": [
+    "def real_next(it):",
+    "    x = next(it)",
+    "    use(x)",
+    "",
+    "",
+    "def user_dunder(it):",
+    "    x = it.__next__()",
+    "    use(x)",
+    "",
+    "",
+    "def real_iter_alias(items):",
+    "    walker = items.__iter__()",
+    "    first = walker.__next__()",
+    "    use(first)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_embedding_migration_723.py",
+   "origin": "corpus slice",
+   "startLine": 723,
+   "classHeader": false,
+   "lines": [
+    "def test_migrate_count_check_reports_actual_unmigrated_counts(migrate_repo, conn):",
+    "    for i in range(3):",
+    "        _seed_row(conn, \"test\", label=\"Message\", id_prop=\"msgId\", id_value=f\"m{i}\",",
+    "                  text=f\"row {i}\", embedding=_old_embedding())",
+    "    unmigrated, total = embedding_migration._count_unmigrated(",
+    "        migrate_repo, \"test\", label=\"Message\", target_ref=_TARGET_REF,",
+    "    )",
+    "    assert (unmigrated, total) == (3, 3)",
+    "",
+    "    embedding_migration._write_embedding(",
+    "        migrate_repo, \"test\", label=\"Message\", id_prop=\"msgId\", id_value=\"m0\",",
+    "        embedding=[0.2] * _TARGET_DIM, target_ref=_TARGET_REF,",
+    "    )",
+    "    unmigrated, total = embedding_migration._count_unmigrated(",
+    "        migrate_repo, \"test\", label=\"Message\", target_ref=_TARGET_REF,",
+    "    )",
+    "    assert (unmigrated, total) == (2, 3)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_logging_config_120.py",
+   "origin": "corpus slice",
+   "startLine": 120,
+   "classHeader": false,
+   "lines": [
+    "def test_shipped_log_config_routes_each_logger_level_to_exactly_one_handler_or_none(tmp_path):",
+    "    reach, stdout, stderr = _run_child(tmp_path)",
+    "",
+    "    assert reach == EXPECTED_REACH",
+    "",
+    "    streams = {\"stdout\": stdout.splitlines(), \"stderr\": stderr.splitlines()}",
+    "    for marker, (stream, text) in PRINTED.items():",
+    "        other = \"stdout\" if stream == \"stderr\" else \"stderr\"",
+    "        hits = [ln for ln in streams[stream] if marker in ln]",
+    "        assert len(hits) == 1, f\"{marker}: {len(hits)} lines on {stream}: {hits}\"",
+    "        assert not [ln for ln in streams[other] if marker in ln], f\"{marker} leaked to {other}\"",
+    "        assert _TS.match(hits[0]), f\"{marker}: no ISO 8601 + offset timestamp: {hits[0]!r}\"",
+    "        assert hits[0][_TS.match(hits[0]).end():].startswith(text), hits[0]",
+    "    for marker in DROPPED:",
+    "        assert marker not in stdout + stderr, f\"{marker} should be dropped\""
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_provenance_19.py",
+   "origin": "corpus slice",
+   "startLine": 19,
+   "classHeader": false,
+   "lines": [
+    "def _seed_thread(repo, *, channel_id=\"c1\", thread_id=\"t1\", seeds=None):",
+    "    \"\"\"Create channel→thread + user u1 + agent bot1, post the seed messages.",
+    "",
+    "    `seeds` = [(msg_id, text)]; the first is a first-message write, the rest",
+    "    subsequent. Returns nothing — the graph is seeded in place.",
+    "    \"\"\"",
+    "    seeds = seeds or []",
+    "    repo.ensure_user(WS, user_id=\"u1\")",
+    "    repo.ensure_agent(WS, agent_id=\"bot1\", name=\"Bot\")",
+    "    repo.create_channel(WS, channel_id=channel_id, name=channel_id, created_at=1)",
+    "    repo.create_thread(",
+    "        WS, channel_id=channel_id, thread_id=thread_id, title=\"t\", created_at=1",
+    "    )",
+    "    first = True",
+    "    ts = 10",
+    "    for msg_id, text in seeds:",
+    "        write = repo.post_first_message if first else repo.post_subsequent_message",
+    "        write(",
+    "            WS, thread_id=thread_id, msg_id=msg_id, author_id=\"u1\",",
+    "            text=text, role=\"user\", created_at=ts,",
+    "        )",
+    "        first = False",
+    "        ts += 1"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_test_repository_4701.py",
+   "origin": "corpus slice",
+   "startLine": 4701,
+   "classHeader": false,
+   "lines": [
+    "def _load_method(name: str) -> ast.FunctionDef:",
+    "    tree = ast.parse(_REPOSITORY_PATH.read_text(encoding=\"utf-8\"), filename=str(_REPOSITORY_PATH))",
+    "    for node in ast.walk(tree):",
+    "        if isinstance(node, ast.FunctionDef) and node.name == name:",
+    "            return node",
+    "    raise AssertionError(f\"{name!r} not found in repository.py\")"
+   ],
+   "lang": "python"
+  }
+ ],
+ "pairs": [
+  {
+   "fixture": "falkorchat_extraction_138.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "raw",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 152,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    138,
+    161
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_extraction_138.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "raw",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "get",
+    "line": 154,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    138,
+    161
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_chunking_21.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "_split_keep_delim",
+    "line": 33,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "_split_oversized",
+    "line": 34,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    21,
+    35
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "items",
+    "line": 126,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "code": "stream == \"stderr\"",
+    "line": 127,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_logging_config_120.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "items",
+    "line": 126,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "startswith",
+    "line": 132,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    120,
+    134
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_repository_4701.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "walk",
+    "line": 4703,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 4704,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    4701,
+    4706
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_repository_4701.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "walk",
+    "line": 4703,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "code": "isinstance(node, ast.FunctionDef) and node.name == name",
+    "line": 4704,
+    "point": "cond"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    4701,
+    4706
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_repository_4701.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "walk",
+    "line": 4703,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "line": 4705,
+    "ordinal": 0,
+    "point": "ret"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    4701,
+    4706
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "data",
+   "source": {
+    "index": 0,
+    "name": "exc",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "is_transient",
+    "line": 81,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_embedding_migration_723.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "range",
+    "line": 724,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "_seed_row",
+    "line": 725,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    723,
+    739
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "enumerate",
+    "line": 273,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 274,
+    "ordinal": 1,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "enumerate",
+    "line": 273,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "get",
+    "line": 276,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "enumerate",
+    "line": 273,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "get",
+    "line": 281,
+    "ordinal": 3,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "enumerate",
+    "line": 273,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "str",
+    "line": 282,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_test_provenance_19.py",
+   "kind": "data",
+   "source": {
+    "index": 3,
+    "name": "seeds",
+    "point": "param"
+   },
+   "sink": {
+    "calleeName": "write",
+    "line": 36,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    19,
+    41
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_tools_1509.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "list_tools",
+    "line": 1512,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "McpTool",
+    "line": 1514,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    1509,
+    1516
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_tools_1509.py",
+   "kind": "data",
+   "source": {
+    "calleeName": "list_tools",
+    "line": 1512,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "sink": {
+    "calleeName": "append",
+    "line": 1515,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:synthetic-lowering-call-opaque",
+   "span": [
+    1509,
+    1516
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "negatives.py",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 0,
+    "name": "it"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "use",
+    "ordinal": 0,
+    "line": 3
+   },
+   "connected": false,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "R3-negative: real next(it) stays an opaque call",
+   "resolved": true
+  },
+  {
+   "fixture": "negatives.py",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 0,
+    "name": "it"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "use",
+    "ordinal": 0,
+    "line": 8
+   },
+   "connected": false,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "R3-negative: user-written it.__next__() stays opaque",
+   "resolved": true
+  },
+  {
+   "fixture": "negatives.py",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 0,
+    "name": "items"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "use",
+    "ordinal": 0,
+    "line": 14
+   },
+   "connected": false,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "R3-negative: a user alias walker = items.__iter__() stays opaque",
+   "resolved": true
+  },
+  {
+   "fixture": "iter.ts",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 0,
+    "name": "xs"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "use",
+    "ordinal": 0,
+    "line": 5
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "JS for-of: the iterable reaches the loop body use directly",
+   "resolved": true
+  },
+  {
+   "fixture": "iter.ts",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 0,
+    "name": "it"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "use",
+    "ordinal": 1,
+    "line": 16
+   },
+   "connected": false,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "JS negative: a real it.next() stays opaque (no direct param -> use edge)",
+   "resolved": true
+  },
+  {
+   "fixture": "iter.ts",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 0,
+    "name": "xs"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "use",
+    "ordinal": 0,
+    "line": 5
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    2,
+    11
+   ],
+   "note": "JS for-of with the method span of f",
+   "resolved": true
+  },
+  {
+   "fixture": "iter.ts",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 0,
+    "name": "xs"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "map",
+    "ordinal": 0,
+    "line": 7
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    2,
+    11
+   ],
+   "note": "JS: f's own point is found although the nested lambda (line 7) is tried first",
+   "resolved": true
+  },
+  {
+   "fixture": "iter.ts",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 0,
+    "name": "it"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "use",
+    "ordinal": 0,
+    "line": 16
+   },
+   "connected": false,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    14,
+    17
+   ],
+   "note": "JS negative: a real it.next() stays opaque (span of realNext)",
+   "resolved": true
+  },
+  {
+   "fixture": "iter.ts",
+   "kind": "data",
+   "source": {
+    "point": "param",
+    "index": 0,
+    "name": "it"
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "use",
+    "ordinal": 0,
+    "line": 20
+   },
+   "connected": false,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    18,
+    21
+   ],
+   "note": "JS negative: it.next(it) stays opaque (only the lowering-temp name guards it: its receiver is at index 1 like the lowering's)",
+   "resolved": true
+  }
+ ]
+}

@@ -1,0 +1,461 @@
+{
+ "behavior": "call-point-cond",
+ "corpus": "0caf85e3 (python corpus, cpg/.ccg-work/corpora/python/src)",
+ "fixtures": [
+  {
+   "name": "falkorchat_llm_263.py",
+   "origin": "corpus slice",
+   "startLine": 263,
+   "classHeader": false,
+   "lines": [
+    "def _parse_native_tool_calls(raw: Any) -> list[ToolCall]:",
+    "    \"\"\"Parse the structured OpenAI `message.tool_calls` list into `ToolCall`s.",
+    "",
+    "    Each entry nests the call under `function` with `arguments` as a JSON *string*",
+    "    (OpenAI shape); we decode it. LM Studio occasionally hands back an already-parsed",
+    "    dict — tolerated. Unparseable/nameless entries are skipped rather than raised.",
+    "    \"\"\"",
+    "    if not isinstance(raw, list):",
+    "        return []",
+    "    calls: list[ToolCall] = []",
+    "    for i, entry in enumerate(raw):",
+    "        if not isinstance(entry, dict):",
+    "            continue",
+    "        fn = entry.get(\"function\", entry)",
+    "        name = fn.get(\"name\") if isinstance(fn, dict) else None",
+    "        if not name:",
+    "            continue",
+    "        args = _coerce_arguments(fn.get(\"arguments\") if isinstance(fn, dict) else None)",
+    "        call_id = entry.get(\"id\") or f\"call_{i}\"",
+    "        calls.append(ToolCall(id=str(call_id), name=str(name), arguments=args))",
+    "    return calls"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_retry_75.py",
+   "origin": "corpus slice",
+   "startLine": 75,
+   "classHeader": false,
+   "lines": [
+    "def is_transient(exc: BaseException, *, retry_timeouts: bool = False) -> bool:",
+    "    \"\"\"True when `exc` is a provider failure worth retrying in place (plan §3.1).\"\"\"",
+    "    if not isinstance(exc, ProviderCallError):",
+    "        return False",
+    "    if exc.kind == \"fallback_exhausted\":",
+    "        return bool(exc.causes) and all(",
+    "            is_transient(cause, retry_timeouts=retry_timeouts) for cause in exc.causes",
+    "        )",
+    "    if exc.kind in _CONNECTION_KINDS:",
+    "        return True",
+    "    if exc.kind == \"timeout\":",
+    "        return retry_timeouts",
+    "    if exc.kind == \"http\":",
+    "        return (",
+    "            exc.status in TRANSIENT_HTTP_STATUSES",
+    "            or (exc.status is not None and 500 <= exc.status <= 599)",
+    "            or _has_marker(exc.detail)",
+    "        )",
+    "    if exc.kind == \"body_error\":",
+    "        return _has_marker(exc.detail)",
+    "    # \"malformed_request\", \"invalid_json\", \"body_shape\", \"response_shape\", None",
+    "    return False",
+    "",
+    "",
+    "@dataclass(frozen=True)",
+    "class RetryPolicy:",
+    "    \"\"\"How many attempts, how long to wait before each retry, and whether a",
+    "    `timeout` counts as transient (plan §3.2).\"\"\"",
+    "",
+    "    max_attempts: int",
+    "    delays_s: tuple[float, ...]",
+    "    jitter: float = 0.5",
+    "    retry_timeouts: bool = False",
+    "",
+    "    def __post_init__(self) -> None:",
+    "        if self.max_attempts < 1:",
+    "            raise ValueError(f\"max_attempts must be >= 1, got {self.max_attempts}\")",
+    "        if len(self.delays_s) != self.max_attempts - 1:",
+    "            raise ValueError(",
+    "                f\"delays_s needs max_attempts - 1 = {self.max_attempts - 1} entries, \"",
+    "                f\"got {len(self.delays_s)}\"",
+    "            )",
+    "        if self.jitter < 0:",
+    "            raise ValueError(f\"jitter must be >= 0, got {self.jitter}\")",
+    "",
+    "",
+    "# Equal today; separate so plan §3.2.1 can flip the embed one alone.",
+    "DEFAULT_PROVIDER_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)",
+    "EMBED_CHUNK_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)",
+    "",
+    "",
+    "def _gate_open(",
+    "    keep_going: Callable[[], bool] | None, label: str, kind: object, status: object",
+    ") -> bool:",
+    "    \"\"\"One read of the liveness gate. A gate that raises is treated as open (logged):",
+    "    a flaky gate read must not turn a recoverable provider hiccup into a failure.\"\"\"",
+    "    if keep_going is None:",
+    "        return True",
+    "    try:",
+    "        open_ = keep_going()",
+    "    except Exception:",
+    "        _log.exception(\"%s: liveness gate read failed; continuing to retry\", label)",
+    "        return True",
+    "    if not open_:",
+    "        _log.info(",
+    "            \"%s: owning document no longer processing; abandoning retry \"",
+    "            \"(kind=%s, status=%s)\",",
+    "            label, kind, status,",
+    "        )",
+    "    return bool(open_)"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_services_402.py",
+   "origin": "corpus slice",
+   "startLine": 402,
+   "classHeader": false,
+   "lines": [
+    "def _serialize_opaque(value: Any) -> str:",
+    "    \"\"\"Serialize a `config`/`guard` value to the opaque string stored in-graph.",
+    "",
+    "    §11 rule 8: `Step.config` and `TRANSITION.guard` are flat serialized strings",
+    "    stored verbatim and never queried inside. `None`/missing → `\"\"`; an existing",
+    "    string passes through unchanged (already-serialized); anything else is",
+    "    compact JSON (stable key order) so re-publishing the same spec is a no-op.",
+    "    \"\"\"",
+    "    if value is None:",
+    "        return \"\"",
+    "    if isinstance(value, str):",
+    "        return value",
+    "    return json.dumps(value, separators=(\",\", \":\"), sort_keys=True)",
+    "",
+    "",
+    "def _load_json_dict(raw: Any) -> dict[str, Any]:",
+    "    \"\"\"Deserialize an opaque stored `ctx` into a dict; `{}` for anything unusable.",
+    "",
+    "    A run's `ctx` is a flat serialized string (rule 8). Never raise here — a run",
+    "    whose ctx got corrupted must still be advanceable rather than permanently 500.",
+    "    \"\"\"",
+    "    parsed = _normalize_opaque(raw) if raw else None",
+    "    return parsed if isinstance(parsed, dict) else {}",
+    "",
+    "",
+    "def _str_values(value: Any) -> list[str]:",
+    "    \"\"\"A defensive list-of-strings view over author-supplied config data.\"\"\"",
+    "    if not isinstance(value, list):",
+    "        return []",
+    "    return [v for v in value if isinstance(v, str)]",
+    "",
+    "",
+    "def _normalize_opaque(value: Any) -> Any:",
+    "    \"\"\"The inverse of `_serialize_opaque`, for validating a spec before it is written.",
+    "",
+    "    `_validate_def_spec` sees `config`/`guard` **heterogeneously typed** (M-7), because",
+    "    serialization to opaque strings happens *after* it, in `publish_workflow_def`: the",
+    "    REST front door types both as `str` (`schemas.py`), while service-layer and MCP",
+    "    callers hand over dicts. Validating without normalizing would either blow up on a",
+    "    string (`AttributeError` → a 500 on `POST /workflow-defs`) or — worse — skip every",
+    "    string-shaped value, letting **every REST-published def escape the invariants**",
+    "    silently. So: a `str` is parsed as JSON when it can be, and returned unchanged when",
+    "    it cannot (an opaque `\"raw-string\"` config stays exactly that); anything else is",
+    "    already parsed and passes through.",
+    "    \"\"\"",
+    "    if isinstance(value, str):",
+    "        try:",
+    "            return json.loads(value)",
+    "        except (ValueError, TypeError):",
+    "            return value",
+    "    return value"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "falkorchat_storefront_api_803.py",
+   "origin": "corpus slice",
+   "startLine": 803,
+   "classHeader": true,
+   "lines": [
+    "    async def _handle_service_error(request, exc):  # noqa: ANN001",
+    "        if request.url.path.startswith(API_PREFIX):",
+    "            answer = service_error_response(exc)",
+    "            if answer is not None:",
+    "                status, token = answer",
+    "                return JSONResponse(",
+    "                    status_code=status,",
+    "                    content={\"error\": token, \"detail\": str(exc)},",
+    "                )",
+    "            _log.error(",
+    "                \"%s reached %s %s with no storefront mapping — the response \"",
+    "                \"carries a Python class name where §5.3 expects a plan token\",",
+    "                type(exc).__name__, request.method, request.url.path,",
+    "            )",
+    "        result = inherited(request, exc)",
+    "        if inspect.isawaitable(result):",
+    "            result = await result",
+    "        return result"
+   ],
+   "lang": "python"
+  },
+  {
+   "name": "tests_eval_nlq_scoring_109.py",
+   "origin": "corpus slice",
+   "startLine": 109,
+   "classHeader": false,
+   "lines": [
+    "def _scalar_equal(expected: Any, actual: Any) -> bool:",
+    "    \"\"\"One value-vs-value comparison per the ml note's scalar rule: numeric",
+    "    epsilon for two numbers, case/whitespace-folded string equality otherwise.",
+    "    A numeric `expected` compared against a non-numeric `actual` (or vice",
+    "    versa) is a type mismatch, not stringified and matched — the ml note's own",
+    "    \"never string-equal on a formatted price\" caution generalizes to \"never",
+    "    coerce a differently-typed actual value into matching.\"\"\"",
+    "    if isinstance(expected, bool) or isinstance(actual, bool):",
+    "        return expected is actual",
+    "    if isinstance(expected, (int, float)) and isinstance(actual, (int, float)):",
+    "        # A tiny extra slop (1e-9) keeps the epsilon boundary itself inclusive",
+    "        # against float representation error (e.g. 25.00 - 24.99 does not",
+    "        # represent as exactly 0.01 in IEEE-754) — the epsilon is a tolerance",
+    "        # for rounding, not a razor's-edge cutoff.",
+    "        return abs(float(expected) - float(actual)) <= _NUMERIC_EPSILON + 1e-9",
+    "    if isinstance(expected, (int, float)) or isinstance(actual, (int, float)):",
+    "        return False  # one numeric, one not — never coerced",
+    "    return _canon_str(expected) == _canon_str(actual)"
+   ],
+   "lang": "python"
+  }
+ ],
+ "pairs": [
+  {
+   "fixture": "tests_eval_nlq_scoring_109.py",
+   "kind": "control",
+   "source": {
+    "code": "isinstance(expected, bool) or isinstance(actual, bool)",
+    "line": 116,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 118,
+    "ordinal": 2,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:call-point-subsumed-by-cond-point",
+   "span": [
+    109,
+    126
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "tests_eval_nlq_scoring_109.py",
+   "kind": "control",
+   "source": {
+    "code": "isinstance(expected, (int, float)) and isinstance(actual, (int, float))",
+    "line": 118,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 124,
+    "ordinal": 4,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:call-point-subsumed-by-cond-point",
+   "span": [
+    109,
+    126
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_retry_75.py",
+   "kind": "control",
+   "source": {
+    "code": "exc.kind == \"fallback_exhausted\"",
+    "line": 79,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "bool",
+    "line": 80,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:call-point-subsumed-by-cond-point",
+   "span": [
+    75,
+    96
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "control",
+   "source": {
+    "code": "isinstance(value, str)",
+    "line": 447,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "loads",
+    "line": 449,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:call-point-subsumed-by-cond-point",
+   "span": [
+    434,
+    452
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "control",
+   "source": {
+    "code": "not isinstance(entry, dict)",
+    "line": 274,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 277,
+    "ordinal": 2,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:call-point-subsumed-by-cond-point",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "control",
+   "source": {
+    "code": "not name",
+    "line": 278,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 280,
+    "ordinal": 3,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:call-point-subsumed-by-cond-point",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_llm_263.py",
+   "kind": "control",
+   "source": {
+    "code": "not name",
+    "line": 278,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "get",
+    "line": 281,
+    "ordinal": 3,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:call-point-subsumed-by-cond-point",
+   "span": [
+    263,
+    283
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_services_402.py",
+   "kind": "control",
+   "source": {
+    "code": "value is None",
+    "line": 410,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "isinstance",
+    "line": 412,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:call-point-subsumed-by-cond-point",
+   "span": [
+    402,
+    414
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_storefront_api_803.py",
+   "kind": "control",
+   "source": {
+    "code": "request.url.path.startswith(API_PREFIX)",
+    "line": 804,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "isawaitable",
+    "line": 818,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:call-point-subsumed-by-cond-point",
+   "span": [
+    803,
+    820
+   ],
+   "resolved": true
+  },
+  {
+   "fixture": "falkorchat_storefront_api_803.py",
+   "kind": "control",
+   "source": {
+    "code": "answer is not None",
+    "line": 806,
+    "point": "cond"
+   },
+   "sink": {
+    "calleeName": "isawaitable",
+    "line": 818,
+    "ordinal": 0,
+    "point": "call"
+   },
+   "connected": true,
+   "direct": false,
+   "cause": "projection:call-point-subsumed-by-cond-point",
+   "span": [
+    803,
+    820
+   ],
+   "resolved": true
+  }
+ ]
+}

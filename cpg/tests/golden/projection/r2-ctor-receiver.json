@@ -1,0 +1,47 @@
+{
+ "behavior": "r2-ctor-receiver",
+ "corpus": "0caf85e3 (python corpus, cpg/.ccg-work/corpora/python/src)",
+ "fixtures": [
+  {
+   "name": "ctor.ts",
+   "origin": "synthetic",
+   "startLine": 1,
+   "classHeader": false,
+   "lines": [
+    "class Foo { constructor(public a: number) {} run(x: number) { return x; } }",
+    "export function h(p: number) {",
+    "  const o = new Foo(p);",
+    "  return o.run(1);",
+    "}"
+   ],
+   "lang": "javascript"
+  }
+ ],
+ "pairs": [
+  {
+   "fixture": "ctor.ts",
+   "kind": "data",
+   "source": {
+    "point": "call",
+    "calleeName": "Foo",
+    "ordinal": 0,
+    "line": 3
+   },
+   "sink": {
+    "point": "call",
+    "calleeName": "run",
+    "ordinal": 0,
+    "line": 4
+   },
+   "connected": true,
+   "direct": true,
+   "cause": "hand",
+   "span": [
+    1,
+    999
+   ],
+   "note": "R2: the `new Foo(p)` result defines the receiver of o.run",
+   "resolved": true
+  }
+ ]
+}

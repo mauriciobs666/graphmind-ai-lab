@@ -217,6 +217,193 @@ def test_committed_answers_reproduce_the_pooled_recall_and_cover_exactly_the_tru
     assert (r["k"], r["n"]) == POOLED[lang]
 
 
+# ----------------------------------------------------------------------------------------------------------- P1-09 join fixes
+# The two cond-join fixes (`docs/reviews/connected-code-graph-p1-09-ml.md`): (a) a label that is a python `for` header resolves to the
+# line's UNIQUE `iteratorNonEmptyOrException` cond, only when no existing tier matched; (b) a tier "equal ignoring whitespace and
+# parentheses" before `contains`. Planted facts only (no corpus pair): each test fails on the P0 join for the stated reason.
+ITER = "iteratorNonEmptyOrException"
+
+
+def cond_facts(conds, cbs=(), calls=()):
+    """one python method `f` (lines 1-4) with the given conds [(id, line, code)], calls [(id, name, line)], cb [(pk, pid, cond)]."""
+    rows = [{"k": "m", "id": "1", "name": "f", "full": "a.py:f", "file": "a.py", "l": 1, "le": 4, "c": 1, "pk": "TYPE_DECL", "pid": "9", "pfull": "", "code": "f"},
+            {"k": "p", "m": "1", "i": 1, "name": "xs", "l": 1, "c": 7, "code": "xs"}]
+    rows += [{"k": "c", "m": "1", "id": i, "l": ln, "c": 5, "code": code, "lab": "UNKNOWN"} for i, ln, code in conds]
+    rows += [{"k": "cs", "m": "1", "id": i, "name": n, "l": ln, "c": 9, "code": n + "(x)"} for i, n, ln in calls]
+    rows += [{"k": "cb", "m": "1", "pk": pk, "pid": pid, "cond": c} for pk, pid, c in cbs]
+    rows.append({"k": "stats", "loadMs": "1", "projectionMs": "1", "totalMs": "2", "methods": 1, "cdgRaw": len(cbs), "cdgSelf": 0, "dataRaw": 0, "histogram": {}})
+    return rows
+
+
+FOR_SRC = "def f(xs):\n    for x in xs:\n        use(x)\n    return 1\n"
+
+
+def ctl(tmp, src, facts, source, sink=CALL("use", 0, 3)):
+    pairs = [("p", "control", source, sink, None, None)]
+    _, res, answers, *_ = run_cfg(tmp, "python", "a.py", src, facts, "a.py::f", (1, 4), pairs)
+    return answers[(1, 0)]
+
+
+def test_for_header_label_resolves_to_the_unique_iterator_cond(tmp_path):
+    facts = cond_facts([("20", 2, ITER)], [("cs", "30", "20")], [("30", "use", 3)])
+    a = ctl(tmp_path, FOR_SRC, facts, COND(2, "x in xs"))
+    assert a["status"] == "connected" and a["endpointDetail"]["source"]["via"] == "for-header-iterator"
+
+
+def test_for_header_rule_leaves_two_iterator_conds_on_the_line_unresolved(tmp_path):
+    facts = cond_facts([("20", 2, ITER), ("21", 2, ITER)], [("cs", "30", "20")], [("30", "use", 3)])
+    a = ctl(tmp_path, FOR_SRC, facts, COND(2, "x in xs"))
+    assert a["status"] == "endpoint-unresolved" and a["endpointDetail"]["source"]["reason"] == "cond-several-iterator"
+
+
+def test_for_header_rule_requires_the_label_line_to_be_the_loop_header(tmp_path):
+    src = "def f(xs):\n    z = a if x in xs else b\n        use(x)\n    return 1\n"   # an iterator cond on the line, but not a `for` header
+    facts = cond_facts([("20", 2, ITER)], [("cs", "30", "20")], [("30", "use", 3)])
+    assert ctl(tmp_path, src, facts, COND(2, "x in xs"))["status"] == "endpoint-unresolved"
+    src2 = "def f(xs):\n    async for x in xs:\n        use(x)\n    return 1\n"
+    (tmp_path / "b").mkdir()
+    assert ctl(tmp_path / "b", src2, facts, COND(2, "x in xs"))["status"] == "connected"      # `async for` is a header too
+
+
+def test_an_existing_tier_wins_over_the_for_header_rule(tmp_path):
+    facts = cond_facts([("20", 2, ITER), ("21", 2, "x in xs")], [("cs", "30", "21")], [("30", "use", 3)])
+    a = ctl(tmp_path, FOR_SRC, facts, COND(2, "x in xs"))
+    assert a["status"] == "connected" and "via" not in a["endpointDetail"]["source"]        # resolved by the exact tier, to cond 21
+
+
+def test_a_contains_match_is_not_overridden_by_the_for_header_rule(tmp_path):
+    facts = cond_facts([("20", 2, ITER), ("21", 2, "x")], [("cs", "30", "21")], [("30", "use", 3)])
+    a = ctl(tmp_path, FOR_SRC, facts, COND(2, "x in xs"))
+    assert a["endpointDetail"]["source"]["via"] == "contains" and a["status"] == "connected"
+
+
+PAREN_SRC = "def f(self, i):\n    if not (self._open or i in self._r):\n        use(i)\n    return 1\n"
+
+
+def test_paren_insensitive_tier_resolves_to_the_whole_condition_not_the_operand(tmp_path):
+    whole = "not self._open or i in self._r"
+    facts = cond_facts([("20", 2, whole), ("21", 2, "self._open")], [("cs", "30", "20")], [("30", "use", 3)])
+    a = ctl(tmp_path, PAREN_SRC, facts, COND(2, "not (self._open or i in self._r)"))
+    assert a["status"] == "connected" and a["endpointDetail"]["source"]["via"] == "equal-ignoring-whitespace-and-parentheses"
+
+
+def test_the_conjunction_split_by_the_frontend_still_resolves_by_contains_exactly_as_before(tmp_path):
+    src = "def f(e):\n    if e.s is not None and 500 <= e.s <= 599:\n        use(e)\n    return 1\n"
+    facts = cond_facts([("20", 2, "e.s is not None"), ("21", 2, "500 <= tmp5")], [("cs", "30", "20")], [("30", "use", 3)])
+    a = ctl(tmp_path, src, facts, COND(2, "e.s is not None and 500 <= e.s <= 599"))
+    assert a["endpointDetail"]["source"]["via"] == "contains" and a["status"] == "connected"
+
+
+def test_two_paren_equal_conds_on_the_line_stay_unresolved(tmp_path):
+    facts = cond_facts([("20", 2, "not a or b"), ("21", 2, "not (a) or b")], [("cs", "30", "20")], [("30", "use", 3)])
+    src = "def f(a, b):\n    if not (a or b):\n        use(a)\n    return 1\n"
+    a = ctl(tmp_path, src, facts, COND(2, "not (a or b)"))
+    assert a["status"] == "endpoint-unresolved"
+
+
+def test_a_resolved_header_endpoint_without_a_chain_stays_not_connected(tmp_path):
+    """Only endpoints change: the iterator cond resolves, the projection has no edge, so the pair is not connected."""
+    facts = cond_facts([("20", 2, ITER)], [], [("30", "use", 3)])
+    a = ctl(tmp_path, FOR_SRC, facts, COND(2, "x in xs"))
+    assert a["status"] == "not-connected" and a["endpointDetail"]["source"]["via"] == "for-header-iterator"
+
+
+def test_the_p0_join_switch_restores_the_old_resolution(tmp_path, monkeypatch):
+    facts = cond_facts([("20", 2, ITER)], [("cs", "30", "20")], [("30", "use", 3)])
+    monkeypatch.setattr(C, "JOIN_P0_ONLY", True)
+    assert ctl(tmp_path, FOR_SRC, facts, COND(2, "x in xs"))["status"] == "endpoint-unresolved"
+
+
+# --- gate P1-09 (analyst) additions: planted-fact tests for the line restriction and the guards of the two join fixes
+def test_iterator_cond_on_another_line_is_not_taken(tmp_path):
+    facts = cond_facts([("20", 3, ITER)], [("cs", "30", "20")], [("30", "use", 3)])     # the only iterator cond is on line 3, label on line 2
+    assert ctl(tmp_path, FOR_SRC, facts, COND(2, "x in xs"))["status"] == "endpoint-unresolved"
+
+
+def test_paren_equal_cond_on_another_line_is_not_taken(tmp_path):
+    src = "def f(a, b):\n    if not (a or b):\n        use(a)\n    return 1\n"
+    facts = cond_facts([("20", 3, "not a or b")], [("cs", "30", "20")], [("30", "use", 3)])
+    assert ctl(tmp_path, src, facts, COND(2, "not (a or b)"))["status"] == "endpoint-unresolved"
+
+
+def test_header_rule_does_not_override_several_contains(tmp_path):
+    """Plan wording ("only when the existing tiers fail"): two `contains` candidates are an ambiguity the header rule must not resolve."""
+    facts = cond_facts([("20", 2, ITER), ("21", 2, "x"), ("22", 2, "xs")], [("cs", "30", "20")], [("30", "use", 3)])
+    a = ctl(tmp_path, FOR_SRC, facts, COND(2, "x in xs"))
+    assert a["status"] == "endpoint-unresolved" and a["endpointDetail"]["source"]["reason"] == "cond-several-contains"
+
+
+def test_for_inside_a_comprehension_line_is_not_a_header(tmp_path):
+    src = "def f(xs):\n    ys = [y for x in xs]\n        use(x)\n    return 1\n"
+    facts = cond_facts([("20", 2, ITER)], [("cs", "30", "20")], [("30", "use", 3)])
+    assert ctl(tmp_path, src, facts, COND(2, "x in xs"))["status"] == "endpoint-unresolved"
+
+
+# ----------------------------------------------------------------------------------------------------------- recompute from the stored facts (opt-in)
+POOLED_P1_JOIN = {"python": (336, 480), "javascript": (60, 151), "go": (246, 433), "java": (314, 465), "csharp": (227, 392), "cpp": (116, 349)}
+# P0's pins (`POOLED`) stay the OLD-join record; this is the SAME shipped projection scored by the P1 join (python +29, nothing else moves).
+# The status relabels (recall unchanged) the P1 join causes; expected lists are the recompute's output, not typed values.
+# python (10): pairs into/out of a `for` header whose chain the SHIPPED projection lacks; their endpoint now resolves, they stay misses.
+# csharp (2, RULED: data-scientist note Pass 2, accepted): ordinal 25, the label is wrapped in one outer pair of parentheses; it was
+# `cond-several-contains`, the join fix matches the whole condition; recall 227/392 is unchanged and no connected pair moves.
+RELABELLED = {"python": sorted(["12|1", "14|4", "17|15", "18|10", "18|3", "21|0", "22|3", "23|9", "24|2", "6|7"]), "csharp": ["25|2", "25|6"]}
+MANIFEST = Path(__file__).resolve().parent / "golden" / "projection" / "join-new-hits-python.json"
+
+
+def _recompute(lang):
+    """(old-join answers, new-join answers) over the stored P0 facts of `lang`, `analyse_cfg` as P0 ran it (dev data only)."""
+    import yaml
+    work = REPO.parents[1] / ".ccg-work" / "frontend-fitness" / "joern" / lang
+    if not (work / "s28-run.json").is_file():
+        pytest.skip(f"UNRUN, not green: {work}/s28-run.json absent (gitignored P0 facts)")
+    runs = json.loads((work / "s28-run.json").read_text())["runs"]
+    ek = sm.EXTRACT_KEYS[lang]
+    run = runs[f"off.{ek}"]
+    if not run.get("factsFile") or not Path(run["factsFile"]).is_file():
+        pytest.skip(f"UNRUN, not green: facts file of {lang} absent")
+    cfg = yaml.safe_load(open(REPO / "corpora.yaml"))["corpora"][lang]
+    samp = [json.loads(l) for l in open(REPO / "sample" / f"{lang}-flow.jsonl", encoding="utf-8")]
+    gold = [json.loads(l) for l in open(REPO / "truth" / f"{lang}.flow-final.jsonl", encoding="utf-8")]
+    tags, removed = sm.load_tags(lang)
+    src = C.Src(C.CORPORA / lang / "src")
+    out = []
+    for old in (True, False):
+        C.JOIN_P0_ONLY = old
+        try:
+            _, res, answers, *_ = sm.analyse_cfg(lang, "off", run, samp, gold, tags, removed, src, cfg["commit"])
+        finally:
+            C.JOIN_P0_ONLY = False
+        out.append({f"{k[0]}|{k[1]}": (a["status"], json.dumps(a.get("endpointDetail", {}), sort_keys=True, default=str)) for k, a in answers.items()})
+    return out
+
+
+@pytest.mark.skipif(not os.environ.get("CCG_S28_RECOMPUTE"), reason="UNRUN: opt-in (CCG_S28_RECOMPUTE=1; scores the stored P0 facts, ~1 min)")
+@pytest.mark.parametrize("lang", sorted(POOLED_P1_JOIN))
+def test_p1_join_changes_only_the_listed_python_pairs(lang):
+    """Closed list (ml note Q3/C4/C6): python 307 -> 336 on the unchanged shipped projection (+29, the committed manifest), 0 flips from
+    connected, and every other pair's status identical; no other language changes at all. Resolution (endpointDetail) of a pair connected
+    before may change only for the one named (9,8)."""
+    old, new = _recompute(lang)
+    assert old.keys() == new.keys()
+    k_old = sum(1 for v in old.values() if v[0] == "connected")
+    k_new = sum(1 for v in new.values() if v[0] == "connected")
+    assert k_old == POOLED[lang][0] and k_new == POOLED_P1_JOIN[lang][0]
+    gained = sorted(k for k in new if new[k][0] == "connected" and old[k][0] != "connected")
+    lost = [k for k in old if old[k][0] == "connected" and new[k][0] != "connected"]
+    assert not lost
+    # a pair whose endpoint now resolves but still has no chain moves "endpoint-unresolved" -> "not-connected": a relabel, not recall
+    relabel = sorted(k for k in new if new[k][0] != old[k][0] and k not in gained)
+    assert all(old[k][0] == "endpoint-unresolved" and new[k][0] == "not-connected" for k in relabel)
+    assert relabel == RELABELLED.get(lang, [])                                  # nothing else changes status
+    if lang == "python":
+        assert gained == sorted(json.loads(MANIFEST.read_text())["pairIds"]) and len(gained) == 29
+        re_resolved = sorted(k for k in old if old[k][0] == "connected" and old[k][1] != new[k][1])
+        assert re_resolved == ["9|8"]
+    else:
+        assert not gained
+        assert [k for k in old if old[k][0] == "connected" and old[k][1] != new[k][1]] == []
+
+
 # ----------------------------------------------------------------------------------------------------------- mutants
 MUTANTS = {
     "control_direction_in_answer": ("s28_metrics.py", [("ok = (tk, sk) in M.ctl", "ok = (sk, tk) in M.ctl")]),
@@ -231,6 +418,22 @@ MUTANTS = {
     "same_point_guard_removed": ("s28_metrics.py", [("if sk is None or tk is None or sk == tk:", "if sk is None or tk is None:")]),
     "call_key_without_ordinal": ("s28_metrics.py", [('return ("call", ep["calleeName"], ep["ordinal"])', 'return ("call", ep["calleeName"])')]),
     "pair_key_without_kind": ("s28_metrics.py", [('return (ordinal, pr["kind"], ckey(pr["source"]), ckey(pr["sink"]))', 'return (ordinal, ckey(pr["source"]), ckey(pr["sink"]))')]),
+    "join_for_header_rule_off": ("s28_core.py", [("if not ct and not JOIN_P0_ONLY and _for_header(M, line, code):", "if False:")]),
+    "join_for_header_uniqueness_removed": ("s28_core.py", [('            if len(its) == 1:\n                det["via"] = "for-header-iterator"', '            if len(its) >= 1:\n                det["via"] = "for-header-iterator"')]),
+    "join_for_header_text_guard_removed": ("s28_core.py", [("and _for_header(M, line, code):", "and True:")]),
+    "join_paren_tier_removed": ("s28_core.py", [("        if not JOIN_P0_ONLY:  # P1-09 (b)", "        if False:  # P1-09 (b)")]),
+    "join_paren_tier_after_contains": ("s28_core.py", [
+        ("        if not JOIN_P0_ONLY:  # P1-09 (b)", "        if False:  # P1-09 (b)"),
+        ("        if not ct and not JOIN_P0_ONLY and _for_header(M, line, code):",
+         "        _np = lambda x: \"\".join(x.replace(\"(\", \"\").replace(\")\", \"\").split())  # noqa: E731\n"
+         "        _pe = [c for c in online if _np(c[2]) == _np(code)]\n"
+         "        if len(_pe) == 1:\n            det[\"via\"] = \"equal-ignoring-whitespace-and-parentheses\"\n            return _pe[0][0], det\n"
+         "        if not ct and not JOIN_P0_ONLY and _for_header(M, line, code):")]),
+    "join_paren_tier_ignores_whitespace_only": ("s28_core.py", [('noparen = lambda x: "".join(x.replace("(", "").replace(")", "").split())', 'noparen = lambda x: "".join(x.split())')]),
+    "join_iterator_lookup_not_line_restricted": ("s28_core.py", [("its = [c for c in online if c[2] == ITER_COND]", "its = [c for c in M.conds if c[2] == ITER_COND]")]),
+    "join_paren_tier_not_line_restricted": ("s28_core.py", [("ep_ = [c for c in online if noparen(c[2]) == noparen(code)]", "ep_ = [c for c in M.conds if noparen(c[2]) == noparen(code)]")]),
+    "join_header_rule_overrides_contains_ambiguity": ("s28_core.py", [("if not ct and not JOIN_P0_ONLY and _for_header(M, line, code):", "if not JOIN_P0_ONLY and _for_header(M, line, code):")]),
+    "join_header_text_loosened": ("s28_core.py", [('return text.startswith(f"for {code}:") or text.startswith(f"async for {code}:")', 'return f"for {code}" in text')]),
     "reach_one_hop_only": ("s28_core.py", [("                if y not in seen:\n                    seen.add(y)\n                    nxt.append(y)", "                pass")]),
 }
 
