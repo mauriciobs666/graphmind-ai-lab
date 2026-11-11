@@ -107,6 +107,11 @@ def build_scopes(B: Builder):
 
     # property accessors, overload stubs
     for s in list(scopes.values()):
+        if s.kind == "lambda":
+            # extract.sc reports a call that takes a lambda (`f(lambda: ...)`) as a decorator application of the lambda; the
+            # slice emits it as a `decorator` record (3 of the stored 213) without letting it widen the lambda's span
+            s.lambda_decos = [(decorator_name(B, s.file, d), d) for d in owned.get(s.key, [])]
+            continue
         if s.kind != "function":
             continue
         names = [(decorator_name(B, s.file, d), d) for d in owned.get(s.key, [])]
@@ -140,7 +145,7 @@ def decorators_by_owner(scopes: dict, deco_by_target: dict) -> dict:
     after its line (a decorator precedes its ``def``)."""
     by_full: dict[str, list[Scope]] = defaultdict(list)
     for s in scopes.values():
-        if s.kind == "function":
+        if s.kind in ("function", "lambda"):
             by_full[s.node["full"]].append(s)
     owned: dict[tuple, list[dict]] = defaultdict(list)
     for target, ds in deco_by_target.items():
@@ -148,7 +153,7 @@ def decorators_by_owner(scopes: dict, deco_by_target: dict) -> dict:
         for d in ds:
             if len(cands) > 1:
                 after = [c for c in cands if c.node["l"] >= d["l"]]
-                owner = min(after or cands, key=lambda c: (c.node["l"], c.node["c"], c.node["id"])) if after else \
+                owner = min(after, key=lambda c: (c.node["l"], c.node["c"], c.node["id"])) if after else \
                     max(cands, key=lambda c: (c.node["l"], c.node["c"], c.node["id"]))
             elif cands:
                 owner = cands[0]
@@ -263,10 +268,33 @@ def py_imports(B: Builder, file: str, scopes_in_file: list[Scope] | None = None)
                 if asn:
                     d["alias"] = asn
                 names.append(d)
-            names.sort(key=lambda x: (x["name"], 0 if "alias" not in x else 1, x.get("alias", "")))
+            names.sort(key=lambda x: (x["name"], x.get("alias", "")))
             rec = dict(line=node.lineno, col=node.col_offset, module=module, names=names, dynamic=False,
                        resolvedPath=resolved, _sub=None)
             rec["_subs"] = subs
             out.append(rec)
     out.sort(key=lambda r: (r["line"], r["col"]))
+    return out
+
+
+def py_params(B: Builder, s: Scope, ps: list[dict]):
+    """``(index, name, fact)`` per parameter of a Python symbol. A method's first parameter (the receiver) gets index
+    ``-1`` unless the function is a ``staticmethod``; the others count from 0. Joern drops the sigil (``*args`` is
+    code ``args``) where spec3 §5.4 keeps it, so the name is read back from the source line."""
+    static = any(nm in ("staticmethod",) for nm, _ in s.decos)
+    recv_first = s.parent is not None and s.parent.is_type and not static and s.kind in ("method", "accessor")
+    out = []
+    idx = 0
+    lines = B.src.lines(s.file)
+    for k, p in enumerate(ps):
+        name = p["name"]
+        srcl = lines[p["l"] - 1] if 1 <= p["l"] <= len(lines) else ""
+        m = re.search(r"(\*{1,2})\s*$", srcl[: max(p["c"] - 1, 0)])
+        if m and srcl[p["c"] - 1: p["c"] - 1 + len(name)] == name:
+            name = m.group(1) + name
+        if k == 0 and recv_first:
+            out.append((-1, name, p))
+        else:
+            out.append((idx, name, p))
+            idx += 1
     return out

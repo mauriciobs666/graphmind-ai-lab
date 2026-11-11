@@ -76,9 +76,9 @@ def py_facts(files: dict[str, str], *, shuffle: int | None = None) -> dict[str, 
                         # the next sibling lines of the member's own parent are unaffected
                         continue
                     facts["m"].append({kk: vv for kk, vv in m.items()})
-                    for d in getattr(ch, "decorator_list", []):
-                        facts["deco"].append({"k": "deco", "m": m["id"], "target": full, "o": 0, "name": "cpg-name",
-                                              "code": ast.unparse(d), "l": d.lineno, "c": d.col_offset + 1})
+                    for o, d in enumerate(getattr(ch, "decorator_list", [])):     # `o`: 0-based, in source order on the target
+                        facts["deco"].append({"k": "deco", "m": m["id"], "target": full, "o": o, "name": "cpg-name",
+                                              "code": ast.unparse(d), "l": d.lineno, "c": d.col_offset + 1, "args": []})
                     visit(ch, dict(m, pk2="METHOD"), full)
                 else:
                     visit(ch, parent_m, parent_full)

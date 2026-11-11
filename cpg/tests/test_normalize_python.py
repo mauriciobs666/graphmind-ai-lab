@@ -521,3 +521,57 @@ def test_decorators_of_one_function_keep_their_written_order_for_every_fact_orde
     _, scopes, _, _ = scopes_of(tmp_path, {"d.py": src}, shuffle=seed)
     f = next(s for s in scopes.values() if s.base == "f")
     assert [n for n, _ in f.decos] == ["a", "b.c", "d"]
+
+
+# --- both definitions of a redefined class carry decorated members of one name (gate P2-1) ---------------------------------
+DECO_REDEF_SRC = textwrap.dedent('''\
+    class D:
+        @property
+        def x(self):
+            return 1
+
+
+    class D:
+        @property
+        def x(self):
+            return 2
+
+        @x.setter
+        def x(self, v):
+            pass
+''')
+DECO_REDEF_WANT = {
+    "r.py::D.x.<get>": ["property"],
+    "r.py::D#2.x.<get>": ["property"],
+    "r.py::D#2.x.<set>": ["x.setter"],
+}
+
+
+@pytest.mark.parametrize("seed", [None, *range(40)])
+def test_decorated_members_of_one_name_in_both_definitions_of_a_class_each_keep_their_own_decorators_and_accessor(tmp_path, seed):
+    B, scopes, _, _ = scopes_of(tmp_path, {"r.py": DECO_REDEF_SRC}, shuffle=seed)
+    by = {s.qname: s for s in scopes.values()}
+    assert {q: [n for n, _ in s.decos] for q, s in by.items() if s.kind == "accessor"} == DECO_REDEF_WANT
+    assert {q: s.accessor for q, s in by.items() if s.kind == "accessor"} == {
+        "r.py::D.x.<get>": "<get>", "r.py::D#2.x.<get>": "<get>", "r.py::D#2.x.<set>": "<set>"}
+    assert {q for q, s in by.items() if s.base == "x"} == set(DECO_REDEF_WANT)
+
+
+def test_the_decorated_redefined_class_fixture_has_the_real_shape(tmp_path):
+    B, _, _, _ = scopes_of(tmp_path, {"r.py": DECO_REDEF_SRC})
+    fulls = sorted(m["full"] for m in B.facts["m"] if m["name"] == "x")
+    assert fulls == ["r.py:<module>.D.<body>.x", "r.py:<module>.D.<body>.x", "r.py:<module>.D.<body>.x$redefinition1"]   # two owners share a fullName
+    assert [(d["target"], d["l"]) for d in sorted(B.facts["deco"], key=lambda d: d["l"])] == [
+        ("r.py:<module>.D.<body>.x", 2), ("r.py:<module>.D.<body>.x", 8), ("r.py:<module>.D.<body>.x$redefinition1", 12)]
+
+
+def test_a_decorator_after_every_candidate_belongs_to_the_last_one_and_one_before_them_all_to_the_first():
+    def fn(key, line, nid):
+        return core.Scope(key=key, kind="function", name="f", base="f", line=line, col=1, lineEnd=line, parent=None, file="r.py",
+                          jname="f", node={"full": "r.py:<module>.f", "l": line, "c": 1, "id": nid})
+    first, second = fn(("m", "1"), 10, "1"), fn(("m", "2"), 20, "2")
+    scopes = {s.key: s for s in (second, first)}
+    late = {"l": 50, "c": 1, "o": 0}
+    early = {"l": 5, "c": 1, "o": 0}
+    got = python.decorators_by_owner(scopes, {"r.py:<module>.f": [late, early]})
+    assert got == {second.key: [late], first.key: [early]}

@@ -69,36 +69,63 @@ def kw_head(name: str) -> str:
     return "kw" + quote_field(name)
 
 
+class SourceRefused(RuntimeError):
+    """A source file the normalizer will not read: its name leaves the stage (``..``, an absolute name, a symlink out), or its
+    bytes are not UTF-8. The unit fails; nothing is skipped silently."""
+
+
 class Source:
-    """The staged unit's files: bytes, text, lines (split on \\n only)."""
+    """The staged unit's files: bytes, text, lines (split on \\n only). A file name comes from the sandboxed Joern run's
+    facts, so every access first confines it to the stage."""
 
     def __init__(self, stage: Path):
         self.stage = Path(stage)
+        self._root = self.stage.resolve()
+        self._b: dict[str, bytes] = {}
         self._t: dict[str, str] = {}
+
+    def _path(self, rel: str) -> Path:
+        try:
+            p = (self.stage / rel).resolve()
+        except (OSError, ValueError) as e:
+            raise SourceRefused(f"file name {rel!r} cannot be resolved: {e}") from e
+        if not p.is_relative_to(self._root):
+            raise SourceRefused(f"file name {rel!r} resolves outside the stage {self._root}")
+        return p
+
+    def raw(self, rel: str) -> bytes:
+        if rel not in self._b:
+            self._b[rel] = self._path(rel).read_bytes()
+        return self._b[rel]
 
     def text(self, rel: str) -> str:
         if rel not in self._t:
-            self._t[rel] = (self.stage / rel).read_bytes().decode("utf-8")
+            try:
+                self._t[rel] = self.raw(rel).decode("utf-8")
+            except UnicodeDecodeError as e:
+                raise SourceRefused(f"{rel!r} is not UTF-8 ({e.reason} at byte {e.start}); the unit cannot be normalized") from None
         return self._t[rel]
 
     def lines(self, rel: str) -> list[str]:
         return self.text(rel).split("\n")
 
     def exists(self, rel: str) -> bool:
-        return (self.stage / rel).is_file()
+        return self._path(rel).is_file()
 
 
 # -- scope tree ------------------------------------------------------------------------------
 class Scope:
     __slots__ = ("key", "kind", "name", "line", "col", "lineEnd", "parent", "file", "cpg_ids",
                  "base", "dup", "qname", "sid", "accessor", "jname", "is_type", "decos",
-                 "synthetic_alias", "node")
+                 "synthetic_alias", "node", "owned", "lambda_decos")
 
     def __init__(self, **kw):
         self.accessor = None
         self.dup = 1
         self.decos = []
+        self.lambda_decos = []   # `deco(<lambda>)` applications recorded against a lambda: emitted, but they never widen its span
         self.cpg_ids = []   # CPG METHOD ids whose own code belongs to this symbol
+        self.owned = []     # ownedRegions (spec3 §5.3): extra (first, last) line pairs that belong to the symbol; none in P1's frontends
         self.qname = None
         self.sid = None
         self.is_type = False
@@ -166,8 +193,12 @@ def number_and_qualify(B: Builder, scopes: dict) -> None:
 
     def chain(s: Scope) -> str:
         parts = []
+        seen = set()
         cur = s
         while cur is not None and cur.kind != "module":
+            if id(cur) in seen:
+                raise ValueError(f"parent chain of {s.base!r} in {s.file} cycles back to {cur.base!r}")
+            seen.add(id(cur))
             parts.append(seg(cur))
             cur = cur.parent
         return ".".join(reversed(parts))

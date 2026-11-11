@@ -85,7 +85,7 @@ def test_source_reads_utf8_and_caches(tmp_path):
 
 def test_source_refuses_bytes_that_are_not_utf8(tmp_path):
     (tmp_path / "a.py").write_bytes(b"\xff\xfe")
-    with pytest.raises(UnicodeDecodeError):
+    with pytest.raises(core.SourceRefused, match="a.py"):                       # typed and naming the file, never a bare decode error
         core.Source(tmp_path).text("a.py")
 
 
@@ -368,3 +368,22 @@ def test_an_import_belongs_to_the_widest_non_module_non_type_span_that_holds_its
     assert core.import_symbol_id(B, scopes, "a.py", 20) == "sid-outer" and core.import_symbol_id(B, scopes, "a.py", 21) is None
     assert core.import_symbol_id(B, scopes, "a.py", 5) is None             # a module- or type-level line: no symbol
     assert core.import_symbol_id(B, scopes, "b.py", 13) is None
+
+
+def test_a_parent_chain_that_cycles_is_an_error_not_an_endless_walk():
+    B = core.Builder.__new__(core.Builder)
+    B.root = "."
+    a = scope("function", "a", nid="1")
+    b = scope("function", "b", a, nid="2")
+    a.parent = b
+    with pytest.raises(ValueError, match="parent chain"):
+        core.number_and_qualify(B, {s.key: s for s in (a, b)})
+
+
+def test_a_scope_that_is_its_own_parent_is_an_error_not_an_endless_walk():
+    B = core.Builder.__new__(core.Builder)
+    B.root = "."
+    a = scope("function", "a", nid="1")
+    a.parent = a
+    with pytest.raises(ValueError, match="parent chain"):
+        core.number_and_qualify(B, {a.key: a})
