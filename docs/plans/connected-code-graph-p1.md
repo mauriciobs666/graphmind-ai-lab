@@ -228,7 +228,7 @@ clustered draw of 30 methods, `-p1-ml.md` §1 F2: P(pass) 0.54–0.56 at 0.95, 0
    causes and both join fixes (the `for` header and the contains-join), each fix or a recorded "not fixed, because",
    and reports the dev recall it reaches. P1-34 spends a fresh draw **only if** that dev figure reaches **465/481**
    (`-p1-ml.md` §3.1, from the §8.4 operating curve; dev recall is optimistic, since the fix is fitted to those 30
-   methods, so "not run" is the expected outcome). JavaScript/TS
+   methods; the measured figure met it exactly, so entering the fresh draw is an explicit `teco`/stakeholder decision, `-p1-gates.md` P1-34 (2)). JavaScript/TS
    is not re-measured: reported not closed (ceiling 0.546); the remedy is a frontend-side synthesis of `switch`-case
    conds from the AST, logged as a backlog item at close.
 2. Re-measure both languages regardless. Rejected: spends a blind draw on a language whose derived ceiling is 0.546.
@@ -347,11 +347,11 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-15 | Indexer adoption: `scip-typescript` (recall) and `scip-python` (precision), offline | `coder` + `graph-dba` | ext | 04, 05, 48b, `-ml` | `analyst`; `data-scientist` |
 | **W2: linking** | | | | | |
 | P1-16 | Pack runtime, conformance over the stored slice bundles | `tdd-engineer` | lnk | 01 | `analyst` |
-| P1-46 | Shell `mcp-call` consumer pack (+ `negatives.yaml`), leaf-harness update | `tdd-engineer` | lnk | 16, 10 | `analyst` |
+| P1-46 | Shell `mcp-call` consumer pack (+ `negatives.yaml`), leaf-harness update | `tdd-engineer` | lnk | 16, 10 (10b) | `analyst` |
 | P1-17 | Linker: matchers, statuses, bindings (Compose and `.mcp.json` are linker code, D10), example configs, prompt mentions | `tdd-engineer` | lnk | 16, 46, 07, 11, 14, `-graph` | `analyst` |
 | P1-18 | Assembler: bundles to graph rows, `mask_http_segments` import, `MOUNTED_BY`, `SkippedFile`, `Unit.flowAvailable`, pack-set identity | `graph-dba` | lnk | 16, 17, `-graph` | `analyst` |
 | P1-19 | Store loader, DDL, ACL users and test, swap, stamp, fuzz test, re-derived `TIMEOUT_MAX` and lock ttl, size re-estimate | `graph-dba` | lnk | 18, 48, 02, `-graph` | `analyst` |
-| P1-44 | Build dispatch by unit kind (Joern py/ts, shell, config, Markdown, SCIP merge if P1-15 is adopted), failure isolated per unit | `coder` | lnk | 03, 04, 05, 10, 11, 12 (15 if adopted) | `analyst` |
+| P1-44 | Build dispatch by unit kind (Joern py/ts, shell, config, Markdown, SCIP merge if P1-15 is adopted), failure isolated per unit | `coder` | lnk | 03, 04, 05, 10, 11, 12, 16 (15 if adopted) | `analyst` |
 | P1-20 | Refresh (on demand, local heads only), stale-kept, not-mapped | `coder` | lnk | 19, 44, 02, 03, 29 | `analyst` |
 | **W3: answers** | | | | | |
 | P1-21 | Reader layer and anchors, carry-over C3 | `tdd-engineer` | ans | 19, 45 | `analyst`; `graph-dba` on queries |
@@ -389,7 +389,7 @@ therefore Needs **every step that edits a tracked file outside those exclusions*
 28, 29, 31, 34 (`cpg/spikes/**` is hashed), 39, 44, 45, 48, 48b. It also Needs **32 (both dispatches), 35, 36 and 47**,
 which are not hashed (`cpg/eval/**` is excluded) but are written before the record and pinned at its commit
 (`-p1-ml.md` §6.1, §6.2: the gate harness is the one at the record's commit, and an edit after it makes the run "after
-adaptation"). Its commit is the freeze. P1-15 either lands before it or
+adaptation"). Its commit is the freeze. **`cpg/spikes/frontend-fitness/s28_core.py` and `cpg/extractors/joern/extract.sc` are hashed, so P1-09's scorer and projection changes are committed together, after the P1-09 gates and C8–C12 of `docs/reviews/connected-code-graph-p1-09-ml.md`, before `ccg-prereg-v1`/`ac5-gate-1` and before P1-34's `ccg-p1-flow-python-v1` record; that record names the commit of both;  the scorer is not changed after a fresh-draw miss, whatever it shows** (`docs/reviews/connected-code-graph-p1-09-ml.md` C5). P1-15 either lands before it or
 is declared out of P1's first gate (the gate then runs with the Joern call graph only). A step that edits any of those
 files after the record makes the run "after adaptation" (the AC-5 result is lost); P1-43's re-gate writes a new record.
 

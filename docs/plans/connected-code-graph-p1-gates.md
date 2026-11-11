@@ -161,15 +161,25 @@ Index §5 is the design; `-p1-ml.md` question 2 fixes the numbers. Python only u
    unchanged) and records the sha256 of the script it ran in the run output; a test asserts that a run with
    `--extract cpg/extractors/joern/extract.sc` used P1-09's script and a run without it used the old one.
 2. **Entry check** (cost guard): P1-09's report line, the dev recall of the fixed projection, against the entry value
-   **465/481** (`-p1-ml.md` §3.1; the dev ceiling is 467). If it is not reached the step ends: `flowAvailable` stays
-   false, reported not closed with the figure, and no fresh draw is spent (the expected outcome, index §5).
+   **465/481** (`-p1-ml.md` §3.1; the dev ceiling is 467). **The entry value is the new-join count** (P1-09's scorer fix in
+   `s28_core.resolve_endpoint`, `docs/reviews/connected-code-graph-p1-09-ml.md` C1); the report states the old-join and new-join
+   counts side by side, and the old-join count is diagnostic only, never a gate input (C7). **The rule is unchanged and is met:** the
+   measured dev recall with the new join is 464/480 (465/481 with the omission), the entry value exactly, on the methods the fixes
+   were designed on, so it carries that optimism and has zero margin. **Entering is an explicit `teco`/stakeholder decision, not
+   automatic.** The 0.80 pass probability assumes the fresh recall equals the dev recall; the F2 curve gives about 0.55 at a true
+   recall of 0.95 and about 0.2 at 0.93. The recommendation is to enter: the pre-registered draw (§3.3) is the only unbiased
+   estimate. If it is not entered, `flowAvailable` stays false, reported not closed with the figure. The report states the
+   four-cell table (shipped/old, shipped/new, fixed/old, fixed/new; the old-join cells diagnostic) and the residual misses by
+   cause (C8). `s28_core.py` and `extract.sc` are committed together before the pre-registration records (index core-freeze
+   rule), and the `ccg-p1-flow-python-v1` record names that commit and the scorer's `JOIN_P0_ONLY = False`; `JOIN_P0_ONLY` is a
+   diagnostic switch and no gate or decision record uses it.
 3. **If entered, pre-register** the draw before any label: the seed
    `ccg-p1a-v1-flow|python|<corpusCommit>` (spurious sample `ccg-p1a-v1-spur|`), 30 methods, a frame of P0-ML §6.4's population at `0caf85e3` minus the 30 P0 methods and minus
    every held-out AC-5 flow anchor (the custodian applies that exclusion and reports the count only), the
    `ccg-p1-flow-python-v1` record (and `-decision` after the run; `-p1-ml.md` §3.3, §8), tier-2 rule, the labeller brief
    (`cpg/spikes/frontend-fitness/flow-brief.template.md` with the patch notes) and the adjudication procedure (one fresh blind
    `qa-engineer` labeller, a Part F-style audit and `data-scientist` rulings; `-p1-ml.md` §3.3), committed before labelling; run
-   `s28_run.py`/`s28_metrics.py` in both configurations offline.
+   `s28_run.py`/`s28_metrics.py` in both configurations offline with the scorer frozen at the commit the record names (index core-freeze rule, C5).
 4. **Decide** by `-p0-ml.md` §8.4: the record names the figure, the cluster interval, the omission rate and the
    spurious rate; if true, `cpg/ccg/registry/flow-availability.yaml` flips that row (a `graph-dba` edit, gated), and
    P1-42's AC-25 fixtures and P1-37's `flow` stratum are re-run in the true form.
