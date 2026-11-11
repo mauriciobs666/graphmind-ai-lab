@@ -179,28 +179,36 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 ## P1-44 · build dispatch by unit kind — `coder`
 
 - **Files:** `cpg/ccg/build.py` (`build_unit(unit, repo, commit, system) -> BundleResult`), `cpg/tests/test_build_dispatch.py`,
-  `cpg/tests/test_build_live.py`.
+  `cpg/tests/test_build_live.py`, `cpg/extractors/joern/run.py` (the one-class addition `RunnerTimeout(RunnerError)`, raised where
+  `_run` times out) and `cpg/tests/test_joern_run.py` (a timeout raises it).
 - **Behaviours:** (1) the unit's kind selects the extractor: python and javascript units → P1-04 run + P1-05
   normalizer (+ P1-15 SCIP merge when adopted); shell files → P1-10; JSON/YAML/TOML/Compose/`.mcp.json`/Kiro/
   Dockerfile → P1-11; Markdown → P1-12; each non-Joern extractor writes **one bundle per unit** through
   `ccg.atrest.write_bundle`, so a per-file extractor is run over the unit's files and merged into the unit's bundle; (2) an
   unknown kind is a typed error, never a silent skip; (3) a failure in one extractor fails **that unit's bundle**
-  and nothing else; (4) bundles and keys are created through `ccg.atrest` only; (5) a test per kind asserts the
+  and nothing else, and sets one code of `FAIL_REASONS` (`-p1-graph.md` §1 G4), value-free: **the mapping is this step's:**
+  `blame.HistoryError` from `require_full_history`, called before extraction → `build:shallow-clone`; `RunnerTimeout` →
+  `extract:timeout`; every other `extractors.joern.run.ExtractError` (the base, so a new subclass is covered) and
+  `normalize.core.SourceRefused`, `RuntimeRefused`, `assemble_bundle.BuildError` and any other `HistoryError` → `extract:failed`;
+  `ccg.bundle.BundleError` from `write_bundle` → `bundle:invalid`. **Any other exception** (`subprocess.CalledProcessError`,
+  `TimeoutExpired`, `atrest.AtRestError`, an unforeseen one) **fails that unit alone under `extract:failed`** and never aborts the
+  refresh. The reason is the code only: no exception text, no source bytes. Test: a unit holding a Latin-1 `.py` is driven through
+  `build_unit`, fails alone (a second unit still builds), `failReason == "extract:failed"` and no source byte is in it; one planted exception per row of the mapping and one unlisted (`CalledProcessError`), which fails its unit alone; (4) bundles and keys are created through `ccg.atrest` only; (5) a test per kind asserts the
   extractor is actually invoked (a stub extractor that records calls), so no extractor is reachable only from its
   own tests.
 - **Done / Gate:** `analyst`. **Needs:** 03, 04, 05, 10, 11, 12.
 
 ## P1-20 · refresh — `coder`
 
-- **Files:** `cpg/ccg/refresh.py` (`refresh(system, scope=None) -> RefreshReport`), `cpg/ccg/staleness.py`
+- **Files:** `cpg/ccg/atrest.py` (`sweep_stale_tmp(system, older_than_s=3600)`: removes `.<name>.<16 hex>.tmp` files left in the system's bundle directory by a crashed `write_bundle`; touches nothing else) with its test in `cpg/tests/test_atrest.py`, `cpg/ccg/refresh.py` (`refresh(system, scope=None) -> RefreshReport`; it calls the sweep first, and the report counts what was removed), `cpg/ccg/staleness.py`
   (adds `unit_staleness(unit, head)` to the file P1-18 created with `FAIL_REASONS`; the **one** staleness module,
   which `engine/` imports in P1-39); `refresh` also takes
   `override=None`, and only when one is given opens a broker `refresh` run, fails if the broker is absent, and names
   the `policy` record in its report (`-egress-spec3.md` §2.1, §2.5); `cpg/tests/test_refresh.py`,
   `cpg/tests/test_refresh_live.py`.
 - **Behaviours:** (1) per unit: `build_unit` (P1-44) inside its own try; a failure keeps the unit's last good
-  bundle marked `stale-kept {built commit, failed at, reason}`, the reason one code of `FAIL_REASONS` (value-free:
-  never exception text); a never-built unit is `not-mapped`, and every link
+  bundle marked `stale-kept {built commit, failed at, reason}`, the reason the one code P1-44 (3) assigned (value-free:
+  never exception text; P1-20 sets none itself); a never-built unit is `not-mapped`, and every link
   into it is `possible`/`target-not-mapped` (AC-9b); (2) units are built **one at a time** (6 GB host); (3) after
   all units: assemble (P1-18) → load and swap (P1-19) → a report (units fresh / stale-kept / not-mapped, wall time
   and peak memory per stage); (4) the staleness check compares a unit's built commit with the **local** head by

@@ -107,7 +107,8 @@ internals. Frontend quirks live in the extractor's normalizer and nowhere downst
   `groupings` rejected until P2 with a clear error; policy: `egress` (`local-only` | `hosted`, mandatory per
   repository, `-egress-spec3.md` §4.4), `rcaWindow`, `secretsWindow`, `previewCap`; the `egress` section is the
   system's only allow-list, validated against `egress-v1.schema.json` with checks S1–S5 and `canonical_endpoint`
-  of `-egress-spec3.md` §4.3); `discover_units(repo_root, manifest) -> list[Unit]`
+  of `-egress-spec3.md` §4.3); `discover_units(repo_root, manifest, per_file=True) -> list[Unit]`
+  (it lists the git **index**, `git ls-files`; the `commit` argument is P1-20's, `-p1-linking.md` P1-20 (8), and P1-03 ships without it)
   where `Unit = (unitId, repoId, rootPath, language)` from `pyproject.toml`/`package.json`/`tsconfig.json`
   manifests, a directory-per-language fallback, and per-file shell/config/Markdown units handled by the non-Joern
   extractors (proposal §3.2). `unitId` and `repoId` come only from `ccg.ids`. `cpg/ccg/system.yaml` is this repo's
@@ -149,39 +150,86 @@ internals. Frontend quirks live in the extractor's normalizer and nowhere downst
 
 ## P1-05 · normalizer port (Python and TS/JS) — `tdd-engineer`
 
-Two dispatches (the slice's `normalize.py` is 1,244 lines).
-- **5a files:** `cpg/extractors/joern/normalize/__init__.py`, `core.py` (`Source`, `Scope`, `Builder`,
+Three dispatches: 5a, 5b (the slice's `normalize.py` is 1,244 lines) and the follow-up 5c.
+- **5a files:** `cpg/extractors/joern/normalize/__init__.py`, `core.py` (`Source`, `SourceRefused`, `Scope`, `Builder`,
   `name_norm`, `quote_field`, `path_from`, `Resolver`), `python.py` (`py_resolve`, `py_imports`, `py_spans`,
   `build_scopes` for Python), `cpg/tests/test_normalize_core.py`, `cpg/tests/test_normalize_python.py`.
 - **5b files:** `.../normalize/javascript.py` (`js_resolve`, `js_imports`, `js_type_spans`, astgen walk),
-  `.../normalize/blame.py` (`blame`, `last_changed`, the rule of BF12 for a staged tree that has no `.git`: computed
-  **outside** the sandbox from the source repo), `.../normalize/assemble_bundle.py` (the old `assemble()` that
-  turns raw facts into bundle records and calls `ccg.atrest.write_bundle`), `cpg/tests/test_normalize_javascript.py`,
-  `cpg/tests/slice/test_normalize_equivalence.py`.
+  `.../normalize/blame.py` (`git()`, `parse_porcelain`, `blame`, `last_changed`, `path_last_commit`, `is_commit_id`,
+  `HistoryError`: the rule of BF12 for a staged tree that has no `.git`, computed **outside** the sandbox from the source
+  repo), `.../normalize/assemble_bundle.py` (`assemble` and `build_bundle(unit, raw, repo, commit, *, system, ...)`, which
+  turn raw facts into bundle records and call `ccg.atrest.write_bundle`; the header constants `NORMALIZER`,
+  `NORMALIZER_VERSION`), `cpg/tests/test_normalize_javascript.py`, `test_normalize_assemble.py`,
+  `test_normalize_history_git.py`, `test_normalize_final.py`, `cpg/tests/slice/test_normalize_equivalence.py`.
 - **Behaviours:** (1) per-frontend goldens (small Python and TS files with expected records, one per rule of
   `-bundle-spec3.md` §4–§5: qname grammar, `<anon>#k`, decorators, `fieldAccess`, `Ret` synthesis for
   expression-bodied lambdas, `use == def` kept); (2) the slice's stored bundles are reproduced byte for byte for
-  `falkor-chat/server` and `salesperson` under the **`slice` profile** (P1-06's masking, P1-08's override and P1-09's
-  projection off; header `builtAt`/`sandboxAuditIds` exempt, §8.5), with the artifact sha256 and `0 skipped` recorded
-  (index D9); later steps pin their own named deltas against this baseline; (3) `lineCount`-0 file
-  rule and the span-plus-`ownedRegions` fallback of spec4 §2 (the slice code tested the span only; this step
-  tests both); (4) the normalizer runs under CPython 3.12 (spec4 §3 host-Python note), asserted at start; (5) a
-  shallow clone is a build error (index D1); (5b) **G-4:** a `controlledBy` record with `point == cond` (a CDG
-  self-edge) is dropped in `assemble_bundle.py` while a `data` self-edge (`use == def`) is kept, each with a test; (6) every emitted bundle passes `ccg.bundle.validate`; (7) the bundle is written only through
-  `ccg.atrest.write_bundle`: the file is `0600` and its directory `0700` under `bundles/<system>/`, under umask 0 as well.
-- **Done:** `build_bundle(unit, raw_facts, repo, commit) -> path`. **Gate:** `analyst`. Python has no
-  primary-constructor owned region, so 5b's `ownedRegions` test uses a synthetic region lying outside the
-  symbol's span, and no fixture row exercises it (0 of the slice's 4,943 symbols carry one).
+  `falkor-chat/server` and `salesperson` (P1-06's masking, P1-08's override and P1-09's projection not yet written;
+  header `builtAt`/`sandboxAuditIds` exempt, §8.5), with the artifact sha256 and `0 skipped` recorded (index D9). **A
+  later step's change to the output is a named delta, never an edit of the stored bundles** (the delta list, 5c). (3) `lineCount`-0 file rule and the span-plus-`ownedRegions` fallback of spec4 §2; (4) the
+  normalizer runs under CPython 3.12 (spec4 §3 host-Python note), asserted at start; (5) a shallow clone is a build error (index D1);
+  (5b) **G-4:** a `controlledBy` record with `point == cond` (a CDG self-edge) is dropped in `assemble_bundle.py` while a
+  `data` self-edge (`use == def`) is kept, each with a test; (6) every emitted bundle passes `ccg.bundle.validate`; (7) the
+  bundle is written only through `ccg.atrest.write_bundle`: the file is `0600` and its directory `0700` under
+  `bundles/<system>/`, under umask 0 as well.
+- **Done (5a, 5b):** `build_bundle(unit, raw_facts, repo, commit, ...) -> path`. **Gate:** `analyst`.
+
+### 5c · follow-up: three contract rulings — `tdd-engineer`
+
+Small, tests first, one dispatch; `analyst` gate. **Needs:** 5b. It and P1-06 both edit `assemble_bundle.py` and the
+delta list below; the order is 5c, P1-06, P1-08, and P1-09 does not edit the file.
+- **Files:** `assemble_bundle.py` (`ownedRegions` emission, the lambda rule's use site), `core.py` (`fingerprint`,
+  `Scope.lambda_decos` removal), `python.py` (the lambda branch), `cpg/tests/test_normalize_assemble.py`,
+  `test_normalize_python.py`, `test_normalize_core.py`, `cpg/tests/slice/test_normalize_equivalence.py` (the delta list).
+- **(a) A source file that is not UTF-8 fails its unit** (index D12 has the rule). `Source.text` already raises
+  `SourceRefused` naming the file; 5c adds the end-to-end tests: a Latin-1 `.py` and a Latin-1 `.ts` in a unit each raise
+  `SourceRefused` from `build_bundle`, the message names the file and carries none of its bytes, and the work area holds no
+  bundle after (`write_bundle` is the last call). **Why not surrogateescape:** `ast.parse` of such text raises
+  `UnicodeEncodeError` and the canonical writer (`ensure_ascii=False`, UTF-8) cannot encode a lone surrogate (both executed).
+  **Why not a skip:** a new `skippedFiles` reason is a closed-enum change of `-bundle-spec4.md` §1 (validator, schema,
+  registry, probe) for a case in 0 of the 382 tracked Python and JS/TS sources outside the census exclusions (checked).
+  **Reversal trigger:** a system whose units fail on this; then a `-bundle-spec6.md` adds the reason. `blame.py` keeps
+  `surrogateescape` on git's output, which never reaches a bundle field. The mapping to a failure code is P1-44's.
+- **(b) The lambda-as-decorator record is removed.** `run(lambda: 1)` is a call that takes a lambda, which `extract.sc`
+  reports as a decorator application; spec3 §5.12 defines `decorator` as one on a function, method or type, so the record is
+  a slice artifact (3 of the stored `falkor-chat/server` bundle's 213, none in `salesperson`). Delete `Scope.lambda_decos`
+  (`core.py`), its assignment in `python.py` (the lambda branch keeps only a count, report key `lambdaDecoratorsDropped`) and
+  the `+ s.lambda_decos` term in `assemble_bundle.py`'s decorator loop, and invert the golden that asserts the record
+  (`test_normalize_assemble.py`). `extract.sc` is untouched, so P1-04's raw-fact equivalence holds. **Delta:** the stored
+  bundle minus every `decorator` record whose `targetId` is a `lambda`-kind symbol, `counts.decorator` lowered by the number
+  removed, asserted to be 3. A real decorator on a named function beside it is unchanged.
+- **(c) `ownedRegions` is a real contract with no P1 producer.** It is a schema field (`bundle-v1.schema.json`, validated
+  strictly sorted by `ccg/bundle.py`), a spec3 §5.3 record field ("exactly when the symbol has owned regions"), a
+  `fingerprint` input and a blame input (spec4 §2). The one input is `Scope.owned` (`core.py`: extra `(first, last)` line
+  pairs); a frontend with primary-constructor initializers (Kotlin/Java, P2) sets it, and Python and TS/JS do not (0 of the
+  slice's 4,943 symbols). Only blame reads it today. 5c wires the rest: `assemble` emits `ownedRegions` (sorted,
+  de-duplicated `[start, end]` pairs) exactly when `s.owned` is non-empty, and `core.fingerprint` takes lines
+  `lineStart..lineEnd` plus every line of the regions (the sorted, de-duplicated union, spec3 §5.3). Tests are synthetic (a
+  symbol with a region outside its span: the field is present and the fingerprint differs from the span-only one); a symbol
+  with none has no field and the stored fingerprints do not move.
+
+**The delta list** (`tests/slice/test_normalize_equivalence.py`; P1-05 (2) states the rule). Whichever of 5c and P1-06
+lands first creates it. The stored header carries `tools.normalizerVersion` `"0.1"`, so each delta is
+`(version_literal, apply)`: it pins its own literal (never read from `NORMALIZER_VERSION`), `apply` edits the records and
+`counts`, and the expected header takes the last applied literal; a test asserts the **last** delta's literal equals
+`NORMALIZER_VERSION`, so a bump without a delta, or a delta without a bump, fails. A step bumps if it changes output code
+even when the stored bundles do not change (its delta then edits no record). Versions follow landing order; the planned
+order gives 5c `0.2`, P1-06 `0.3`, P1-08 `0.4`.
 
 ## P1-06 · `Cond.code` literal masking (F-9) — `graph-dba`
 
-- **Files:** `cpg/extractors/joern/normalize/mask.py` (`mask_cond_code(code: str) -> str` replaces each string
-  literal that fails `ccg.bundle.screen_fails` or `name_fails` with `"…"`), wiring in `assemble_bundle.py`,
-  `cpg/tests/test_mask_cond.py`.
+- **Needs:** 05. Edits `assemble_bundle.py` and the delta list with 5c (order in 5c: 5c, then this).
+- **Files:** `cpg/extractors/joern/normalize/mask.py` (new; `mask_cond_code(code: str) -> str` replaces each string
+  literal that fails `ccg.bundle.screen_fails` or `name_fails` with `"…"`), `assemble_bundle.py` (one call site: the `cond`
+  record's `"code": collapse(c["code"], 200)` becomes `collapse(mask_cond_code(c["code"]), 200)`, masking before the cut so a
+  literal is never cut mid-way; the cond **sort key** keeps the raw `code`, so ordinals and point ids do not move),
+  `cpg/tests/test_mask_cond.py`, `cpg/tests/test_normalize_assemble.py` (a planted 32-hex literal in a condition is masked
+  in the written bundle), `cpg/tests/slice/test_normalize_equivalence.py` (its delta, version `0.3` in the planned order: it
+  edits only the `cond.code` of stored records that masking changes, possibly none).
 - **Behaviours:** a literal passing the screen is kept verbatim; a failing one (32-hex, token prefix,
   UUID-shaped) becomes `"…"`; escapes and nested quotes in Python and TS template literals are handled; a
   condition with no literal is byte-identical; `Cond.code` after masking never contains a string that
-  `screen_fails` flags (a property test over generated literals).
+  `screen_fails` flags (a property test over generated literals); the delta lists every stored cond that masking changes.
 - **Done:** hard prerequisite of P1-41 and of any non-proving build. **Gate:** `analyst`.
 
 ## P1-07 · writer done-condition (F-10) — `tdd-engineer`
@@ -204,16 +252,43 @@ Two dispatches (the slice's `normalize.py` is 1,244 lines).
   `keyPath`s gives two hashes. `entry_hmac` reproduces `-bundle-spec5.md` §9.1, EH-31 for the id-domain form, with
   expected hex read from the spec text. The key is read only through `ccg.atrest.hmac_key` (P1-02), which refuses
   both of spec5 §9's test keys; tests pass a test key to `entry_hmac` directly.
+- **Fail closed (W4 statement).** Hostile `keyPath` or value input makes every writer helper **withhold**: `bind_value`,
+  `bind_fields`, `launch_default` and `default_fields` return `None` or omit the field, and **never raise with the input in the
+  message**. A `keyPath` that does not parse (`BundleError`, `ValueError`, `json.JSONDecodeError`) cannot be judged, so it is
+  withheld; `bundle._keypath_segments` wraps its `json.loads` into `BundleError` and caps any echoed key text at 80
+  characters. Tests: `'a['`, `'[01]'`, `'["\\a"]'`, `'["\\u00"]'` and a 300 kB key each return `None`; a raised message holds no key text beyond the cap.
+- **Text with no UTF-8 encoding** (a lone surrogate, producible by a YAML `"\uD800"` escape; a non-UTF-8 *file* already fails its unit,
+  index D12): `writer_rules.encodable(text) -> bool` is the one test. `default_fields` and `bind_fields` withhold on `False`; the
+  config extractor (P1-11) **drops that entry** at its value-read step (report counter `unencodableEntries`, the file's other entries
+  stand). It is never hashed (`valueHash` is required, so it cannot be withheld alone) and never emitted. `entry_hmac` keeps raising
+  for a caller bug.
+- **The AST guard** (`test_only_writer_rules_writes_argv_fields_in_the_extractors`) widens its key set from `command`/`args` to
+  `{command, args, bindValue, default, valueHash, defaultHash}` (P1-14 adds `bindParts`), with a planted-offender row per key
+  (dict literal, keyword, subscript store). For the four non-argv keys the guard is the only control (the validator cannot recompute a
+  hash or know the declared services), and `writer_rules.py`'s docstring says so; it is blind to dynamic keys (`dict(zip(...))`, a variable key).
 - **Needs:** P1-13 (`-bundle-spec5.md` fixes `entry_hmac`'s bytes and EH-31).
 - **Done:** a `writer_rules` import is the only way an extractor decides these rules. **Gate:** `analyst`;
   `security-expert` advisory (HMAC, SA-1).
 
 ## P1-08 · `jssrc2cpg` override, `skippedFiles`, coverage probe — `graph-dba`
 
-- **Files:** `cpg/extractors/joern/skipped.py` (`skipped_files(unit, parsed, override) -> list[{path, reason}]`),
-  `cpg/extractors/joern/run.py` (override flag, if any), `cpg/tests/test_skipped_files.py`
+- **Needs:** 05, 5c, P1-06 (it edits `assemble_bundle.py` and the delta list after them).
+- **Files:** `cpg/extractors/joern/skipped.py` (new; `skipped_files(unit, parsed: Mapping[str, bool], override) ->
+  list[{path, reason}]`: pure, never reads the file system; with `override=True` an unparsed non-test source contradicts the override, so it raises `ValueError` rather than listing `frontend-ignore` (a third outcome spec4 does not state; production always passes `override=False`); `parsed` maps every candidate source path, **repo-relative
+  POSIX**, to whether the frontend gave it a `file`; returns `[]` for any language but `javascript`),
+  `cpg/extractors/joern/run.py` (override flag, if any), **`assemble_bundle.py` (this step owns the edit):** the wiring
+  builds `parsed` by calling the tested helper `candidate_sources(stage, ...)` (this step's; it shares `run._count_sources`'
+  predicate, non-empty non-symlink files, so the wiring never walks the stage itself) over `raw.stage`, rebasing each unit-relative name to repo-relative
+  with `Builder.P`, `True` when the name is in `lang_files(facts, lang)`; `assemble(..., skipped=None)` writes
+  `header.skippedFiles` exactly when non-empty and **removes every listed path from `files`**, so no `file`, symbol or
+  derived record exists for it (the writer applies `test` whether or not Joern parsed the file); `cpg/tests/test_normalize_assemble.py`
+  (wiring), `cpg/tests/slice/test_normalize_equivalence.py` (its delta, `0.4` in the planned order: `salesperson`'s stored
+  header gains `skippedFiles`, 33 paths on the fallback = 28 `test` + 5 `frontend-ignore`, header-only because the stored
+  bundle already lacks those files; `falkor-chat/server` has no delta, Python being `[]` (107 `.py` = 107 `file`
+  records); with an override the five i18n files also gain `file` records and the delta says so), `cpg/tests/test_skipped_files.py`
   (the spec4 §1 coverage probe: a table test over language × reason × overlap × location × override), a note in
   `cpg/extractors/joern/README.md` recording the mechanism.
+- **Recorded fact:** `AstGenRunner$.AstGenDefaultIgnoreRegex` is the `jssrc2cpg` folder-ignore constant.
 - **First behaviour (a probe, reported):** does `jssrc2cpg` 4.0.579 accept any switch that re-includes
   `i18n`/`test` paths? Run `jssrc2cpg --help`, its config object and one experiment on a 3-file copy that keeps
   paths (a staged-copy rename is not an escape: it changes `qname`s). Record the result in the README.
@@ -228,11 +303,22 @@ Two dispatches (the slice's `normalize.py` is 1,244 lines).
 
 Index §5 decides what and why. Scope: python and TS/JS only (the C# guard of `-p0-2.md` §15 is reported not closed:
 not a P1 language).
-- **Files:** `cpg/extractors/joern/extract.sc` (the projection), `cpg/extractors/joern/normalize/points.py`
-  (join fixes: a Python `for` CDG node coded `iteratorNonEmptyOrException` maps to the `for` statement's condition
-  point (36 misses); the contains-join that resolves the label `not (self._open or ...)` to the operand
-  `self._open` is fixed so the whole condition point is found (4 misses)), `cpg/tests/golden/projection/*.json`,
-  `cpg/tests/test_projection_golden.py`, `cpg/tests/slice/test_projection_not_regressed.py`.
+- **Files:** `cpg/extractors/joern/extract.sc` (the projection; edited only here, after P1-04's port),
+  `cpg/spikes/frontend-fitness/s28_core.py` (**the one home of the join fixes**: `resolve_endpoint`, cond branch, line match,
+  then exact, whitespace-insensitive and the `contains` tier at ~line 277), `cpg/tests/test_s28_metrics.py`
+  (new mutants on each fix), `cpg/tests/golden/projection/*.json`, `cpg/tests/test_projection_golden.py`,
+  `cpg/tests/slice/test_projection_not_regressed.py`, and `cpg/tests/slice/test_extract_equivalence.py` (P1-04's raw-fact
+  comparison: every fact kind but `d` and `cb` stays equal to the slice's; those two are governed by (5)'s subset rule).
+  **The two join fixes are scorer-side:** a Python `for` CDG node coded `iteratorNonEmptyOrException` resolves to the `for`
+  statement's condition point (36 misses); the label `not (self._open or ...)` resolves to the whole condition, not the
+  operand `self._open` the `contains` tier picks (4 misses). Both are in `s28_core.resolve_endpoint`; `s28_metrics.py` imports it and
+  scores (`s28_run.py` only extracts facts), and P1-34 scores with `s28_metrics.py`, so **P1-09's recall line and P1-34's 465/481
+  entry check (`-p1-gates.md` P1-34) are scored by the same function, by construction**, and neither needs a copy. The committed normalizer has no such join (`assemble_bundle.py`
+  joins `cb` and `d` by CPG node id: `point_of_use`, `cond_pid`), so this step does not edit it; if a fix proves to need it, the
+  step stops and asks `teco`. **Owed: `data-scientist` is consulted before the `s28_core` change merges**, because it changes
+  how endpoints are matched and so the metric (`-p1-ml.md` §1 F1 already counts the fix; the consult confirms the scorer's
+  method, `graph-dba` does not decide it). Tests that pin P0 figures are re-run; a change in a pinned P0 figure is reported, not
+  silently re-pinned.
 - **Behaviours (ordered):** (1) R1: `defsOf` also follows a `REACHING_DEF` whose source is an earlier same-name
   identifier that is not an assignment target, through its own reaching definitions (67 python misses); (2) R2:
   the receiver of a `<init>` call is defined by that call (0 python, JS and Java gains); (3) **R3 as a projection
@@ -254,7 +340,7 @@ not a P1 language).
 - **Done:** a report line with the dev recall reached (with its cluster interval) and the list of fixable python
   misses still open. P1-34's entry value is 465/481 against a dev ceiling of 467 (`-p1-ml.md` §3.1), so at most 2 of
   the 159 fixable misses may stay open, and **the expected outcome is a flag that stays false** (P1-34 "not run"); this step still ships because R1 loses no pair and every fix
-  helps the call-level-versus-flow question. **Gate:** `analyst`; `data-scientist` reads the report line.
+  helps the call-level-versus-flow question. **Gate:** `analyst`; `data-scientist` reads the report line and is **consulted on the `s28_core` change before it merges** (owed).
   **Risk:** Java-heap blowups in the "follow every source" variant (§a2.2.1) — do not adopt it.
 
 ## P1-10 · shell extractor — `coder`
@@ -329,6 +415,7 @@ identity tuple) and the graph note. **Gate:** `analyst`; `security-expert`.
   defines no key-reading function), `cpg/tests/test_answer.py`, and the P1-11 tests whose expectations change: W6 withholds `bindValue` for `ip` and
   `external` URL hosts, and W7 plus spec5 §1 give every P1-11 URL entry `bindParts`, so those bundles become `"1.1"`
   with `bindKeyCheck` (spec5 §6.1, §6.2).
+- **Guard:** `bindParts` joins the key set of P1-07's AST guard, with its planted-offender rows; only `writer_rules.bind_parts_allowed` writes it.
 - **Key epoch (spec5 §5.4):** this step supplies `bind_parts_usable` and its test (a bundle planted under spec5's
   second test key is loaded but its `bindParts` are not usable; the same bundle under the first key is the positive
   control); BR-1–BR-3's `usable` column. P1-17 (`bind.py`) owns the binding outcomes and the `bind-key-mismatch`
