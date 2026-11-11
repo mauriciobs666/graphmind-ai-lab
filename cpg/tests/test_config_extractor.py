@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from ccg import bundle, ids
+from ccg import atrest, bundle, ids, valuehash
 from extractors.common import writer_rules as wr
 from extractors.config import extract as X
 from extractors.config import formats as F
@@ -472,6 +472,7 @@ def _bundle_for(res: X.ConfigResult, path: str) -> list[dict]:
                       "normalizerVersion": "0.0.1", "extractScript": "none", "extractScriptHash": "0" * 64},
             "sandboxAuditIds": ["0f8fad5b-d9cb-469f-a165-70867728950e"], "egressMode": "offline", "flowProjected": False,
             "fieldDepthCap": 3, "vendoredDirs": [], "history": "available", "counts": counts}
+    head.update(wr.bind_header_fields(KEY, recs))          # spec5 §1: "1.1" and bindKeyCheck exactly when an entry carries parts
     return [head, file_rec, *by_type["configEntry"], *by_type["launchFact"]]
 
 
@@ -1024,3 +1025,135 @@ def test_the_declared_set_uses_the_same_normalised_names_so_a_bind_value_still_r
     assert "box" in r3.declared_services and binds(r3, "compose.yaml") == {"services.a.environment.B_HOST": "box"}
     r2 = run({"web.compose.yaml": "services:\n  web:\n    environment:\n      A_HOST: peer\n"}, extra_declared_services=[" peer "])
     assert binds(r2, "web.compose.yaml") == {"services.web.environment.A_HOST": "peer"}
+
+
+# --- P1-14: bindParts (spec5 §6.1, §6.2, §1) --------------------------------------------------------------------
+
+def _parts(res: X.ConfigResult, path: str) -> dict[str, dict]:
+    return {k: r["bindParts"] for k, r in entries(res, path).items() if "bindParts" in r}
+
+
+def test_url_entries_carry_parts_and_the_capability_url_carries_no_bind_value():
+    r = run({"a.json": json.dumps({"notify": {"url": "https://ntfy.sh/x7k2-q9w4-m1p8-z3v6"}, "svc_url": "http://localhost:8000/mcp",
+                                   "base_url": "http://localhost:8000/api/v1", "port": "8200", "timeout_url": "http://localhost:1/"})})
+    e = entries(r, "a.json")
+    assert "bindValue" not in e["notify.url"] and e["notify.url"]["bindParts"]["hostKind"] == "external"
+    assert "host" not in e["notify.url"]["bindParts"]
+    assert e["svc_url"]["bindValue"] == "http://localhost:8000/mcp" and e["svc_url"]["bindParts"]["host"] == "localhost"
+    assert "bindValue" not in e["base_url"] and len(e["base_url"]["bindParts"]["pathHmacs"]) == 2    # a multi-segment base binds by parts
+    assert "bindParts" not in e["port"] and "bindValue" in e["port"]                               # a non-URL value has none
+    assert "bindParts" in e["timeout_url"]                                                          # `url` is a role token here
+    for rec in e.values():                                                                          # the URL text itself is never stored
+        assert "ntfy.sh" not in json.dumps({k: v for k, v in rec.items() if k != "keyPath"})
+
+
+def test_parts_are_the_keyed_parts_of_the_entrys_text_under_the_run_key():
+    r = run({"compose.yaml": "services:\n  api:\n    environment:\n      DB_URL: redis://api:6379\n      EXT_URL: https://example.org/v1\n"})
+    e = entries(r, "compose.yaml")
+    for kp, text in (("services.api.environment.DB_URL", "redis://api:6379"), ("services.api.environment.EXT_URL", "https://example.org/v1")):
+        assert e[kp]["bindParts"] == valuehash.bind_parts(KEY, text, {"api"})
+    assert e["services.api.environment.DB_URL"]["bindParts"]["hostKind"] == "service"
+    assert e["services.api.environment.EXT_URL"]["bindParts"]["hostKind"] == "external"
+    other = X.extract_config(REPO, {"compose.yaml": "services:\n  api:\n    environment:\n      DB_URL: redis://api:6379\n".encode()},
+                             key=bytes(range(96, 128)))
+    assert entries(other, "compose.yaml")["services.api.environment.DB_URL"]["bindParts"]["hostHmac"] != \
+        e["services.api.environment.DB_URL"]["bindParts"]["hostHmac"]                            # the key matters
+
+
+def test_every_bind_parts_traces_to_bind_parts_fields(monkeypatch):
+    seen: list[str] = []
+    real = wr.bind_parts_fields
+
+    def spy(key, kpath, text, **kw):
+        out = real(key, kpath, text, **kw)
+        if out:
+            seen.append(kpath)
+        return out
+    monkeypatch.setattr(X.wr, "bind_parts_fields", spy)
+    res = X.extract_config(REPO, repo_files(), key=KEY)
+    emitted = [r["keyPath"] for r in res.records if r["type"] == "configEntry" and "bindParts" in r]
+    assert emitted and sorted(emitted) == sorted(seen)
+    monkeypatch.setattr(X.wr, "bind_parts_fields", lambda *a, **k: {})
+    again = X.extract_config(REPO, repo_files(), key=KEY)
+    assert not any("bindParts" in r for r in again.records) and again.header_fields == {}
+
+
+def test_the_header_fields_follow_the_version_rule():
+    with_url = run({"a.json": '{"svc_url": "http://localhost:8000/"}'})
+    assert with_url.header_fields == {"bundleSchemaVersion": "1.1", "bindKeyCheck": atrest.bind_key_check(KEY)}
+    assert run({"a.json": '{"port": "8200"}'}).header_fields == {}                              # no parts: the header stays "1.0"
+    assert run({}).header_fields == {}
+
+
+@pytest.mark.parametrize("path", _GOLDEN_PATHS)
+def test_each_file_header_is_one_point_one_exactly_when_it_has_parts(repo1, path):
+    recs = _bundle_for(repo1, path)
+    has = any("bindParts" in r for r in recs if r["type"] == "configEntry")
+    assert recs[0]["bundleSchemaVersion"] == ("1.1" if has else "1.0") and ("bindKeyCheck" in recs[0]) == has
+    bundle.validate(recs)
+
+
+def test_the_fixture_repo_has_parts_on_url_entries_and_none_on_other_values(repo1):
+    texts = _audit_texts(repo1)
+    cfg = [r for r in repo1.records if r["type"] == "configEntry"]
+    parts = [r for r in cfg if "bindParts" in r]
+    assert len(parts) >= 5
+    for r in cfg:
+        if "bindValue" in r and "://" in r["bindValue"]:   # W7: no clear URL without parts
+            assert "bindParts" in r, r["keyPath"]
+        if "bindParts" in r:
+            assert wr.bind_parts_allowed(r["keyPath"], texts[r["id"]], binding_role=True,
+                                         declared_services=repo1.declared_services), r["keyPath"]
+            assert bundle.parse_bind_url(texts[r["id"]]) is not None
+
+
+@pytest.mark.parametrize("value", ["http://169.254.169.254/latest", "http://169.254.169.254:80/", "http://[fe80::1]:8000/",
+                                   "http://[fd00:ec2::254]/latest", "http://100.100.100.200/"])
+def test_a_link_local_url_gets_external_parts_with_no_clear_host_and_no_bind_value(value):
+    r = run({"a.json": json.dumps({"api_url": value})})
+    e = entries(r, "a.json")["api_url"]
+    host = bundle.parse_bind_url(value).host
+    assert "bindValue" not in e and e["bindParts"]["hostKind"] == "external" and "host" not in e["bindParts"]
+    assert host not in json.dumps(e) and host.strip("[]") not in json.dumps(e)
+    bundle.validate(_bundle_for(r, "a.json"))
+
+
+def test_an_argv_element_url_and_a_url_without_a_role_carry_no_parts():
+    r = run({"compose.yaml": "services:\n  a:\n    command: [\"app\", \"http://localhost:8000/mcp\"]\n    labels:\n      note: http://localhost:8000/x\n"})
+    assert not _parts(r, "compose.yaml")
+
+
+def test_a_lone_surrogate_url_drops_the_entry_as_before_and_never_raises():
+    r = run({"a.yaml": 'svc_url: "http://x\\uD800/"\nok_url: "http://localhost:8000/"\n'})
+    assert r.report["unencodableEntries"] == 1 and "ok_url" in entries(r, "a.yaml")
+
+
+def test_a_yaml_alias_gets_parts_only_if_both_ends_pass_the_name_rule():
+    clean = run({"a.yaml": 'base_url: &a "http://localhost:9000/"\nsvc_url: *a\n'})
+    assert set(_parts(clean, "a.yaml")) == {"base_url", "svc_url"}
+    dirty = run({"a.yaml": 'secret_url: &a "http://localhost:9000/"\nsvc_url: *a\n'})        # the anchor's key fails the name rule (W3)
+    e = entries(dirty, "a.yaml")
+    assert "bindParts" not in e["secret_url"] and "bindParts" not in e["svc_url"] and "bindValue" not in e["svc_url"]
+
+
+def test_audit_texts_cover_every_entry_that_carries_bind_parts_and_the_audit_finds_nothing(repo1):
+    """P1-11 Done: `audit_records` gets the raw text of every `bindParts` entry, so it can recompute the parts."""
+    texts = _audit_texts(repo1)
+    with_parts = [r["id"] for r in repo1.records if r["type"] == "configEntry" and "bindParts" in r]
+    assert with_parts and all(i in texts for i in with_parts)
+    assert wr.audit_records(repo1.records, key=KEY, declared_services=repo1.declared_services, texts=texts) == []
+    wrong = {**texts, with_parts[0]: "http://elsewhere.example.org/x"}              # the text decides: other text, other parts
+    assert wr.audit_records(repo1.records, key=KEY, declared_services=repo1.declared_services, texts=wrong)
+
+
+def test_audit_over_an_adhoc_run_with_urls_covers_every_parts_entry():
+    values = {"notify.url": "https://ntfy.sh/x7k2-q9w4-m1p8-z3v6", "svc_url": "http://localhost:8000/mcp", "a_url": "http://168.63.129.16/x",
+              "b_url": "http://[2002:a00:1::1]/", "c_url": "http://10.0.0.5:80/api"}
+    r = run({"a.json": json.dumps({"notify": {"url": values["notify.url"]}, **{k: v for k, v in values.items() if "." not in k}})})
+    texts = {rec["id"]: values[rec["keyPath"]] for rec in r.records if rec["type"] == "configEntry"}
+    parts = [rec for rec in r.records if rec["type"] == "configEntry" and "bindParts" in rec]
+    assert len(parts) == 5 and all(rec["id"] in texts for rec in parts)
+    assert wr.audit_records(r.records, key=KEY, declared_services=r.declared_services, texts=texts) == []
+    for rec in parts:                                                                  # link-local, 6to4, capability: never a clear host
+        if rec["keyPath"] in ("a_url", "b_url", "notify.url"):
+            assert rec["bindParts"]["hostKind"] == "external" and "host" not in rec["bindParts"]

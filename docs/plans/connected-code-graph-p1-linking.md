@@ -58,12 +58,22 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
   gain `shell-mcp-call` by hand or the pack goes unguarded.
 - **Behaviours:** a rule matching a call site of the command `mcp-call` in a shell `<script>` extracts the tool
   from argument `a0` and emits `CONSUMES mcp_tool` with the key; a literal gives `confirmed`/`key-match`; a value
-  that is a shell variable or sits under `eval` gives `possible` with the registry's `shell-dynamic` code; the
+  that is a shell variable or a call site under `eval` gives `possible`/`runtime-built` on the `CONSUMES` edge (`shell-dynamic` is
+  registered only on `shell DATA` and `callsite`, so `validate_pack` rejects it there; the registry is not widened); the pack
+  matches the inner call site that `-p1-extraction.md` P1-10 10b adds for an `eval` string, so **P1-46 Needs 10b**; the
   negatives file (required by `ccg.rulepack.load_pack` for signature-style packs; add it regardless) covers a
   comment, a string containing the word, and `mcp-call` as an argument to another command; the pack passes
   `ccg.rulepack.validate_pack`. If the pack format cannot express a shell-file scope (the `fastmcp` rules scope by
   imports), that gap is **returned to the architect as a finding before any engine change**, not worked around in
   the runtime.
+- **Known limits, pinned, not fixed in P1.** The tool is `a0` as written, so `mcp-call --json reindex` yields a `confirmed`
+  consumer of the key `--json` (the real `reindex` edge is lost), and a prefix wrapper (`sudo`, `exec`, `nohup`, `bash -c`) is an
+  under-match, never an over-match. Option skipping is not P1 work: no real `mcp-call` exists in the repository (the only
+  scripts that use it are the fixtures, which take no flags), so there is no flag grammar to model, and a generic "skip `-x`
+  words" rule is wrong whenever an option takes a value (`--timeout 5 reindex` would give the key `5`). Neither the pack format nor the shell
+  extractor changes. The P1-46 tests pin both outcomes by name as known limits, and fixture rows LNK-19 and LNK-20 and the shell
+  rows are unchanged (flag-free). **P2 backlog item**, owner `architect`: a per-command flag grammar in the pack format (which words
+  are options, which take a value) once a real wrapper is in scope, with wrapper handling in the same item.
 - **Not a pack (D10):** Compose mappings and the `.mcp.json` launch chain are linker code (P1-17).
 - **Gate:** `analyst`; mutation check on the literal/dynamic split.
 
@@ -80,12 +90,21 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
   (`resolved: False, leaf: True`); behaviour (3) reads it from there, not from `consumers`. (b) `run_packs` raises
   `UnsupportedSubject` on `paper-inhouse-bus` (a `query` subject); six of the seven packs run over s14a, and the caller
   names the pack set explicitly. (c) `matchers.py` reuses `ccg.packrt.httpkey.normalize_path_rfc`, no second normalizer.
+- **Trust rules for launch and binding facts** (they come from untrusted repo files): (a) the linker never dials, opens or reads a
+  path named by a `mount`, `port` or `command` fact; it resolves lexically only. (b) A `mountPath` is joined to its compose file's
+  directory and normalised without touching the file system; the result must lie under a repository path of the system manifest
+  (a sibling repo is legal, `../../fx-job`), else the link is `possible`/`target-not-mapped`; an absolute path or one that leaves
+  every manifest repo is never followed. (c) A service's identity is `(origin, path, service)`: a `.mcp.json` server and a Compose
+  service of one name are different services. (d) A `bindValue` or `bindParts` host in `169.254.0.0/16`, `fe80::/10` or
+  `fd00:ec2::254` is never bindable, whatever writer produced the bundle (P1-11 already withholds it, in `writer_rules.bind_fields`). (e) `port` facts carry no published/container distinction in P1 (`-p1-extraction.md` P1-11): a loopback consumer's match is reported with that residual until `portKind` exists. Tests: `../../../../etc`
+  and `/var/run` bind nothing; same-name `.mcp.json` and Compose services stay apart; a metadata-address `bindValue` planted by
+  hand binds nothing.
 - **Interface:** `Link = (linkId, kind, keyNorm, provider anchor, consumer anchor, status, reason, paramMap,
   evidence: ordered BOUND_BY and LIFTED_VIA entries)`; ids from `ccg.ids.link_id` (one `Link` per consumer
   **symbol**, `-bundle-spec3.md` BF6); `status` is the weakest hop.
 - **Behaviours:** (1) both keys known and matching → `confirmed`/`key-match`; (2) partial or name-only → `possible`
   (`partial-key`, `name-only-provider`); (3) a fully unknown key with no binding → one `possible` link per
-  provider of the kind (`unknown-key`), none collapsed; (4) **URL binding:** a consumer URL's port is matched to
+  provider of the kind (`unknown-key`), none collapsed; **the link's reason is the consumer call site's own when that is `shell-dynamic`**: a `possible`/`shell-dynamic` site (an `eval` string, P1-10 10b) gives the `Link` reason `shell-dynamic`, which wins over `unknown-key` and `runtime-built` (the linker derives it from the site, since the `CONSUMES` edge cannot carry it), as fixture row LNK-20 expects, which stays `gate: P1` as written once 10b, P1-46 and this rule land; (4) **URL binding:** a consumer URL's port is matched to
   launch facts (explicit flags, env-defaulted values, framework defaults from the pack, Compose mappings), the
   path to the unit's mount paths; on `localhost`, several deployments of one unit (8000 and 8200 serving
   `falkor-chat/server`) are one provider and the link is `binding-confirmed`; two different units on one port are
@@ -98,7 +117,10 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
   with `ord` 0 the entry nearest the consumer; `ord` counts per (link, site) and every `BOUND_BY` edge carries its
   `siteId` (`-p1-graph.md` §1–§2; `-answer-spec2.md` §3.2); (7) `File.role = 'example'` makes every link through it
   `possible`/`example-config`; a prompt mention is `possible`/`prompt-mention`; documentation snippets are not
-  callers; (8) a link into a unit never built is `possible`/`target-not-mapped`; (9) O-9, the `-p1-graph.md` §2 rule for every link kind: a
+  callers; **mention call sites have this consumer:** the linker binds only tool mentions (an `mcp__<server>__<tool>` name, or a
+  bare name the extractor matched against `known_tools`, P1-44) to providers of that tool, **stripping a leading `./` from a callee
+  name before matching** (the extractor keeps names as written, spec3 §5.6); script and command mentions (about 94% of the
+  corpus's 1,868) are inert in P1: no link, they stay `CallSite` nodes. Test: `./x.sh` and `x.sh` match one provider; a script mention makes no link; (8) a link into a unit never built is `possible`/`target-not-mapped`; (9) O-9, the `-p1-graph.md` §2 rule for every link kind: a
   `VIA`'s reason is `binding-confirmed` iff the `VIA` is `confirmed` and the link has a `BOUND_BY` edge with that site's
   `siteId` (a confirmed unbound site keeps `key-match`; a `possible` site keeps its own reason), and `Link.reason` is
   `binding-confirmed` iff some confirmed site is; mutants: dropping the `siteId` condition, deriving the `Link` reason
@@ -184,19 +206,26 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 - **Behaviours:** (1) the unit's kind selects the extractor: python and javascript units → P1-04 run + P1-05
   normalizer (+ P1-15 SCIP merge when adopted); shell files → P1-10; JSON/YAML/TOML/Compose/`.mcp.json`/Kiro/
   Dockerfile → P1-11; Markdown → P1-12; each non-Joern extractor writes **one bundle per unit** through
-  `ccg.atrest.write_bundle`, so a per-file extractor is run over the unit's files and merged into the unit's bundle; (2) an
+  `ccg.atrest.write_bundle`, so a per-file extractor is run over the unit's files and merged into the unit's bundle; **the unit's header is built from the merged record set** (see (8)); (2) an
   unknown kind is a typed error, never a silent skip; (3) a failure in one extractor fails **that unit's bundle**
   and nothing else, and sets one code of `FAIL_REASONS` (`-p1-graph.md` §1 G4), value-free: **the mapping is this step's:**
   `blame.HistoryError` from `require_full_history`, called before extraction → `build:shallow-clone`; `RunnerTimeout` →
   `extract:timeout`; every other `extractors.joern.run.ExtractError` (the base, so a new subclass is covered) and
-  `normalize.core.SourceRefused`, `RuntimeRefused`, `assemble_bundle.BuildError` and any other `HistoryError` → `extract:failed`;
+  `SourceRefused` (the one class of `extractors/common/errors.py`, whichever extractor raises it), `normalize.core.RuntimeRefused`, `assemble_bundle.BuildError` and any other `HistoryError` → `extract:failed`;
   `ccg.bundle.BundleError` from `write_bundle` → `bundle:invalid`. **Any other exception** (`subprocess.CalledProcessError`,
   `TimeoutExpired`, `atrest.AtRestError`, an unforeseen one) **fails that unit alone under `extract:failed`** and never aborts the
   refresh. The reason is the code only: no exception text, no source bytes. Test: a unit holding a Latin-1 `.py` is driven through
   `build_unit`, fails alone (a second unit still builds), `failReason == "extract:failed"` and no source byte is in it; one planted exception per row of the mapping and one unlisted (`CalledProcessError`), which fails its unit alone; (4) bundles and keys are created through `ccg.atrest` only; (5) a test per kind asserts the
   extractor is actually invoked (a stub extractor that records calls), so no extractor is reachable only from its
-  own tests.
-- **Done / Gate:** `analyst`. **Needs:** 03, 04, 05, 10, 11, 12.
+  own tests; (6) **Markdown hand-offs:** a `MarkdownError` (an oversize file) **skips that file** and counts it in the build report
+  (`skippedDocs`); it does not fail the unit, and no `skippedFiles` reason is used (the field is not written for Markdown units in
+  v1); P1-44 passes `extract_markdown` (a) `history`, the file's `(lastChangedAt, lastChangedCommit)` from the source repo at the built
+  commit through `normalize.blame` (`last_changed` over the whole file, `path_last_commit` for an empty one), (b) `bundle_path` when the
+  path in the bundle differs from the repo path the manifest's globs match, and (c) `known_tools`, the system's MCP tool names,
+  computed once per build by running the P1-16 mcp pack (`ccg.packrt.run_packs`) over the system's code bundles built before the
+  Markdown units (code units first); tests: the stub extractor records all three arguments, an oversize file is skipped while its unit
+  builds, and the `fx-svc` fixture's two prompt files yield the AC6-PM call sites end to end; (7) **Config call convention:** `extract_config` is called **once per repository** with all that repository's Compose files (W2's declared-service set is per repository and primary-role only), or with `extra_declared_services` for a split call; for a file that produced no records (oversize, unparseable) P1-44 takes the `File` role from `file_role`, since `ConfigResult.roles` is empty for it; (8) **Header merge (`bindParts` obligation, `-p1-extraction.md` P1-14):** before `write_bundle`, P1-44 takes `fields = writer_rules.bind_header_fields(ccg.atrest.hmac_key(system), merged_records)` over the unit's **merged** records (never a union of per-extractor `ConfigResult.header_fields`) and sets `header.bundleSchemaVersion` (`"1.1"` iff any entry has `bindParts`, else `"1.0"`) and `header.bindKeyCheck` (present iff `"1.1"`) from it, so V1a-V1d hold; the key is read through `ccg.atrest` only (behaviour (4)). Tests in `test_build_dispatch.py`: a config unit with a URL entry builds and validates as `"1.1"` with `bindKeyCheck == ccg.atrest.bind_key_check(key)`; a code-only unit and a config unit with no URL entry build as `"1.0"` with no `bindKeyCheck`; a multi-file config unit whose `bindParts` entries come from two files gets one header.
+- **Done / Gate:** `analyst`. **Needs:** 03, 04, 05, 10, 11, 12, 16 (the pack runtime that names the tools).
 
 ## P1-20 · refresh — `coder`
 

@@ -39,7 +39,7 @@ def default(env_var="FALKORDB_HOST", value="falkordb", **kw):
 
 @pytest.mark.parametrize("value", [
     "falkordb:6379", "redis://falkordb:6379", "http://api:8000", "http://server:8200/mcp", "falkordb",
-    "localhost:8000", "http://localhost:8000/mcp", "8200", "ntfy.sh", "http://10.0.0.5:8080/api",
+    "localhost:8000", "http://localhost:8000/mcp", "8200", "ntfy.sh", "10.0.0.5:8080",       # a `url` to an IP is W6's (spec5 §6.2)
 ])
 def test_w2_declared_or_non_single_label_hosts_bind(value):
     assert bind("x.addr", value) == value
@@ -186,7 +186,7 @@ def test_launch_argv_fields_forces_the_next_element_after_a_secret_flag():
 # Backstop for those, per obligation: `writer_rules.audit_records` (below), which a writer's own test runs over the
 # records it produced (grammar, name rule, W1 and the argv fixed point are also re-checked by `bundle.validate`).
 
-_OWNED_FIELDS = frozenset({"command", "args", "bindValue", "default", "valueHash", "defaultHash"})
+_OWNED_FIELDS = frozenset({"command", "args", "bindValue", "default", "valueHash", "defaultHash", "bindParts"})
 _EXEMPT = frozenset({("decorator", "args")})       # a decorator record's own `args`: the one legitimate overlap
 _RULE_NAMES = frozenset({"bind_value_allowed", "value_grammar_ok", "gate_argv"})
 _KEY_NAMES = frozenset({"hmac_key", "key_path", "bind_key_check", "KEY_ROOT", "credentials_dir", "entry_hmac"})
@@ -288,18 +288,36 @@ _FORMS = [
 ]
 
 
-_SIX = ["command", "args", "bindValue", "default", "valueHash", "defaultHash"]     # literal: P1-14 adds bindParts
+_SEVEN = ["command", "args", "bindValue", "default", "valueHash", "defaultHash", "bindParts"]     # literal: the six of P1-07 plus P1-14's
 
 
-def test_the_guards_owned_field_set_is_exactly_the_six_of_the_plan():
-    assert sorted(_OWNED_FIELDS) == sorted(_SIX)       # a shrunk set must not just shrink the parametrisation below
+def test_the_guards_owned_field_set_is_exactly_the_seven_of_the_plan():
+    assert sorted(_OWNED_FIELDS) == sorted(_SEVEN)       # a shrunk set must not just shrink the parametrisation below
 
 
-@pytest.mark.parametrize("field", _SIX)
+@pytest.mark.parametrize("field", _SEVEN)
 @pytest.mark.parametrize("form", _FORMS)
 def test_guard_flags_every_form_of_writing_an_owned_field(field, form):
     src = form.format(f=field, a=field[:2], b=field[2:])
     assert owned_field_writes(src), src
+
+
+def test_guard_flags_bind_parts_in_a_typed_record_and_does_not_flag_a_read():
+    assert owned_field_writes('r = {"type": "configEntry", "bindParts": p}')
+    assert owned_field_writes('r["bind" "Parts"] = p')
+    assert not owned_field_writes('x = r["bindParts"]\ny = r.get("bindParts")')
+
+
+def test_writer_rules_writes_bind_parts_only_inside_bind_parts_fields_which_asks_bind_parts_allowed():
+    src = (CPG / "extractors" / "common" / "writer_rules.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "bind_parts_fields")
+    writes = [ln for ln in owned_field_writes(src) if any(
+        isinstance(n, ast.Dict) and n.lineno <= ln <= n.end_lineno
+        and any(isinstance(k, ast.Constant) and k.value == "bindParts" for k in n.keys) for n in ast.walk(tree))]
+    assert writes and all(fn.lineno <= ln <= fn.end_lineno for ln in writes)
+    assert any(isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == "bind_parts_allowed"
+               for c in ast.walk(fn))
 
 
 def test_guard_exempts_only_the_decorator_args_pair():
@@ -783,12 +801,19 @@ FORBIDDEN_TARGETS = [
     "100.100.100.200", "100.100.100.200:80", "http://100.100.100.200/", "http://100.100.100.200:8080",
     "[::ffff:a9fe:a9fe]", "http://[::ffff:a9fe:a9fe]/", "[::a9fe:a9fe]", "[64:ff9b::a9fe:a9fe]",
     "[::ffff:6464:64c8]", "[::ffff:a9fe:1]",
+    # architect ruling (P1-14): Azure wireserver, the DS-Lite/IPv4 service address, and the whole 6to4 block
+    "168.63.129.16", "168.63.129.16:80", "http://168.63.129.16/", "http://168.63.129.16:32526/machine", "0xa83f8110",
+    "192.0.0.192", "192.0.0.192:80", "http://192.0.0.192/", "https://192.0.0.192:443",
+    "[2002::1]", "2002::1", "[2002:a00:1::1]", "http://[2002::1]/", "http://[2002:a00:1::1]:80/", "[2002:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "[::ffff:a83f:8110]", "[::ffff:c000:c0]",
 ]
 ALLOWED_TARGETS = [
     "169.253.169.254", "169.255.0.1", "100.100.100.201", "100.100.100.199", "100.64.0.1", "10.0.0.5", "127.0.0.1",
     "http://10.0.0.5:8080/api", "[fe7f::1]", "[fe7f:ffff::1]", "[fd00:ec2::255]",
     "[fd00:ec2::253]", "[2001:db8::5]", "http://[2001:db8::5]:8080/v1", "[100:0:0:1::1]", "[::1]", "localhost:80",
     "falkordb:6379", "ntfy.sh", "[::ffff:a00:1]",
+    "168.63.129.17", "168.63.129.15", "168.63.129.17:80", "192.0.0.193", "192.0.0.191", "192.0.1.192", "[2003::1]", "[2001:ffff::1]",
+    "http://168.63.129.17/", "http://[2003::1]/", "10.0.0.5", "172.16.0.1", "192.168.1.1",             # RFC1918 stays clear
 ]
 
 
@@ -803,8 +828,11 @@ def test_link_local_and_metadata_targets_are_withheld_everywhere(value):
 
 @pytest.mark.parametrize("value", [v for v in ALLOWED_TARGETS if bundle.value_grammar_ok(v)])
 def test_neighbouring_addresses_are_not_withheld(value):
-    assert bind("x.addr", value) == value
-    assert default("X_PORT", value) == value
+    if "://" in value:
+        assert bind("x.addr", value) is None              # W6 (spec5 §6.2): an `ip` URL keeps its parts, not a clear `bindValue`
+    else:
+        assert bind("x.addr", value) == value
+    assert default("X_PORT", value) == value              # a launchFact default is not W6's
 
 
 def test_the_forbidden_list_is_withheld_on_every_url_form_of_the_same_host():

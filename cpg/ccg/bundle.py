@@ -9,7 +9,8 @@ recomputation through ``ccg.ids`` (§3.2), in-bundle references (§5.0), and the
 rules of §2.2 and §5.
 
 Public API: ``loads``/``read_bundle`` (parse + validate), ``validate`` (records in file
-order), ``dumps``/``write_bundle`` (sort + validate + serialize), ``canonical_line``.
+order), ``dumps``/``write_bundle`` (sort + validate + serialize), ``canonical_line``,
+``parse_bind_url`` (``-bundle-spec5.md`` §3, the one URL parse of the writer and the validator).
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import unicodedata
 from collections.abc import Iterable
 from functools import cache
 from pathlib import Path
+from typing import NamedTuple
 
 import jsonschema
 
@@ -134,7 +136,7 @@ def _no_dup_keys(pairs: list[tuple[str, object]]) -> dict:
 
 
 def _no_float(text: str) -> object:
-    raise BundleError(f"numbers are integers only (§8.1), got {text}")
+    raise BundleError("numbers are integers only (§8.1); the number is not echoed (-spec5 §6.3)")
 
 
 def loads(data: bytes) -> list[dict]:
@@ -191,8 +193,36 @@ def validate(records: list[dict]) -> None:
 def _check_schema(n: int, rec: object) -> None:
     err = jsonschema.exceptions.best_match(_validator().iter_errors(rec))
     if err is not None:
-        where = "/".join(str(p) for p in err.absolute_path) or "<record>"
+        path = list(err.absolute_path)
+        if path[:1] in (["bindParts"], ["bindValue"], ["bindKeyCheck"]):        # spec5 §6.3: a message never carries these values
+            raise BundleError(f"line {n}: {_value_free_schema_message(rec.get('type'), path, err)}")
+        where = "/".join(str(p) for p in path) or "<record>"
         raise BundleError(f"line {n}: schema: {where}: {err.message}")
+
+
+def _value_free_schema_message(rtype: object, path: list, err) -> str:
+    """spec5 §6.3: the record's field and the §6.4 rule id, never the value (jsonschema's own message quotes it)."""
+    if path[0] == "bindValue":
+        return f"schema: {rtype}.bindValue: fails the value grammar (§1.7.2); the value is not echoed (-spec5 §6.3)"
+    if path[0] == "bindKeyCheck":
+        return f"schema: {rtype}.bindKeyCheck: not 64 lowercase hex; the value is not echoed (-spec5 §6.3)"
+    field = path[1] if len(path) > 1 else None
+    v = err.validator
+    if field is None:
+        if v in ("required", "not") and isinstance(err.instance, dict) and \
+                "hostKind" in err.instance and err.instance["hostKind"] not in ("loopback", "ip", "service", "external"):
+            rule = "V4f"                                   # the if/then/else on hostKind fired because hostKind is out of the enum
+        else:
+            rule = {"additionalProperties": "V4a", "required": "V5b" if err.validator_value == ["host"] else "V4b",
+                    "not": "V5a"}.get(v, "V4a")
+    elif field == "host":
+        rule = "host: not a string"
+    else:
+        rule = {"scheme": "V4c", "port": "V4e", "hostKind": "V4f", "hostHmac": "V4g"}.get(field, "V4a")
+        if field == "pathHmacs":
+            rule = "V4i" if v == "maxItems" else "V4h"
+    where = "bindParts" + (f".{field}" if field else "")
+    return f"{rtype}.{where}: {rule}"
 
 
 #: §8.1: identity fields are stripped as well as NFC (every ``*Id`` key counts as one).
@@ -203,7 +233,7 @@ def _check_values(n: int, value: object, key: str = "") -> None:
     """§8.1: integers only (JSON Schema's ``integer`` admits ``1.0``), every string NFC,
     identity strings stripped."""
     if isinstance(value, float):
-        raise BundleError(f"line {n}: {key}: numbers are integers only (§8.1), got {value!r}")
+        raise BundleError(f"line {n}: {key}: numbers are integers only (§8.1); the number is not echoed (-spec5 §6.3)")
     if isinstance(value, str):
         if unicodedata.normalize("NFC", value) != value:
             raise BundleError(f"line {n}: {key}: string is not NFC (§8.1)")
@@ -498,15 +528,112 @@ def _keypath_segments(key_path: str) -> list[tuple[str, str]]:
     return out
 
 
+def _w1_fails(segs: list[tuple[str, str]]) -> bool:
+    """W1: an element of an argv-shaped key (``args``/``command``/``entrypoint`` followed by an index)."""
+    return any(k == "name" and t in ("args", "command", "entrypoint") and i + 1 < len(segs)
+               and segs[i + 1][0] == "index" for i, (k, t) in enumerate(segs))
+
+
+def _name_rule_fails(segs: list[tuple[str, str]]) -> bool:
+    return any(k == "name" and name_fails(t) for k, t in segs)
+
+
 def bind_value_allowed(key_path: str, value: str) -> bool:
     """§1.7: the value grammar, the name rule on every named ``keyPath`` segment, and W1."""
     segs = _keypath_segments(key_path)
-    if any(k == "name" and t in ("args", "command", "entrypoint") and i + 1 < len(segs)
-           and segs[i + 1][0] == "index" for i, (k, t) in enumerate(segs)):
+    if _w1_fails(segs):
         return False                                                   # W1
-    if any(k == "name" and name_fails(t) for k, t in segs):
+    if _name_rule_fails(segs):
         return False                                                   # §1.7.3
     return _bind_grammar(value)
+
+
+# --- -bundle-spec5.md §3 the URL parse -----------------------------------------------------
+class BindUrl(NamedTuple):
+    """``parse_bind_url``'s result: ``host_class`` is ``loopback``, ``ip``, ``label`` or ``dnsname``."""
+    scheme: str
+    port: int | None
+    host: str
+    host_class: str
+    segments: tuple[str, ...]
+
+
+_BIND_URL_SHAPE = re.compile(r"([A-Za-z][A-Za-z0-9+.-]*)://([^/]*)(/.*)?")
+_BIND_URL_FORBIDDEN = frozenset("@?#;\\%$")
+_PATH_SEGMENT = re.compile(r"[A-Za-z0-9._~-]+")
+_LOOPBACK_NAMES = ("localhost", "host.docker.internal")
+_V6_EXCLUDED = tuple(ipaddress.ip_network(n) for n in ("::ffff:0:0/96", "::/96", "64:ff9b::/96"))   # mapped, compatible, NAT64
+_V6_LOOPBACK = ipaddress.IPv6Address("::1")
+
+
+def v6_excluded(addr: ipaddress.IPv6Address) -> bool:
+    """§3 step 3: IPv4-mapped, IPv4-compatible (``::/96`` other than ``::1``) and NAT64 addresses, by range."""
+    return addr != _V6_LOOPBACK and any(addr in net for net in _V6_EXCLUDED)
+
+
+def _bind_authority(auth: str) -> tuple[str, str, str] | None:
+    """(host text ``H``, host class, port text with its ``:``) of §3 step 3, or ``None``."""
+    if auth.startswith("[") and "]" in auth:
+        i = auth.index("]")
+        inner, rest = auth[1:i].lower(), auth[i + 1:]
+        if not re.fullmatch(r"[0-9a-f:]{2,39}", inner):
+            return None
+        try:
+            addr = ipaddress.IPv6Address(inner)
+        except ValueError:
+            return None
+        if v6_excluded(addr):
+            return None
+        host = "[" + str(addr) + "]"
+        return host, ("loopback" if host == "[::1]" else "ip"), rest
+    host, sep, port = auth.rpartition(":")
+    if not sep:
+        host, port = auth, ""
+    else:
+        port = sep + port
+    host = host.lower()
+    if _ipv4(host):
+        return host, ("loopback" if host.startswith("127.") else "ip"), port
+    labels = host.split(".")
+    if len(host) > 253 or not all(_label(x, False) for x in labels) or re.fullmatch(r"[0-9]+", labels[-1]):
+        return None
+    if host in _LOOPBACK_NAMES:
+        return host, "loopback", port
+    return host, ("label" if len(labels) == 1 else "dnsname"), port
+
+
+def parse_bind_url(value: object) -> BindUrl | None:
+    """``-bundle-spec5.md`` §3: the URL parse of the writer and the validator, a pure function of the text. ``None`` for
+    anything §3 refuses (hostile, interpolated, userinfo, query, fragment, percent-encoded, odd host or path); it never
+    raises and never echoes ``value``. No URL library parses it."""
+    if not isinstance(value, str) or len(value) >= 512:
+        return None
+    if any(not "\x21" <= c <= "\x7e" or c in _BIND_URL_FORBIDDEN for c in value):                     # step 1
+        return None
+    m = _BIND_URL_SHAPE.fullmatch(value)                                                           # step 2
+    if not m:
+        return None
+    scheme = m.group(1).lower()
+    if len(scheme) > 16 or screen_fails(scheme):
+        return None
+    got = _bind_authority(m.group(2))                                                              # step 3
+    if got is None:
+        return None
+    host, host_class, port_part = got
+    if port_part == "":
+        port = None
+    elif port_part.startswith(":") and _port(port_part[1:]):
+        port = int(port_part[1:])
+    else:
+        return None
+    path = m.group(3) or ""                                                                        # step 4
+    segs: tuple[str, ...] = ()
+    if path not in ("", "/"):
+        parts = (path[:-1] if path.endswith("/") else path)[1:].split("/")
+        if len(parts) > 32 or any(not _PATH_SEGMENT.fullmatch(x) or x in (".", "..") for x in parts):
+            return None
+        segs = tuple(parts)
+    return BindUrl(scheme, port, host, host_class, segs)
 
 
 # --- §1.6.1 the argv gate ------------------------------------------------------------------
@@ -775,7 +902,22 @@ class _Semantics:
             raise BundleError("line 1: vendoredDirs must be sorted (§2.2)")
         if h["history"] != "available":
             raise BundleError("line 1: history must be 'available' in P0 (§2.2)")
+        self._bind_version(h)
         self._skipped_files(h.get("skippedFiles", []))
+
+    def _bind_version(self, h: dict) -> None:
+        """-spec5 §6.4 V1a-V1d: the version rule and the cross-record pairing of ``bindParts`` and ``bindKeyCheck``."""
+        has_parts = any("bindParts" in r for _, r in self.by_type["configEntry"].values())
+        has_check = "bindKeyCheck" in h
+        v = h["bundleSchemaVersion"]
+        if v == "1.0" and (has_parts or has_check):
+            raise BundleError("line 1: header: V1a (a 1.0 bundle carries neither bindParts nor bindKeyCheck)")
+        if v == "1.1" and not (has_parts or has_check):
+            raise BundleError("line 1: header: V1b (a 1.1 bundle carries bindParts or bindKeyCheck)")
+        if has_parts and not has_check:
+            raise BundleError("line 1: header.bindKeyCheck: V1c (bindParts present)")
+        if has_check and not has_parts:
+            raise BundleError("line 1: header.bindKeyCheck: V1d (no entry carries bindParts)")
 
     def _skipped_files(self, entries: list[dict]) -> None:
         """spec4 §1: ``header.skippedFiles`` is sorted by path (byte order), unique, under
@@ -941,12 +1083,67 @@ class _Semantics:
 
     def _configEntry(self, n, r):
         if "bindValue" in r and not bind_value_allowed(r["keyPath"], r["bindValue"]):
-            raise BundleError(f"line {n}: bindValue {r['bindValue']!r} under keyPath "
-                              f"{r['keyPath']!r} fails BS2 §1.7 (grammar, screen, name rule or "
-                              "W1)")
+            raise BundleError(f"line {n}: configEntry.bindValue fails BS2 §1.7 (grammar, screen, name rule or "
+                              "W1); the value is not echoed (-spec5 §6.3)")
+        if "bindParts" in r:
+            self._bind_parts(n, r)
         f = self.by_type["file"].get(ids.file_id(self.repo, r["path"]))
         if f and r["example"] != (f[1]["role"] == "example"):
             raise BundleError(f"line {n}: example must be copied from its file's role (§5.17)")
+
+    def _bind_parts(self, n: int, r: dict) -> None:
+        """-spec5 §6.4 V2-V6 for one entry. A message names the line, the field and the rule id, never a value (§6.3)."""
+        bp = r["bindParts"]
+
+        def fail(rule: str, field: str = "") -> None:
+            raise BundleError(f"line {n}: configEntry.bindParts{'.' + field if field else ''}: {rule}")
+
+        segs = _keypath_segments(r["keyPath"])
+        if _w1_fails(segs):
+            fail("V2")
+        if _name_rule_fails(segs):
+            fail("V3")
+        if screen_fails(bp["scheme"]):
+            fail("V4d", "scheme")
+        kind, host = bp["hostKind"], bp.get("host")
+        if kind == "loopback" and not (host in ("localhost", "host.docker.internal", "[::1]")
+                                       or (_ipv4(host) and host.startswith("127."))):
+            fail("V5c", "host")
+        if kind == "ip":
+            if host.startswith("[") and host.endswith("]"):
+                try:
+                    excluded = v6_excluded(ipaddress.IPv6Address(host[1:-1]))
+                except ValueError:
+                    excluded = False
+                if excluded:
+                    fail("V5e", "host")
+                if not _ipv6(host[1:-1]) or host == "[::1]":
+                    fail("V5d", "host")
+            elif not _ipv4(host) or host.startswith("127."):
+                fail("V5d", "host")
+        if kind == "service":
+            if not _label(host, False):
+                fail("V5f", "host")
+            if screen_fails(host):
+                fail("V5g", "host")
+            if not any(c.isalpha() for c in host):
+                fail("V5h", "host")
+            if host == "localhost":
+                fail("V5i", "host")
+        if "bindValue" in r:
+            u = parse_bind_url(r["bindValue"])
+            if u is None:
+                fail("V6a")
+            if bp["scheme"] != u.scheme:
+                fail("V6b", "scheme")
+            if bp.get("port") != u.port:
+                fail("V6c", "port")
+            if kind != {"loopback": "loopback", "ip": "ip", "label": "service", "dnsname": "external"}[u.host_class]:
+                fail("V6d", "hostKind")
+            if host is not None and host != u.host:
+                fail("V6e", "host")
+            if len(bp["pathHmacs"]) != len(u.segments):
+                fail("V6f", "pathHmacs")
 
     def _launchFact(self, n, r):
         if r["kind"] == "command":

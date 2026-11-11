@@ -6,9 +6,10 @@ Plan: `docs/plans/connected-code-graph-p1-extraction.md` § P1-11; spec: `-bundl
 format (``formats.FORMATS``), and returns the records of the whole repository, the ``File.role`` of every file it read and a
 report of counters. Rules decided elsewhere, by import:
 
-- ``bindValue``, ``launchFact.default``/``defaultHash``, ``command``/``args`` and ``valueHash`` come only from
+- ``bindValue``, ``bindParts``, ``launchFact.default``/``defaultHash``, ``command``/``args`` and ``valueHash`` come only from
   ``extractors.common.writer_rules`` (P1-07); this module supplies the *inputs*: the entry's binding role (E3), the alias
-  anchor (W3), the declared Compose services (W2) and the text.
+  anchor (W3), the declared Compose services (W2) and the text. ``ConfigResult.header_fields`` is the version rule's
+  (`-bundle-spec5.md` §1): ``"1.1"`` and ``bindKeyCheck`` exactly when some entry carries ``bindParts``, else ``{}``.
 - A file that is not UTF-8 refuses the whole unit (``SourceRefused``, index D12). Text with no UTF-8 encoding inside a
   readable file (a YAML ``"\\uD800"``) drops that entry or fact, counted in ``unencodableEntries``.
 - The text of a value never leaves this module except as a gated field and a hash: the report holds counts and paths only,
@@ -50,6 +51,7 @@ class ConfigResult:
     roles: dict[str, str] = field(default_factory=dict)            # path -> File.role, for every file that yielded records
     declared_services: frozenset[str] = frozenset()
     report: dict = field(default_factory=dict)
+    header_fields: dict = field(default_factory=dict)              # header fields to merge when these records go in one bundle
 
 
 def _clean_path(path: object) -> str:
@@ -113,6 +115,7 @@ def extract_config(repo_id: str, files: Mapping[str, bytes] | Iterable[tuple[str
             del result.roles[path]
             skipped.append({"path": path, "reason": "memory"})
             report["memoryErrors"] += 1
+    result.header_fields = wr.bind_header_fields(key, result.records)
     report["files"] = len(trees)
     report["skippedFiles"] = len(skipped)
     result.report = {**{k: report[k] for k in ("files", "ignoredFiles", "skippedFiles", "configEntries", "launchFacts",
@@ -144,8 +147,10 @@ def _file_records(repo_id, path, fmt, tree, text, key, declared, result, report)
         rec = {"type": "configEntry", "id": rid, "repoId": repo_id, "path": path, "line": leaf.line, "format": fmt,
                "keyPath": kpath, "example": example}
         rec.update(wr.value_hash_fields(key, rid, leaf.text))     # §1.7.5: domain is the entry's own id
-        rec.update(wr.bind_fields(kpath, leaf.text, binding_role=F.binding_role(fmt, leaf.segs),
-                                  declared_services=declared, via_alias=leaf.via_alias, anchor_key_path=anchor))
+        gate = dict(binding_role=F.binding_role(fmt, leaf.segs), declared_services=declared, via_alias=leaf.via_alias,
+                    anchor_key_path=anchor)
+        rec.update(wr.bind_fields(kpath, leaf.text, **gate))
+        rec.update(wr.bind_parts_fields(key, kpath, leaf.text, **gate))      # spec5 §6.1: E1-E4; the keyed parts of a URL value
         entries[kpath] = rec                                      # a repeated keyPath: the last occurrence wins
         if not leaf.via_alias:
             drafts += L.env_defaults(leaf.text, leaf.line)

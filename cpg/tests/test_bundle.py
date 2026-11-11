@@ -296,6 +296,10 @@ SPEC_TEXT = (_PLANS / "connected-code-graph-bundle-spec3.md").read_text(encoding
 SPEC4_TEXT = (_PLANS / "connected-code-graph-bundle-spec4.md").read_text(encoding="utf-8")
 
 
+#: spec5 extends spec3/spec4 (F-7): `configEntry.bindParts` (§5.1), `header.bindKeyCheck` (§5.2), `bundleSchemaVersion` in {"1.0","1.1"} (§1).
+SPEC5_TEXT = (_PLANS / "connected-code-graph-bundle-spec5.md").read_text(encoding="utf-8")
+
+
 def _section(heading_re: str, text: str | None = None) -> str:
     """The text of the first section of ``text`` (default: the spec) whose heading matches."""
     text = SPEC_TEXT if text is None else text
@@ -389,11 +393,14 @@ def _spec_fields(rtype: str) -> tuple[set[str], set[str], dict[str, list[str]]]:
             enums[names[0]] = _ticks(tcell)
         elif tcell == "§3.3 token":
             enums[names[0]] = SPEC_LANGS
-    if rtype == "header":  # spec4 §1 adds one row to spec3 §2.2's table (the v1 freeze text)
-        for cells in _table_rows(_section(r"1\. Rule 4", SPEC4_TEXT)):
+    if rtype == "header":  # spec4 §1 adds one row to spec3 §2.2's table (the v1 freeze text); spec5 §5.2 another
+        for cells in _table_rows(_section(r"1\. Rule 4", SPEC4_TEXT)) + _table_rows(_section(r"5\.2 ", SPEC5_TEXT)):
             (req if cells[2].startswith("yes") else opt).update(_ticks(cells[0]))
     else:
         req |= {"type", "id"}  # §5.0: every record carries both
+        if rtype == "configEntry":  # spec5 §5.1 adds one optional row
+            for cells in _table_rows(_section(r"5\.1 ", SPEC5_TEXT)):
+                (req if cells[2].startswith("yes") else opt).update(_ticks(cells[0]))
     return req, opt, enums
 
 
@@ -449,7 +456,9 @@ def test_schema_enums_match_spec(rtype):
 def test_header_constants_match_spec():
     rows = {(_ticks(c[0]) or [""])[0]: c for c in _table_rows(_section(r"2\.2 "))}
     props = _def("header")["properties"]
-    assert props["bundleSchemaVersion"]["const"] == _ticks(rows["bundleSchemaVersion"][1])[0]
+    assert _ticks(rows["bundleSchemaVersion"][1])[0] == "1.0"                 # spec3 §2.2's row: the v1.0 freeze text
+    minors = re.search(r"`bundleSchemaVersion` is `\"(1\.\d)\"` or `\"(1\.\d)\"`", _section(r"1\. Version rule", SPEC5_TEXT))
+    assert props["bundleSchemaVersion"]["enum"] == list(minors.groups()) == ["1.0", "1.1"]     # spec5 §1
     assert str(props["fieldDepthCap"]["const"]) == _ticks(rows["fieldDepthCap"][1])[0]
     assert set(_resolve(props["counts"])["required"]) == set(SPEC_ORDER[1:])
 
@@ -1299,7 +1308,9 @@ def test_path_form(path, ok):
     ({"sandboxAuditIds": []}, False),
     ({"sandboxAuditIds": [AUDIT.upper()]}, False),
     ({"sandboxAuditIds": ["0f8fad5b-d9cb-169f-a165-70867728950e"]}, False),  # not v4
-    ({"bundleSchemaVersion": "1.1"}, False),
+    ({"bundleSchemaVersion": "1.1"}, True),     # spec5 §1 admits "1.1"; V1b (a "1.1" header with no bindParts) is bundle-level (BK-5)
+    ({"bundleSchemaVersion": "1.2"}, False),
+    ({"bundleSchemaVersion": "2.0"}, False),
     ({"fieldDepthCap": 4}, False),
     ({"builtCommit": "1" * 39}, False),
     ({"counts": {**zero_counts(), "widget": 0}}, False),
@@ -2401,7 +2412,7 @@ def test_skipped_files_reasons_stay_out_of_the_status_registry():
 
 def test_skipped_files_is_optional_in_the_header_schema():
     assert "skippedFiles" not in _def("header")["required"]
-    assert _def("header")["properties"]["bundleSchemaVersion"]["const"] == "1.0"
+    assert _def("header")["properties"]["bundleSchemaVersion"]["enum"] == ["1.0", "1.1"]     # spec4 kept "1.0"; spec5 §1 adds "1.1"
 
 
 def test_bundle_without_skipped_files_is_valid():

@@ -768,7 +768,7 @@ def test_one_valid_launch_hop_per_kind_validates():
     validate(doc)
 
 
-@pytest.mark.parametrize("field", ["args", "default", "defaultHash", "origin", "bindValue", "pairs"])
+@pytest.mark.parametrize("field", ["args", "default", "defaultHash", "origin", "bindValue", "bindParts", "hostHmac", "pathHmacs", "pairs"])
 def test_the_launch_object_cannot_carry_what_s17_refused(field):
     rejects(b_launch(), lambda d: launch_of(d, 1).update({field: "x"}), "schema")
 

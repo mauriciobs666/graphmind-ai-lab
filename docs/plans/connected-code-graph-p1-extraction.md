@@ -206,7 +206,11 @@ delta list below; the order is 5c, P1-06, P1-08, and P1-09 does not edit the fil
   de-duplicated `[start, end]` pairs) exactly when `s.owned` is non-empty, and `core.fingerprint` takes lines
   `lineStart..lineEnd` plus every line of the regions (the sorted, de-duplicated union, spec3 §5.3). Tests are synthetic (a
   symbol with a region outside its span: the field is present and the fingerprint differs from the span-only one); a symbol
-  with none has no field and the stored fingerprints do not move.
+  with none has no field and the stored fingerprints do not move. **Frontend contract:** a region lies inside the file
+  (`1 <= start <= end <= lineCount`) and the list is well-ordered; **the writer rejects** anything else with `BuildError`
+  naming the symbol (it does not clamp the emitted field), while `fingerprint` and blame keep their clamp only as a resource
+  bound that the check makes unreachable. Latent (no P1 frontend sets `owned`): a small `tdd-engineer` addition to `assemble`
+  with a synthetic test (beyond-file, inverted and negative regions each raise), landing before the first frontend that sets it.
 
 **The delta list** (`tests/slice/test_normalize_equivalence.py`; P1-05 (2) states the rule). Whichever of 5c and P1-06
 lands first creates it. The stored header carries `tools.normalizerVersion` `"0.1"`, so each delta is
@@ -220,16 +224,17 @@ order gives 5c `0.2`, P1-06 `0.3`, P1-08 `0.4`.
 
 - **Needs:** 05. Edits `assemble_bundle.py` and the delta list with 5c (order in 5c: 5c, then this).
 - **Files:** `cpg/extractors/joern/normalize/mask.py` (new; `mask_cond_code(code: str) -> str` replaces each string
-  literal that fails `ccg.bundle.screen_fails` or `name_fails` with `"…"`), `assemble_bundle.py` (one call site: the `cond`
-  record's `"code": collapse(c["code"], 200)` becomes `collapse(mask_cond_code(c["code"]), 200)`, masking before the cut so a
-  literal is never cut mid-way; the cond **sort key** keeps the raw `code`, so ordinals and point ids do not move),
+  literal that fails `ccg.bundle.screen_fails` or `name_fails`, judged over the whole literal body, with `"…"`), `assemble_bundle.py`
+  (one call site: the `cond` record's `"code": collapse(c["code"], 200)` becomes `mask_cond_code(collapse(mask_cond_code(c["code"]),
+  200))`: **mask, cut, mask again**, so a passing literal cut at character 200 is judged as the prefix that is stored; cut-then-mask
+  would leak a flagged literal's passing prefix; the cond **sort key** keeps the raw `code`, so ordinals and point ids do not move),
   `cpg/tests/test_mask_cond.py`, `cpg/tests/test_normalize_assemble.py` (a planted 32-hex literal in a condition is masked
   in the written bundle), `cpg/tests/slice/test_normalize_equivalence.py` (its delta, version `0.3` in the planned order: it
   edits only the `cond.code` of stored records that masking changes, possibly none).
 - **Behaviours:** a literal passing the screen is kept verbatim; a failing one (32-hex, token prefix,
   UUID-shaped) becomes `"…"`; escapes and nested quotes in Python and TS template literals are handled; a
-  condition with no literal is byte-identical; `Cond.code` after masking never contains a string that
-  `screen_fails` flags (a property test over generated literals); the delta lists every stored cond that masking changes.
+  condition with no literal is byte-identical; after mask-cut-mask **a stored `Cond.code` literal passes both screens** (a property test over generated literals, including ones that straddle the cut);
+  **lossiness is kept:** judging the whole body masks benign dictionary keys (`"key"`, `"empty key"`, `"seedKind"`: 43 of the slice's 4,034 stored conds, 1.1%); `Cond.code` is display-only and no id or match key reads it, and segment-wise judging is a spec change and a leak surface, deferred to P2; the delta lists every stored cond that masking changes.
 - **Done:** hard prerequisite of P1-41 and of any non-proving build. **Gate:** `analyst`.
 
 ## P1-07 · writer done-condition (F-10) — `tdd-engineer`
@@ -309,11 +314,22 @@ not a P1 language).
   (new mutants on each fix), `cpg/tests/golden/projection/*.json`, `cpg/tests/test_projection_golden.py`,
   `cpg/tests/slice/test_projection_not_regressed.py`, and `cpg/tests/slice/test_extract_equivalence.py` (P1-04's raw-fact
   comparison: every fact kind but `d` and `cb` stays equal to the slice's; those two are governed by (5)'s subset rule).
-  **The two join fixes are scorer-side:** a Python `for` CDG node coded `iteratorNonEmptyOrException` resolves to the `for`
-  statement's condition point (36 misses); the label `not (self._open or ...)` resolves to the whole condition, not the
-  operand `self._open` the `contains` tier picks (4 misses). Both are in `s28_core.resolve_endpoint`; `s28_metrics.py` imports it and
-  scores (`s28_run.py` only extracts facts), and P1-34 scores with `s28_metrics.py`, so **P1-09's recall line and P1-34's 465/481
-  entry check (`-p1-gates.md` P1-34) are scored by the same function, by construction**, and neither needs a copy. The committed normalizer has no such join (`assemble_bundle.py`
+  **The two join fixes are scorer-side** and live only in the cond branch of `s28_core.resolve_endpoint`, after the existing
+  tiers (`docs/reviews/connected-code-graph-p1-09-ml.md` C1): (a) a label whose source line is the `for <code>:` header resolves to the unique
+  `iteratorNonEmptyOrException` cond on that line, applied only when the existing tiers fail (36 endpoints, 9 labels); (b) a
+  tier **equal ignoring whitespace and parentheses, before `contains`**, exactly one match (Joern drops redundant
+  parentheses, so `not (self._open or ...)` never equals `not self._open or ...`), `contains` unchanged; `DEFINITIONS["join"]`
+  states both. `s28_metrics.py` imports `s28_core` and scores (`s28_run.py` only extracts facts), and P1-34 scores with
+  `s28_metrics.py`, so **P1-09's recall line and P1-34's 465/481 entry check (`-p1-gates.md` P1-34) are scored by the same
+  function, by construction**. The scorer alone delivers +29 on the unchanged projection (pooled 307/480 → 336/480; 308/481 →
+  337/481), not the 40 the plan's additive table assumed; 11 of the 40 are real projection causes. **Conditions (the same note):**
+  C2 synthetic-fixture tests (`run_cfg` in `cpg/tests/test_s28_metrics.py`) that each fail on the old join, with the
+  negatives; C3 one new `MUTANTS` entry per rule and guard; C4 an opt-in recompute of old join against new join over all six
+  languages asserting the 29 pair ids (a committed dev-data manifest) and no other difference; C6 csharp and cpp recomputed,
+  expected unchanged; C7 the report line carries old-join and new-join recall with cluster intervals, the 29 ids by cause and the
+  11 still missed. **Stop and ask `teco`** on: any pair that resolved before changing, any non-python change, a delta other than
+  the measured +29, or a real-cause miss turning into a hit. P0's `POOLED` constant is not re-pinned: it stays the old-join record
+  and the P1 join gets a second, labelled constant. C5 (freeze before any fresh-draw seed) is P1-34's and the index freeze rule's. The committed normalizer has no such join (`assemble_bundle.py`
   joins `cb` and `d` by CPG node id: `point_of_use`, `cond_pid`), so this step does not edit it; if a fix proves to need it, the
   step stops and asks `teco`. **Owed: `data-scientist` is consulted before the `s28_core` change merges**, because it changes
   how endpoints are matched and so the metric (`-p1-ml.md` §1 F1 already counts the fix; the consult confirms the scorer's
@@ -322,10 +338,10 @@ not a P1 language).
 - **Behaviours (ordered):** (1) R1: `defsOf` also follows a `REACHING_DEF` whose source is an earlier same-name
   identifier that is not an assignment target, through its own reaching definitions (67 python misses); (2) R2:
   the receiver of a `<init>` call is defined by that call (0 python, JS and Java gains); (3) **R3 as a projection
-  rule**: a frontend-synthetic call (one whose name is not in the source, such as iterator `next`) is a
+  rule**: a frontend-synthetic call (iterator `next`) is a
   transparent intermediate when the projection walks `defsOf`, so the pair connects without scoring-time help (17
   python misses); this is a design line of its own because the report's R3 was a scoring relaxation designed after
-  reading the misses, so the golden states the rule and a negative case; (4) the 27 unverified projection-side causes
+  reading the misses, so the golden states the rule and a negative case. **The recognizers are closed lists** (the script has no source text, so "a name not in the source" cannot be implemented; this is a deviation from the open rule): python `__iter__`/`__next__` whose code starts with its receiver, where the receiver is `tmpN` or the call is assigned to a `tmpN`; JavaScript `_iterator_N.next()` only. P1-09 credits **no JavaScript recall**. Each recognizer has a golden, a mutant and a negative: a user `it.next(it)` stays opaque (the name regex is the only guard). 4b's recognizers are closed lists likewise (`-p1-ml.md` §3.4); (4) the 27 unverified projection-side causes
   (comprehension/generator scopes 12, a call that is itself a CDG source 10, dict/array/spread literals 4, a
   bound-method alias 1) each get a golden and a fix or a recorded "not fixed, because"; (4b) **synthetic-cond transparency** as `-p1-ml.md` §3.4 states it (recognizers, nearest-real-cond redirect, ungoverned
   edge dropped; scoring stays direct-edge): goldens for the 8 `definition` pairs (no projected edge in those methods ends
@@ -336,11 +352,16 @@ not a P1 language).
   its `controlledBy` records are a subset **modulo the rewritten synthetic-cond edges**, each listed with its
   replacement set (one edge, several, or none), and no golden pair the shipped projection connects is unconnected by
   the fixed one (`slice/test_projection_not_regressed.py` carries the same carve-out); (6) the spurious rate does not rise on the 30 dev-contact methods (`cpg/spikes/frontend-
-  fitness/truth`, `s28_metrics.py` reused, not copied); (7) `header.flowProjected` stays true and `fieldDepthCap` 3.
+  fitness/truth`, `s28_metrics.py` reused, not copied); (7) `header.flowProjected` stays true and `fieldDepthCap` 3; (8) **4f, a `for`-statement header cond receives data from its
+  iterable** (python only; the projection half of join fix (a), the iterator cond's dependence on the iterable named in
+  `tmp = x.__iter__()`): a positive golden, a negative (no data flows into a comprehension iterator cond, which `isCompIterator`
+  excludes) and a mutant. It is fitted to the dev methods, so its risk is optimism, not leakage (dev data only, no held-out), as for every fix in this step.
+  The projection reports its counters in `stats` (`cbRewritten`, `cbRewrites`, and the other new keys), all documented in
+  `cpg/extractors/joern/README.md`.
 - **Done:** a report line with the dev recall reached (with its cluster interval) and the list of fixable python
-  misses still open. P1-34's entry value is 465/481 against a dev ceiling of 467 (`-p1-ml.md` §3.1), so at most 2 of
-  the 159 fixable misses may stay open, and **the expected outcome is a flag that stays false** (P1-34 "not run"); this step still ships because R1 loses no pair and every fix
-  helps the call-level-versus-flow question. **Gate:** `analyst`; `data-scientist` reads the report line and is **consulted on the `s28_core` change before it merges** (owed).
+  misses still open. **Regeneration stamp:** each recorded-output test (the recorded facts files and `fixed-<tag>.facts.jsonl`) is tied to its script by a stamped `sha256(extract.sc)` written beside the file, and a default-tier test asserts the current script's hash equals it (red on any byte change until regenerated; positive control: a copy with an appended space fails). Independent of the script's own audit, a test checks that each rewritten synthetic cond has a recognised shape and no replacement is itself synthetic. P1-34's entry value is 465/481 against a dev ceiling of 467 (`-p1-ml.md` §3.1), so at most 2 of
+  the 159 fixable misses may stay open, and the measured new-join dev recall, 464/480 (465/481), meets it exactly on the design data, so P1-34's fresh draw is an explicit
+  `teco`/stakeholder decision (`-p1-gates.md` P1-34 (2)); the report states the four-cell shipped/fixed by old/new-join table and the residual misses by cause. **Gate:** `analyst`; `data-scientist` reads the report line and is **consulted on the `s28_core` change before it merges** (owed).
   **Risk:** Java-heap blowups in the "follow every source" variant (§a2.2.1) — do not adopt it.
 
 ## P1-10 · shell extractor — `coder`
@@ -359,6 +380,32 @@ not a P1 language).
   the real `falkor-chat/scripts/*.sh` and `cypher-mcp/*.sh` parse with zero error nodes; an unparseable shell file
   is reported as a unit warning and the script still gets a `<script>` symbol with no calls (never silently
   absent; the `skippedFiles` enum is `test|frontend-ignore` and does not apply to shell).
+- **Rulings** (`docs/reviews/connected-code-graph-p1-10.md`): (1) **P1 accepts the error rule.** On `git ls-files '*.sh'` 5 of 113
+  scripts (4.4%) hit a parse error (`cpg/sandbox/offline-run.sh` among them: `(( 0$(…) ))`, `<>/dev/tcp`, `<<<`) and lose their functions and
+  calls; the README records the rate and the five paths. An error-tolerant extraction (functions and commands outside the error
+  ranges, the error lines as warning detail) is a backlog item for P2, owner `coder`, logged at close. (2) **One `SourceRefused`:**
+  the class lives once in `extractors/common/errors.py`, and `normalize.core`, `extractors/config` and `extractors/shell` import it
+  (`normalize.core.SourceRefused` stays as a re-export of the same class); P1-44's mapping names it (`-p1-linking.md` P1-44 (3)).
+  The file cap is **2 MiB** (`MAX_FILE_BYTES`; the largest real script is 171 kB); a larger file raises it. (3) **Secret withholding is
+  ratified as shell-specific:** a literal that fails `screen_fails`, a variable named by the name rule, a secret-named flag or value, or
+  a value over 8,192 characters becomes `{"unknown": "runtime-built"}` (a legal `unknown`, spec3 §5.8; a writer may withhold more,
+  §1.10). It goes beyond Python and TS, which keep source literals (F-1), because scripts are where secrets are assigned; the measured cost
+  is 7 of 5,118 value records on the corpus, and no Cypher literal is withheld (`gquery`'s 50 values lift intact). (4) **A computed command
+  name** (`$DIR/run.sh a`) is a fourth `shell-dynamic` case beside `eval`, indirect expansion and computed `source`: callee `<dynamic>`,
+  `possible`/`shell-dynamic`, `a0` the first argument. (5) **`constant` in shell** (spec3 §5.9): a script-level once-assigned variable is
+  the shell analog of a module-level constant. Items (4) and (5) are for the spec3 §7.3 and §5.9 wording at the feature's spec update.
+- **10b · follow-up: an `eval` string is shell source** (`coder`; goldens first; `analyst` gate). `eval` joins its arguments and
+  runs the result as shell, so the faithful model of `eval "mcp-call $TOOL"` is the command `mcp-call` with an unknown argument,
+  the same shape the unquoted `mcp-call $TOOL` already has, which the `shell-mcp-call` pack matches (the alternative, matching a
+  template prefix in the pack format with an `{argGroup}` extract, is an engine change and a rule-pack spec successor, rejected).
+  The extractor keeps the `eval` call site (`possible`/`shell-dynamic`) and **adds** one inner call site per complete simple
+  command found by parsing the leading `const` of the `eval` argument with `tree-sitter-bash`, never by splitting on spaces, so
+  `eval 'a "b c"'` gives command `a` with the single argument `b c`. Bounds: only the leading const, at most 4,096 characters
+  and 8 commands; a word counts only when a delimiter follows it inside the const (or the argument ends), so `"mcp-call$X"` gives
+  none; the first non-const segment becomes one trailing `unknown` argument; an unparseable prefix (an open quote), a template that
+  starts with a non-const (`eval "$(ssh-agent)"`, `eval "$CMD x"`) and an `eval` inside an `eval` string give no inner site.
+  An inner site carries `possible`/`shell-dynamic` whatever its arguments (it runs under `eval`). Tests: `eval "mcp-call $TOOL"`
+  gives `mcp-call` with `a0` unknown; `eval 'mcp-call reindex'` gives `a0` const `reindex`; `eval 'a "b c"'`; and the four negatives.
 - **Done / Gate:** goldens plus the corpus smoke; `analyst`.
 
 ## P1-11 · config, Compose, `.mcp.json`, Kiro and Dockerfile launch extractors (F-6) — `coder`
@@ -377,8 +424,40 @@ not a P1 language).
   every format has a derivation row and a test; the `Cond`-free path is `ConfigEntry` only; secrets never
   stored (`valueHash` HMAC through P1-07). Compose `build.context` resolves relative to the compose file and may
   leave its repo (`-p0-compose-binding.md`): the extractor records the relative path, resolution is the linker's.
-- **Done / Gate:** one derivation table row per format of `-bundle-spec3.md` §5.17; `analyst`; `security-expert`
-  advisory.
+- **Hostile-input rules** (`docs/reviews/connected-code-graph-p1-11-security.md`; all are writer withholdings, which
+  `-bundle-spec3.md` §1.10 allows without a spec successor):
+  - **An args-only argv never reaches `gate_argv` as written.** A list whose first element starts with `-`, or a Dockerfile `CMD`
+    beside an `ENTRYPOINT` in the same stage, has no program, and `gate_argv` supplies no context for argv[0], so a short value after
+    `--password` would pass. The extractor gates `[bundle.REDACTED, *elements]` and emits `command: "<redacted>"` (the spec's own
+    value for an argv[0] that fails, §1.6) with every element in `args`, gated; the gate's placeholder is that existing sentinel, so
+    no new value exists. **The plain `command` field never holds a flag**: a test asserts no emitted `command` starts with `-`.
+    Planted-secret tests (the earlier ones were all `--flag=value` or after a program): a flag-first Compose list, a flag-first
+    `CMD` beside `ENTRYPOINT`, shell form `--password hunter2lower`, `-p hunter2lower`, an uppercase value after `--api-key`, and a
+    `.mcp.json` `command` that is a flag; none leaks in `command` or `args`.
+  - **Declared services (W2) come only from `primary`-role Compose files** (`file_role`; a `docker-compose.example.yml` declares
+    nothing) and are the keys of `services` plus the `container_name` of those services. This reads spec3 §1.7.4's "Compose file"
+    as a file that runs, a tightening within §1.10; no successor. The same set serves `launchFact.default` and spec5 §4's
+    `service` class. Test: an example compose with `container_name: metadata` does not make `api_host: metadata` bindable.
+  - **`mount` facts:** an absolute `mountPath` (`/var/run`) is withheld; a relative one is kept as written, because a build
+    context may legitimately leave its repo for a sibling repo of the system (P1-17 (5)). Resolution and confinement are the linker's.
+  - **No `bindValue` for a link-local or metadata host:** the set is P1-14's (its "Link-local and metadata hosts" bullet, the one
+    home); it is withheld (W2 family; a writer withholding more) and P1-14 gives such a host hostKind `external`.
+  - **Bounded parsing (B2):** `parse_yaml.conv` accounts nodes against `MAX_NODES` as it builds (a shared counter, `FormatError("nodes")`),
+    expands a merge key lazily (a reference to the merged map, expanded in the already-bounded `Walk`, never a per-merger copy of its
+    item list), and `extract_config` catches `MemoryError` at each file's parse as a `skipped` reason with a counter, so one file
+    never aborts the unit. Test: a 22-level doubling merge-key chain yields `skipped: nodes` in under a second under
+    `ulimit -v 1000000`.
+- **Port facts and spec-update notes.** A Compose `ports: "8200:8000"` emits two `port` facts of one service and the record cannot say which
+  is published; `-bundle-spec3.md` §1.6 has no field for it. P1 accepts the ambiguity (a consumer `localhost:8000` can match a service that
+  only exposes 8000 internally; the fixtures use `8000:8000` and `8300:8300`), P1-17 reports it as a known residual, and the spec update
+  adds an optional `portKind` (`published` | `container`) that P1-17 then reads (a loopback consumer matches `published`). Also for that
+  update: `launchFact.service` is a Compose service **or** a `.mcp.json` server name, `origin` telling which (identity
+  `(origin, path, service)`, P1-17); and §5.17's keyPath sentence omits that `render_key_path` also quotes empty and control-character segments.
+- **Done / Gate:** one derivation table row per format of `-bundle-spec3.md` §5.17; the hostile-input rules above, each with its
+  test; `analyst`; `security-expert` advisory. Each writer's test runs `writer_rules.audit_records` with `texts` over the records it produced,
+  and **`texts` covers every entry that carries `bindParts`** (W6/W7 withhold `bindValue` for `ip`/`external` hosts, so `texts` is the only
+  source `_audit_config_entry` can re-derive their parts from; without it the host classification goes unchecked). The test asserts that
+  coverage, so a gap fails loudly rather than being silently unverifiable; no change to `audit_records` itself.
 
 ## P1-12 · prompt/Markdown extractor — `coder`
 
@@ -390,6 +469,26 @@ not a P1 language).
   callers); a `prompt-md` file's mentions of a tool, script or command become call sites of kind `mention`,
   `possible`/`prompt-mention`; fenced code in a prompt is not a call; the loader fails if the manifest is
   absent or its glob list changed shape (a schema check).
+- **Bare tool names.** A mention also names a tool by its bare name (`get_item` in prose, `reindex` in a table cell), but only
+  against a vocabulary: `extract_markdown(..., known_tools: frozenset[str] = frozenset())` matches a bare name, on word
+  boundaries in prose, inline spans and table cells and never in fenced code or front matter, only when it is in `known_tools`;
+  an empty set turns it off. The set is P1-44's (`-p1-linking.md` P1-44 (6)); the extractor invents no vocabulary and the linker
+  does not resolve unmatched identifiers. Tests: the AC6-PM-1 prose and AC6-PM-2 table goldens with `known_tools={"get_item",
+  "reindex"}`; the same text with the empty set has no mention; `reindexing` does not match; a fenced `get_item` does not.
+- **Fixture rows (AC6-PM-1, AC6-PM-2) stay `gate: P1` as written**, once two things hold: the vocabulary above, and a
+  prompt-bearing path. `prompts/agent.md` and `prompts/tools.md` match no manifest glob, so they classify `doc` and get no
+  mentions. **Follow-up for `qa-engineer` (the fixtures are its files):** move the two files under a matching path of the fixture
+  repo (`.claude/agents/agent.md`, `.claude/agents/tools.md`, glob `.claude/agents/**/*.md`), re-path the two rows in
+  `cpg/fixtures/system1/expected/fx-svc.yaml` and their lines in `docs/test-plans/connected-code-graph-fixtures.md`. Re-scoping the
+  rows is rejected: they are the only fixture rows for AC-6's prompt mention.
+- **More behaviours:** a `disallowedTools:` front-matter line is a deny-list and makes **no mention** (test: an `mcp__x__y` under it
+  yields none, under `tools:` yields one); the extractor **raises** on a non-normalised path (`./`, a leading `/`, `//`, `..`, `\`)
+  rather than classify it `doc`; a parity test ties the classifier to the eval kit: `tuple(load_globs().include) ==
+  export_kit.PROMPT_MD_GLOBS` (and the except list) and `export_kit.is_prompt_md(f) == (classify(f) == "prompt-md")` over
+  `git ls-files '*.md'` (the kit is frozen, so the test, not an edit, is the control). `MarkdownError` for an oversize file is
+  P1-44's to skip.
+- **Writer rules:** this extractor writes none of the guarded keys (`command`, `args`, `bindValue`, `default`, `valueHash`,
+  `defaultHash`), so P1-07's `audit_records` check is not applicable to it.
 - **Done / Gate:** goldens plus a corpus smoke on `claude/**` prompts; `analyst`.
 
 ## P1-13 · `-bundle-spec5.md` (F-7, `bindParts`) — `architect`
@@ -415,7 +514,18 @@ identity tuple) and the graph note. **Gate:** `analyst`; `security-expert`.
   defines no key-reading function), `cpg/tests/test_answer.py`, and the P1-11 tests whose expectations change: W6 withholds `bindValue` for `ip` and
   `external` URL hosts, and W7 plus spec5 §1 give every P1-11 URL entry `bindParts`, so those bundles become `"1.1"`
   with `bindKeyCheck` (spec5 §6.1, §6.2).
-- **Guard:** `bindParts` joins the key set of P1-07's AST guard, with its planted-offender rows; only `writer_rules.bind_parts_allowed` writes it.
+- **Link-local and metadata hosts (writer-only, one set):** a host in `169.254.0.0/16`, `fe80::/10`, `fec0::/10`, `100::/64`, `fd00:ec2::254`,
+  `100.100.100.200`, `168.63.129.16` (Azure wireserver), `192.0.0.192` (Oracle) or `2002::/16` (6to4, which embeds any IPv4, metadata
+  included) is hostKind `external` (no clear host, hash only), as P1-11 withholds its `bindValue`. The set is one constant in
+  `writer_rules` used by `_parts_for` and `bind_value`; a test per member (and a neighbour outside it) pins it. **The validator does not
+  enforce it, by design:** spec5 §4 makes any non-loopback IPv4/IPv6 literal a clear `ip`, so a bundle with such a host is
+  spec-conformant, and the writer withholds more under spec3 §1.10 (spec5 §3, last paragraph). A clear well-known address discloses
+  nothing, and no consumer fetches a bundle host, so a validator rule would add a spec successor for no leak closed. **RFC1918 and other
+  private `ip` hosts stay clear**: that is the stakeholder decision SA-13/Q4 (2026-10-29, spec5 §4), not reopened here.
+- **Header fields have one owner: P1-44** (below, `-p1-linking.md` behaviour (8)). This step supplies `bind_header_fields(key, records)`
+  and `ConfigResult.header_fields` (per-extractor, informational); only the merged set decides the header.
+- **Guard:** `bindParts` joins the key set of P1-07's AST guard, with its planted-offender rows; only `writer_rules.bind_parts_fields`
+  writes it, gated by `writer_rules.bind_parts_allowed` (E1-E4; W6/W7 sit in `bind_value`).
 - **Key epoch (spec5 §5.4):** this step supplies `bind_parts_usable` and its test (a bundle planted under spec5's
   second test key is loaded but its `bindParts` are not usable; the same bundle under the first key is the positive
   control); BR-1–BR-3's `usable` column. P1-17 (`bind.py`) owns the binding outcomes and the `bind-key-mismatch`

@@ -2,7 +2,7 @@
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "urn:ccg:bundle-v1",
  "title": "ccg fact bundle v1: one record (one JSONL line)",
- "description": "docs/plans/connected-code-graph-bundle-spec3.md read with docs/plans/connected-code-graph-bundle-spec4.md. Validates ONE record. The spec is normative and ccg/bundle.py is the reference validator (BS2 section 1.12); this schema is necessary but NOT sufficient and never rejects a spec-valid record. bundle.py adds the file framing and canonical bytes, record order and duplicate ids, every id recompute, in-bundle references and the cross-record rules, the one-encoding rule for quoted keys, nameNorm, the canonical-IPv6 check, the token screen, the name rule, W1, and the argv gate over the emitted sequence. A consumer that validates with this schema alone is not a validator.",
+ "description": "docs/plans/connected-code-graph-bundle-spec3.md read with docs/plans/connected-code-graph-bundle-spec4.md and -bundle-spec5.md (bindParts, header.bindKeyCheck, bundleSchemaVersion 1.0 or 1.1). Validates ONE record. The spec is normative and ccg/bundle.py is the reference validator (BS2 section 1.12); this schema is necessary but NOT sufficient and never rejects a spec-valid record. bundle.py adds the file framing and canonical bytes, record order and duplicate ids, every id recompute, in-bundle references and the cross-record rules, the one-encoding rule for quoted keys, nameNorm, the canonical-IPv6 check, the token screen, the name rule, W1, and the argv gate over the emitted sequence, and spec5 section 6.4's V1 (cross-record version rule), V2, V3, V4d, V5c-V5i and V6 (parse_bind_url). A consumer that validates with this schema alone is not a validator.",
  "type": "object",
  "required": [
   "type"
@@ -647,7 +647,10 @@
      "const": "header"
     },
     "bundleSchemaVersion": {
-     "const": "1.0"
+     "enum": [
+      "1.0",
+      "1.1"
+     ]
     },
     "unit": {
      "type": "object",
@@ -864,6 +867,9 @@
        "$ref": "#/$defs/count"
       }
      }
+    },
+    "bindKeyCheck": {
+     "$ref": "#/$defs/hex64"
     }
    }
   },
@@ -1953,6 +1959,9 @@
     },
     "example": {
      "type": "boolean"
+    },
+    "bindParts": {
+     "$ref": "#/$defs/bindParts"
     }
    },
    "allOf": [
@@ -2397,6 +2406,71 @@
      ]
     }
    ]
+  },
+  "bindParts": {
+   "description": "docs/plans/connected-code-graph-bundle-spec5.md section 5.3: keyed binding parts of a URL value (V4a-V4c, V4e-V4i, V5a/V5b). Matching input only; never in the graph and never rendered. bundle.py adds V1, V2, V3, V4d, V5c-V5i and V6.",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "scheme",
+    "hostKind",
+    "hostHmac",
+    "pathHmacs"
+   ],
+   "properties": {
+    "scheme": {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9+.-]{0,15}(?!\\n)$"
+    },
+    "port": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 65535
+    },
+    "hostKind": {
+     "enum": [
+      "loopback",
+      "ip",
+      "service",
+      "external"
+     ]
+    },
+    "host": {
+     "type": "string"
+    },
+    "hostHmac": {
+     "$ref": "#/$defs/hex64"
+    },
+    "pathHmacs": {
+     "type": "array",
+     "maxItems": 32,
+     "items": {
+      "$ref": "#/$defs/hex64"
+     }
+    }
+   },
+   "if": {
+    "properties": {
+     "hostKind": {
+      "const": "external"
+     }
+    },
+    "required": [
+     "hostKind"
+    ]
+   },
+   "then": {
+    "not": {
+     "required": [
+      "host"
+     ]
+    }
+   },
+   "else": {
+    "required": [
+     "host"
+    ]
+   }
   }
  }
 }

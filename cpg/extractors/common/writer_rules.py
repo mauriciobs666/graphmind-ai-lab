@@ -7,7 +7,7 @@ accessors or ``ccg.valuehash`` itself, and does not write the fields below by ha
 
 **Enforcement is a tripwire plus a per-obligation backstop, not a proof.** The tripwire is an AST test
 (``tests/test_writer_rules.py``) that fails if another extractor module writes ``command``, ``args``, ``bindValue``,
-``default``, ``valueHash`` or ``defaultHash`` (literal or constant-foldable keys) or reaches the rule-deciding names; it
+``default``, ``valueHash``, ``defaultHash`` or ``bindParts`` (literal or constant-foldable keys) or reaches the rule-deciding names; it
 cannot see ``dict(zip(..))``, ``r.update(var)``, a ``**`` splat of a built mapping or a data-computed key. The backstop is
 ``audit_records``, which a writer's own test runs over the records it produced: it re-derives W1-W3 and W2 for
 ``default``, the argv fixed point, the hash domain (the record's own id), ``defaultHash`` present whenever ``default`` is
@@ -24,10 +24,16 @@ Obligations:
   that does not parse, or text with no UTF-8 encoding (``encodable``), withholds. A withheld field is *absent*, never
   ``null``. Text that cannot be encoded is never hashed (``valueHash`` is required, so the *entry* is dropped by the
   config extractor, P1-11); ``default_fields`` then returns ``{}``.
+- **E1-E4, W6, W7** (`-bundle-spec5.md` §6.1, §6.2; P1-14) ``bind_parts_allowed`` decides whether a ``configEntry`` may carry
+  ``bindParts``: the URL parse is not ``None``, W1, a binding role, the name rule on every ``keyPath`` segment and, for an alias,
+  on the anchor's. ``bind_parts_fields`` is the one place the field is written. A link-local or metadata host is hostKind
+  ``external`` (hash only, never in clear). A ``url``-form ``bindValue`` is kept only if ``bindParts`` is emitted (W7) and its
+  hostKind is ``loopback`` or ``service`` (W6). ``bind_header_fields`` gives ``"1.1"`` and ``bindKeyCheck`` exactly when one
+  entry carries parts. Hostile input is withheld, never raised, and no message carries it.
 - **SA-1** ``launchFact.command``/``args`` exist only as the output of ``ccg.bundle.gate_argv``; an argv with no program
   is gated behind a ``<redacted>`` argv[0] and ``command`` never holds a flag.
 - **Targets** a link-local or cloud-metadata host (169.254.0.0/16, fe80::/10, fec0::/10, 100::/64, fd00:ec2::254,
-  100.100.100.200, in any URL or numeric form) is never a ``bindValue`` or ``default``. W2's declared-service set is the
+  100.100.100.200, 168.63.129.16, 192.0.0.192, 2002::/16, in any URL or numeric form) is never a ``bindValue`` or ``default``. W2's declared-service set is the
   caller's: P1-11 passes only services of primary-role Compose files.
 - **§1.7.5** ``valueHash``/``defaultHash`` are ``entry_hmac`` over the record's own 32-hex id.
 
@@ -40,11 +46,12 @@ import ipaddress
 import re
 from collections.abc import Collection, Iterable, Mapping
 
-from ccg import atrest, bundle, ids
+from ccg import atrest, bundle, ids, valuehash
 from ccg.valuehash import entry_hmac
 
-__all__ = ["encodable", "bind_value", "bind_fields", "launch_default", "default_fields", "launch_argv_fields",
-           "value_hash", "value_hash_fields", "default_hash", "config_entry_value_hash", "system_key", "audit_records"]
+__all__ = ["encodable", "bind_value", "bind_fields", "bind_parts_allowed", "bind_parts_fields", "bind_header_fields",
+           "launch_default", "default_fields", "launch_argv_fields", "value_hash", "value_hash_fields", "default_hash",
+           "config_entry_value_hash", "system_key", "audit_records"]
 
 _RECORD_ID = re.compile(r"[0-9a-f]{32}")
 _HASH = re.compile(r"[0-9a-f]{64}")
@@ -89,9 +96,12 @@ def _single_label_host(value: str) -> str | None:
 # Never carried as a bindValue or a default, whatever the form of the URL: link-local and cloud-metadata targets.
 # 169.254.0.0/16 and fe80::/10 (P1-11 security review M3), plus the list deferred in
 # `docs/plans/connected-code-graph-egress-spec4.md` §6: `fec0::/10`, `100::/64`, `fd00:ec2::254`, `100.100.100.200`.
-_V4_NETS = (ipaddress.ip_network("169.254.0.0/16"), ipaddress.ip_network("100.100.100.200/32"))
+# Architect ruling (P1-14): also 168.63.129.16 (Azure wireserver), 192.0.0.192 and the whole 6to4 block 2002::/16 (which embeds
+# any IPv4 address); RFC1918 stays clear. Writer-only: the validator has no link-local rule.
+_V4_NETS = (ipaddress.ip_network("169.254.0.0/16"), ipaddress.ip_network("100.100.100.200/32"),
+            ipaddress.ip_network("168.63.129.16/32"), ipaddress.ip_network("192.0.0.192/32"))
 _V6_NETS = (ipaddress.ip_network("fe80::/10"), ipaddress.ip_network("fec0::/10"), ipaddress.ip_network("100::/64"),
-            ipaddress.ip_network("fd00:ec2::254/128"))
+            ipaddress.ip_network("fd00:ec2::254/128"), ipaddress.ip_network("2002::/16"))
 _INET_PART = re.compile(r"0[xX][0-9a-fA-F]+|[0-9]+")
 
 
@@ -171,13 +181,68 @@ def bind_value(key_path: str, value: str, *, binding_role: bool, declared_servic
             return None
     except ValueError:                                                          # a keyPath that does not parse
         return None
-    return value if _w2_ok(value, declared_services) else None                  # W2
+    if not _w2_ok(value, declared_services):                                    # W2
+        return None
+    if _URL_AUTHORITY.match(value):                                             # a `url`-form value (§6.2)
+        if not bind_parts_allowed(key_path, value, binding_role=binding_role, declared_services=declared_services,
+                                  via_alias=via_alias, anchor_key_path=anchor_key_path, withhold=withhold):
+            return None                                                         # W7: no clear URL without parts
+        url = bundle.parse_bind_url(value)
+        if valuehash.host_kind(url, declared_services, force_external=_forbidden_target(url.host)) not in ("loopback", "service"):
+            return None                                                         # W6: ip and external keep the parts only
+    return value
 
 
 def bind_fields(key_path: str, value: str, **kw) -> dict:
     """``{"bindValue": value}`` or ``{}``: a withheld field is absent, never ``null`` (W4)."""
     v = bind_value(key_path, value, **kw)
     return {} if v is None else {"bindValue": v}
+
+
+def bind_parts_allowed(key_path: str, value: str, *, binding_role: bool, declared_services: Collection[str] = (),
+                       via_alias: bool = False, anchor_key_path: str | None = None, withhold: bool = False) -> bool:
+    """E1-E4 of `-bundle-spec5.md` §6.1: may a ``configEntry`` carry ``bindParts`` for ``value``? The URL parse must not be
+    ``None`` (E1), W1 (E2), a binding role (E3), the name rule on every named ``keyPath`` segment and, for a YAML alias,
+    on the anchor's too (E4, W3). What cannot be judged (a ``keyPath`` that does not parse, text with no UTF-8 encoding) is
+    withheld, never raised. ``declared_services`` is accepted so one keyword set serves ``bind_value`` and
+    ``bind_parts_fields``; the gate does not depend on it (§4's host classes are applied when the parts are built)."""
+    if withhold or not binding_role or not encodable(value) or not encodable(key_path):
+        return False
+    if via_alias and (not encodable(anchor_key_path) or not _name_rule_ok(anchor_key_path)):       # E4, the alias half
+        return False
+    try:
+        segs = bundle._keypath_segments(key_path)
+    except ValueError:
+        return False
+    if bundle._w1_fails(segs) or bundle._name_rule_fails(segs):                                   # E2, E4
+        return False
+    return bundle.parse_bind_url(value) is not None                                               # E1
+
+
+def _parts_for(key: bytes, value: str, declared_services: Collection[str]) -> dict | None:
+    """The §5.3 object for a ``value`` the gate admitted: a link-local or metadata host is ``external`` (hash only)."""
+    url = bundle.parse_bind_url(value)
+    if url is None:
+        return None
+    return valuehash.bind_parts(key, value, declared_services, force_external=_forbidden_target(url.host))
+
+
+def bind_parts_fields(key: bytes, key_path: str, value: str, *, binding_role: bool, declared_services: Collection[str],
+                      via_alias: bool = False, anchor_key_path: str | None = None, withhold: bool = False) -> dict:
+    """``{"bindParts": {...}}`` or ``{}``: the one way an extractor emits the field (a withheld field is absent, W4)."""
+    if not bind_parts_allowed(key_path, value, binding_role=binding_role, declared_services=declared_services,
+                              via_alias=via_alias, anchor_key_path=anchor_key_path, withhold=withhold):
+        return {}
+    parts = _parts_for(key, value, declared_services)
+    return {} if parts is None else {"bindParts": parts}
+
+
+def bind_header_fields(key: bytes, records: Iterable[dict]) -> dict:
+    """The ``header`` fields of the version rule (§1): ``bundleSchemaVersion`` ``"1.1"`` and ``bindKeyCheck`` exactly when
+    some ``configEntry`` in ``records`` carries ``bindParts``; ``{}`` otherwise (the header stays ``"1.0"``)."""
+    if any(r.get("type") == "configEntry" and "bindParts" in r for r in records):
+        return {"bundleSchemaVersion": "1.1", "bindKeyCheck": atrest.bind_key_check(key)}
+    return {}
 
 
 def launch_default(env_var: str, value: str, *, binding_role: bool, declared_services: Collection[str],
@@ -293,7 +358,14 @@ def _audit_config_entry(r, tag, rid, key, declared, texts, out) -> None:
     bv, vh = r.get("bindValue"), r.get("valueHash")
     if isinstance(bv, str) and bind_value(str(r.get("keyPath", "")), bv, binding_role=True,
                                           declared_services=declared) != bv:
-        out.append(f"{tag}: bindValue breaks W1/W2/§1.7.2/§1.7.3")
+        out.append(f"{tag}: bindValue breaks W1/W2/W6/W7/§1.7.2/§1.7.3")
+    if "bindParts" in r:
+        bp = r["bindParts"]
+        text = texts.get(rid, bv if isinstance(bv, str) else None)
+        if not isinstance(bp, dict):
+            out.append(f"{tag}: bindParts is not an object (a withheld field is absent, never null)")
+        elif text is not None and (not encodable(text) or _parts_for(key, text, declared) != bp):
+            out.append(f"{tag}: bindParts are not the §5.3 parts of the entry's text under the key (E1, §4, link-local)")
     if not (isinstance(vh, str) and _HASH.fullmatch(vh)):
         out.append(f"{tag}: valueHash missing or not 64-hex")
         return
