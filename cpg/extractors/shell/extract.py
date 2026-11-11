@@ -138,6 +138,9 @@ def _check_rel(rel: object) -> str:
     return rel
 
 
+check_rel = _check_rel          # public name for callers outside this module (``ccg.build`` validates tree paths with it)
+
+
 def _read(root: Path, rel: str) -> bytes:
     try:
         target = (root / rel).resolve()

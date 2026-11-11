@@ -953,15 +953,42 @@ def test_a_port_listed_twice_in_one_compose_file_contributes_its_first_fact_only
     assert [e.entry_id for e in got.entries] == ["P-a", "M-api"]
 
 
-# --- L1: ccg never imports extractors; the forbidden-target rule is ccg's, the writer imports it ------------------------
-def test_l1_no_module_under_ccg_imports_extractors():
-    root = Path(bind_mod.__file__).resolve().parents[1]
+# --- L1: ccg never imports extractors, except the orchestration layer; the forbidden-target rule is ccg's -----------------
+ORCHESTRATION = frozenset({"build.py", "refresh.py"})     # the only ccg modules that may import `extractors` (they run them)
+
+
+def test_l1_the_orchestration_allowlist_is_exactly_build_and_refresh():
+    """Pin the allowlist itself: widening it (adding ids.py, say) must fail a test, not pass silently."""
+    assert ORCHESTRATION == frozenset({"build.py", "refresh.py"})
+
+
+def _extractor_importers(root, allowed=ORCHESTRATION):
+    """Relative paths of the ccg modules outside ``allowed`` that import ``extractors``."""
     bad = []
     for f in root.rglob("*.py"):
+        rel = str(f.relative_to(root))
+        if rel in allowed:
+            continue
         for n in ast.walk(ast.parse(f.read_text())):
             names = [a.name for a in n.names] if isinstance(n, ast.Import) else [n.module or ""] if isinstance(n, ast.ImportFrom) and not n.level else []
-            bad += [f"{f.relative_to(root)}: {x}" for x in names if x.split(".")[0] == "extractors"]
-    assert bad == []
+            bad += [f"{rel}: {x}" for x in names if x.split(".")[0] == "extractors"]
+    return bad
+
+
+def test_l1_no_module_under_ccg_imports_extractors():
+    """Rule: `ccg` never imports `extractors`, except an explicit allowlist of orchestration modules (`ccg/build.py`, and
+    `ccg/refresh.py` of P1-20), which run the extractors by design. Every other module under `cpg/ccg` must not."""
+    root = Path(bind_mod.__file__).resolve().parents[1]
+    assert _extractor_importers(root) == []
+    assert (root / "build.py").exists()                                       # the allowlist is not vacuous
+    assert any(m.startswith("build.py") for m in _extractor_importers(root, allowed=frozenset()))
+
+
+def test_l1_the_allowlist_is_exactly_the_orchestration_modules(tmp_path):
+    (tmp_path / "build.py").write_text("import extractors.x\n")
+    (tmp_path / "other.py").write_text("from extractors.y import z\n")
+    assert _extractor_importers(tmp_path) == ["other.py: extractors.y"]
+    assert len(_extractor_importers(tmp_path, allowed=frozenset({"other.py"}))) == 1
 
 
 def test_l1_the_writer_uses_the_ccg_definition_not_its_own():
