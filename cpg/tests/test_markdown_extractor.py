@@ -462,3 +462,114 @@ def test_document_fingerprint_is_the_hash_of_the_stripped_non_blank_lines(globs)
     ex = run(PROMPT_PATH, b"  a \n\n\t\nb\n", globs)
     assert ex.records[1]["fingerprint"] == "7e18f737311b2dc3b2f269dd78396b0351f14fb66efa879f768cb23181883c78"  # sha256("a\nb")
     assert run(PROMPT_PATH, b"", globs).records[1]["fingerprint"] == hashlib.sha256(b"").hexdigest()
+
+
+# --- bare tool names against a vocabulary (AC6-PM-1, AC6-PM-2) and deny-lists ------------------------------------------
+
+KNOWN = frozenset({"get_item", "reindex"})
+AGENT = ".claude/agents/agent.md"
+
+
+def bare(globs, text, known=KNOWN, path=AGENT):
+    ex = extract_markdown(path, text if isinstance(text, bytes) else text.encode(), repo_id=REPO, unit_id=UNIT,
+                          globs=globs, history=AT, known_tools=known)
+    return [(c["line"], c["calleeName"]) for c in callsites(ex)], ex
+
+
+def test_ac6_pm1_prose_mention_with_a_vocabulary(globs):
+    got, ex = bare(globs, (DATA / "pm1_prose.md").read_bytes())
+    assert got == [(3, "get_item")]
+    c = callsites(ex)[0]
+    assert (c["callKind"], c["status"], c["reason"]) == ("mention", "possible", "prompt-mention")
+
+
+def test_ac6_pm2_table_cell_mention_with_a_vocabulary(globs):
+    assert bare(globs, (DATA / "pm2_table.md").read_bytes())[0] == [(5, "reindex")]
+
+
+@pytest.mark.parametrize("name", ["pm1_prose.md", "pm2_table.md"])
+def test_empty_vocabulary_switches_bare_names_off(globs, name):
+    assert bare(globs, (DATA / name).read_bytes(), known=frozenset())[0] == []
+    ex = run(AGENT, (DATA / name).read_bytes(), globs)             # the default argument is the empty set
+    assert callsites(ex) == []
+
+
+def test_bare_name_needs_word_boundaries(globs):
+    assert bare(globs, "reindexing and re_index and xreindex and reindex_all and `get_items`\n")[0] == []
+    assert bare(globs, "(reindex), reindex. `get_item` and get_item!\n")[0] == [
+        (1, "reindex"), (1, "reindex"), (1, "get_item"), (1, "get_item")]
+
+
+def test_bare_name_in_fenced_code_is_not_a_mention(globs):
+    assert bare(globs, "```\nget_item reindex\n```\n~~~\n`get_item`\n~~~\nthen reindex\n")[0] == [(7, "reindex")]
+
+
+def test_bare_name_in_front_matter_is_not_a_mention(globs):
+    text = "---\nname: reindex\ndescription: call get_item\ntools: get_item\n---\nbody\n"
+    assert bare(globs, text)[0] == []
+    assert bare(globs, text + "reindex\n")[0] == [(7, "reindex")]
+
+
+def test_bare_names_do_not_apply_to_a_doc(globs):
+    assert bare(globs, "call get_item\n", path="docs/x.md")[0] == []
+
+
+def test_a_known_name_that_is_also_another_mention_is_emitted_once(globs):
+    got, _ = bare(globs, "`mcp__a__b` and `git`\n", known=frozenset({"mcp__a__b", "git"}))
+    assert got == [(1, "mcp__a__b"), (1, "git")]
+
+
+def test_disallowed_tools_front_matter_makes_no_mention(globs):
+    text = ("---\ntools: mcp__x__y\ndisallowedTools: mcp__a__b\n---\nbody\n")
+    assert names(globs, text) == [(2, "mcp__x__y")]
+    block = "---\ndisallowedTools:\n  - mcp__a__b\n  - mcp__c__d\ntools:\n  - mcp__x__y\n---\n"
+    assert names(globs, block) == [(6, "mcp__x__y")]
+    assert names(globs, "---\ndisallowedtools: mcp__a__b\n---\n") == []        # key case
+
+
+def test_a_fence_info_string_is_part_of_the_fence_not_prose(globs):
+    assert bare(globs, "```get_item\ncode\n```\nreindex\n")[0] == [(4, "reindex")]
+
+
+# --- Pass 2: front matter detection, closer bound, bare-name boundaries -------------------------------------------------
+
+def test_a_leading_horizontal_rule_is_not_front_matter(globs):
+    assert names(globs, "---\n\nRun `a.sh` and `git`.\n\n---\nMore `b.sh`\n") == [(3, "a.sh"), (3, "git"), (6, "b.sh")]
+    assert names(globs, "---\nplain prose\n---\n`a.sh`\n") == [(4, "a.sh")]
+    assert names(globs, "---\n---\n`a.sh`\n") == [(3, "a.sh")]
+
+
+@pytest.mark.parametrize("first", ["name: x", "# comment", "- item"])
+def test_yaml_looking_first_line_makes_front_matter(globs, first):
+    text = f"---\n{first}\n`a.sh` mcp__x__y\n---\n`b.sh`\n"
+    assert names(globs, text) == [(3, "mcp__x__y"), (5, "b.sh")]
+
+
+def test_blank_lines_before_the_first_yaml_line_are_skipped(globs):
+    assert names(globs, "---\n\n  \nname: x\n---\n`a.sh`\n") == [(6, "a.sh")]
+
+
+def closer_at(n: int) -> str:
+    return "---\ndisallowedTools: mcp__d__d\n" + "".join("k: v\n" for _ in range(n - 3)) + "---\n`a.sh` mcp__x__y\n"
+
+
+def test_front_matter_closer_bound_is_two_hundred_lines(globs):
+    assert mdx.FRONT_MATTER_MAX_LINES == 200
+    assert names(globs, closer_at(200)) == [(201, "a.sh"), (201, "mcp__x__y")]   # closer on line 200: front matter
+    assert names(globs, closer_at(201)) == [(2, "mcp__d__d"), (202, "a.sh"), (202, "mcp__x__y")]  # 201: not front matter
+
+
+@pytest.mark.parametrize("text", ["reindex-all", "re-reindex", "reindex.md", "reindex.x", "reindexé", "éreindex",
+                                  "reindex٣"])
+def test_bare_name_glued_to_hyphen_dot_word_or_non_ascii_does_not_match(globs, text):
+    assert bare(globs, f"call {text} now\n")[0] == []
+
+
+@pytest.mark.parametrize("text", ["call reindex.", "call reindex, then", "call reindex. Next", "reindex", "(reindex)", "reindex."])
+def test_bare_name_sentence_punctuation_still_matches(globs, text):
+    assert bare(globs, text + "\n")[0] == [(1, "reindex")]
+
+
+def test_script_name_emits_only_the_script_not_its_stem(globs):
+    got, _ = bare(globs, "run `a.sh` now\n", known=frozenset({"a"}))
+    assert got == [(1, "a.sh")]

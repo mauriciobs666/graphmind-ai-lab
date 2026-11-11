@@ -14,8 +14,12 @@ A mention is, outside fenced code (a fence is not a call, whatever it says):
 - **tool**: an ``mcp__<server>__<tool>`` name, in prose, in an inline code span or in front matter (where an agent
   declares the tools it uses);
 - **script**: a token of an inline code span that is a path or name ending ``.sh .py .js .mjs .ts``, as written;
+- **bare tool name**: a word in ``known_tools`` (the caller's vocabulary; empty switches this off), on word boundaries
+  (``[A-Za-z0-9_]`` runs) in prose, inline spans and table cells, never in fenced code or front matter;
 - **command**: the first word of an inline code span when it is one of ``COMMANDS`` (a closed list of CLI launchers),
   unless the span names a script (``bash x.sh`` mentions ``x.sh``, not ``bash``).
+
+A front-matter ``disallowedTools:`` entry (a deny-list) is never a mention; ``tools:`` entries are.
 
 Not recognised, by design: indented code blocks (indistinguishable from list continuation without a full CommonMark
 parser), spans across lines, link targets. The file is untrusted text: it is only decoded and scanned, never executed
@@ -51,6 +55,9 @@ _SCRIPT_EXT = (".sh", ".py", ".js", ".mjs", ".ts")
 
 _MCP = re.compile(r"mcp__[A-Za-z0-9][A-Za-z0-9-]{0,63}__[A-Za-z0-9_][A-Za-z0-9_-]{0,63}")
 _SCRIPT = re.compile(r"(?:\.{1,2}/)?(?:[A-Za-z0-9_.-]{1,80}/){0,8}[A-Za-z0-9_-][A-Za-z0-9_.-]{0,80}")
+_WORD = re.compile(r"[A-Za-z0-9_]+")
+_FM_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,63}:")
+FRONT_MATTER_MAX_LINES = 200
 _EXAMPLE_BASE = re.compile(r"(?:.*\.example.*|.*\.sample.*|example.*|sample.*)", re.S)
 
 
@@ -176,12 +183,59 @@ def _example(path: str) -> bool:
     return (_EXAMPLE_BASE.fullmatch(base) is not None) or any(s in ("examples", "samples") for s in segs[:-1])
 
 
-def _scan(lines: list[str], capped: list[int]):
+def _front_matter_end(lines: list[str]) -> int:
+    """The 1-based line of the closing ``---`` of a leading front matter block, else 0. The block must open with
+    ``---``, its first non-blank line must look like YAML (``key:``, a ``-`` list item or a ``#`` comment: otherwise
+    the ``---`` is a horizontal rule) and close within ``FRONT_MATTER_MAX_LINES`` lines."""
+    if not lines or lines[0].rstrip() != "---":
+        return 0
+    for n in range(2, min(len(lines), FRONT_MATTER_MAX_LINES) + 1):
+        text = lines[n - 1].rstrip()
+        if text == "---":
+            return n if _yaml_first(lines[1:n - 1]) else 0
+    return 0
+
+
+def _yaml_first(body: list[str]) -> bool:
+    for line in body:
+        t = line.strip()
+        if t:
+            return bool(_FM_KEY.match(t)) or t.startswith("#") or t == "-" or t.startswith("- ")
+    return False
+
+
+def _bare_ok(line: str, start: int, end: int) -> bool:
+    """Word boundary for a vocabulary name: not glued to ``-`` or a non-ASCII letter/digit, and not followed by
+    ``.`` plus an alphanumeric (a file name or domain); a sentence-final ``.`` or ``,`` still matches."""
+    if start > 0 and (line[start - 1] == "-" or (line[start - 1].isalnum() and not line[start - 1].isascii())):
+        return False
+    if end < len(line):
+        c = line[end]
+        if c == "-" or (c.isalnum() and not c.isascii()):
+            return False
+        if c == "." and end + 1 < len(line) and line[end + 1].isalnum():
+            return False
+    return True
+
+
+def _scan(lines: list[str], capped: list[int], known: frozenset[str]):
     """The mentions ``(line, column, name)`` of an already-split file, in source order, outside fences."""
     out: list[tuple[int, int, str]] = []
     fence: tuple[str, int] | None = None
+    fm_end = _front_matter_end(lines)
+    key = ""
     for n, raw in enumerate(lines, start=1):
         line = raw
+        if fm_end and n <= fm_end:
+            if n in (1, fm_end):
+                continue
+            m = _FM_KEY.match(line)
+            if m:
+                key = m.group()[:-1].lower()
+            if key == "disallowedtools":
+                continue
+            out.extend((n, mm.start(), mm.group()) for mm in _MCP.finditer(line[:LINE_CAP]))
+            continue
         if len(line) > LINE_CAP:
             line = line[:LINE_CAP]
             capped[0] += 1
@@ -196,18 +250,21 @@ def _scan(lines: list[str], capped: list[int]):
         found = [(m.start(), m.group()) for m in _MCP.finditer(line)]
         for content, col in _spans(line):
             found.extend((c, t) for t, c in _span_mentions(content, col))
-        for col, name in sorted(found):
+        if known:
+            found.extend((w.start(), w.group()) for w in _WORD.finditer(line) if w.group() in known and _bare_ok(line, w.start(), w.end()))
+        for col, name in sorted(set(found)):
             out.append((n, col, name))
     return out
 
 
 def extract_markdown(repo_path: str, data: bytes, *, repo_id: str, unit_id: str, globs: Globs,
-                     bundle_path: str | None = None, history: tuple[str, str] | None = None) -> Extraction:
+                     bundle_path: str | None = None, history: tuple[str, str] | None = None,
+                     known_tools: frozenset[str] = frozenset()) -> Extraction:
     """Records for one Markdown file.
 
     ``repo_path`` is the repository-relative POSIX path the manifest's globs are matched against; ``bundle_path`` (default
     the same) is the ``path`` the records carry (relative to the unit's root when the unit is not the repository).
-    ``history`` is ``(lastChangedAt, lastChangedCommit)`` for the ``<document>`` symbol, from the assembler's blame."""
+    ``known_tools`` is the vocabulary of bare tool names (P1-44's; empty: off). ``history`` is ``(lastChangedAt, lastChangedCommit)`` for the ``<document>`` symbol, from the assembler's blame."""
     _check_path("repo_path", repo_path)
     if bundle_path is not None:
         _check_path("bundle_path", bundle_path)
@@ -242,7 +299,7 @@ def extract_markdown(repo_path: str, data: bytes, *, repo_id: str, unit_id: str,
         return ex
 
     capped = [0]
-    mentions = _scan(lines, capped)
+    mentions = _scan(lines, capped, known_tools)
     ex.lines_truncated = capped[0]
     if len(mentions) > MAX_MENTIONS:
         mentions = mentions[:MAX_MENTIONS]

@@ -158,3 +158,56 @@ minus mentions, which is tested.
 
 None: every new check this review leaned on (parity with a second copy of a list, a silent-argument mutant) is already covered
 by root `REVIEW.md`'s check-can-fail bullet.
+
+## Pass 2 (follow-up on d2ab7020: F2/F4/F5, `known_tools`, front-matter change)
+
+**Verdict: approve with suggestions** (no blocker; F1's vocabulary is now supplied, F3/F6 stay with `architect`).
+Executed: `tests/test_markdown_extractor.py` + `tests/test_writer_rules.py` 384 passed (`ulimit -v 1500000`); probes; a before/after
+run of `git show d2ab7020:...extract.py` (scratch copy) against all 139 prompt-md files; 4 own mutants in fresh copies under
+`cpg/.ccg-work/gate-p1-12/`.
+
+Dispositions of Pass 1: **F1** fixed for the extractor (bare names via `known_tools`; goldens `pm1_prose.md`/`pm2_table.md` copy the
+fixture rows' text); the fixture-path/`doc` conflict and who supplies the set stay P1-44's/`architect`'s. **F2** fixed: parity
+tests exist (they pass in-tree; they cannot run in a scratch copy, so every scratch mutant run fails those two, and I discounted them
+against an unmutated baseline run C0). **F3** not addressed (routed, as instructed). **F4** fixed: A2/B4/B5 have tests; B1
+equivalent, verified: `_MCP`, `_SCRIPT`, `_WORD`, `_FM_KEY` are ASCII-only patterns and a non-ASCII `known_tools` entry can never
+match (`Ф.sh`, `mcp__ä__b` give no mention), so NFC cannot change an emitted name; B2 equivalent as before. **F5** fixed: nine forms
+(`''`, `/a.md`, `a\b.md`, NUL, `./a.md`, `a//b.md`, `a/./b.md`, `a/../b.md`, `a/`) all raise for both `repo_path` and `bundle_path`;
+`a/b.md` passes. **F6** not addressed (routed); the `disallowedTools` item is fixed.
+
+### P2-1 (minor, verified) — a leading horizontal rule can be read as front matter, and real mentions then vanish
+`_front_matter_end` takes any `---` on line 1 and the next `---` within 200 lines as front matter, with no check that the block is
+YAML-shaped. Probe: `---\n\nRun \`a.sh\` and \`git\`.\n\n---\nMore \`b.sh\`` gives only `['b.sh']`: `a.sh` and `git` are lost.
+On the real corpus nothing is lost (21 files begin `---`, all genuine front matter), so this is a latent hazard.
+*Suggested:* treat the block as front matter only if its first non-blank line is a `key:`, `- ` or `#` line; add one planted
+horizontal-rule case.
+
+### P2-2 (minor, verified) — the 200-line bound is untested
+Mutant C2 (`FRONT_MATTER_MAX_LINES + 1`) survives: no test closes the block at line 200 or 201. Probed by hand:
+closer at line 200 is front matter, at 201 it is prose (correct). *Suggested:* two rows at those boundaries.
+
+### P2-3 (minor, verified) — "word boundary" admits `-`, `.` and non-ASCII neighbours
+`reindex-all`, `reindex.md`, `reindexé` and `éreindex` each emit a `reindex` mention (only `[A-Za-z0-9_]` neighbours block it);
+`a.sh` with `a` in the vocabulary emits both `a.sh` and `a`. Kebab-case names make `reindex-all` a plausible false positive, and
+the delegate's note "a name with other characters never matches" does not describe this. Impact is `possible`-only noise.
+*Suggested:* either also refuse a match adjacent to `-`, `.` or `/` (and non-ASCII letters), or state in the docstring that
+they are boundaries, and pin whichever with a test row.
+
+### Checks that passed (verified)
+- **Word boundary / fences / front matter / doc / empty set:** `xreindex`, `reindex_all`, `get_items` do not match; ```` ```reindex ````
+  info string and `~~~ reindex` are not scanned; `tools: ... reindex` in front matter gives only the `mcp__` name; a `doc` path gives
+  nothing even with a vocabulary; an empty set equals the old behaviour (corpus diff below); dedup works (`known={'git'}` over `` `git` ``
+  emits once).
+- **`disallowedTools:`** inline, block list, folded scalar, any case (`DISALLOWEDTOOLS`), and the key after it ends the skip
+  (`model: mcp__z__z` is counted); `tools:` entries are counted. A `---  ` padded delimiter works; a BOM before `---` means no front
+  matter (then it is prose, which is only more mentions).
+- **Front-matter behaviour change vs the plan.** The plan text (P1-12) says nothing about front matter, so the narrowing is not
+  contradicted, and the earlier ruling (front-matter `mcp__` names are mentions) still holds. **Real corpus, before/after:** 1868
+  mentions before, 1868 after, 0 lost, 0 gained (139 prompt-md files, per-(line, name) multiset diff). No real mention disappeared.
+- **Mutants (own, fresh copies):** C1 (silent ARGUMENT: `_check_path("bundle_path", repo_path)`) killed by
+  `test_non_normalised_path_raises_instead_of_classifying_doc`; C3 (`_` not a word char) killed by `test_bare_name_needs_word_boundaries`
+  and the AC6-PM-1 golden; **C2 survived** (P2-2); C4 (closing `---` scanned as body) survived and is equivalent (a `---` line has no
+  mention).
+
+Routing: `tdd-engineer` for P2-1/P2-2/P2-3 (three small tests plus one guard); `architect` still owes F1's P1-44 wiring of `known_tools`
+and the fixture path, F3, and F6.
