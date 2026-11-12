@@ -116,7 +116,7 @@ case "$cmd" in
     echo "6379/tcp -> $ip:$port" >"$d/ports"
     echo "$port" >"$d/hostport"; echo "$name" >"$W/p/$port"
     echo 0 >"$d/keys"; echo 1 >"$d/auth"; echo "$image" >"$d/image"
-    echo 41811 >"$d/modver"; echo 0 >"$d/tmax"; echo 1000 >"$d/miq"; echo default >"$d/acl"
+    echo 41811 >"$d/modver"; echo 0 >"$d/tmax"; echo 1000 >"$d/miq"; echo 10000 >"$d/rsz"; echo default >"$d/acl"
     echo "$mem" >"$d/mem"; echo "$memswap" >"$d/memswap"
     echo deadbeef ;;
   *) echo "stub docker: unsupported command $cmd" >&2; exit 3 ;;
@@ -169,7 +169,7 @@ case "$cmd" in
     esac ;;
   MODULE) printf 'name\ngraph\nver\n%s\npath\n/var/lib/falkordb/bin/falkordb.so\nargs\nMAX_QUEUED_QUERIES\n25\n' "$(cat "$d/modver")" ;;
   GRAPH.CONFIG)
-    f=""; case "${3:-}" in TIMEOUT_MAX) f=tmax ;; MAX_INFO_QUERIES) f=miq ;; esac
+    f=""; case "${3:-}" in TIMEOUT_MAX) f=tmax ;; MAX_INFO_QUERIES) f=miq ;; RESULTSET_SIZE) f=rsz ;; esac
     if [ -z "$f" ]; then echo "ERR unknown config ${3:-}"; exit 0; fi
     case "$(echo "$2" | tr a-z A-Z)" in
       GET) printf '%s\n%s\n' "$3" "$(cat "$d/$f")" ;;
@@ -209,7 +209,7 @@ mkc() { # name state label hostport keys [ports-file-content]
   echo "$4" >"$d/hostport"; echo "$1" >"$W/p/$4"
   if [ -n "${6:-}" ]; then printf '%s\n' "$6" >"$d/ports"; else echo "6379/tcp -> 127.0.0.1:$4" >"$d/ports"; fi
   echo 1 >"$d/auth"; echo falkordb/falkordb:v4.18.11 >"$d/image"; echo 41811 >"$d/modver"
-  echo 10000 >"$d/tmax"; echo 0 >"$d/miq"; echo default >"$d/acl"; : >"$d/twlabel"
+  echo 10000 >"$d/tmax"; echo 0 >"$d/miq"; echo 10000 >"$d/rsz"; echo default >"$d/acl"; : >"$d/twlabel"
   echo 2147483648 >"$d/mem"; echo 2147483648 >"$d/memswap"
 }
 new_world() {
@@ -323,6 +323,7 @@ st_case() { # description setup-command
 }
 new_world; mkc ccg-falkordb running 1 6390 0; run_s -- status
 check "S0 clean instance -> status passes" '[ $RC = 0 ]'
+check "S0b status reports RESULTSET_SIZE" 'echo "$OUT" | grep -q "RESULTSET_SIZE:.*10000"'
 st_case "no password"        'echo 0 >"$W/c/ccg-falkordb/auth"'
 st_case "label missing"      ': >"$W/c/ccg-falkordb/label"'
 st_case "wrong image"        'echo falkordb/falkordb:latest >"$W/c/ccg-falkordb/image"'
@@ -331,6 +332,8 @@ st_case "two binding lines"  'printf "6379/tcp -> 127.0.0.1:6390\n6379/tcp -> [:
 st_case "no binding"         ': >"$W/c/ccg-falkordb/ports"'
 st_case "TIMEOUT_MAX 0 (restarted behind up's back)" 'echo 0 >"$W/c/ccg-falkordb/tmax"'
 st_case "MAX_INFO_QUERIES default 1000" 'echo 1000 >"$W/c/ccg-falkordb/miq"'
+st_case "RESULTSET_SIZE below the image default 10000 (the engine reader would take a cut reply as whole)" 'echo 5000 >"$W/c/ccg-falkordb/rsz"'
+st_case "RESULTSET_SIZE unreadable" ': >"$W/c/ccg-falkordb/rsz"'
 st_case "ACL probe user left" 'printf "default\nprobe\n" >"$W/c/ccg-falkordb/acl"'
 st_case "ACL user beside the P1 set" 'printf "default\nccg_build\nccg_buildx\n" >"$W/c/ccg-falkordb/acl"'
 st_case "ACL ccg_raw_ with no system" 'printf "default\nccg_raw_\n" >"$W/c/ccg-falkordb/acl"'

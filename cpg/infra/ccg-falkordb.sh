@@ -114,6 +114,9 @@ MEM_CAP_BYTES=$((2 * 1024 * 1024 * 1024))
 # P1 module config (-p0-graph.md §6): row 5 TIMEOUT_MAX default 10,000 ms (P1-19 re-derives it,
 # so `status` accepts any nonzero value); row 12 MAX_INFO_QUERIES 0 (no telemetry stream).
 TIMEOUT_MAX_UP=10000
+# RESULTSET_SIZE is the image default (v4.18.11); `up` does not set it. `status` only checks it: the engine reader
+# (ccg/engine/config.py RESULTSET_SIZE) takes a reply shorter than this as complete, so a lower server value would cut silently.
+RESULTSET_SIZE_IMAGE=10000
 MAX_INFO_QUERIES_UP=0
 # The P1 steady-state ACL user set (P1-19's create_users): default plus, per system <s>, the four
 # users ccg_<role>_<s> with role build|verdict|engine|raw; any other user is drift. <s> follows the
@@ -486,7 +489,7 @@ cmd_status() {
     echo "config:    DRIFTED from D7"; return 1
   fi
 
-  local mm pol save aof modver tmax miq acl u bad_users="" keys
+  local mm pol save aof modver tmax miq rsz acl u bad_users="" keys
   mm="$(cli CONFIG GET maxmemory | sed -n 2p)"
   pol="$(cli CONFIG GET maxmemory-policy | sed -n 2p)"
   save="$(cli CONFIG GET save | sed -n 2p)"
@@ -506,12 +509,15 @@ cmd_status() {
   # MAX_INFO_QUERIES 0, and no ACL user outside default + the four ccg_* users.
   tmax="$(graph_config_get TIMEOUT_MAX)"
   miq="$(graph_config_get MAX_INFO_QUERIES)"
+  rsz="$(graph_config_get RESULTSET_SIZE)"
   acl="$(cli ACL USERS | paste -sd' ' -)"
   echo "TIMEOUT_MAX:      $tmax (up sets $TIMEOUT_MAX_UP; must be nonzero)"
   echo "MAX_INFO_QUERIES: $miq (must be $MAX_INFO_QUERIES_UP)"
+  echo "RESULTSET_SIZE:   $rsz (image default $RESULTSET_SIZE_IMAGE, not set by up; the engine reader assumes it)"
   echo "ACL users:   $acl (allowed: default, ccg_{build,verdict,engine,raw}_<system>)"
   case "$tmax" in ''|*[!0-9]*|0) drift "GRAPH.CONFIG TIMEOUT_MAX is '${tmax}', not a nonzero value (restarted behind up's back?)" ;; esac
   [ "$miq" = "$MAX_INFO_QUERIES_UP" ] || drift "GRAPH.CONFIG MAX_INFO_QUERIES is '$miq', not $MAX_INFO_QUERIES_UP"
+  [ "$rsz" = "$RESULTSET_SIZE_IMAGE" ] || drift "GRAPH.CONFIG RESULTSET_SIZE is '$rsz', not the image default $RESULTSET_SIZE_IMAGE (the engine reader would take a cut reply as complete)"
   for u in $acl; do
     acl_user_ok "$u" || bad_users+="$u "
   done
