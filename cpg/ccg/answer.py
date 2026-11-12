@@ -36,8 +36,10 @@ REGISTRY_PATH = HERE / "registry" / "reasons.yaml"
 
 #: §4.2: the verdict-log hash while the offset is 0 (P4 owns the chaining rule for offset > 0).
 EMPTY_VERDICT_LOG_HASH = ids.tuple_id(["verdictLog"])
-#: §10.3: engine-minted reason codes that are not in the registry (decided exception to spec3 §7.1); code -> status.
-ENGINE_REASON_CODES = {"function-level-continuation": "possible"}
+#: §10.3: engine-minted reason codes that are not in the registry (a decided exception to spec3 §7.1); code -> status. Empty since P1-22: the one entry,
+#: ``function-level-continuation``, retired with the ``arg(i)``/``Ret`` rows (``-answer-spec2.md`` §1.2, carry-over C6). The mechanism stays so a later minor can
+#: mint one under §10.3's disjointness rule.
+ENGINE_REASON_CODES: dict[str, str] = {}
 #: §7.2's data fields (``<$defs name>.<property>``); equals what the schema marks ``x-ccg-data`` (tested both ways).
 DATA_FIELDS = frozenset({
     "AnchorSymbol.qname", "AnchorSymbol.path", "AnchorSymbol.signature", "AnchorContract.keyNorm",
@@ -254,7 +256,7 @@ def registry_status(code: str, registry_path: Path | str | None = None) -> str |
 
 
 def check_engine_codes_disjoint(registry_path: Path | str | None = None) -> None:
-    """§10.3: an engine code must not also be a registry code (the exception retires with the ``arg(i)`` rows)."""
+    """§10.3: an engine code must not also be a registry code (no engine code is minted since P1-22 retired the one entry)."""
     reg = _registry(str(registry_path or REGISTRY_PATH))
     clash = sorted(set(ENGINE_REASON_CODES) & set(reg))
     if clash:

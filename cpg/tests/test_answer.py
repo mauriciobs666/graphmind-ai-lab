@@ -125,7 +125,7 @@ def simple_item(name: str, unit: dict = U1, line: int = 20, path: str = "svc/b.p
 
 
 def b_possible() -> dict:
-    """A confirmed hop, then a possible CALLS_NAME (name-match), then a possible CALLS (function-level-continuation)."""
+    """A confirmed hop, then a possible CALLS_NAME (name-match), then a possible CALLS (flow-unavailable:python)."""
     u = U1["unitId"]
     s_b, s_c, s_d = mk_sym("fb", line=30), mk_sym("fc", line=40), mk_sym("fd", line=50)
     chain = [sym_hop(SA, u),
@@ -133,7 +133,7 @@ def b_possible() -> dict:
              sym_hop(s_b, u, "function", edge="HAS_CALL"),
              site_hop("c2", u, edge="CALLS_NAME", status="possible", reason="name-match"),
              sym_hop(s_c, u, "function", edge="HAS_CALL"),
-             site_hop("c3", u, edge="CALLS", status="possible", reason="function-level-continuation"),
+             site_hop("c3", u, edge="CALLS", status="possible", reason="flow-unavailable:python"),
              sym_hop(s_d, u, "end", edge="HAS_CALL")]
     return mk_doc([anchor_of(SA)], [mk_item(s_d, chain, 3)], units=[U1])
 
@@ -661,7 +661,7 @@ def test_directness_is_direct_exactly_when_distance_is_one():
 def test_the_reason_is_the_first_possible_hops_not_the_last():
     doc = b_possible()
     assert doc["items"][0]["reason"] == "name-match"
-    rejects(doc, lambda d: d["items"][0].update(reason="function-level-continuation"), r"V7.*reason")
+    rejects(doc, lambda d: d["items"][0].update(reason="flow-unavailable:python"), r"V7.*reason")
     rejects(doc, lambda d: d["items"][0].pop("reason"), "reason")
     rejects(golden(), lambda d: d["items"][0].update(reason="key-match"), "reason")
 
@@ -1462,21 +1462,24 @@ def test_v15_recomputes_for_every_extension_that_determines_the_language(path, l
     rejects(b_mixed(), lambda d: anchor(d, "python" if lang != "python" else "go"), "V15")
 
 
-def test_engine_reason_codes_are_the_one_decided_exception_and_disjoint_from_the_registry(tmp_path):
-    assert answer.ENGINE_REASON_CODES == {"function-level-continuation": "possible"}
+def test_the_engine_reason_code_exception_is_retired_and_the_disjointness_check_still_guards_a_future_code(tmp_path, monkeypatch):
+    """``function-level-continuation`` retired with the ``arg(i)``/``Ret`` rows (P1-22, carry-over C6): the engine mints no reason code of its own."""
+    assert answer.ENGINE_REASON_CODES == {}
     answer.check_engine_codes_disjoint()
     planted = tmp_path / "reasons.yaml"
     shutil.copy(answer.REGISTRY_PATH, planted)
     answer.check_engine_codes_disjoint(planted)
     with planted.open("a") as f:
-        f.write('- {code: function-level-continuation, status: possible, "on": [CALLS]}\n')
-    with pytest.raises(AnswerError, match="function-level-continuation"):
+        f.write('- {code: engine-only-code, status: possible, "on": [CALLS]}\n')
+    answer.check_engine_codes_disjoint(planted)                                  # no engine code, so no clash
+    monkeypatch.setattr(answer, "ENGINE_REASON_CODES", {"engine-only-code": "possible"})
+    with pytest.raises(AnswerError, match="engine-only-code"):                  # the check itself still fires when an engine code is also a registry code
         answer.check_engine_codes_disjoint(planted)
 
 
-def test_the_registry_itself_does_not_hold_an_engine_code():
-    registry_text = answer.REGISTRY_PATH.read_text()
-    assert "function-level-continuation" not in registry_text
+def test_the_retired_code_is_in_neither_the_registry_nor_any_code_list():
+    assert "function-level-continuation" not in answer.REGISTRY_PATH.read_text()
+    assert answer.registry_status("function-level-continuation") is None
 
 
 def test_an_engine_code_is_valid_on_a_possible_hop_only():
@@ -1589,7 +1592,6 @@ def test_registry_status_resolves_codes_and_parameterized_templates():
     assert answer.registry_status("flow-unavailable:python") == "possible"
     assert answer.registry_status("flow-unavailable:<lang>") is None  # the template itself is not a usable code
     assert answer.registry_status("flow-unavailable:") is None
-    assert answer.registry_status("function-level-continuation") == "possible"
     assert answer.registry_status("no-such-code") is None
 
 
@@ -2654,8 +2656,8 @@ def test_algorithm_version_pin_is_only_the_pattern():
     rejects(b_11(), lambda d: d["recipe"]["algorithm"].update(version="1.1.0"), "schema")
 
 
-def test_engine_reason_codes_unchanged():
-    assert answer.ENGINE_REASON_CODES == {"function-level-continuation": "possible"}
+def test_engine_reason_codes_are_empty_after_the_function_level_retirement():
+    assert answer.ENGINE_REASON_CODES == {}
 
 
 def _set_hop(d: dict, item: int, i: int, *, status: str | None = None, reason: str | None = None, **fields) -> None:

@@ -2,6 +2,8 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1)
 
+Revised 2026-11-12: P1-22 gate rulings (`docs/reviews/connected-code-graph-p1-22.md` Q1-Q4) folded into P1-22 and P1-23 in place.
+
 Part of `docs/plans/connected-code-graph-p1.md` (decisions D1–D11, the flow gate §5, step index §7). Contracts:
 answers `docs/plans/connected-code-graph-answer-spec.md` (canonical answer v1, `ccg/answer.py` is its validator),
 traversal `-p0-graph.md` §3 (`bfs-v1`), graph `-graph.md` §6.2, evaluation `-eval-protocol-ml.md` §10. The slice's
@@ -68,7 +70,7 @@ the earlier gains `Extended by:`. It states **only** the changes:
 ## P1-22 · BFS rows, guards, depth bound — `tdd-engineer`
 
 - **Files:** `cpg/ccg/engine/bfs.py` (the walk), `cpg/ccg/answer.py` (remove the `function-level-continuation` entry of `ENGINE_REASON_CODES` and its test in `cpg/tests/test_answer.py`), `cpg/ccg/engine/state.py` (`value`, `path(P)`, `contract`,
-  `key`, `end`, and `function`, kept for `-answer-spec2.md` §5's flag-false rows), `cpg/tests/test_engine_bfs.py`,
+  `key`, `end`, `site(siteId)` and `function`, kept for `-answer-spec2.md` §5's flag-false rows), `cpg/tests/test_engine_bfs.py`,
   `cpg/tests/test_engine_bfs_guards.py`, `cpg/tests/slice/test_engine_equivalence.py`.
 - **Behaviours (ordered):** (1) equivalence first: the slice walks (anchor `p0`, `p0.path`, `p0.method`, `p0.query`,
   `p0.nothing`, value walk from `buildUrl`) reproduce the slice's item sets under the slice's recipe; (2) the
@@ -76,30 +78,50 @@ the earlier gains `Extended by:`. It states **only** the changes:
   reaching consumers by **`CONSUMES <-`** with the `Link` attached through `ON <-`/`VIA`, so a consumer with no
   provider is found and reported `unmatched` (the slice walked `PROVIDES <-`, `TO <-`, `VIA <-` and never read
   `CONSUMES`/`ON`): a fixture graph where a contract walk from a provider-less contract point lists its consumers;
+  **not walked in P1** (the module docstring and `cpg/README.md` list them): depends-on `BOUND_BY ->` (a `Link` is
+  left only by `TO ->`/`TO_UNIT ->`, spec2 §3.3 V5), `CONSUMES ->` (no item kind carries it), `VIA ->` in `arg(i)`
+  state (needs `paramMap`, not stored, `-p1-graph.md` G12), and from a `Param`, `←` then `CALLS ←` (P5's RCA);
+  a **`ConfigEntry` anchor** (impact) reaches only the sites it binds: `BOUND_BY ←` enters the `Link` in a
+  `site(siteId)` state carrying the `siteId` that `bound_in` returns (`-p1-graph.md` G7 and §5, which supersede
+  graph note §6.2's "the links it binds → their consumers"), `VIA ←` from that state lists only that site's
+  `CallSite`, an entry bound at two sites of one link lists exactly those two consumers, and a `bound_in` row with
+  no `siteId` is a malformed row; a `Link` is never an anchor (`WalkError` before any read);
   (3) the **`CONTROLLED_BY` row** with a visited set seeded with the anchor keyed `(label, id, state kind, state
-  path)`, re-expanding a node only on a strictly smaller `(possible, distance)`: a `cond → cond` cycle terminates
-  (C1, F-12; a mutant replacing `<` by `<=` is killed), a two-point `DATA` cycle and a `DATA` self-edge
+  path)`, keeping a state's arrivals that no other arrival dominates on `(possible, distance)` and expanding the state once per
+  kept arrival (`-answer-spec2.md` §4.1): a `cond → cond` cycle terminates (C1, F-12; a mutant that expands an
+  equal arrival, `<` replaced by `<=`, is killed), a two-point `DATA` cycle and a `DATA` self-edge
   terminate, a chain deeper than 64 levels raises; (4) the **`arg(i)`/`Ret` rows** (`CALLS ->` into a callee,
   index-matched `HAS_PARAM ->`, a `Ret`-reached callee summary onto the call site's `r`; receiver as index `-1`,
-  `kw.<n>` by `Param.name`): in a flag-true unit items are then precise, no hop enters the `function` state, and a
-  caller of a function whose return the change does not reach is no longer listed through it; the slice's 21-item
-  function-level sets (`-p0-graph.md` §3.3) shrink toward the V2-gated counts that note records (19, 5, 5, 3, 2, 4
-  across the six walks; a prior carried from the S17-L2 gate, not recomputed here), each pinned by a test, and
-  `apiFetch` stays `confirmed` (a resolved `CALLS ←` from the anchor `Symbol` is not a labelled row,
+  `kw.<n>` by `Param.name`; **the `Ret` summary is context-insensitive**: a function reached through a `Ret` lists every
+  caller of it as a resolved `CALLS ←` hop, not only the call site the change entered by. Accepted and documented for
+  P1 (a test pins it): no P1 acceptance criterion measures it, because every P1 language's
+  `flowAvailable` is false (index §5, D2), so these rows are not followed in any measured unit, and flag-true units
+  exist only in fixtures. A flag that flips true by a decision record (`ccg-p1-flow-python-v1-decision`) first needs
+  a call-string version of the row, a table change and a version bump, before that population is gated): in a flag-true unit items are then precise, no hop enters the `function` state, and a
+  caller of a function whose return the change does not reach is no longer listed through it; each of the six slice walks
+  is pinned as a named delta against the slice's 21-item set (`-p0-graph.md` §3.3): the items dropped and the items
+  added, each with its reason, an empty delta being a legal value and no walk special-cased. Callees the change
+  enters through `CALLS ->`/`HAS_PARAM ->`, which the slice never walked, are added, so a walk's item and state counts may grow (the anchor `p0` walk: 21 → 22
+  items, 98 → 157 states, accepted). The V2-gated counts (19, 5, 5, 3, 2, 4) are state counts of the S17-L2 gate
+  model, a prior; the engine is not required to approach them, and the equivalence test reproduces them only from
+  that gate's own table. `apiFetch` stays `confirmed` (a resolved `CALLS ←` from the anchor `Symbol` is not a labelled row,
   `-answer-spec2.md` §5). **Every fixture sets `Unit.flowAvailable` explicitly** (`true` for these rows), so
   P1-23's flag gate changes no pin here; the `function` state and its labelled rows in flag-false units are
   P1-23's; (5) **depth bound:** `DEFAULT_DEPTH_BOUND = 2` always applies (the
-  1.1 request has no bound field, `-answer-spec2.md` §4.1); items at distance ≤ bound; every edge the bound cuts from the frontier is counted into
+  1.1 request has no bound field, `-answer-spec2.md` §4.1); items at distance ≤ bound as `-answer-spec2.md` §4.1 defines (everything reachable within it, not only the
+  lexicographically best path), every edge the bound cuts is counted by §4.2 into
   `depthBound.unexplored` (a cut edge is counted once per edge, not per path) and `unexplored > 0` implies `bound`;
   a distance-2 `flow`-shaped item is reached by default (the reason the bound is 2); (6) `Name` is one compound
   hop carrying the `DISMISSED` anti-join (no verdict log in P1: the join returns empty) and never a BFS node;
-  (7) best predecessor: fewest `possible` hops, then distance, then length, then fewer hops whose own edge is
-  `possible`, then stable id (`-answer-spec2.md` §1.2, §5); (8) `algorithm.version`
+  (7) best chain per item among the chains within the bound: fewest `possible` hops, then distance, then length, then
+  fewer hops whose own edge is `possible`, then stable id (`-answer-spec2.md` §1.2, §5); every item's chain
+  recomputes to the item's own cost (possible hops, distance, length) through the chain's own arrivals; (8) `algorithm.version`
   per `-answer-spec2.md` §1.2: the walk executes its row table as a data record (so P1-23's candidate walks are table variants, and only the shipped
   one is pinned), `ALGORITHM_VERSIONS` maps
   `"1.1"` to the record's pinned fingerprint (P1-23 re-pins it before P1-39 publishes it), and a test fails if a
   row is added without changing it.
-- **Done / Gate:** `analyst`; mutation check on the visited-set comparison, the bound and the `unexplored` count.
+- **Done / Gate:** `analyst`; mutation check on the arrival-dominance comparison, the bound and the `unexplored` count,
+  and on every row of the table × each field (a field no code reads is removed from the table, not pinned).
 
 ## P1-23 · flow fallback, distance and grouping, reverse question — `tdd-engineer`
 
@@ -118,7 +140,9 @@ the earlier gains `Extended by:`. It states **only** the changes:
   the shipped table, and a shipped table other than `-answer-spec2.md` §5's is a walk-definition change (its §1.2
   bump, and §5 revised by its owner before it ships); a test plants one caller reached through a resolved and a name-matched site, **the name-matched
   site sorting first by stable key**, and expects the resolved chain (the mutant it kills: the own-possible
-  tie-break dropped); **wiring items** (spec2 §3.3): at a `Link` reached by `TO ←`, each `configEntry`-origin
+  tie-break dropped; P1-22 computes one `possible` variable for the hop's labelled status and its own edge's status, and
+  P1-23 splits them where the first labelled row lands, so that test can fail); P1-22 already built the wiring row,
+  `TO_UNIT ->` and the depends-on column, so P1-23 inherits and extends their tests and rebuilds nothing; **wiring items** (spec2 §3.3): at a `Link` reached by `TO ←`, each `configEntry`-origin
   `BOUND_BY` target is a `config` item (`BOUND_BY ->`, distance +1, the link's status) listed once, its single `Bound`
   taken from the entry's lowest-`(siteId, ord)` edge as `bound_of_link` returns it (spec2 §3.3); the **depends-on rules**:
   a walk row ending on a `launchFact`-origin entry yields no item, and from a `Link` with no `TO` the

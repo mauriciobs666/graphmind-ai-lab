@@ -1,9 +1,9 @@
 """Engine constants (``docs/plans/connected-code-graph-p1-answers.md`` P1-21 Files; ``-answer-spec2.md`` §1.2, §4.1)."""
 from __future__ import annotations
 
-#: the default depth bound of every resolved answer (``-answer-spec2.md`` §4.1); read by P1-22
+#: the default depth bound of every resolved answer (``-answer-spec2.md`` §4.1); read by ``ccg.engine.bfs.walk`` and part of its definition's version
 DEFAULT_DEPTH_BOUND = 2
-#: the level-synchronous walk's guard (a cycle that escapes the visited set raises, never loops); read by P1-22
+#: the level-synchronous walk's guard (a cycle that escapes the visited set raises, never loops); read by ``ccg.engine.bfs.walk``, not part of its algorithm version
 LEVEL_GUARD = 64
 #: ids per query; a reply that fills ``RESULTSET_SIZE`` halves it (``-p1-graph.md`` §5)
 CHUNK = 1000

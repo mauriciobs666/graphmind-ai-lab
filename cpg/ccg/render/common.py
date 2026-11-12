@@ -37,7 +37,6 @@ REASON_GLOSS = {
     "partial-key": "only part of the key matches",
     "unknown-key": "the key is not known",
     "field-truncated": "the field path was truncated",
-    "function-level-continuation": "the reach continues at function level",
 }
 GROUP_TITLE = {
     "other-possible-callees": "Other possible callees of one resolved call site",

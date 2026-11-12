@@ -2,6 +2,8 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Extends:** `docs/plans/connected-code-graph-answer-spec.md`
 
+Revised 2026-11-12: §1.2 definition (item rules, record content) and §4.1/§4.2 (bounded result, final arrival set), from the P1-22 gate (`docs/reviews/connected-code-graph-p1-22.md` Q1, F5).
+
 This document states **only the changes** P1 makes to `docs/plans/connected-code-graph-answer-spec.md` (v1.3, "v1"
 below); anything not named here is as v1 says. It is step P1-00 of `docs/plans/connected-code-graph-p1-answers.md`,
 whose scope list it covers in full. It extends rather than edits v1 because S34 executed against v1. The code and
@@ -47,6 +49,7 @@ emitted a version. P1's walk is the first changed definition, so it takes the ne
 **What a version names.** One version names exactly one **walk definition**. The definition is:
 - the row table: for each row, the edge type, `dir`, column (impact, contract, depends-on), from-state kinds,
   to-state kind, distance increment, and status/reason labelling, including §5's labelled rows, §3.3's wiring row and §3.5's `TO_UNIT` row;
+- the item rules: which arriving hop makes an item, per column (`symbol`, `config`, `unit`);
 - the cost order, which is `(possible hops, distance, length)`, then fewer hops whose own edge is `possible` (§5),
   then the predecessor's stable key;
 - the flow-fallback rule (§5);
@@ -68,8 +71,10 @@ The following are **not** part of it, because they cannot change a fact:
 **Mechanism (P1-22 builds it).**
 - The walk executes its row table as data. The row table is a record the walk interprets, not a description kept
   beside the code.
-- The definition record holds that table plus one identifier string for each part that is code: the cost order,
-  the flow-fallback rule and the `unexplored` rule. One example identifier is
+- The definition record holds that table, the item rules as data, and one identifier string for each part that is
+  code: the cost order, the flow-fallback rule and the `unexplored` rule. A table field no code branches on is not in
+  the record (it would version the table without constraining the walk), and a read an adapter issues beyond its
+  row's own (the `CONSUMES <-` anti-join reads `ON <-` and `VIA <-`) is named in the record. One example identifier is
   `"costOrder": "possible,distance,length,own-possible,stable-key"`.
 - The engine holds `ALGORITHM_VERSIONS`, a mapping from version to a pinned literal fingerprint. The fingerprint is
   `ccg.ids.tuple_id` over the record's canonical JSON. P1-22 chooses the encoding and pins the literal.
@@ -257,14 +262,24 @@ A link into a never-built unit has no `TO`; it has a `TO_UNIT` edge to that `Uni
   `Request` field, and it would have to enter EP §10.4's request equality. No P1 consumer needs one.
 - V17 requires `bound` ≥ 2 on every resolved 1.1 answer (EP §15.2 Q1).
 - Ambiguous and unresolved answers keep v1's `{"unexplored": 0}`, with no `bound` (V2).
+- **The bounded result is everything reachable within the bound.** An item is listed when some chain whose distance
+  never exceeds `bound` reaches it, on the best such chain by §1.2's cost order. A `possible` chain within the bound
+  is therefore listed, and the item is `possible`, even when a `confirmed` chain reaches it only beyond the bound.
+  The result depends on the snapshot and the bound alone, never on route length or arrival order.
+- **How the walk keeps it.** A state is a visited-set key (`-p0-graph.md` §3.1), and the walk keeps every *arrival* at it that no other
+  arrival dominates, where `a` dominates `b` when `a` has no more possible hops and no greater distance. A state is
+  expanded once per kept arrival, and an equal pair is dominated, so a cycle ends. A rule that re-expands on the
+  lexicographic `(possible hops, distance)` alone, or on distance alone, makes the result depend on arrival order
+  under the bound. Each item's chain is the chain of its own arrival, so the chain's possible hops, distance and
+  length recompute to the item's cost.
 
 ### 4.2 `unexplored`
 
 `unexplored` is `|E_cut|`, the number of **distinct stored edges** the bound cut. A stored edge is identified by
 its type and its two endpoint ids; a `CALLS_NAME` compound is identified by its `CallSite` and `Symbol` ends. An
 edge `e` is in `E_cut` when all three of these hold:
-1. Some state `s` in the walk's final best set has distance equal to `bound`.
-2. A row of the walk definition (§1.2) would traverse `e` from `s`. The `DISMISSED` anti-join and §5's exclusions
+1. Some arrival at a state, in the final set of non-dominated arrivals (§4.1), has distance equal to `bound`.
+2. A row of the walk definition (§1.2) would traverse `e` from that state. The `DISMISSED` anti-join and §5's exclusions
    apply.
 3. That row's distance increment is 1.
 
