@@ -5,9 +5,9 @@ hand-offs"; method note `typed-decision-models-ml.md` §Q1.3).
 
 It writes `data/<role>/<datasetVersion>/` (`--data-dir` moves the root): `items.jsonl`,
 `splits.json`, `generation.json` (§3.7's keys) and `diagnostics.json`. Everything is built first and
-renamed into place whole, so a refusal writes nothing and a crash leaves at most a `.partial`
-directory. The ledger gains one `finalized` event (the split's RNG seed joins the held set), and
-the one other write is a `recheck-halt` (below).
+renamed into place whole, so a refusal writes no dataset and a crash leaves at most a `.partial`
+directory. The ledger gains one `finalized` event (the split's RNG seed joins the held set); the
+only other writes are a `recheck-halt` and a `floor-short` (below). `--rng-seed` fixes the seed.
 
 **What it refuses** (each names its fix; none writes a file):
 1. a campaign that is not `full`, has no install record, has a halt open, has a batch not ingested
@@ -21,10 +21,14 @@ the one other write is a `recheck-halt` (below).
    role whose ingested runs name more than one model, or one model for both roles;
 4. a short cell (fewer labelled items than `campaign.cell_target`): with no decline recorded the
    top-up is still due; after `resolve --decline-topup` the refusal names `--short` and
-   `resolve --reopen-topup`. **`--short`** needs that decline, then finalizes only when every
-   eval cell meets its floor (`point.json`'s `evalFloorPerCell`) and every calibration cell meets
-   the same floor after the splits, the shingle drop included; otherwise it refuses with the
-   store intact. `--short` on a point with no short cell is an ordinary finalize.
+   `resolve --reopen-topup`. **`--short`** needs that decline, then finalizes with the short cells
+   printed (the floors of 5 still apply). `--short` on a point with no short cell is an ordinary
+   finalize.
+5. **a cell under its floor** (`point.json`'s `evalFloorPerCell`, on every finalize): an eval or
+   calibration cell below it after the splits, the shingle drop and the refill. `build_dataset`
+   (pure) raises `FloorShort`; `finalize` catches it inside `camp.locked()`, appends `floor-short`
+   (per short cell `n` and `need` = `⌈deficit / (1 − d)⌉` more labelled items, and the RNG seed,
+   now held) and re-raises. No halt: `State.floor_short` folds the newest event.
 
 **The whole-point recheck** (plan4 §3.6, message type only): the tranche's rule
 (`campaign.tranche_failed`) over every labelled item. A failure appends `recheck-halt` and
@@ -32,8 +36,9 @@ refuses; `resolve` clears it with a changed rubric (`point-relabel`: every item'
 taken again) and a second failure only with `--stakeholder-ref` (`recheck-accepted`), after which
 `finalize` goes ahead with the ties counted as `voteTie` drops.
 
-**The dataset.** A cell is (design stratum, label). `split.make_splits` runs the plan's four steps
-over the labelled items (those with three votes and a majority) with `eval` and `calibration` of
+**The dataset.** A cell is (design stratum, label). `split.make_splits` runs the plan's steps (a
+dropped eval slot is refilled from the cell's unused candidates) over the labelled items (those
+with three votes and a majority) with `eval` and `calibration` of
 `campaign.cell_target // 2` per cell and `train` 0 (note §Q1.3's train column is U8's), so
 `splits.json`'s `train` is empty. Only items in a split list reach `items.jsonl`: a surplus,
 side-check or shingle-dropped item is omitted. An item is its input fields, `expected` (the
@@ -53,6 +58,7 @@ import copy
 import json
 import re
 import shutil
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC
 from pathlib import Path
@@ -66,6 +72,8 @@ from .points import load_point
 SURFACE = "claude-code-subagent"
 TIERS = {"generator": "opus", "labeler": "sonnet"}
 ITEM_PREFIX = {"guard-judge": "gj", "join-in-judge": "ji", "message-type-classifier": "mt"}
+#: A cell whose eval-assigned drop rate `d` exceeds this is flagged in the printed line.
+DROP_RATE_FLAG = 0.25
 #: The files of a dataset version, in write order.
 ITEMS_FILE, SPLITS_FILE, GENERATION_FILE = "items.jsonl", "splits.json", "generation.json"
 _VERSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -75,15 +83,62 @@ _PROMPT_KEYS = {"agentDefinition": {"generator", "labeler", "driver"},
 
 
 @dataclass(frozen=True)
+class CellFigures:
+    """One cell's printed figures (plan4 §3.6 "Cells, then splits"): the split sizes, the
+    remaining `surplus`, and the refill's own counts (all counts of items)."""
+
+    stratum: str | None
+    label: str
+    sizes: dict[str, int]
+    surplus: int
+    n: int                 # labelled items in the cell
+    eval_assigned: int     # eval slots `assign_splits` filled, before the shingle drop
+    assigned_drops: int    # of those, dropped by the eval-against-calibration/train check
+    walked: int            # unused candidates the refill walked (`refilled` + `refill_drops`)
+    refill_drops: int
+    refilled: int
+
+    @property
+    def drop_rate(self) -> float:
+        return self.assigned_drops / self.eval_assigned if self.eval_assigned else 0.0
+
+    def need(self, floor: int) -> int | None:
+        """`⌈deficit / (1 − d)⌉` more labelled items (plan4 §3.6 "Drop-aware top-up") for an eval
+        cell below `floor`, in exact integers; 0 for a cell with no eval deficit (calibration
+        alone is short only under `cell_target`, which the planner already covers); `None` when
+        every assigned eval item was dropped, so no survival rate is observed."""
+        deficit = floor - self.sizes["eval"]
+        if deficit <= 0:
+            return 0
+        if self.assigned_drops == 0:
+            return deficit
+        if self.assigned_drops >= self.eval_assigned:
+            return None
+        kept = self.eval_assigned - self.assigned_drops
+        return -(-deficit * self.eval_assigned // kept)
+
+
+class FloorShort(CampaignRefused):
+    """`build_dataset`'s refusal for a cell below its floor. `cells` holds, per short cell, the
+    `floor-short` event's `{stratum, label, n, need}`; `finalize` records it (`build_dataset`
+    stays pure)."""
+
+    def __init__(self, message: str, cells: list[dict[str, Any]]) -> None:
+        super().__init__(message)
+        self.cells = cells
+
+
+@dataclass(frozen=True)
 class Dataset:
     """What `build_dataset` computed: the three files' contents, the eval items' inputs for the
-    diagnostics, and the printable per-cell sizes."""
+    diagnostics, and the printable per-cell figures."""
 
     items: list[dict[str, Any]]
     splits: dict[str, Any]
     generation: dict[str, Any]
     eval_items: list[dict[str, Any]]
-    cells: list[tuple[str | None, str, dict[str, int], int]]   # stratum, label, sizes, surplus
+    cells: list[CellFigures]
+    floor: int = 0
 
 
 def eval_per_cell(role: str) -> int:
@@ -207,9 +262,9 @@ def _runs(state: State) -> list[dict[str, Any]]:
 
 
 def build_dataset(state: State, *, rng_seed: int, side_check: frozenset[str],
-                  generated_at: str, short: bool = False) -> Dataset:
-    """The dataset of a ready campaign (module docstring). `short` holds every cell to its floor
-    and raises `CampaignRefused` naming those below it."""
+                  generated_at: str) -> Dataset:
+    """The dataset of a ready campaign (module docstring). Every cell is held to its floor:
+    `FloorShort` (a `CampaignRefused`) names those below it and carries what `finalize` records."""
     role = state.init["point"]
     point = load_point(role)
     per_cell = eval_per_cell(role)
@@ -220,17 +275,32 @@ def build_dataset(state: State, *, rng_seed: int, side_check: frozenset[str],
         sizes={"eval": per_cell, "calibration": per_cell, "train": 0},
         rng_seed=rng_seed, side_check=side_check)
 
-    cells = [(stratum, label,
-              {name: result.sizes.get((stratum, label), {}).get(name, 0) for name in split.SPLITS},
-              result.surplus.get((stratum, label), 0)) for stratum, label in all_cells(role)]
+    cell_of = {row.seed_id: (row.stratum, row.cls) for row in rows}
+    in_cell = {cell: 0 for cell in all_cells(role)}
+    for cell in cell_of.values():
+        in_cell[cell] = in_cell.get(cell, 0) + 1
+    assigned_drops = Counter(cell_of[seed] for seed in result.dropped["shingleSplit"])
+    refill_drops = Counter(cell_of[seed] for seed in result.refill_dropped)
+    cells = []
+    for cell in all_cells(role):
+        sizes = {name: result.sizes.get(cell, {}).get(name, 0) for name in split.SPLITS}
+        refilled = result.refilled.get(cell, 0)
+        cells.append(CellFigures(
+            cell[0], cell[1], sizes, result.surplus.get(cell, 0), in_cell[cell],
+            sizes["eval"] - refilled + assigned_drops[cell], assigned_drops[cell],
+            refilled + refill_drops[cell], refill_drops[cell], refilled))
     floor = eval_floor(role)
-    below = [f"({label}, {stratum or 'no stratum'}): eval {sizes['eval']}, calibration "
-             f"{sizes['calibration']}" for stratum, label, sizes, _ in cells
-             if short and (sizes["eval"] < floor or sizes["calibration"] < floor)]
-    if below:
-        raise CampaignRefused(
-            f"a cell is below its floor of {floor} ({'; '.join(below)}): nothing is written; "
-            "`driver resolve --reopen-topup` plans a later round")
+    short = [figures for figures in cells
+             if figures.sizes["eval"] < floor or figures.sizes["calibration"] < floor]
+    if short:
+        raise FloorShort(
+            f"a cell is below its floor of {floor} ("
+            + "; ".join(f"({f.label}, {f.stratum or 'no stratum'}): eval {f.sizes['eval']}, "
+                        f"calibration {f.sizes['calibration']}" for f in short)
+            + "): nothing is written; a `floor-short` event records each cell's n and the "
+            "labelled items it needs, and holds the RNG seed",
+            [{"stratum": f.stratum, "label": f.label, "n": f.n, "need": f.need(floor)}
+             for f in short])
 
     kept = sorted(result.eval + result.calibration + result.train)
     item_id = {seed: f"{ITEM_PREFIX[role]}-{n:04d}" for n, seed in enumerate(kept, 1)}
@@ -272,7 +342,7 @@ def build_dataset(state: State, *, rng_seed: int, side_check: frozenset[str],
         "runs": _runs(state)}
     eval_set = set(ids["eval"])
     return Dataset(items, splits, generation,
-                   [item for item in items if item["itemId"] in eval_set], cells)
+                   [item for item in items if item["itemId"] in eval_set], cells, floor)
 
 
 # --- the command ---------------------------------------------------------------------------------
@@ -345,8 +415,12 @@ def finalize(camp: Campaign, *, version: str, data_dir: Path = campaign.DATA_DIR
         if seed in state.held_rng_seeds:
             raise CampaignRefused(f"RNG seed {seed} is already held")
         stamp = camp.clock().astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        data = build_dataset(state, rng_seed=seed, side_check=shingles.load_side_check_hashes(
-            side_check_file), generated_at=stamp, short=bool(shorts))
+        try:
+            data = build_dataset(state, rng_seed=seed, side_check=shingles.load_side_check_hashes(
+                side_check_file), generated_at=stamp)
+        except FloorShort as exc:
+            camp._append({"event": "floor-short", "rngSeed": seed, "cells": exc.cells})
+            raise
         target.parent.mkdir(parents=True, exist_ok=True)
         _write_version(target, data, state)
         camp._append({"event": "finalized", "datasetVersion": version, "rngSeed": seed,
@@ -360,8 +434,14 @@ def _report(role: str, version: str, target: Path, data: Dataset, short: bool) -
              f"calibration {sizes['calibration']}, train {sizes['train']}) in {target}"]
     if short:
         lines.append("SHORT: finalized under a declined top-up; every cell meets its floor")
-    for stratum, label, counts, surplus in data.cells:
-        lines.append(f"  cell {stratum or '-'} / {label}: eval {counts['eval']}, calibration "
-                     f"{counts['calibration']}, surplus {surplus}")
+    for cell in data.cells:
+        lines.append(
+            f"  cell {cell.stratum or '-'} / {cell.label}: eval {cell.sizes['eval']}, "
+            f"calibration {cell.sizes['calibration']}, surplus {cell.surplus} | eval-assigned "
+            f"{cell.eval_assigned}, assigned drops {cell.assigned_drops}, walked {cell.walked}, "
+            f"refill drops {cell.refill_drops}, refilled {cell.refilled}, floor {data.floor}, "
+            f"d {cell.drop_rate:.2f}"
+            + (f" (above {DROP_RATE_FLAG}: a generation-diversity signal)"
+               if cell.drop_rate > DROP_RATE_FLAG else ""))
     lines.append("dropped: " + json.dumps(data.generation["dropped"], sort_keys=True))
     return lines

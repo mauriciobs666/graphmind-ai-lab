@@ -1,8 +1,8 @@
 # Typed Decision Models — Implementation Plan, Subagent Labelling Amendments
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.3 · **Extends:** `docs/plans/typed-decision-models3.md` · **Reviews:** `docs/reviews/typed-decision-models4.md` · **Extended by:** `docs/plans/typed-decision-models5.md`, `docs/plans/typed-decision-models6.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.4 · **Extends:** `docs/plans/typed-decision-models3.md` · **Reviews:** `docs/reviews/typed-decision-models4.md` · **Extended by:** `docs/plans/typed-decision-models5.md`, `docs/plans/typed-decision-models6.md`
 
-*2026-11-01 — v1.3: §3.9 follows note v1.14 §Q6 (family-pooled ICC); U3e.3 added to §5 (P13-M1).*
+*2026-11-12 — v1.4: §3.6 adds the eval refill, the always-on floor gate and the drop-aware top-up; §3.4 pins the generator to `claude-opus-4-8`; U5.10c, U5.9b and U5.10d added (Pass 33).*
 
 ## 1. Goal & scope
 
@@ -189,7 +189,7 @@ decision-models/
 
 | | `dm-generator` | `dm-labeler` | `dm-driver` |
 |---|---|---|---|
-| `model` | `claude-opus-5-5` (full id) | `claude-sonnet-5-5` (full id) | session default |
+| `model` | `claude-opus-4-8` (full id; Opus 5.5's safeguards flagged generation before any seed was visible, `docs/reviews/typed-decision-models-safeguard-rca.md`) | `claude-sonnet-5-5` (full id) | session default |
 | `effort` | `medium` | `high` | — |
 | `tools` | `Read, Write` | `Read, Write` | `Agent(dm-generator, dm-labeler), Bash` |
 | `maxTurns` | `P_max + 4` = 6 | `P_max + 4` = 14 | — |
@@ -311,8 +311,45 @@ Each bullet names its owning unit (§4.1).
   - The side-check shingle drop runs first, on every generated item (note §Q1.4).
   - Each cell is then subsampled at random to its target; surplus items stay unused and counted.
   - Splits are assigned within each cell by `seedId`.
-  - The eval-against-train/calibration shingle drop comes last and is counted. Nothing is
-    refilled; the note's floors absorb it, and the printed n shows it.
+  - The eval-against-train/calibration shingle drop comes last and is counted (`dropped.shingleSplit`: the eval-assigned items it removes, nothing else). **A dropped eval slot is refilled
+    from the same cell's surplus.**
+    - `subsample_cells` returns the unused candidates per cell (not only a count). After
+      `assign_splits`, a cell's unused candidates (side-check survivors the subsample left out,
+      seed-sorted, then shuffled on the same `rng`) are walked in that order. One sharing an
+      8-token span with any calibration or train item is dropped and counted as a **refill drop**;
+      any other joins eval, until the cell's eval is at its size or the walk ends.
+    - Calibration and train are never changed, and a refill is conditioned on the same test as
+      the eval items it replaces (note §Q1.4, `docs/reviews/typed-decision-models-refill-ml.md` §1),
+      so held-out purity is unchanged. The shuffle follows `assign_splits` and draws nothing when no
+      eval item dropped, so a run with no drop equals today's output.
+    - `SplitResult.surplus` becomes the **remaining** unused count (neither taken nor dropped).
+      New fields: `refilled` (per cell) and `refill_dropped` (seed ids). `generation.json` and
+      the contract vector are unchanged: refill drops never held a slot, like surplus.
+    - The per-cell line prints: eval-assigned, assigned drops, refill candidates walked, refill
+      drops, refilled, final eval, floor, remaining surplus, the drop rate `d`
+      (assigned drops / eval-assigned; `d > 0.25` is flagged as a generation-diversity signal).
+  - **Floors gate every finalize, not only `--short`.** After the refill, an eval or calibration
+    cell below `evalFloorPerCell` refuses and writes no dataset. Join-in's floor equals its eval
+    size (100), so without the refill one drop breaks FR-11's 200 at the importer.
+  - **A floor refusal records `floor-short`.** `finalize()` catches the floor refusal inside
+    `camp.locked()` (as `_recheck` does), appends the event, then re-raises; `build_dataset` stays
+    pure. The `--short` refusal records it too. It holds, per short cell: `n` (its labelled items
+    now), `need` = `⌈deficit / (1 − d)⌉` more (`deficit` = floor − final eval; calibration cells
+    have none; `d` the observed drop rate), and the trial's RNG seed, which joins `held_rng_seeds`
+    so a later finalize refuses it. It raises no halt. `State` folds it plainly, the newest event
+    replacing the older; before U5.9b the fold is the only reader.
+  - **Drop-aware top-up.** A cell with a `floor-short` record has the target
+    `max(cell_target, n + need)`: the need counts on top of the items the refusal already
+    held, and a cell already below `cell_target` is not counted twice. `topup_counts` takes
+    those targets (`extra`: cell → target) and keeps its draw `⌈shortfall / P̂(ℓ | s)⌉` over
+    them; `_short_cells` uses the same function. The next `driver run` plans the round through
+    the ordinary path, with the spend halt, `--decline-topup` and `--reopen-topup` unchanged (a
+    decline plus `finalize --short` still finalizes only at the floors). Finalize again as a
+    new version with a fresh seed (`--rng-seed <n>`, a new flag, written in the coordination
+    ledger before any score exists; never retried on a result). Each version is a whole new
+    split with its own `d`, so one top-up does not guarantee the floor: a second `floor-short` is
+    possible, and nothing caps it automatically. The spend halt, a decline, or the stakeholder
+    ends it. The earlier version stays, unconsumed.
 - **Diagnostics (U5.9),** written by `diagnostics.py` to `diagnostics.json` beside
   `generation.json`: note §Q1.2's four, round 1 against top-up per cell on intent-label agreement
   and pair agreement, and screen hits by intent and difficulty.
@@ -442,6 +479,9 @@ code gate. U5.x units serialize on `decision-models/docs/HISTORY.md` (§4.3).
 | U5.7 agent definitions and install | `coder`; `cobb` consulted at the gate | §3.4's three definitions, templates, `guard_hook.py`, `settings.json`; `driver install` with hash checks and declared expectations (§3.5) | §5 rows, plus a **human-started smoke** (`--phase smoke`): one label batch of 50 guard items of **pt-BR** text at the 6,000-character render cap ingests with no void, every page Read succeeds, and §3.3's injected-context rows pass on it. A second batch under a smoke-only `dm-labeler` copy with `maxTurns: 2` records what a `maxTurns` stop looks like; U5.5 adds it as a fixture |
 | U5.8 generation, votes, pilot tooling | `coder` | §3.6's generation runs, screen and votes; `labels.py` majority and `labelVotes`; the pilot phase and `pilot.py` (§3.8) | §5 rows |
 | U5.9 rounds and top-up | `coder` | §3.6's tranche, top-up planner, spend halt, decline path, `diagnostics.py` | §5 rows |
+| U5.10c refill, floor gate, generator pin | `tdd-engineer`; `data-scientist` reads the §3.6 rule once | `split.subsample_cells`, `make_splits`, `SplitResult`; `finalize.build_dataset`'s floor check; `finalize()`'s `floor-short` append, `State`'s plain fold and `--rng-seed`; the sentences that say nothing is refilled or that a refusal writes nothing (`split.py` and `test_split.py` docstrings, `finalize.py:10`, `driver.py:28`, `decision-models/AGENTS.md` lines 72-76 (both sentences), `README.md`); `agents/dm-generator.md`'s `model:` line to `claude-opus-4-8` with `tests/test_install.py` lines 118, 245, 476 | §5's U5.10c done list |
+| U5.9b drop-aware top-up | `coder`, after U5.10c | `topup_counts(extra=…)`, the fold's reader in `campaign`, `finalize._short_cells` | §5's U5.9b done list |
+| U5.10d re-finalize | `teco` (operator commands, no code) after U5.9b | per §3.6: join-in `finalize v2`; message-type `finalize v2` is expected to refuse and record `floor-short` for `escalation` (about 48 of 52 after the refill; a refusal writes no `v2`), then `driver run` plans the top-up and `finalize v2` runs again; guard needs nothing (every cell clears its floor, `analyst` Pass 33). The stakeholder approved the top-up spend in principle (2026-11-12); the spend halt still applies. **Before a v2 import,** the operator deletes the untracked v1 pack files under `model-bench/packs/<role>-synthetic/` (the importer overwrites in place and v2 renumbers item ids, so no run record on v1 carries over; no scores exist on them). Re-import with a new `--pack-version` | dataset versions committed; `HISTORY.md` entry naming the superseded `v1` |
 | U5.10 finalize | `coder` | §3.6's cells and splits, `--short`, the tranche re-check; `split.py`, `shingles.py`, `scripts/import_side_check_shingles.py` (plan2 §3.5); `generation.json` and `items.jsonl` per §3.7 | §5 rows |
 | U5.2b new-ability contract copies | `coder` | the join-in and message-type rows and vectors once U4 has landed them | as U5.2 |
 | **U5p guard pilot** | `teco` runs it; a human starts each window; the stakeholder decides | §3.8 | `pilot-report.json` committed with `stakeholderDecision` |
@@ -486,13 +526,15 @@ flowchart LR
   U58 --> U5p --> U5cg[U5c.guard]
   U510 --> U5cg --> U5cm[U5c.message-type] --> U5cj[U5c.join-in]
   U4 --> U52b --> U5cm
+  U5cj --> U510c[U5.10c] --> U59b[U5.9b] --> U510d[U5.10d]
   U5cg & U3d --> U5ig[U5i.guard]
-  U5cm & U3d --> U5im[U5i.message-type]
-  U5cj & U3d --> U5ij[U5i.join-in]
+  U510d & U3d --> U5im[U5i.message-type]
+  U510d & U3d --> U5ij[U5i.join-in]
   U5ig & U5im & U5ij --> U6 --> U7
   U23 & U3e2 --> U7
 ```
 
+- U5.10c, U5.9b and U5.10d follow the finished U5c campaigns (their stores are the input); the message-type and join-in imports wait on U5.10d, and guard's does not.
 - The two chains run in parallel; `teco` enforces each chain's order at dispatch.
 - The pilot needs U5.1–U5.8 only, and no model-bench unit. Guard's campaign needs U5.10 and the
   pilot decision; only its import waits on U3d.
@@ -510,7 +552,9 @@ hand-built from §2's shapes, plus one trimmed real transcript as a shape check.
 | U5.7 | The installed definitions and settings hash-equal the sources; a one-byte edit refuses install. The frontmatter pins §3.4's table. `guard_hook.py` exits 0 on every input and prints a JSON decision. It denies a `Read` outside `req/`, a `Write` outside `ans/`, a driver `Bash` with `; cat x` appended or an unlisted subcommand, and an `Agent` call with an `effort` key, another `subagent_type` or a non-pending prompt. It allows the exact calls. **Declared expectations, each with a planted-red fixture:** an empty `instructions` set; no `gitStatus` in `session_context`; no MCP attachment; `output_config.effort` equal to the pin. |
 | U5.8 | **Screen** (note v1.9 §Q1.2): one hit fixture per hit kind (`near-miss` anywhere, `dom_07` anywhere, an ordinary word in brackets or after `label`/`answer`/`category`/`intent`); "had difficulty paying" and a plain answer word in prose pass. A regenerated item keeps its seed's `genRound` and takes the new `genRunId`; the third hit drops the seed; the halt threshold's equality case does not halt. **Votes and majority:** majority on the predicate (2–1, 3–0) and the choice (2–1; three distinct → `voteTie`). `labelVotes` sums to 3 over the whole answer space, zeros included. Each (round, vote) reshuffles, so the batch partitions differ across votes. Every item carries `genRunId` and `genRound`. Every round-1 guard run of 25 holds both evidence kinds (fixed RNG seed). **Pilot:** with `n = 100`, Δ = 10 gives cap 25 and Δ = 9 gives 50; with `n = 90`, Δ = 9 gives 25. `n = 79` issues one added block (note v1.9 §Q1.3) voted at 50 and screened at 10. F and c are recovered from synthetic runs at two batch sizes. The report holds no item text. |
 | U5.9 | **No intent conditioning:** a short `yes` cell's top-up draws seeds whose intent mix equals the design's within `s`; a mutant sampler that filters on intent reddens. A top-up run with two short strata holds seeds from both. **Spend halt:** `project_topup` reproduces a hand-computed value from a fixture round 1 (per-point, four classes); exactly half of round 1 does not halt, one token more halts; a message-type fixture uses its own round 1, not guard's. After `--decline-topup`, no top-up run is issued. **Tranche:** 8 drops in 250 halt, and 7 pass. |
-| U5.10 | As plan2's U5 row, plus: cells are filled by random subsampling with surplus counted, splits follow, and the eval shingle drop is last and is not refilled. `--short` finalizes when every cell meets its floor and refuses, store intact, when one does not. A failed tranche re-check halts; a second failure needs `--stakeholder-ref`. `generation.json` matches §3.7's keys exactly. |
+| U5.10c | **Done when (each a named test; the rule is §3.6's):** (1) an eval item overlapping a calibration item, in a cell with surplus, leaves eval at its size, the replacement disjoint from every calibration and train shingle; (2) an overlapping candidate is a refill drop and the walk continues; (3) a walk that ends prints the short n; a cell with no surplus is unchanged; (4) `surplus` is the remaining count and `shingleSplit` counts assigned drops only; (5) with no drop the output equals today's (digest pin), and `calibration`/`train` equal the no-refill run's for the same seed; (6) a finalize with no short cell and an eval or calibration cell under its floor refuses, writes no dataset, appends `floor-short` (`n`, `need` = 3 for deficit 2 and d = 1/3, the seed) and the seed is in `held_rng_seeds`, so a later finalize with it refuses; (7) a cell at its floor passes; (8) `--rng-seed` fixes the seed; (9) the `refused` helper (`test_finalize.py` ~583-592) allows exactly one `floor-short` append and still demands byte-equal otherwise; (10) rewritten for the new rule: `test_split.py`'s `..._not_refilled` (~l.130), `test_finalize.py`'s `test_short_with_no_short_cell_holds_no_cell_to_the_floor` (~l.794) and the `--short` floor tests (~l.776); (11) the install test passes with the new model line and fails with the old. **Mutants that redden:** refill from calibration, no shingle test on a refill, shuffle before `assign_splits`, side-check-dropped surplus used, seed not held. |
+| U5.9b | **Done when:** (1) no `floor-short` gives today's `topup_counts`; (2) `n` = 132, `need` = 6 (target 120) plans `⌈(138 − 132) / P̂⌉` seeds; (3) a cell below `cell_target` with a record has the target `max(cell_target, n + need)`, not both; (4) a newer `floor-short` replaces the older; (5) the spend halt, `--decline-topup` and `--reopen-topup` act as for any top-up; (6) a cell that reaches its raised target plans nothing. **Mutant:** ignoring `extra`, or using `cell_target + need`, reddens (2). |
+| U5.10 | As plan2's U5 row, plus: cells are filled by random subsampling with surplus counted, splits follow, and the eval shingle drop is last and refilled per §3.6. `--short` finalizes when every cell meets its floor and refuses, store intact, when one does not. A failed tranche re-check halts; a second failure needs `--stakeholder-ref`. `generation.json` matches §3.7's keys exactly. |
 | U3d | An imported eval item keeps `genRunId`, `genRound`, `seedId` and `labelVotes`; `input_hash` is unchanged by them. |
 | U3e.1 | `validate_pack` refuses an eval item without `genRunId` and a pack without `labels.generator.model`. `gen_run_ids` covers every eval item. The caveat names both models. |
 | U3e.2 | `design_effect` gives 1.0 for one run, for runs of size 1 and for constant outcomes. On a hand-computed two-run fixture it matches the ANOVA formula, and a negative ICĈ floors at 1.0. Unequal sizes use `m₀`; a mutant using the mean `m̄` reddens. `outcome_ids` stay aligned with `outcomes` after a pairwise drop. A cell whose items share one high-ICC run prints `DE > 1` and a larger `mdd`, with the same `p_worse` and decision. `RunResult.designEffect` stays 1.0 and `compare_report` is unchanged. |

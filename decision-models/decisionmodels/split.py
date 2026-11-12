@@ -12,13 +12,18 @@ split by seed is a split by item, and a seed id repeated among candidates is an 
    8-token span with a side-check item (`dropped.shingleSideCheck`).
 2. **Subsample each cell at random to its target** (`sizes` summed): `subsample_cells` draws with
    `rng.sample` over the cell's seed-sorted candidates, never the first N. A cell under its target
-   keeps all; the surplus items of a full cell stay unused and are counted per cell.
+   keeps all; the unused candidates of a full cell are returned, seed-sorted, for step 4.
 3. **Assign splits within each cell by seed** (`assign_splits`): a seed-shuffled cell is cut into
    eval, then calibration, then train, each up to its size. A short cell therefore fills eval
    first (note §Q1.3, "On a stakeholder 'no'").
 4. **The eval-against-calibration/train shingle drop, last**: an eval item sharing an 8-token span
-   with any calibration or train item is dropped and counted (`dropped.shingleSplit`). Nothing
-   is refilled, so a cell's printed n shows the loss.
+   with any calibration or train item is dropped and counted (`dropped.shingleSplit`: assigned
+   eval items only). **Each dropped eval slot is then refilled from the same cell's unused
+   candidates** (plan4 §3.6): after `assign_splits`, a cell with an eval deficit shuffles its
+   unused candidates on the same `rng` and walks them; one sharing an 8-token span with any
+   calibration or train item is a refill drop (`SplitResult.refill_dropped`), any other joins
+   eval, until eval is at its size or the walk ends. Calibration and train never change, and a
+   run with no drop draws nothing more, so its output is what it was before the refill existed.
 
 Cells and candidates are visited in a fixed order (cells by `str`, candidates by seed id) so a
 recorded `rng_seed` reproduces the split from the same candidates on the same Python minor
@@ -46,9 +51,11 @@ class Candidate:
 @dataclass(frozen=True)
 class SplitResult:
     """`eval`, `calibration` and `train` hold seed ids. `dropped` has `shingleSideCheck` and
-    `shingleSplit` (the seed ids dropped by each rule, in drop order). `surplus` counts, per cell,
-    the items the subsample left unused. `sizes` is the printed n: per cell, each split's final
-    count."""
+    `shingleSplit` (the seed ids dropped by each rule, in drop order; `shingleSplit` holds eval
+    items assigned to a slot, never a refill candidate). `surplus` is the **remaining** unused
+    count per cell: neither taken by the refill nor dropped by it. `refilled` is the count each
+    cell's refill added to eval and `refill_dropped` the seed ids its walk dropped. `sizes` is the
+    printed n: per cell, each split's final count."""
 
     rng_seed: int
     eval: tuple[str, ...]
@@ -57,6 +64,8 @@ class SplitResult:
     dropped: Mapping[str, tuple[str, ...]]
     surplus: Mapping[Hashable, int]
     sizes: Mapping[Hashable, Mapping[str, int]] = field(default_factory=dict)
+    refilled: Mapping[Hashable, int] = field(default_factory=dict)
+    refill_dropped: tuple[str, ...] = ()
 
 
 def _by_cell(candidates: Iterable[Candidate]) -> dict[Hashable, list[Candidate]]:
@@ -72,16 +81,52 @@ def _by_cell(candidates: Iterable[Candidate]) -> dict[Hashable, list[Candidate]]
 
 def subsample_cells(
     cells: Mapping[Hashable, Sequence[Candidate]], target: int, rng: random.Random
-) -> tuple[dict[Hashable, list[Candidate]], dict[Hashable, int]]:
-    """Each cell cut at random to `target`: (kept, surplus per cell). A cell at or under the
-    target is kept whole with no surplus."""
+) -> tuple[dict[Hashable, list[Candidate]], dict[Hashable, list[Candidate]]]:
+    """Each cell cut at random to `target`: (kept, unused candidates per cell, seed-sorted). A
+    cell at or under the target is kept whole with nothing unused."""
     kept: dict[Hashable, list[Candidate]] = {}
-    surplus: dict[Hashable, int] = {}
+    unused: dict[Hashable, list[Candidate]] = {}
     for cell in sorted(cells, key=str):
         members = sorted(cells[cell], key=lambda c: c.seed_id)
         kept[cell] = rng.sample(members, target) if len(members) > target else members
-        surplus[cell] = len(members) - len(kept[cell])
-    return kept, surplus
+        taken = {c.seed_id for c in kept[cell]}
+        unused[cell] = [c for c in members if c.seed_id not in taken]
+    return kept, unused
+
+
+def refill_eval(
+    eval_kept: Sequence[Candidate], unused: Mapping[Hashable, Sequence[Candidate]], size: int,
+    others: set[int], rng: random.Random,
+) -> tuple[list[Candidate], dict[Hashable, int], list[str], dict[Hashable, int]]:
+    """Each cell's eval deficit (`size` less what survived the drop) refilled from its unused
+    candidates, shuffled on `rng` only for a cell that has both a deficit and candidates, and
+    walked: a candidate sharing a hash with `others` (calibration and train) is a refill drop,
+    any other joins eval. Returns (the refills, refilled per cell, refill-dropped seed ids,
+    walked per cell)."""
+    held: dict[Hashable, int] = {}
+    for candidate in eval_kept:
+        held[candidate.cell] = held.get(candidate.cell, 0) + 1
+    added: list[Candidate] = []
+    refilled: dict[Hashable, int] = {}
+    dropped: list[str] = []
+    walked: dict[Hashable, int] = {}
+    for cell in sorted(unused, key=str):
+        deficit = size - held.get(cell, 0)
+        refilled[cell], walked[cell] = 0, 0
+        if deficit <= 0 or not unused[cell]:
+            continue
+        walk = list(unused[cell])
+        rng.shuffle(walk)
+        for candidate in walk:
+            if refilled[cell] == deficit:
+                break
+            walked[cell] += 1
+            if shingles.shingle_hashes(candidate.text).isdisjoint(others):
+                added.append(candidate)
+                refilled[cell] += 1
+            else:
+                dropped.append(candidate.seed_id)
+    return added, refilled, dropped, walked
 
 
 def assign_splits(
@@ -118,7 +163,7 @@ def make_splits(
     surviving = {cell: [c for c in members if c.seed_id not in gone]
                  for cell, members in everything.items()}
 
-    kept, surplus = subsample_cells(surviving, sum(sizes.values()), rng)
+    kept, unused = subsample_cells(surviving, sum(sizes.values()), rng)
     assigned = assign_splits(kept, sizes, rng)
 
     others: set[str] = set()
@@ -129,6 +174,10 @@ def make_splits(
                    if not shingles.shingle_hashes(c.text).isdisjoint(others)]
     dropped_eval = set(split_drops)
     eval_kept = [c for c in assigned["eval"] if c.seed_id not in dropped_eval]
+    added, refilled, refill_drops, walked = refill_eval(
+        eval_kept, unused, sizes["eval"], others, rng)
+    eval_kept += added
+    surplus = {cell: len(members) - walked[cell] for cell, members in unused.items()}
 
     final = {"eval": eval_kept, "calibration": assigned["calibration"],
              "train": assigned["train"]}
@@ -143,4 +192,5 @@ def make_splits(
         train=tuple(c.seed_id for c in assigned["train"]),
         dropped={"shingleSideCheck": tuple(side_drops), "shingleSplit": tuple(split_drops)},
         surplus=surplus,
-        sizes={cell: {name: count[name][cell] for name in SPLITS} for cell in everything})
+        sizes={cell: {name: count[name][cell] for name in SPLITS} for cell in everything},
+        refilled=refilled, refill_dropped=tuple(refill_drops))

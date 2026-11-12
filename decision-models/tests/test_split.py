@@ -1,7 +1,8 @@
 """`decisionmodels/split.py` (typed-decision-models U5.10a; plan4 §3.6 "Cells, then splits",
 plan2 §3.5, note §Q1.3/§Q1.4): random subsampling with surplus counted, splits by seed within a
-cell, the side-check drop first and the eval-against-calibration/train shingle drop last, never
-refilled. Expected values are written here, never read from the constants they check."""
+cell, the side-check drop first and the eval-against-calibration/train shingle drop last, its
+dropped eval slots refilled from the same cell's unused candidates (plan4 §3.6, U5.10c).
+Expected values are written here, never read from the constants they check."""
 
 from __future__ import annotations
 
@@ -37,9 +38,11 @@ def result_ids(result: split.SplitResult) -> list[str]:
 
 def test_a_full_cell_is_subsampled_at_random_not_first_n() -> None:
     members = pool(300)
-    kept, surplus = split.subsample_cells({("a", "x"): members}, 100, random.Random(1))
+    kept, unused = split.subsample_cells({("a", "x"): members}, 100, random.Random(1))
     chosen = {c.seed_id for c in kept[("a", "x")]}
-    assert len(chosen) == 100 and surplus == {("a", "x"): 200}
+    assert len(chosen) == 100 and len(unused[("a", "x")]) == 200
+    assert chosen.isdisjoint(c.seed_id for c in unused[("a", "x")])
+    assert [c.seed_id for c in unused[("a", "x")]] == sorted(c.seed_id for c in unused[("a", "x")])
     first_hundred = {c.seed_id for c in members[:100]}
     assert chosen != first_hundred
     assert len(chosen - first_hundred) > 40          # a uniform draw leaves ~67 of 100 outside
@@ -55,10 +58,10 @@ def test_the_subsample_ignores_the_input_order_and_follows_the_rng() -> None:
 
 
 def test_a_short_cell_keeps_every_item_and_counts_no_surplus() -> None:
-    kept, surplus = split.subsample_cells({("a", "x"): pool(7), ("a", "y"): pool(10, start=50)},
-                                          10, random.Random(0))
-    assert len(kept[("a", "x")]) == 7 and surplus[("a", "x")] == 0
-    assert len(kept[("a", "y")]) == 10 and surplus[("a", "y")] == 0
+    kept, unused = split.subsample_cells({("a", "x"): pool(7), ("a", "y"): pool(10, start=50)},
+                                         10, random.Random(0))
+    assert len(kept[("a", "x")]) == 7 and unused[("a", "x")] == []
+    assert len(kept[("a", "y")]) == 10 and unused[("a", "y")] == []
 
 
 # --- assign_splits ----------------------------------------------------------------------------
@@ -127,22 +130,156 @@ def test_the_three_sizes_reach_their_own_splits() -> None:
     assert result.surplus == {("a", "x"): 19}
 
 
-def test_an_eval_item_sharing_a_span_with_a_calibration_item_is_dropped_and_not_refilled() -> None:
-    shared = "alpha bravo charlie delta echo foxtrot golf hotel"
-    candidates = pool(12)
-    candidates = [Candidate(c.seed_id, c.cell, c.text) for c in candidates]
-    sizes = {"eval": 4, "calibration": 4, "train": 0}
-    plain = split.make_splits(candidates, sizes=sizes, rng_seed=4)
-    # plant the span in one eval and one calibration item, and in a surplus one
-    planted = {plain.eval[0]: shared, plain.calibration[0]: "x " + shared + " y",
-               next(c.seed_id for c in candidates
-                    if c.seed_id not in result_ids(plain)): shared + " z"}
+SHARED = "alpha bravo charlie delta echo foxtrot golf hotel"
+SIX_FIVE = {"eval": 4, "calibration": 4, "train": 0}
+
+
+def planted_run(count: int, rng_seed: int, *, overlap_unused: int | None, cell: object = ("a", "x"),
+                side_check: frozenset[str] = frozenset(), extra: list[Candidate] | None = None,
+                ) -> tuple[split.SplitResult, split.SplitResult, list[str], list[Candidate]]:
+    """(plain run, run with a planted span, the unused seed ids of the plain run, the planted
+    candidates). The span goes into the plain run's first eval item and first calibration item
+    (the drop) and into `overlap_unused` of its unused items, all but that many left clean
+    (`None`: none planted)."""
+    candidates = pool(count, cell) + (extra or [])
+    plain = split.make_splits(candidates, sizes=SIX_FIVE, rng_seed=rng_seed, side_check=side_check)
+    dropped_side = set(plain.dropped["shingleSideCheck"])
+    unused = [c.seed_id for c in candidates if c.seed_id not in result_ids(plain)
+              and c.seed_id not in dropped_side]
+    planted = {plain.eval[0]: SHARED, plain.calibration[0]: "x " + SHARED + " y"}
+    for seed_id in unused[:overlap_unused or 0]:
+        planted[seed_id] = SHARED + " z"
     changed = [Candidate(c.seed_id, c.cell, planted.get(c.seed_id, c.text)) for c in candidates]
-    result = split.make_splits(changed, sizes=sizes, rng_seed=4)
-    assert result.eval == plain.eval[1:] and result.calibration == plain.calibration
-    assert result.dropped["shingleSplit"] == (plain.eval[0],)
-    assert result.surplus == plain.surplus == {("a", "x"): 4}   # the surplus did not refill eval
+    return (plain, split.make_splits(changed, sizes=SIX_FIVE, rng_seed=rng_seed,
+                                     side_check=side_check), unused, changed)
+
+
+def test_a_dropped_eval_item_is_replaced_from_the_cells_surplus_and_the_replacement_is_disjoint(
+) -> None:
+    for rng_seed in range(12):
+        plain, result, unused, changed = planted_run(12, rng_seed, overlap_unused=None)
+        assert result.dropped["shingleSplit"] == (plain.eval[0],)
+        assert len(result.eval) == 4 == len(plain.eval)             # eval stays at its size
+        (new,) = set(result.eval) - set(plain.eval)
+        assert new in unused and new not in result.calibration      # from the surplus, not a split
+        others = set()
+        by_id = {c.seed_id: c for c in changed}
+        for seed_id in (*result.calibration, *result.train):
+            others |= shingles.shingle_hashes(by_id[seed_id].text)
+        for seed_id in result.eval:
+            assert shingles.shingle_hashes(by_id[seed_id].text).isdisjoint(others)
+        assert result.calibration == plain.calibration and result.train == plain.train
+        assert result.refilled == {("a", "x"): 1}
+        assert result.sizes[("a", "x")] == {"eval": 4, "calibration": 4, "train": 0}
+
+
+def test_the_refill_walk_is_shuffled_not_in_seed_order() -> None:
+    firsts = []
+    for rng_seed in range(40):
+        plain, result, unused, _ = planted_run(12, rng_seed, overlap_unused=None)
+        (new,) = set(result.eval) - set(plain.eval)
+        firsts.append(new == min(unused))
+    assert not all(firsts) and any(firsts)         # 1 in 4 is the lowest id, not every time
+
+
+def test_an_overlapping_candidate_is_a_refill_drop_and_the_walk_continues() -> None:
+    continued = 0
+    for rng_seed in range(40):
+        plain, result, unused, _ = planted_run(12, rng_seed, overlap_unused=3)
+        assert len(unused) == 4
+        clean = unused[3]                                            # the only candidate that fits
+        assert result.eval == (*plain.eval[1:], clean)
+        assert set(result.refill_dropped) <= set(unused[:3])
+        assert result.dropped["shingleSplit"] == (plain.eval[0],)    # assigned drops only
+        if result.refill_dropped:
+            continued += 1
+        assert result.surplus == {("a", "x"): 4 - len(result.refill_dropped) - 1}
+    assert continued > 10                      # a walk that met an overlapping candidate went on
+
+
+def test_a_walk_that_ends_leaves_eval_short_and_counts_every_candidate_walked() -> None:
+    plain, result, unused, _ = planted_run(12, 4, overlap_unused=4)
+    assert sorted(result.refill_dropped) == sorted(unused)
+    assert result.eval == plain.eval[1:] and result.refilled == {("a", "x"): 0}
     assert result.sizes[("a", "x")] == {"eval": 3, "calibration": 4, "train": 0}
+    assert result.surplus == {("a", "x"): 0}                         # all four walked
+    assert result.dropped["shingleSplit"] == (plain.eval[0],)        # not 5: assigned drops only
+
+
+def test_a_cell_with_no_surplus_is_unchanged_by_the_refill() -> None:
+    plain, result, _, _ = planted_run(8, 4, overlap_unused=None)
+    assert result.eval == plain.eval[1:] and result.refilled == {("a", "x"): 0}
+    assert result.refill_dropped == () and result.surplus == {("a", "x"): 0}
+    assert result.sizes[("a", "x")] == {"eval": 3, "calibration": 4, "train": 0}
+
+
+def test_surplus_is_the_remaining_count_and_shingle_split_counts_assigned_drops_only() -> None:
+    plain, result, _, _ = planted_run(12, 9, overlap_unused=None)
+    walked = 1 + len(result.refill_dropped)
+    assert result.surplus == {("a", "x"): 4 - walked}
+    assert len(result.dropped["shingleSplit"]) == 1
+
+
+def test_the_refill_is_per_cell_and_each_cell_uses_only_its_own_surplus() -> None:
+    other = [Candidate(f"s9{i:03d}", ("b", "y"), words(f"o{i}")) for i in range(12)]
+    for rng_seed in range(10):
+        plain, result, _, changed = planted_run(12, rng_seed, overlap_unused=None, extra=other)
+        cell_of = {c.seed_id: c.cell for c in changed}
+        (new,) = set(result.eval) - set(plain.eval)
+        assert cell_of[new] == ("a", "x")
+        assert result.refilled == {("a", "x"): 1, ("b", "y"): 0}
+
+
+def test_a_side_check_dropped_candidate_is_never_the_refill() -> None:
+    side = frozenset(shingles.shingle_hashes("sidea sideb sidec sided sidee sidef sideg sideh"))
+    hits = [Candidate(f"s8{i:03d}", ("a", "x"), "sidea sideb sidec sided sidee sidef sideg sideh "
+                      + words(f"h{i}")) for i in range(6)]
+    for rng_seed in range(30):
+        _, result, _, _ = planted_run(12, rng_seed, overlap_unused=None, side_check=side,
+                                      extra=hits)
+        assert not {s for s in result.eval if s.startswith("s8")}
+        assert result.dropped["shingleSideCheck"] == tuple(c.seed_id for c in hits)
+        assert len(result.eval) == 4
+
+
+def three_cell_candidates() -> list[Candidate]:
+    candidates, n = [], 0
+    for cell, count in [(("a", "x"), 31), (("b", "y"), 9), ((None, "z"), 14)]:
+        for _ in range(count):
+            candidates.append(Candidate(f"s{n:04d}", cell, words(f"w{n}")))
+            n += 1
+    return candidates
+
+
+def test_with_no_drop_the_output_is_todays_exactly() -> None:
+    """The digest was taken from the code before the refill existed, over this input: a shuffle
+    drawn without a drop, or one before `assign_splits`, moves it."""
+    import hashlib
+    import json
+    result = split.make_splits(three_cell_candidates(),
+                               sizes={"eval": 5, "calibration": 4, "train": 2}, rng_seed=1234)
+    body = json.dumps([result.eval, result.calibration, result.train,
+                       {k: list(v) for k, v in result.dropped.items()}], sort_keys=True)
+    assert hashlib.sha256(body.encode()).hexdigest() == (
+        "55ee5d48fa393a8eac4895da9284ed6909e159a4d4bb0582eaf7cbb78a7afc07")
+    assert result.surplus == {("a", "x"): 20, ("b", "y"): 0, (None, "z"): 3}
+    assert result.refilled == {("a", "x"): 0, ("b", "y"): 0, (None, "z"): 0}
+    assert result.refill_dropped == ()
+
+
+def test_a_refill_leaves_calibration_and_train_as_the_no_refill_run_has_them() -> None:
+    plain, result, _, _ = planted_run(12, 3, overlap_unused=None)
+    assert result.calibration == plain.calibration and result.train == plain.train
+    # the same input without a planted span but with the sizes giving a train split
+    sizes = {"eval": 3, "calibration": 3, "train": 2}
+    candidates = pool(14)
+    base = split.make_splits(candidates, sizes=sizes, rng_seed=6)
+    planted = {base.eval[0]: SHARED, base.train[0]: SHARED + " q"}
+    again = split.make_splits(
+        [Candidate(c.seed_id, c.cell, planted.get(c.seed_id, c.text)) for c in candidates],
+        sizes=sizes, rng_seed=6)
+    assert again.calibration == base.calibration and again.train == base.train
+    assert len(again.eval) == 3 and base.eval[0] not in again.eval
 
 
 @pytest.mark.parametrize("other_split", ["calibration", "train"])

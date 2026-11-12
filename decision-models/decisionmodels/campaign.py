@@ -264,6 +264,8 @@ class State:
     instructions: dict[str, list[list[str]]] = field(default_factory=dict)
     held_rng_seeds: set[int] = field(default_factory=set)
     finalized_versions: set[str] = field(default_factory=set)
+    #: The newest `floor-short` event (plan4 §3.6): `{rngSeed, cells: [{stratum, label, n, need}]}`.
+    floor_short: dict[str, Any] | None = None
     seeds: dict[str, Seed] = field(default_factory=dict)
     batches: dict[str, Batch] = field(default_factory=dict)
     attempts: list[Attempt] = field(default_factory=list)
@@ -695,6 +697,9 @@ def fold(events: Iterable[Mapping[str, Any]]) -> State:
                           "voidClass": "rubric", "drops": event["drops"],
                           "items": event["items"], "rubric": event["rubric"],
                           "second": state.recheck_failures >= 2}
+        elif kind == "floor-short":
+            state.held_rng_seeds.add(event["rngSeed"])
+            state.floor_short = {"rngSeed": event["rngSeed"], "cells": list(event["cells"])}
         elif kind == "finalized":
             state.held_rng_seeds.add(event["rngSeed"])
             state.finalized_versions.add(event["datasetVersion"])

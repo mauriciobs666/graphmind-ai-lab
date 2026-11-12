@@ -2,6 +2,18 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-12 — typed-decision-models U5.10c — eval refill, floor gate, `floor-short`, generator pin
+
+**What:** plan4 v1.4 §3.6 "Cells, then splits", §3.4 and the §5 row U5.10c (gate: `docs/reviews/typed-decision-models4-impl.md` Pass 33, 34; method review `docs/reviews/typed-decision-models-refill-ml.md`). Plan4 §3.6 "Drop-aware top-up" (`topup_counts(extra)`, `_short_cells`) is U5.9b and is not built.
+
+- `split.subsample_cells` returns the unused candidates per cell (seed-sorted). After `assign_splits`, a cell with an eval deficit shuffles them on the same `rng` and walks them (`refill_eval`): one sharing an 8-token span with calibration or train is a refill drop, any other joins eval, until eval is full or the walk ends. No drop, no extra draw: the output equals the earlier one (a digest taken before the change pins it). `SplitResult.surplus` is the remaining count; `refilled` and `refill_dropped` are new; `dropped.shingleSplit` counts assigned drops only; `generation.json` is unchanged.
+- `finalize.build_dataset` gates every finalize on the floors (the `short` argument is gone) and raises `FloorShort` (a `CampaignRefused` carrying the cells); `finalize()` catches it inside `camp.locked()`, appends `floor-short` (`rngSeed`, per short cell `n` and `need` = `⌈deficit / (1 − d)⌉` in exact integers) and re-raises. `State.floor_short` folds the newest event and holds the seed; no halt. `need` is 0 for a cell with no eval deficit (a calibration shortfall) and null when every assigned eval item was dropped (no survival rate).
+- The printed cell line gains eval-assigned, assigned drops, walked, refill drops, refilled, floor and `d` (flagged above 0.25). `finalize --rng-seed <n>` is new.
+- `agents/dm-generator.md` `model:` is `claude-opus-4-8` (sha256 `4b83cfeb…`, the recorded v1 hash); `tests/test_install.py` rows follow.
+- Sentences rewritten: `AGENTS.md`, `README.md`, `finalize.py`, `driver.py`, `split.py` and `test_split.py` docstrings; tests rewritten for the new rule: `test_split.py`'s refill test, `test_finalize.py`'s no-short-cell floor test, the `--short` floor tests and the `refused` helper (one `floor-short` append allowed, byte-equal otherwise).
+
+**Verified:** each "Done when" item has a test in `tests/test_split.py` or `tests/test_finalize.py`; mutants on a scratch copy (refill from calibration, no shingle test, shuffle before `assign_splits`, side-check-dropped surplus used, seed not held, unshuffled walk, break on overlap, `<=` floor, calibration floor ignored, `need` from a global rate, per-cell size for the floor, floor division, `n` from the surplus, no append, `--rng-seed` ignored, remaining surplus, deficit ignored, wrong cell's `refilled`, floors only under `--short`, old model line) each redden a test.
+
 ## 2026-11-11 — `driver start`: a full campaign's round 1
 
 **What:** a `--phase full` campaign had no path that drew round 1 (`begin_round(1)` was called by

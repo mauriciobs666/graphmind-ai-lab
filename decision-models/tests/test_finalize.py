@@ -39,6 +39,11 @@ VECTOR = {line["role"]: line for line in (json.loads(raw) for raw in (
 ).read_text("utf-8").splitlines() if raw)}
 
 
+def cell_lines(lines: list[str]) -> set[str]:
+    """Each printed cell line up to its refill figures (` | eval-assigned ...`)."""
+    return {line.split(" | ")[0] for line in lines if line.startswith("  cell")}
+
+
 # --- §3.7's shape comparison ---------------------------------------------------------------------
 
 
@@ -279,7 +284,7 @@ def test_a_cell_is_keyed_by_the_majority_label_not_the_seeds_intent(
     # turns/true held 8 - |flipped| labelled, turns/false 8 + |flipped|: the surplus differs
     surplus = {"true": 8 - len(flipped) - 4, "false": 8 + len(flipped) - 4}
     for label, left in surplus.items():
-        assert f"  cell turns / {label}: eval 2, calibration 2, surplus {left}" in lines
+        assert f"  cell turns / {label}: eval 2, calibration 2, surplus {left}" in cell_lines(lines)
 
 
 def test_items_jsonl_has_no_raw_line_separator_and_the_text_round_trips(
@@ -420,8 +425,9 @@ def test_the_dataset_hashes_are_the_last_issued_runs_and_the_rubric_the_current_
 
 def test_the_side_check_drop_surplus_and_split_drop_land_under_their_own_keys(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every dropped count is distinct, so a count under the wrong key is a red test."""
-    bench = Bench(tmp_path, monkeypatch, "guard-judge", per_cell=1)
+    """Every dropped count is distinct, so a count under the wrong key is a red test. (Floor 0:
+    the cell the shingle drop empties is not what this test is about.)"""
+    bench = Bench(tmp_path, monkeypatch, "guard-judge", per_cell=1, floor=0)
     for name in ("HALT_PERCENT", "POOL_PERCENT"):
         monkeypatch.setattr(campaign, name, 100)         # no template halt: the hits are planted
     shared = "alpha beta gamma delta epsilon zeta eta theta iota kappa"
@@ -584,12 +590,19 @@ def ledger(bench: Bench) -> bytes:
     return bench.camp.ledger_path.read_bytes()
 
 
-def refused(bench: Bench, match: str, **kwargs: Any) -> None:
-    """`finalize` is refused with `match`, the ledger is byte-equal and no dataset is written."""
+def refused(bench: Bench, match: str, *, floor_short: bool = False, **kwargs: Any) -> None:
+    """`finalize` is refused with `match` and no dataset is written. The ledger is byte-equal,
+    except that a floor refusal (`floor_short=True`) appends exactly one `floor-short` event."""
     before = ledger(bench)
     with pytest.raises(CampaignRefused, match=match):
         bench.finalize("vx", **kwargs)
-    assert ledger(bench) == before
+    after = ledger(bench)
+    if floor_short:
+        assert after.startswith(before)
+        appended = after[len(before):].splitlines()
+        assert len(appended) == 1 and json.loads(appended[0])["event"] == "floor-short"
+    else:
+        assert after == before
     assert not list(bench.data.glob("*/*")) if bench.data.exists() else True
 
 
@@ -767,8 +780,8 @@ def test_short_finalizes_when_every_cell_meets_its_floor_and_prints_every_n(
     decline(bench2)
     lines = bench2.finalize(short=True)
     assert lines[1] == "SHORT: finalized under a declined top-up; every cell meets its floor"
-    assert "  cell turns / true: eval 4, calibration 2, surplus 0" in lines
-    assert "  cell understanding / true: eval 4, calibration 4, surplus 0" in lines
+    assert "  cell turns / true: eval 4, calibration 2, surplus 0" in cell_lines(lines)
+    assert "  cell understanding / true: eval 4, calibration 4, surplus 0" in cell_lines(lines)
     data = bench2.dataset()
     assert len(data["splits"]["eval"]) == 16 and len(data["splits"]["calibration"]) == 14
 
@@ -791,10 +804,12 @@ def test_an_eval_cell_the_shingle_drop_empties_is_under_its_floor_whatever_calib
         bench.finalize(short=True)
 
 
-def test_short_with_no_short_cell_holds_no_cell_to_the_floor(
+def test_a_cell_under_its_floor_refuses_every_finalize_short_cell_or_not(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every cell has its target; the shingle drop empties one eval cell below the floor. Without
-    a short cell that is an ordinary finalize, whatever `--short` says."""
+    """Every cell has its target; the shingle drop empties one eval cell below the floor. The
+    floor gates this finalize whatever `--short` says: nothing is written, and the one ledger
+    change is the `floor-short` record (a cell whose eval was all dropped has no drop rate to
+    size a top-up from: `need` is null)."""
     bench = Bench(tmp_path, monkeypatch, "guard-judge", per_cell=4, floor=2)
     counts = {(stratum, label): 8 for stratum in STRATA["guard-judge"]
               for label in LABELS["guard-judge"]}
@@ -806,9 +821,11 @@ def test_short_with_no_short_cell_holds_no_cell_to_the_floor(
     bench.start(seeds)
     bench.generate()
     bench.vote(bench.agree)
-    lines = bench.finalize(short=True)
-    assert not any(line.startswith("SHORT") for line in lines)
-    assert "  cell understanding / true: eval 0, calibration 4, surplus 0" in lines
+    for short in (False, True):
+        refused(bench, r"below its floor of 2 \(\(true, understanding\): eval 0, calibration 4\)",
+                floor_short=True, short=short, rng_seed=100 + short)
+    cells = bench.camp.state().floor_short["cells"]
+    assert cells == [{"stratum": "understanding", "label": "true", "n": 8, "need": None}]
 
 
 def test_an_empty_cell_is_printed_with_zeros(
@@ -818,7 +835,8 @@ def test_an_empty_cell_is_printed_with_zeros(
     bench = short_bench(tmp_path, monkeypatch, turns_true=0, floor=0)
     decline(bench)
     lines = bench.finalize(short=True)
-    assert "  cell turns / true: eval 0, calibration 0, surplus 0" in lines
+    assert ("  cell turns / true: eval 0, calibration 0, surplus 0 | eval-assigned 0, assigned "
+            "drops 0, walked 0, refill drops 0, refilled 0, floor 0, d 0.00") in lines
     assert len([line for line in lines if line.startswith("  cell")]) == 4
 
 
@@ -826,7 +844,7 @@ def test_a_floor_refusal_leaves_the_store_intact_for_a_later_round(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bench = short_bench(tmp_path, monkeypatch, turns_true=3)    # eval 3, calibration 0
     decline(bench)
-    refused(bench, "below its floor", short=True)
+    refused(bench, "below its floor", floor_short=True, short=True)
     bench.camp.resolve(decision="reopen: more generation", reopen_topup=True)
     assert not bench.camp.state().topup_declined
     refused(bench, "`driver run` plans the top-up")
@@ -861,7 +879,186 @@ def test_an_unbounded_cell_is_short_and_a_floor_failure(
     bench = short_bench(tmp_path, monkeypatch, turns_true=0)
     decline(bench)
     refused(bench, "--short.*--reopen-topup")
-    refused(bench, "below its floor of 2 .*turns", short=True)
+    refused(bench, "below its floor of 2 .*turns", floor_short=True, short=True)
+
+
+# --- the eval refill, the floor gate and `floor-short` (U5.10c) ---------------------------------
+
+SEED = 20261110
+Cell = tuple[str, str]
+
+
+def plain_split(bench: Bench, per_cell: int) -> tuple[split.SplitResult, dict[str, Cell]]:
+    """The split `finalize` would make over `bench`'s campaign, and each seed's cell."""
+    state = bench.camp.state()
+    rows = [row for row in diagnostics.labelled_items(state) if row.cls is not None]
+    candidates = [split.Candidate(row.seed_id, (row.stratum, row.cls),
+                                  shingles.evidence_text(bench.role, row.item)) for row in rows]
+    result = split.make_splits(candidates, sizes={"eval": per_cell, "calibration": per_cell,
+                                                  "train": 0}, rng_seed=SEED)
+    return result, {c.seed_id: c.cell for c in candidates}
+
+
+def planted_bench(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                  counts: dict[Cell, int], plant: dict[Cell, tuple[int, int]], *,
+                  per_cell: int = 6, floor: int = 6) -> Bench:
+    """Guard with `counts` labelled items per cell. `plant[cell] = (k, u)` plants a distinct span
+    in the cell's first `k` eval items (of the plain split at `SEED`) and a calibration item each
+    (so `k` assigned drops), and the first of them in `u` of its unused items (`u` refill drops
+    when walked)."""
+    def build(root: Path, texts: dict[str, str]) -> Bench:
+        bench = Bench(root, monkeypatch, "guard-judge", per_cell=per_cell, floor=floor)
+        seeds = bench.seeds(counts)
+        bench.texts.update(texts)
+        bench.start(seeds)
+        bench.generate()
+        bench.vote(bench.agree)
+        return bench
+
+    base = build(tmp_path / "plain", {})
+    result, cell_of = plain_split(base, per_cell)
+    texts: dict[str, str] = {}
+    everyone = set(result.eval) | set(result.calibration)
+    for cell, (k, u) in plant.items():
+        evals = [x for x in result.eval if cell_of[x] == cell]
+        cals = [x for x in result.calibration if cell_of[x] == cell]
+        unused = sorted(x for x in cell_of if cell_of[x] == cell and x not in everyone)
+        spans = [" ".join(f"sp{cell[0][:2]}{cell[1][0]}{i}w{j}" for j in range(10))
+                 for i in range(k)]
+        for i, span in enumerate(spans):
+            texts[evals[i]], texts[cals[i]] = span, "x " + span + " y"
+        for seed_id in unused[:u]:
+            texts[seed_id] = spans[0] + " z"
+    return build(tmp_path / "planted", texts)
+
+
+US, UF, TS, TF = ("understanding", "true"), ("understanding", "false"), ("turns", "true"), (
+    "turns", "false")
+
+
+def test_finalize_refills_an_eval_slot_from_the_cells_surplus_and_prints_every_figure(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    counts = {US: 14, UF: 12, TS: 13, TF: 12}
+    bench = planted_bench(tmp_path, monkeypatch, counts, {US: (2, 0), TS: (1, 1)}, floor=5)
+    lines = bench.finalize(rng_seed=SEED)
+    head = "eval 6, calibration 6, surplus 0 | eval-assigned 6, assigned drops "
+    expect = {
+        "understanding / true": head.replace("assigned drops ", "assigned drops 2, walked 2, "
+                                              "refill drops 0, refilled 2, floor 5, d 0.33 "
+                                              "(above 0.25: a generation-diversity signal)"),
+        "understanding / false": head + "0, walked 0, refill drops 0, refilled 0, floor 5, d 0.00",
+        "turns / true": "eval 5, calibration 6, surplus 0 | eval-assigned 6, assigned drops 1, "
+                        "walked 1, refill drops 1, refilled 0, floor 5, d 0.17",
+        "turns / false": head + "0, walked 0, refill drops 0, refilled 0, floor 5, d 0.00"}
+    for cell, text in expect.items():
+        assert f"  cell {cell}: {text}" in lines
+    dropped = bench.dataset()["generation"]["dropped"]
+    assert dropped["shingleSplit"] == 3                       # assigned drops only: 2 + 1
+    splits = bench.dataset()["splits"]
+    assert len(splits["eval"]) == 6 + 6 + 5 + 6 and len(splits["calibration"]) == 24
+
+
+def test_a_refill_never_enters_through_a_dropped_surplus_a_refill_drop_is_not_counted_assigned(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    counts = {US: 14, UF: 12, TS: 13, TF: 12}
+    bench = planted_bench(tmp_path, monkeypatch, counts, {TS: (1, 1)}, floor=5)
+    bench.finalize(rng_seed=SEED)
+    assert bench.dataset()["generation"]["dropped"]["shingleSplit"] == 1
+
+
+def test_an_eval_cell_under_its_floor_after_the_refill_refuses_and_records_floor_short(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Eval size 6, floor 5, and per cell a different `n`, drop rate and deficit, so a figure
+    taken from another cell, or the size for the floor, goes wrong. understanding/true: 12 items,
+    3 of 6 dropped (d = 1/2, eval 3, deficit 2: need 4); understanding/false: 12, 2 of 6 (d =
+    1/3, eval 4, deficit 1: need 2); turns/true: 14, 4 of 6 dropped and both surplus items
+    overlap (d = 2/3, eval 2, deficit 3: need 9); turns/false: 12, none dropped."""
+    counts = {US: 12, UF: 12, TS: 14, TF: 12}
+    bench = planted_bench(tmp_path, monkeypatch, counts, {US: (3, 0), UF: (2, 0), TS: (4, 2)},
+                          floor=5)
+    refused(bench, "below its floor of 5", floor_short=True, rng_seed=SEED)
+    event = json.loads(ledger(bench).splitlines()[-1])
+    assert event["rngSeed"] == SEED
+    by_cell = {(c["stratum"], c["label"]): (c["n"], c["need"]) for c in event["cells"]}
+    assert by_cell == {US: (12, 4), UF: (12, 2), TS: (14, 9)}          # turns/false is not short
+    state = bench.camp.state()
+    assert SEED in state.held_rng_seeds
+    with pytest.raises(CampaignRefused, match=f"RNG seed {SEED} is already held"):
+        bench.finalize("vy", rng_seed=SEED)
+    assert not (bench.data / "guard-judge").exists()
+    assert state.floor_short["rngSeed"] == SEED
+
+
+@pytest.mark.parametrize(("sizes_eval", "assigned", "drops", "floor", "need"), [
+    (4, 6, 2, 6, 3),      # deficit 2, d = 1/3: 2 / (2/3) = 3 exactly (a float ceil gives 4)
+    (5, 6, 1, 6, 2),      # deficit 1, d = 1/6: 1.2 up to 2
+    (2, 6, 3, 6, 8),      # deficit 4, d = 1/2
+    (3, 4, 0, 5, 2),      # no drop: the deficit itself
+    (0, 4, 4, 2, None),   # every assigned item dropped: no survival rate observed
+    (6, 6, 0, 6, 0),      # at the floor: nothing needed
+])
+def test_need_is_the_deficit_over_the_survival_rate_rounded_up_in_exact_integers(
+        sizes_eval: int, assigned: int, drops: int, floor: int, need: int | None) -> None:
+    figures = finalize.CellFigures(
+        "s", "x", {"eval": sizes_eval, "calibration": 6, "train": 0}, 0, 12, assigned, drops,
+        drops, 0, 0)
+    assert figures.need(floor) == need
+
+
+def test_a_later_floor_short_replaces_the_earlier_and_both_seeds_stay_held(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    counts = {US: 12, UF: 12, TS: 12, TF: 12}
+    bench = planted_bench(tmp_path, monkeypatch, counts, {US: (2, 0)})
+    refused(bench, "below its floor", floor_short=True, rng_seed=SEED)
+    later = [{"stratum": "turns", "label": "false", "n": 9, "need": 4}]
+    bench.camp._append({"event": "floor-short", "rngSeed": SEED + 1, "cells": later})
+    state = bench.camp.state()
+    assert state.floor_short == {"rngSeed": SEED + 1, "cells": later}
+    assert {SEED, SEED + 1} <= state.held_rng_seeds
+    assert state.halt is None                                          # a plain fold: no halt
+
+
+def test_a_cell_at_its_floor_passes_and_one_above_it_refuses(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    counts = {US: 12, UF: 12, TS: 12, TF: 12}
+    at = planted_bench(tmp_path / "at", monkeypatch, counts, {US: (2, 0)}, floor=4)   # eval 4
+    assert at.finalize(rng_seed=SEED)[0].startswith("finalized")
+    above = planted_bench(tmp_path / "above", monkeypatch, counts, {US: (2, 0)}, floor=5)
+    refused(above, "below its floor of 5", floor_short=True, rng_seed=SEED)
+
+
+def test_a_refusal_for_a_cell_with_no_eval_deficit_records_need_zero(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A calibration shortfall has no `need` (the planner's own target covers it)."""
+    bench = short_bench(tmp_path, monkeypatch, turns_true=5)          # eval 4 + calibration 1
+    decline(bench)
+    refused(bench, "calibration 1", floor_short=True, short=True, rng_seed=SEED)
+    event = json.loads(ledger(bench).splitlines()[-1])
+    assert event["cells"] == [{"stratum": "turns", "label": "true", "n": 5, "need": 0}]
+
+
+def test_build_dataset_stays_pure_the_event_is_finalizes_to_append(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    counts = {US: 12, UF: 12, TS: 12, TF: 12}
+    bench = planted_bench(tmp_path, monkeypatch, counts, {US: (2, 0)})
+    before = ledger(bench)
+    with pytest.raises(CampaignRefused, match="below its floor"):
+        finalize.build_dataset(bench.camp.state(), rng_seed=SEED, side_check=frozenset(),
+                               generated_at="2026-11-12T00:00:00Z")
+    assert ledger(bench) == before
+
+
+def test_rng_seed_fixes_the_seed_on_the_command_line_and_a_held_one_is_refused(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    bench = Bench(tmp_path, monkeypatch, "guard-judge")
+    bench.full_round(5)
+    argv = ["finalize", "--root", str(bench.camp.root), "--dataset-version", "v1",
+            "--data-dir", str(bench.data), "--rng-seed", "4242"]
+    assert driver.main(argv) == 0
+    assert bench.dataset()["splits"]["rngSeed"] == 4242
+    assert bench.camp.state().held_rng_seeds >= {4242}
+    argv[argv.index("v1")] = "v2"
+    assert driver.main(argv) == 1                                      # 4242 is held
 
 
 # --- the mid-tranche rubric edit -----------------------------------------------------------------

@@ -3305,3 +3305,108 @@ The stranded-seed hint is derived from `unbatched_seeds()` rather than a flag, t
 
 ### Growth-stops check
 New scope only (Pass 32). Passes 1 to 31 unchanged. Proposed `REVIEW.md` lines: none.
+
+## Pass 33 — plan4 v1.4 / plan6 §3.5 gate: refill, floor gate, generator re-pin, U5.10c (2026-11-12)
+
+**Verdict: needs changes.** `CPG: considered, not relevant — a static plan gate against a 146-line pure module and one function, read in full`. Plan-gate passes for plan4 live in this file (`typed-decision-models4.md` holds none).
+
+**Scope.** `git diff` of `docs/plans/typed-decision-models4.md` (§3.4, §3.6, §4.1 U5.10c, §5) and `typed-decision-models6.md` §3.5 "Outcome"; read `split.py`, `finalize.py` (`build_dataset`, `finalize`, `_short_cells`), `campaign.cell_target`, `test_split.py`, `test_finalize.py` and `data/*/v1`. Static; nothing run, nothing under `~/dm-campaigns`.
+
+### Findings
+
+**P33-B1 (blocker) — the refill cannot satisfy the floor it gates for `message-type`'s `escalation`, so the v2 re-finalize the row demands refuses.** *Verified from committed data; arithmetic inferred.*
+- `data/message-type-classifier/v1/diagnostics.json`: `escalation` has 132 labelled items against a target of 120, so the surplus is at most 12 (before side-check drops). `escalation` eval is 40 (`splits.json` + `items.jsonl`), a deficit of 20 against floor 52 (needs 12) and against size 60 (needs 20).
+- The cell's own eval-vs-calibration drop rate is 20/60 = 33%, so about 8 of 12 surplus candidates survive: eval about 48, under 52. The v2 finalize refuses under the new gate, and U5.10c's done-condition ("each committed dataset below a floor re-finalized as `v2`") fails.
+- The refusal's hint is a dead end: `topup_counts` plans only cells below `cell_target` (`campaign.py:1239-1256`), and `_short_cells` (`finalize.py:130`) is empty for a cell at 132 ≥ 120, so `--reopen-topup` plans nothing.
+- *Fix (`architect`, `data-scientist`):* state the capacity the refill needs (surplus ≥ deficit / survival rate) and what the operator does when it is short, e.g. a top-up trigger that counts eval-after-drop, or a ruled lower bar for that cell. Name `message-type` as the case the unit must resolve, not a re-finalize that is assumed to pass.
+
+**P33-M1 (major) — the claim "about 8 drops per cell" is true for join-in only.** *Verified from `generation.json`.* join-in 14 drops in 2 cells (6 and 8: 94 and 92); message-type 42 in 5 cells (escalation alone 20); guard-judge 83 in 4 cells (about 21 each, but floor 50 and eval 74-89, so no cell is below its floor). Join-in's surplus (224−≤200 and 216−≤200, so 24 and 16 labelled spare) covers 6 to 8 plus the candidates' own drops, so join-in is feasible; the generalisation is not.
+
+**P33-M2 (major) — the new floor gate reverses existing tests, and the row names none.** `finalize()` passes `short=bool(shorts)` (`finalize.py:349`), so floors are enforced only for a campaign with a short cell, which is the claim in the brief (true). `tests/test_finalize.py:794` `test_short_with_no_short_cell_holds_no_cell_to_the_floor` asserts the opposite of the new rule (an eval cell dropped below the floor finalizes), and `:776` is built on `--short`. Both must be rewritten; the §5 U5.10c row names only new assertions. Also `test_split.py:130` (`..._not_refilled`, asserts `surplus` unchanged and `eval == plain.eval[1:]`) is the exact reverse of the new behaviour and `test_split.py`'s docstring (line 4) and `split.py`'s docstring (step 4, line 21) say "nothing is refilled". Name them as rewritten, with a mutant that reddens.
+- *Fix:* add the three tests to the row's "files"; keep the required red: a floor-below eval cell with no short cell refuses and writes nothing (`ledger` unchanged).
+
+**P33-M3 (major) — two semantic gaps in the refill spec.**
+(a) `SplitResult.surplus` is a per-cell count (`split.py:52`, printed at `finalize.py:365`), and `subsample_cells` returns only counts, discarding the unused candidates; the plan says "walked in that order" but does not say `surplus` becomes the *remaining* count after consumed and dropped candidates, nor that `subsample_cells` must return the unused candidates (it changes its signature, used by `make_splits` and tests). State both. (b) `dropped.shingleSplit` then counts surplus candidates that were never in a slot, so it stops equalling "eval items lost"; `shingleSplit` is a plan4 §3.7 key (`:340`) and a contract-vector field. `tests/fixtures/decision-contract/dataset-shape.jsonl` carries `shingleSplit: 0` with `itemCount: 3`, so the fixture is unaffected, but state the definition, and whether `diagnostics`/the printed line shows refill and refill-drop counts separately.
+
+**P33-M4 (major, sizing) — U5.10c bundles four jobs and is missing from §4.3.** Code (`split.py`, `finalize.py`, tests), an agent-file edit with a pinned hash, two docs sentences, and two live re-finalizes of committed datasets from a store under `~/dm-campaigns`. The re-finalize is operator work gated by P33-B1, not a coder done-condition. The §4.3 mermaid chain (`U5.10 → U5.2b`, `U5.10 → U5cg → U5cm → U5cj`) does not list U5.10c, so its place against the finished U5c campaigns is undefined. *Fix:* split into U5.10c (code, tests, docs, agent line) and a data step; add both to §4.3.
+
+**P33-m1 (minor) — wording: "a join-in cell's floor equals its target".** `evalFloorPerCell` 100 equals `evalPerCell` 100 (`points/join-in-judge/point.json`), but `cell_target` is 200 (`campaign.py:1239`). Say "its eval size".
+
+**P33-m2 (minor) — the generator re-pin: the hash claims check out, the install test claim is incomplete.** Verified: `sha256sum agents/dm-generator.md` is `ec89ec20…`; the same file with `model: claude-opus-5-5` replaced by `claude-opus-4-8` hashes to `4b83cfeb7411ffc8…`, equal to `generation.json`'s `promptSha256.agentDefinition.generator` of all three v1 datasets, and every ingested generator run names `claude-opus-4-8`. The plan6 Outcome claim is true. `tests/test_install.py:118` is the shipped-definition row, but lines 245 and 476 also hard-code `claude-opus-5-5` for the generator pin; the coder should run that file after the edit (I did not, to leave the tree untouched). The hash value is also stated in plan4's U5.10c row and (as an equality) in plan6 Outcome: one home.
+
+### Answers to the asks
+- **Floors only under `--short`, join-in floor = eval size:** true (above).
+- **Surplus candidates are side-check survivors:** true by construction (`surviving` feeds `subsample_cells`, `split.py:111-115`), implementable once `subsample_cells` returns the unused members.
+- **Calibration/train untouched, no-drop output identical:** implementable and sound. `assign_splits` has already drawn all `rng` values before the refill, so a post-split refill cannot move them; the `others` set is built before the refill. No `rng` draw is needed when no eval item drops. Add a test that the refill's shuffle happens after `assign_splits`.
+- **FR-8 side-check:** no interaction; surplus excludes side-check drops. **`--short`:** a short cell has no surplus, so the refill is a no-op there; unchanged. **Refilled-vs-eval overlap:** eval-eval overlap is never tested, before or after.
+- **`cell_target // 2` can't change cheaply:** it is `evalPerCell` (`finalize.py:91`), also feeding calibration size and `topup_counts`; an over-sized eval slot would shift the calibration cut (`assign_splits` cuts eval first). The diff makes no such claim; I did not find it in the text.
+- **Audit of the three committed v1 datasets (observed):** guard-judge eval per (path, label): turns/False 78, turns/True 74, understanding/False 89, understanding/True 76, calibration 100 each; floor 50, all pass. join-in-judge: eval 94/92, calibration 100/100; floor 100, **eval fails (186 < 200)**. message-type: eval complaint 52, escalation **40**, order 54, other 53, question 59; calibration 60 each; floor 52, **escalation fails (40 < 52; note §Q5.3 and line 313 give 52 as the floor)**. The architect's side finding is confirmed.
+
+### What's solid
+The refill order (after `assign_splits`, against calibration and train only) keeps the held-out set's calibration identical; §3.4 re-pin and the plan6 Outcome are accurate to the data; the revision note is one line and no finding-resolution table was added.
+
+### Growth-stops check
+New scope: refill, floor gate, U5.10c row, re-pin. Rework growth: the U5.10 row and §3.6 describe the refill twice (the §5 row restates §3.6's rule; cite it). Restated fact: the recorded generator hash in the U5.10c row and plan6 Outcome. Revision note is one line. Proposed `REVIEW.md` lines: none.
+
+## Pass 34 — plan4 v1.4 re-gate after Pass 33 (2026-11-12)
+
+**Verdict: needs changes.** One blocker, a new one inside the mechanism that answers P33-B1. `CPG: considered, not relevant — static plan gate; the code paths were read directly`. Static; nothing run, nothing mutated.
+
+**Dispositions.**
+- **P33-B1: not fixed.** The path exists (`floor-short`, `extra`, new version), but its arithmetic does not plan a round for `escalation` (P34-B1).
+- **P33-M1: fixed.** The "about 8 drops" claim is gone; U5.10d says "about 48 of 52" and names guard as needing nothing (v1 data re-read).
+- **P33-M2: fixed.** U5.10c's row names `test_split.py` `..._not_refilled`, `test_finalize.py:794`, the `--short` floor tests (~776) and the docstrings; see P34-m1 for one missing assertion.
+- **P33-M3: fixed.** `subsample_cells` returns the unused candidates, `surplus` is the remaining count, `shingleSplit` counts assigned drops only, `refilled`/`refill_dropped` are new. `dataset-shape.jsonl` carries `shingleSplit: 0` and the key set is unchanged, so the contract vector is unaffected.
+- **P33-M4: fixed.** U5.10c (`tdd-engineer`), U5.9b (`coder`) and U5.10d (`teco`, no code) are separate, and §4.3 orders them after U5cj with the message-type and join-in imports waiting on U5.10d.
+- **P33-m1 and m2: fixed.** "Floor equals its eval size"; install-test lines 118/245/476 named; the hash value is no longer in plan4.
+
+### New findings
+
+**P34-B1 (blocker) — `extra` raises the target by the need, but the cell already holds the surplus the refill walked, so the top-up plans nothing.** *Verified by reading `topup_counts` (`campaign.py:1244-1270`); arithmetic inferred.* Escalation has n = 132 labelled items against target 120. The refill walked all 12 surplus candidates (eval about 48, deficit 4, `d` 1/3, need ⌈4/(2/3)⌉ = 6). The plan makes the cell short "below `cell_target + extra`" = 126, and the planner skips any cell with `n >= target` (`campaign.py:1262`). 132 ≥ 126, so no draw is planned, `_short_cells` stays empty, and the next finalize re-splits the same labelled set with a fresh seed. That is a lottery, not the stated remedy.
+- *Fix (`architect`):* the need is additional candidates beyond the n that produced the shortfall. Raise the target to `n_at_refusal + need` (record `n` in `floor-short`), or express `extra` as items to add on top of the current n. Add a U5.9b row: n = 132, need = 6 plans a draw for `⌈(138 − 132) / P̂⌉`.
+- Also note that a v2 re-split on the larger set is a new random split with a new `d`, so one top-up does not guarantee the floor. The text should say a second `floor-short` is possible and who decides the stop (spend halt, decline, stakeholder).
+
+**P34-M1 (major) — "a refusal writes nothing" has three more places that assert it, and the plan edits only some.** Verified: `test_finalize.py:583-592` (`refused` helper) asserts the ledger is byte-equal on every refusal; `driver.py:28` and `finalize.py:10` ("the one other write is a `recheck-halt`") and `decision-models/AGENTS.md:74` say the same. The append is also structurally awkward: `build_dataset` is pure and raises `CampaignRefused`; the append belongs in `finalize()` (inside `camp.locked()`, as `_recheck` does, `finalize.py:306`) after catching the refusal. Add all four to U5.10c's files, and let the `refused` helper take an expected `floor-short`. The `recheck-halt` precedent is consistent in kind (a refusal that records state) but differs in that `floor-short` raises no halt: it must be a plain fold into `State`, and the fold ignores unknown kinds today (U5.10c lands before U5.9b, so it must stay harmless).
+
+**P34-M2 (major) — the new import path overwrites an uncommitted pack.** Verified from `model-bench/scripts/import_decision_pack.py`: a re-import needs a new `--pack-version` (`:441`), then writes `pack.json`, `items.jsonl` and `PROVENANCE.md` by plain overwrite into the same `packs/<role>-synthetic/` (`:511-535`). `git status` shows `packs/message-type-classifier-synthetic/` (and guard's) untracked, so the v1 pack is not recoverable after a v2 import; item IDs are renumbered in v2, so any score against v1 is not comparable. Add to U5.10d: commit (or move aside) the v1 pack before the v2 import, and state that run records on v1 do not carry over.
+
+**P34-m1 (minor) — floor-short on a short cell double counts.** For a cell below target the planner already draws `target − n`; adding `extra` on top counts the same deficit twice (a conservative overdraw, no refusal). State it, or define `extra` for non-short cells only. Also U5.10c's row has no test that `floor-short` records the seed and that a later finalize refuses that seed (`held_rng_seeds`); add one with the mutant "seed not held".
+
+**P34-m2 (minor, growth) — the per-cell line.** The refill's printed figures (nine fields plus per-split intent-label agreement, "exploratory") go beyond what the gate needs. Eight of the nine are the new scope the data-scientist asked for; the per-split intent agreement is not tied to any decision and is new scope without a consumer. Cut it or name its reader.
+
+### Answers
+- **(a)** `Campaign.resolve` needs no change (`--reopen-topup`, decline and spend-approval work as today, `:2135-2175`); `queue_topup` (`:1677`) is gated only on phase `full`, labelled rounds and no halt, so it runs on a finalized or refused point; it, `_short_cells` and `topup_counts` need the `extra` plumbing U5.9b names. The one fold-order caveat is above.
+- **(b)** Escalation: deficit 52−48 = 4, `d` = 20/60, need 6. A top-up draw only helps once P34-B1 is fixed; `finalize` already takes `rng_seed` and holds seeds (`finalize.py:331`), and `driver.py` exposes no `--rng-seed` today, so the flag is new, as the plan says. The v2 split is a whole new split (new seed, new surplus and `d`), deterministic only given the seed.
+- **(c)** Refill, floor gate, `floor-short` and `--short`: a short cell has no surplus (refill no-op); the `--short` refusal also appends `floor-short`; `generation.json` and `dataset-shape.jsonl` are unchanged; the printed figures never reach `generation.json`.
+- **(d)** See P34-M2.
+- **(e)** Sizing and order are right after P34-M1's additions. Growth-stops: new scope (refill, floor-short, three units); revision note is one line; plan6 §3.5 unchanged. The §3.6 refill bullet and the §5 U5.10c row still describe the same rule twice; the row should cite §3.6. No `REVIEW.md` lines proposed.
+
+## Pass 35 — U5.10c gate: refill, floor gate, `floor-short`, generator pin (2026-11-12)
+
+**Verdict: approve with suggestions.** No blocker. `CPG: considered, not relevant — a diff of two pure modules, read in full`.
+
+**Scope.** Uncommitted `decision-models/` diff (`split.py`, `finalize.py`, `campaign.py` fold, `driver.py`, `agents/dm-generator.md`, three test files, README, AGENTS.md, HISTORY) against plan4 v1.4 §3.6 and the §5 U5.10c done list, and the method review `typed-decision-models-refill-ml.md`. All runs on a scratch copy under `scratchpad/`; nothing under `~/dm-campaigns`, no `driver run`/`pilot`/claude.
+
+**Executed.**
+- Scratch copy: `test_split`, `test_finalize`, `test_install`: 247 passed; full suite **1770 passed in 308 s**; `ruff check` clean.
+- 22 mutants on the scratch copy, each followed by split+finalize+driver tests: 21 killed (skip shingle test on a refill; side-check-dropped surplus used; shuffle before `assign_splits`; refill from another cell's candidates; refill with `others` empty; unused-vs-walked `surplus`; seed not held; no `floor-short` append; `need` floored, `need` ignoring `d`, `need` from a constant rate, `None` need turned into 0; calibration floor unchecked; eval floor unchecked; floor `<=`; `n` taken from the surplus; wrong `eval_assigned`; assigned drops including refill drops; floors gated only under a declined top-up; held-seed check off; `--rng-seed` ignored by the CLI). The tests use varied per-cell fixtures (`test_finalize.py` `planted_bench`: four cells with different `n`, `d` and deficit; need 4, 2, 9).
+- **Real CLI round trip** (subprocess `driver.main`, throwaway guard campaign of 4 cells, planted overlaps, tmp dir outside the repo; `cell_target`/`eval_floor` patched in the wrapper only): `finalize --rng-seed 20261110` refuses, ledger 41 to 42 lines with one `floor-short` (`rngSeed` 20261110, cells n 12/12/14, need 4/2/9), no data directory; the same seed again refuses "already held", ledger unchanged (sha equal); a fresh seed without the flag refuses and records its own seed; `--rng-seed 8` finalizes `v2` (eval 22, calibration 24), with the new per-cell line (one cell shows walked 2, refill drops 1, refilled 1, `d` 0.33 flagged) and `splits.json` `rngSeed` 8.
+
+### Done-when dispositions
+(1)-(5) each has a named test in `test_split.py` and is killed by the mutants above. (6), (7), (8), (9) are covered in `test_finalize.py` (`refused(..., floor_short=True)` allows exactly one `floor-short` and demands byte equality otherwise; the append is in `finalize()` inside `camp.locked()` after catching `FloorShort`, observed in the round trip). (10) the three old tests are rewritten. (11) `test_install.py:118` reads the shipped definition; `sha256` of the edited file is the recorded `4b83cfeb…`.
+
+### Findings
+
+**P35-m1 (minor) — the no-drop "draws nothing" claim is only observable through the output, and the digest cannot see an extra draw.** *Executed.* The mutant that shuffles the unused list for a cell without a deficit survives all tests: with no drop the `rng` is never read again, so the output is identical. The behaviour that matters (output and calibration/train equality) is pinned; the HISTORY/docstring phrase "no extra draw" is not. Either drop the phrase from the docstrings (`split.py`, AGENTS.md "no drop, no extra RNG draw") or accept it as prose. An extra draw does move a *later* cell's walk when an earlier cell has no deficit, which is harmless but should be stated as order-dependent.
+
+**P35-m2 (minor) — plan gap the coder reported: `need` is `null` when every assigned eval item dropped, and U5.9b has no rule for it.** Verified in `CellFigures.need` (`finalize.py`) and in the plan's U5.9b row, whose done list (3) computes `max(cell_target, n + need)`: `n + None` is a `TypeError`. Name the rule: a null need is unbounded like P̂ = 0, so the planner raises the existing `unboundedCell` halt (stakeholder: probe, decline or re-pin), or sizes by `max(deficit, …)` from a stated fallback. Also state in U5.9b that `need: 0` (a calibration-only shortfall) gives `max(cell_target, n)`, i.e. no change. The exact-integer `⌈deficit·assigned / kept⌉` is right and tested (3 for deficit 2, d 1/3; a float ceil gives 4).
+
+**P35-m3 (minor) — `test_install.py` lines 610 and 799 changed without need.** Those are "wrong model" fixtures, not pins (the driver's `message.model` and a driver pin swap); plan6's U5.5 row still says a driver `message.model` of `claude-opus-5-5` halts. The tests still pass and cover the same rule, but the plan6 row and the fixture now disagree. Revert those two (only 118, 245, 476 were named) or update the plan6 row.
+
+**P35-n1 (nit)** — `finalize.py` module docstring item 4: "(the floors of 5 still apply)" reads as a number; say "refusal 5". The `FloorShort` refusal text says "nothing is written" while the ledger gains an event; "no dataset is written" is exact.
+
+### What's solid
+`build_dataset` stays pure and `FloorShort` carries the cells; the append sits in the lock after the seed check; `n` is recorded (answering P34-B1's data need); the walk shuffle follows `assign_splits`, so calibration and train are the no-refill run's; held seeds are re-refused (observed). AGENTS.md is 2,197 words with no line over 700 (run); the stale "never refilled" / "refusal writes nothing" sentences are rewritten (unfiltered grep of `decision-models/` finds none outside HISTORY).
+
+### Growth-stops check
+New scope only. HISTORY entry cites the sections. U5.9b and U5.10d remain unbuilt; the U5.9b `need`-null rule (P35-m2) is the one plan edit this gate asks for. Proposed `REVIEW.md` lines: none.

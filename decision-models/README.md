@@ -108,10 +108,10 @@ or `AGENTS.md`. Run these from `decision-models/`:
   drawn; `run` queues the stranded seeds. Votes, the message-type tranche and top-ups then start
   from `run` by themselves.
 - `run` refuses a campaign that has no `install` record.
-- `finalize --root <dir> --dataset-version <name> [--data-dir <dir>] [--short]` (U5.10) turns a
+- `finalize --root <dir> --dataset-version <name> [--data-dir <dir>] [--rng-seed <n>] [--short]` (U5.10) turns a
   finished `full` campaign into `data/<role>/<name>/`: `items.jsonl`, `splits.json`,
-  `generation.json` and `diagnostics.json`. It prints every cell's final n and the `dropped`
-  counts, and never overwrites a version (a directory with no `finalized` event, left by a crash
+  `generation.json` and `diagnostics.json`. It prints every cell's final n, the refill's figures
+  and the `dropped` counts, and never overwrites a version (a directory with no `finalized` event, left by a crash
   between the rename and the event, is named as such in the refusal: move it aside or pick
   another name). It refuses (writing nothing) a campaign that is not
   finished, halted or unlabelled, and:
@@ -122,10 +122,13 @@ or `AGENTS.md`. Run these from `decision-models/`:
     halt (only runs after the last generator restart count);
   - a short cell: with no decline recorded the top-up is still due; after `resolve
     --decline-topup` the text names `finalize --short` and `resolve --reopen-topup`. **`--short`**
-    (needs that decline) finalizes only when every cell's eval and calibration n meet the point's
-    floor after the splits, and otherwise refuses with the store intact.
+    (needs that decline) finalizes with the short cells printed. Every finalize, `--short` or not,
+    holds each cell's eval and calibration n to the point's floor after the splits and the refill;
+    a cell below it refuses, writes no dataset and appends a `floor-short` event to the ledger (per
+    short cell its labelled items `n` and the `need` more it would take, plus the RNG seed, which
+    is then held: finalize again with `--rng-seed <n>`).
   A message-type point is also rechecked over every labelled item with the tranche's 3% rule. A
-  failure appends a halt (`recheck`, the one write a refusal makes); `resolve` then needs a changed
+  failure appends a halt (`recheck`, the other write a refusal makes); `resolve` then needs a changed
   rubric and relabels the whole point (all three votes). The second failure is cleared only by
   `resolve --decision ... --stakeholder-ref "<who decided, where recorded>"` given alone (a
   `--repin-model` or `--repin-instructions` beside it is refused, and a ref on a halt that is not
@@ -139,9 +142,14 @@ tokenizes (NFKC, lowercase, non-letter/digit to space) and cuts 8-token shingles
 evidence text only (a guard's `condition` and the agent's name are not evidence).
 `decisionmodels/split.py` `make_splits` drops, first, every generated item whose evidence shares a
 shingle with a side-check item; cuts each cell (design stratum × label) at random to its target,
-counting the surplus; assigns eval, then calibration, then train within each cell by seed; and drops
-last, and counts, any eval item that shares a shingle with a calibration or train item. Nothing is
-refilled, so the printed n shows the loss. A cell is keyed by the item's **majority** label.
+keeping the unused candidates; assigns eval, then calibration, then train within each cell by seed;
+and drops last, and counts, any eval item that shares a shingle with a calibration or train item.
+Each such slot is then refilled from the same cell's unused candidates (shuffled on the same RNG,
+walked until eval is full or they run out; a candidate that shares a shingle with calibration or
+train is a refill drop). Calibration and train are untouched, and a run with no drop is what it was
+before the refill. The printed cell line gives eval-assigned, assigned drops, candidates walked,
+refill drops, refilled, floor, remaining surplus and the drop rate `d` (flagged above 0.25: a
+generation-diversity signal). A cell is keyed by the item's **majority** label.
 `train` is empty (note §Q1.3's train column is U8's), so `splits.json` is `{rngSeed, eval, train:
 [], calibration}`; only items in a split reach `items.jsonl` (one line per item, the U+2028, U+0085 and U+2029
 line separators escaped as in `exchange.dump_line`, since model-bench splits on them), and `generation.json` is plan4 §3.7's
@@ -239,7 +247,7 @@ read and write `data/guard-judge/pilot/pilot-report.json` (`--data-dir` for anot
 
 `agents/` holds the sources, which are dataset provenance (hashed into `promptSha256`): the three
 definitions `dm-driver.md` (Sonnet, `Agent(dm-generator, dm-labeler)` only, `maxTurns: 3`),
-`dm-generator.md` (Opus, effort `medium`, `Read, Write`, `maxTurns: 6`) and `dm-labeler.md`
+`dm-generator.md` (`claude-opus-4-8`, effort `medium`, `Read, Write`, `maxTurns: 6`) and `dm-labeler.md`
 (Sonnet, effort `high`, `Read, Write`, `maxTurns: 14`), the spawn templates
 (`spawn-generator.txt`, `spawn-labeler.txt`, `spawn-driver.txt`; no trailing newline, because a
 template is compared byte for byte), `guard_hook.py` and `settings.json`. `install` takes the

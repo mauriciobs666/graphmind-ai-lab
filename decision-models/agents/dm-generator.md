@@ -1,7 +1,7 @@
 ---
 name: dm-generator
 description: Writes the items for one decision-models generation request file. Started only by the campaign's driver session.
-model: claude-opus-5-5
+model: claude-opus-4-8
 effort: medium
 tools: Read, Write
 maxTurns: 6

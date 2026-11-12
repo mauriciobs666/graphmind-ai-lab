@@ -69,17 +69,23 @@ templates, `guard_hook.py` and `settings.json`. Fitting (U6) and what follows it
   `spawnTemplate`, `guardHook` hash installed bytes and must match the first install's;
   `requestTemplate` and `rubric` (`campaign.rubric_hash`) hash `points/` files and are recorded fresh
   on every install, so a `generator.md`/`rubric.md` edit appends a second `expectations` event.
-- **Splits and `finalize`** (`split.make_splits`, `finalize.py`) run in a fixed order: side-check
-  drop, random subsample per cell (keyed by the **majority** label; surplus counted), split by seed
-  (eval first), eval-vs-calibration/train shingle drop last, never refilled; `train` is empty. A
-  refusal writes nothing (the one exception is the whole-point tranche recheck's `recheck-halt`,
-  whose second failure only `resolve --stakeholder-ref` alone clears; a re-pin is refused);
-  `items.jsonl` goes through `exchange.dump_line` (model-bench's importer uses `splitlines()`);
-  `--short` needs a recorded `--decline-topup` and every cell at its floor; `generation.json` holds
-  one model per role and the last-issued run's hashes; the one-hash rule reads only post-restart
-  runs (`State.template_resolutions` against `Attempt.epoch`). `tests/test_finalize.py` checks the
-  output against the contract vector (plan6 §3.7). Shingles cover evidence text only; a hash cannot
-  be turned back into text.
+- **Splits and `finalize`** (`split.make_splits`, `finalize.py`; plan4 §3.6) run in a fixed order:
+  side-check drop, random subsample per cell (keyed by the **majority** label), split by seed
+  (eval first), eval-vs-calibration/train shingle drop last; `train` is empty. **A dropped eval
+  slot is refilled from the same cell's unused candidates**, tested against the same
+  calibration/train shingles (calibration and train never change; no drop, no extra RNG draw);
+  `surplus` is what is left and `dropped.shingleSplit` counts assigned drops only. **Floors gate
+  every finalize**: a cell under `evalFloorPerCell` (eval or calibration) refuses, writes no
+  dataset, and `finalize()` (not the pure `build_dataset`) appends a `floor-short` event (`n` and
+  `need` per cell, the RNG seed, held; `State.floor_short` folds it plainly, no halt). The other
+  ledger write a refusal makes is the whole-point tranche recheck's `recheck-halt` (second failure
+  only `resolve --stakeholder-ref` alone clears; a re-pin is refused). `finalize --rng-seed <n>`
+  fixes the seed. `items.jsonl` goes through `exchange.dump_line` (model-bench's importer uses
+  `splitlines()`); `--short` needs a recorded `--decline-topup` (the floors apply anyway);
+  `generation.json` holds one model per role and the last-issued run's hashes; the one-hash rule
+  reads only post-restart runs (`State.template_resolutions` against `Attempt.epoch`).
+  `tests/test_finalize.py` checks the output against the contract vector (plan6 §3.7). Shingles
+  cover evidence text only; a hash cannot be turned back into text.
 - **Requests are closed and id-blind** (plan4 §3.2, plan5 §3.4). `exchange.request_errors` is the
   one schema check; the writer runs it before any request leaves it. No `*Id` key
   reaches a generation request, whatever `points/` declares.

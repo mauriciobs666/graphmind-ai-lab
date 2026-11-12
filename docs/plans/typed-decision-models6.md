@@ -270,6 +270,7 @@ The hand-back is exempt from the bounds checks, `guardBreach` included, and coun
   - **retry:** `resolve --decision <text>`. The batch is re-issued under a new opaque name, with no attempt counted.
   - **skip the batch:** `resolve --skip-batch --decision <text>`. This is new. Its seeds (generation) or items (labelling) drop and are counted under the new `generation.json` key `dropped.safeguardSkipped: {seeds, items}`, beside plan4 §3.7's `retryCapExceeded`.
   - **move generation to another model:** `resolve --repin-model generator <id>`, with plan4 §3.3's `generation-restart` event.
+- **Outcome.** Opus 5.5 flagged the generator on the first reply after the request header, and a stakeholder-approved retry flagged again (`docs/reviews/typed-decision-models-safeguard-rca.md`). Generation moved to `claude-opus-4-8` through an install-time `--agents-dir` copy differing from `agents/dm-generator.md` in its `model:` line alone, and plan4 §3.4 pins that id. Every ingested generator run of the three full campaigns names it (`generation.json`'s `generator.model`, from `message.model`). The recorded `promptSha256.agentDefinition.generator` is the hash of that file, so the repo's `agents/dm-generator.md` carries the same bytes.
 - **Not probed:** a subagent-side flag under `-p`. The row keys on the main-session markers (F7). U5.7's smoke records any flag it meets. No probe should try to provoke one.
 
 ### 3.6 The probe evidence's home

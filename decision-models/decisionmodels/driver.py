@@ -13,7 +13,8 @@ stop switch in `decisionmodels.runner`); `start` (a full campaign's round 1); `i
 - `resolve --root <dir> --decision <text> [--skip-batch | --repin-instructions |
   --decline-topup | --reopen-topup | --probe-topup | --repin-model generator|labeler <id>]
   [--stakeholder-ref <text>]`
-- `finalize --root <dir> --dataset-version <name> [--data-dir <dir>] [--short]`: writes
+- `finalize --root <dir> --dataset-version <name> [--data-dir <dir>] [--rng-seed <n>]
+  [--short]`: writes
   `<data-dir>/<role>/<name>/` (default: the component's `data/`)
 - `install --root <dir> [--agents-dir <dir>]`
 - `smoke-fixture --out <items.jsonl> [--count 50]`
@@ -25,7 +26,8 @@ stop switch in `decisionmodels.runner`); `start` (a full campaign's round 1); `i
 - `status --root <dir>`
 
 A refusal prints one line to stderr and exits 1. Every command but `run` has then written nothing
-(`finalize`'s one exception: a failed whole-point tranche recheck appends its `recheck-halt`);
+(`finalize`'s exceptions: a failed whole-point tranche recheck appends its `recheck-halt`, and a
+cell under its floor appends `floor-short`);
 `run` has appended nothing, and a refusal after it took the lock (the install record, the user
 settings) leaves the reason in `store/refusal` for `status`. Its root and no-campaign refusals
 come first and write nothing: `status` refuses a missing campaign the same way, and prints a root
@@ -89,6 +91,8 @@ def _parser() -> argparse.ArgumentParser:
     fin.add_argument("--root", required=True, type=Path)
     fin.add_argument("--dataset-version", required=True)
     fin.add_argument("--data-dir", type=Path, default=DATA_DIR)
+    fin.add_argument("--rng-seed", type=int,
+                     help="the split's RNG seed (default: a fresh one the ledger does not hold)")
     fin.add_argument("--short", action="store_true",
                      help="after resolve --decline-topup: finalize with short cells if each meets "
                           "its floor")
@@ -165,7 +169,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(_start(camp))
         elif args.command == "finalize":
             print("\n".join(finalize.finalize(camp, version=args.dataset_version,
-                                              data_dir=args.data_dir, short=args.short)))
+                                              data_dir=args.data_dir, short=args.short,
+                                              rng_seed=args.rng_seed)))
         elif args.command == "install":
             print("\n".join(install.install(args.root, agents_dir=args.agents_dir)))
         elif args.command == "init":

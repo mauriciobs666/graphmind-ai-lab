@@ -115,7 +115,7 @@ def test_dm_driver_pins_sonnet_has_no_bash_and_three_turns() -> None:
 
 
 @pytest.mark.parametrize(("name", "model", "effort", "turns"), [
-    ("dm-generator.md", "claude-opus-5-5", "medium", "6"),
+    ("dm-generator.md", "claude-opus-4-8", "medium", "6"),
     ("dm-labeler.md", "claude-sonnet-5-5", "high", "14"),
 ])
 def test_the_subagents_pin_model_effort_tools_and_turns(
@@ -242,7 +242,7 @@ def test_the_expectations_declare_the_pins_templates_and_an_empty_instructions_s
     template = (AGENTS / "spawn-labeler.txt").read_text("utf-8")
     assert event["guardCommand"] == GUARD_COMMAND
     assert event["roles"] == {
-        "generator": {"agentType": "dm-generator", "model": "claude-opus-5-5",
+        "generator": {"agentType": "dm-generator", "model": "claude-opus-4-8",
                       "effort": "medium", "spawnTemplate": template, "instructions": []},
         "labeler": {"agentType": "dm-labeler", "model": "claude-sonnet-5-5",
                     "effort": "high", "spawnTemplate": template, "instructions": []}}
@@ -473,7 +473,7 @@ def test_a_repinned_model_and_instructions_set_survive_a_reinstall(tmp_path: Pat
     state = camp.state()
     assert len(made.expectations()) == 2
     assert (state.pins["labeler"], state.instructions["labeler"]) == ("claude-haiku-9", pair)
-    assert state.pins["generator"] == "claude-opus-5-5"          # an unrepinned role is unchanged
+    assert state.pins["generator"] == "claude-opus-4-8"          # an unrepinned role is unchanged
 
 
 # --- the hash checks -----------------------------------------------------------------------------
@@ -607,7 +607,7 @@ DEFINITION_PLANTS = [
     ("missing permissionMode", "dm-labeler.md", drop_key("permissionMode"), "permissionMode"),
     ("driver with Bash", "dm-driver.md", swap("Agent(dm-generator, dm-labeler)",
                                                "Agent(dm-generator, dm-labeler), Bash"), "tools"),
-    ("driver model off the pin", "dm-driver.md", swap("claude-sonnet-5-5", "claude-opus-5-5"),
+    ("driver model off the pin", "dm-driver.md", swap("claude-sonnet-5-5", "claude-opus-4-8"),
      "model"),
     ("driver maxTurns off the pin", "dm-driver.md", swap("maxTurns: 3", "maxTurns: 4"),
      "maxTurns"),
@@ -796,7 +796,7 @@ def test_an_effort_other_than_the_installed_pin_is_environmental(tmp_path: Path)
 
 def test_a_model_other_than_the_installed_pin_is_environmental(tmp_path: Path) -> None:
     def plant(run: Any) -> None:
-        run.assistant("msg_s0003")[1]["message"]["model"] = "claude-opus-5-5"
+        run.assistant("msg_s0003")[1]["message"]["model"] = "claude-opus-4-8"
     assert planted(tmp_path, plant) == [(audit.ENVIRONMENTAL, "modelMismatch")]
 
 
