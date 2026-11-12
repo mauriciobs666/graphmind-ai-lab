@@ -16,7 +16,7 @@ reconciliation, halts, generation runs, votes, tranche, top-up), `diagnostics.py
 (`diagnostics.json`), `screen.py` (the generated-text screen and form
 obedience, pure), `labels.py` (majority of three, `labelVotes`, pure), `pilot.py` (the guard pilot's CLI and pure
 screen/cue-check, below), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
-(`driver install`), `smoke.py` (the label smoke's fixture) and `driver.py` (CLI: `init`, `install`,
+(`driver install`), `smoke.py` (the label smoke's fixture) and `driver.py` (CLI: `init`, `install`, `start`,
 `resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`, `finalize`), plus `shingles.py` and
 `split.py` (pure: the 8-token shingle rule and cells-then-splits, plan4 §3.6;
 `scripts/import_side_check_shingles.py` writes `data/guard-judge/side-check-shingles.txt`, hashes
@@ -105,7 +105,7 @@ templates, `guard_hook.py` and `settings.json`. Fitting (U6) and what follows it
   the item wrappers by value, the unstripped `agentName`, and that each point's rendering matches
   its rubric's "What an item looks like" block (the first indented block only). `data-scientist`
   confirmed the rule (plan5 §3.4).
-- **Generation is ledger-folded, and commits at the `outcome`** (plan6 §3.8). `begin_round` records
+- **Generation is ledger-folded, and commits at the `outcome`** (plan6 §3.8). A `full` campaign's round 1 is drawn only by `driver start` (`run` never draws it; pilot: `pilot start`). `begin_round` records
   `round-start` (one `genRound` may have several; only `_draw_topup` (`queue_topup`'s and `_resume_topup`'s) passes `extend=True`, for a
   new named stratum of a started round, refused once a run of it has issued); `Campaign.ingest` appends a run's `generated` and
   `screen-hit`/`binding-mismatch`/`form-mismatch` events *before* its `outcome`, and `fold` applies

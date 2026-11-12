@@ -3,9 +3,9 @@
 "Subcommands").
 
 `init`, `resolve` and `status` (U5.6); `run`, `pause [--now]` and `resume` (U6.3, the runner and
-stop switch in `decisionmodels.runner`); `install` (U5.7, `decisionmodels.install`) and
-`smoke-fixture` (the label smoke's items, `decisionmodels.smoke`); `finalize` (U5.10,
-`decisionmodels.finalize`). `next` and `ingest` are library entry points of
+stop switch in `decisionmodels.runner`); `start` (a full campaign's round 1); `install` (U5.7,
+`decisionmodels.install`) and `smoke-fixture` (the label smoke's items, `decisionmodels.smoke`);
+`finalize` (U5.10, `decisionmodels.finalize`). `next` and `ingest` are library entry points of
 `campaign.Campaign` that `run` calls, listed for no session.
 
 - `init --point <role> --phase smoke|pilot|full --root <dir> [--fixture <items.jsonl>]
@@ -17,6 +17,8 @@ stop switch in `decisionmodels.runner`); `install` (U5.7, `decisionmodels.instal
   `<data-dir>/<role>/<name>/` (default: the component's `data/`)
 - `install --root <dir> [--agents-dir <dir>]`
 - `smoke-fixture --out <items.jsonl> [--count 50]`
+- `start --root <dir>`: a `full` campaign's round 1 (`Campaign.begin_round(1)`: ⌈1.1 × target⌉
+  seeds, queued as generation runs); `run` then spends tokens. A pilot starts with `pilot start`
 - `run --root <dir>`: exits 0 when it stops (done, halt, usage stop, pause, a held lock, a
   `launchFailed` launch, a signal)
 - `pause --root <dir> [--now]` and `resume --root <dir>`
@@ -95,6 +97,9 @@ def _parser() -> argparse.ArgumentParser:
     fixture.add_argument("--out", required=True, type=Path)
     fixture.add_argument("--count", type=int, default=50)
 
+    start = commands.add_parser("start", help="draw a full campaign's round 1 and queue its runs")
+    start.add_argument("--root", required=True, type=Path)
+
     run = commands.add_parser("run", help="the unattended runner: one session per batch")
     run.add_argument("--root", required=True, type=Path)
 
@@ -123,6 +128,27 @@ def _smoke_fixture(out: Path, count: int) -> int:
     return 0
 
 
+def _start(camp: Campaign) -> str:
+    """Round 1 of a `full` campaign. Refuses, writing nothing, any other phase, a campaign with no
+    `install` record and one whose round 1 is drawn; a crash between the draw and the queued runs
+    is finished by `run` (`next` queues the stranded seeds, plan6 §3.8)."""
+    with camp.locked():
+        state = camp.state()
+        if state.init["phase"] != "full":
+            raise CampaignRefused(f"`start` is for a full campaign, not {state.init['phase']} "
+                                  "(a pilot starts with `pilot start`)")
+        if state.expectations is None:
+            raise CampaignRefused("no `install` record (run `driver install`)")
+        if state.rounds:
+            stranded = len(state.unbatched_seeds())
+            raise CampaignRefused(
+                "round 1 is already drawn" + (f"; {stranded} seeds are not queued yet, "
+                                              "`driver run` queues them" if stranded else ""))
+        batches = camp.begin_round(1)
+        seeds = len(camp.state().rounds[0]["seeds"])
+        return f"round 1: {seeds} seeds drawn, {len(batches)} generation runs queued"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "smoke-fixture":
@@ -135,6 +161,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             lines = (runner.pause(args.root, now=args.now) if args.command == "pause"
                      else runner.resume(args.root))
             print("\n".join(lines))
+        elif args.command == "start":
+            print(_start(camp))
         elif args.command == "finalize":
             print("\n".join(finalize.finalize(camp, version=args.dataset_version,
                                               data_dir=args.data_dir, short=args.short)))

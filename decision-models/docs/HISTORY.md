@@ -2,6 +2,26 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-11 — `driver start`: a full campaign's round 1
+
+**What:** a `--phase full` campaign had no path that drew round 1 (`begin_round(1)` was called by
+`pilot.py` and top-up only), so `driver run` stopped at "done (nothing is pending)". Plan4 §3.6
+"Generation runs", plan6 §3.8; no plan text changed.
+
+- `driver start --root <campaign>` (`driver._start`, under `Campaign.locked()`) calls
+  `begin_round(1)` and prints the seeds drawn and runs queued. It refuses, exit 1 and writing
+  nothing, a phase other than `full`, a campaign with no `install` record, and a campaign whose
+  round 1 is drawn (the message names stranded seeds when a crash left some unqueued).
+- A crash after the draw: `start` retried refuses, and `driver run`'s `next` queues the stranded
+  seeds (plan6 §3.8 "A half-written round"); a crash before `round-start` draws afresh.
+- Read-only look: round-1 label votes, the message-type tranche and top-ups all start from `next`
+  (`queue_votes`, `queue_topup`); `finalize` and `resolve` are explicit by design. No other
+  full-phase step lacks an entry point.
+
+**Verified:** `tests/test_driver.py` `start` round trips through `driver.main` on a tmp full
+campaign; mutants of each guard (phase, install, started, stranded hint, count, lock) redden it
+on a scratch copy.
+
 ## 2026-11-10 — typed-decision-models U5.10b — `finalize`, dataset files, hand-offs
 
 **What:** the second half of U5.10 (plan4 §3.6 "Cells, then splits", §3.7, §4.1 and §5 rows; plan2

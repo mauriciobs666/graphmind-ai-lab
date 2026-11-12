@@ -3274,3 +3274,34 @@ The vector comparison is a real one (key sets, types, all-entries comparison, a 
 
 ### Growth-stops check
 New scope only (Pass 31). Passes 1 to 30 unchanged. Proposed `REVIEW.md` lines: none.
+
+## Pass 32 — `driver start`: a full campaign's round 1 (2026-11-11)
+
+**Verdict: approve with suggestions.** No blocker. `start` conforms to plan4 §3.6 "Generation runs" and plan6 §3.8 "A half-written round", the refusals write nothing to the ledger, and the CPG was not consulted (`CPG: considered, not relevant — a 20-line CLI wrapper read in full`).
+
+**Scope.** Uncommitted `decision-models/` diff of `driver.py` (`_start`), `tests/test_driver.py` (8 new tests, 17 in file pass), README, AGENTS.md, `docs/HISTORY.md`. Scratch campaigns and a scratch copy under `scratchpad/`; nothing under `~/dm-campaigns` and no `run`/`pilot` touched.
+
+**Executed.**
+- Real CLI round trip (subprocess `python -m decisionmodels.driver`) on a tmp full campaign built with `test_topup.full_campaign`: `status` "batches: none queued" → `start` exit 0 "round 1: 880 seeds drawn, 36 generation runs queued" → `status` "36 pending" → second `start` exit 1 "refused: round 1 is already drawn". message-type-classifier: 660 seeds, 27 runs.
+- Ledger sha256 before/after for: held lock (a separate process holding `locked()`), second call, smoke, pilot, no `install` record: all identical.
+- Crash after `seed-draw`, before `round-start` (forced): 0 rounds, 880 orphan seeds and its RNG seed held; retry exit 0 on a fresh RNG seed, 36 runs, `held_rng_seeds` then has both seeds, `state.seeds` 1760 ids (no seedId clash: ids depend on the RNG seed). Crash after `round-start`: the suite's test shows the retry refuses naming the stranded seeds and `next` queues them.
+- Mutants on `_start` (14, on the scratch copy): 12 killed, 2 survive (below). Full suite: 1746 passed in 404 s; ruff clean.
+
+### Findings
+
+**P32-m1 — minor — `start` on a non-campaign directory creates `store/driver.lock` before refusing (owner `coder`).** *Verified: executed.* `start --root <empty dir>` exits 1 "refused: no campaign at ..." but leaves `store/driver.lock`, because `locked()` (`campaign.py:1389`) does `mkdir` and opens the file before `state()` raises. The README and HISTORY say refusals write nothing; the ledger claim holds, a typo'd `--root` litters a directory. `install` and `pilot` share the pattern. Either check for the ledger before `locked()`, or say "writes no ledger event".
+
+**P32-m2 — minor — two surviving mutants, each a missing assertion (owner `coder`).** *Verified: executed.* (a) `begin_round(1)` → `begin_round(1, round_one_count("guard-judge"))` survives: every `start` test uses guard-judge, so a role hard-coded in `_start` goes unseen; add one message-type-classifier round trip (660 seeds, from my run) via `full_campaign(..., "message-type-classifier")`. (b) `if stranded else ""` → `if True else ""` survives: nothing asserts the hint is absent on the plain second call (it would read "0 seeds are not queued yet"). Assert `"not queued yet" not in err` in `test_start_a_second_time_refuses_cleanly`. HISTORY's "mutants of each guard ... redden it" is true of the guards, not of these two.
+
+**P32-n1 — nit — the count assertion reads its expected value from `seeds.round_one_count`** (`tests/test_driver.py`, `test_start_draws_round_one...`), the function whose result `begin_round` also uses. Root `REVIEW.md` asks for expected values not read from the checked function; a literal 880 pins it, though `tests/test_seeds.py` may already.
+
+### Answers to the asks
+1. **Conformance.** `_start` is `begin_round(1)` under the lock, as plan4 §3.6 and plan6 §3.8; refusals write no ledger event (sha256).
+3. **Crash windows.** Leaving the first draw held after the pre-`round-start` crash is the accepted waste of plan6 §3.8 ("a retry draws a fresh RNG seed"): nothing reads `state.seeds` outside round/item paths, no round or denominator exists for it (observed: 0 rounds), and the held RNG seed only shrinks the seed space by one. Not an issue for the hold bookkeeping. The lock refuses `start` against a running holder (observed, exit 1, ledger unchanged); `run` then takes it only after `start` releases it.
+5. **Docs.** README and HISTORY match the code (phase, install, lock, second call; `pilot start` exists, `pilot.py:503`). AGENTS.md 2,116 words, no line over 700 (run). `driver.py` docstring lists `start`.
+
+### What's solid
+The stranded-seed hint is derived from `unbatched_seeds()` rather than a flag, the crash-retry test runs `next` afterwards to prove the hand-off to `run`, and the lock test holds the real flock.
+
+### Growth-stops check
+New scope only (Pass 32). Passes 1 to 31 unchanged. Proposed `REVIEW.md` lines: none.

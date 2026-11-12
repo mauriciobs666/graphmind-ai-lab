@@ -72,6 +72,8 @@ or `AGENTS.md`. Run these from `decision-models/`:
     --root ~/dm-campaigns/smoke --fixture items.jsonl     # smoke: one label batch from a fixture
 .venv/bin/python -m decisionmodels.driver init --point guard-judge --phase pilot \
     --root ~/dm-campaigns/pilot --launch-fail-bound 6h    # --batch-timeout defaults to 45m
+.venv/bin/python -m decisionmodels.driver init --point guard-judge --phase full \
+    --root ~/dm-campaigns/guard      # then `install`, `start` (round 1), `run` per window
 .venv/bin/python -m decisionmodels.driver status --root ~/dm-campaigns/pilot
 .venv/bin/python -m decisionmodels.driver resolve --root ~/dm-campaigns/pilot \
     --decision "why the halt is cleared"   # or --skip-batch, --repin-instructions,
@@ -99,6 +101,12 @@ or `AGENTS.md`. Run these from `decision-models/`:
   a `--skip-batch` drop closed a round or pool, the halt that raised. A `spend` halt (below) is
   let through by a plain `resolve`, or ended by `--decline-topup`; a `rubric` halt is cleared only
   once the rubric has changed; an `unboundedCell` halt refuses a plain `resolve` (below).
+- **`start`** draws a `full` campaign's round 1 (⌈1.1 × the point's target⌉ seeds) and queues its
+  generation runs; it spends no tokens, `run` does. It refuses, writing nothing, a smoke or pilot
+  campaign (a pilot starts with `pilot start`), one with no `install` record, a held lock, and a
+  second call. After a crash between the draw and the queued runs `start` says the round is
+  drawn; `run` queues the stranded seeds. Votes, the message-type tranche and top-ups then start
+  from `run` by themselves.
 - `run` refuses a campaign that has no `install` record.
 - `finalize --root <dir> --dataset-version <name> [--data-dir <dir>] [--short]` (U5.10) turns a
   finished `full` campaign into `data/<role>/<name>/`: `items.jsonl`, `splits.json`,
