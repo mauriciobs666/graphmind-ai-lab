@@ -1679,6 +1679,7 @@ def b_prov_11() -> dict:  # B-prov-1.1
 
 def b_config_launch_only() -> dict:
     d = to_11(b_config())
+    d["items"][0]["chain"][1]["state"] = "site"  # a Link a config anchor entered (spec2 §3.6)
     b = d["items"][0]["chain"][1]["bound"][0]
     del b["keyPath"]
     b["launch"] = {"launchKind": "command", "argv0": "run.sh"}
@@ -1952,7 +1953,7 @@ ENUMS = {  # location -> field -> allowed values (spec §3-§5)
     ("Hop", "edgeType"): ("CALLS CALLS_NAME HAS_CALL HAS_PARAM HAS_RETURN HAS_COND DATA CONTROLLED_BY VIA TO ON CONSUMES PROVIDES READS "
                           "WRITES DEFINED_BY BOUND_BY LAUNCHES RAN DEPENDS_ON FROM_DEP TO_UNIT"),
     ("Bound", "portOrigin"): "explicit env-default compose pack-default",
-    ("Hop", "dir"): "<- ->", ("Hop", "status"): "confirmed possible", ("Hop", "state"): "value path function contract key end",
+    ("Hop", "dir"): "<- ->", ("Hop", "status"): "confirmed possible", ("Hop", "state"): "value path function contract key end site",
     ("Item", "status"): "confirmed possible", ("Item", "directness"): "direct indirect",
     ("Group", "kind"): "other-possible-callees runtime-built-access", ("Group", "reason"): "resolution-unverified runtime-built",
 }
@@ -2813,3 +2814,99 @@ def test_v12_screens_each_bound_launch_field_as_its_own_kind(field, launch):
     rejects(base, set_("abcdef0123.456789abcd"), "V12")
     if field == "mountPath":  # a mountPath is screened per segment, not as one string (T5 needs 20+ characters)
         accepts(base, set_("/aaaaaaaaaa/sk-abcdefgh"))
+
+
+# --- the `site` hop state (spec2 §3.6; P1-23 behaviour 0) ---------------------------------------------
+
+def b_site() -> dict:  # B-site: a 1.1 config-anchor chain, the Link a config entry entered is in state `site`
+    d = to_11(b_config())
+    d["items"][0]["chain"][1]["state"] = "site"
+    return d
+
+
+def _site_chain(d: dict) -> list[dict]:
+    return d["items"][0]["chain"]
+
+
+def test_a_config_anchor_chain_with_a_site_link_followed_by_its_call_site_is_accepted():
+    validate(b_site())
+    assert [h["state"] for h in _site_chain(b_site())[:3]] == ["key", "site", "contract"]
+
+
+def test_a_site_hop_has_no_access_path_and_other_states_still_do():
+    rejects(b_site(), lambda d: _site_chain(d)[1].update(accessPath="r"), "V3")
+
+
+def test_v5_a_site_hop_is_a_link():
+    rejects(b_site(), lambda d: _site_chain(d)[2].update(state="site"), "V5")
+    rejects(b_site(), lambda d: _site_chain(d)[0].update(state="site"), "V5")
+
+
+def test_v5_a_site_link_is_entered_by_bound_by_from_a_config_entry():
+    d = to_11(b_dep())
+    link = d["items"][0]["chain"][2]  # entered by VIA ->, a depends-on link
+    assert link["kind"] == "Link"
+    rejects(to_11(b_dep()), lambda x: x["items"][0]["chain"][2].update(state="site"), "V5")
+    # a wrong edge into a Link that follows a ConfigEntry
+    rejects(b_site(), lambda x: _site_chain(x)[1].update(edgeType="TO"), "V5")
+    rejects(b_site(), lambda x: _site_chain(x)[1].update(dir="->"), "V5")
+
+
+def test_v5_a_link_entered_by_bound_by_from_a_config_entry_is_in_state_site_on_a_1_1_document():
+    for state in ("contract", "value", "key", "end", "function"):
+        rejects(b_site(), lambda d, state=state: _site_chain(d)[1].update(state=state), "V5")
+
+
+def test_v5_a_site_link_is_not_followed_by_a_wiring_config_entry():
+    def wire(d):
+        bound = {"ord": 0, "entryId": H("c7"), "repo": REPO, "unit": U1["unitId"], "path": "cfg/w.yaml", "line": 9, "keyPath": "w.port"}
+        link = _site_chain(d)[1]
+        link["bound"] = [bound]
+        entry = hop("ConfigEntry", H("c7"), "end", U1["unitId"], "cfg/w.yaml", 9, edge="BOUND_BY", direction="->", keyPath="w.port")
+        d["items"][0]["chain"] = [_site_chain(d)[0], link, entry]
+        d["items"][0]["subject"] = {"type": "config", "entryId": H("c7"), "path": "cfg/w.yaml", "line": 9, "keyPath": "w.port"}
+    base = b_site()
+    doc = copy.deepcopy(base)
+    wire(doc)
+    doc["items"][0]["chain"][1]["state"] = "contract"  # the same chain, Link not `site`: shape-valid except the state clause
+    with pytest.raises(AnswerError, match="V5"):
+        validate(doc)
+    rejects(base, wire, "V5")
+
+
+def test_v17_site_is_rejected_on_a_1_0_document():
+    d = b_site()
+    d["answerSchemaVersion"] = "1.0"
+    del d["depthBound"]["bound"]
+    with pytest.raises(AnswerError, match=r"V17.*chain\[1\]"):
+        validate(d)
+    old = b_config()  # the 1.0 base keeps its Link state; V5's site clause is a 1.1 shape
+    validate(old)
+
+
+def test_v13_the_same_link_as_site_and_as_value_is_not_a_repeat_but_twice_as_value_is():
+    d = b_site()
+    chain = _site_chain(d)
+    twin = copy.deepcopy(chain[1])  # the Link again, reached by TO <- in state value, then its own call site
+    twin.update(state="value", edgeType="TO", dir="<-")
+    site2 = copy.deepcopy(chain[2])
+    site2.update(id=H("cs10"), line=8)
+    chain[3:3] = [twin, site2]
+    validate(d)  # one Link id, once as `site` and once as `value`: no repeat (the visited key holds the state)
+    chain[5:5] = [copy.deepcopy(twin), copy.deepcopy(site2)]
+    chain[6]["id"] = H("cs11")
+    with pytest.raises(AnswerError, match="V13"):
+        validate(d)
+
+
+def _before_site_link(d: dict, x: dict) -> None:
+    _site_chain(d).insert(1, x)
+
+
+def test_v5_a_site_link_follows_a_config_entry_hop_and_nothing_else():
+    u = U1["unitId"]
+    mid_entry = hop("ConfigEntry", H("c5"), "value", u, "cfg/mid.yaml", 4, edge="READS", keyPath="mid.port")
+    accepts(b_site(), lambda d: _before_site_link(d, mid_entry))  # a mid-chain entry (engine row bound_in), not only the anchor
+    for x in (sym_hop(mk_sym("pre", "svc/pre.py", 3), u, "value", edge="CALLS"),
+              site_hop("pre", u, 3, "g", "value", "HAS_CALL")):
+        rejects(b_site(), lambda d, x=x: _before_site_link(d, x), "V5.*site Link")

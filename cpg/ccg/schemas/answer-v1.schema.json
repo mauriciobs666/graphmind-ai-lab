@@ -1445,7 +1445,8 @@
       "function",
       "contract",
       "key",
-      "end"
+      "end",
+      "site"
      ]
     },
     "accessPath": {

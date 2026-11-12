@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1)
 
-Revised 2026-11-12: P1-22 gate rulings (`docs/reviews/connected-code-graph-p1-22.md` Q1-Q4) folded into P1-22 and P1-23 in place.
+Revised 2026-11-12: P1-22 gate rulings (`docs/reviews/connected-code-graph-p1-22.md` Q1-Q4, N1, N2) folded into P1-22, P1-23 and P1-39 in place.
 
 Part of `docs/plans/connected-code-graph-p1.md` (decisions D1–D11, the flow gate §5, step index §7). Contracts:
 answers `docs/plans/connected-code-graph-answer-spec.md` (canonical answer v1, `ccg/answer.py` is its validator),
@@ -126,8 +126,12 @@ the earlier gains `Extended by:`. It states **only** the changes:
 ## P1-23 · flow fallback, distance and grouping, reverse question — `tdd-engineer`
 
 - **Files:** `cpg/ccg/engine/flow.py`, `cpg/ccg/engine/group.py`, `cpg/tests/test_engine_flow.py`,
-  `cpg/tests/test_engine_group.py`.
-- **Behaviours:** (1) **flow fallback (index §5), as `-answer-spec2.md` §5 defines it:** from `Unit.flowAvailable`
+  `cpg/tests/test_engine_group.py`; for behaviour (0) `cpg/ccg/schemas/answer-v1.schema.json`, `cpg/ccg/answer.py`, `cpg/tests/test_answer.py`.
+- **Behaviours:** (0) **the `site` hop state, first, failing tests first** (`-answer-spec2.md` §3.6): `Hop.state` gains `site`
+  (schema, and the `ENUMS` row `("Hop", "state")` of `test_answer.py`); V5 gains the `site` shape clause and V17 the 1.0 rejection, with
+  the rejections of spec2 §3.6 (a `site` hop that is not a `Link`; a `Link` entered by `BOUND_BY <-` from a `ConfigEntry` in another state;
+  a `site` `Link` followed by a wiring `ConfigEntry`; `site` on a 1.0 document) and an acceptance of a config-anchor chain
+  (`ConfigEntry` anchor, `Link` `site`, its `CallSite`). `ccg/render/` needs no change; (1) **flow fallback (index §5), as `-answer-spec2.md` §5 defines it:** from `Unit.flowAvailable`
   (assembler, D2): inside a unit with the flag true `DATA` and `CONTROLLED_BY` rows are followed `confirmed`;
   inside a unit with the flag false `DATA`, `CONTROLLED_BY` and the `arg(i)`/`Ret` rows are not followed, and only
   the closed list of labelled rows (continuations leaving the `function` state) is `possible`, with
@@ -142,7 +146,7 @@ the earlier gains `Extended by:`. It states **only** the changes:
   site sorting first by stable key**, and expects the resolved chain (the mutant it kills: the own-possible
   tie-break dropped; P1-22 computes one `possible` variable for the hop's labelled status and its own edge's status, and
   P1-23 splits them where the first labelled row lands, so that test can fail); P1-22 already built the wiring row,
-  `TO_UNIT ->` and the depends-on column, so P1-23 inherits and extends their tests and rebuilds nothing; **wiring items** (spec2 §3.3): at a `Link` reached by `TO ←`, each `configEntry`-origin
+  `TO_UNIT ->` and the depends-on column, so P1-23 inherits and extends their tests and rebuilds nothing; **pinned at the P1-22 gate** (`docs/reviews/connected-code-graph-p1-22.md` N2): the equal-cost chain tie-break by the predecessor's stable key (spec2 §1.2) has a test planting two equal-cost arrivals whose reader and insertion order is opposite to their key order, under the shuffled-reply harness, so the mutant that drops the sort of a key's candidates fails; and the own/hop split above makes the own-possible test one that can fail, run at the first labelled row; **P1-23's gate re-runs V18 over real walk output** (P1-45's carry), not only planted documents; a missing `candidate_count` row (`-p1-graph.md` §5: absent `consumerKey`, or a site with no owner) reads as "N unknown", never `0` or `1`, with one live test for the absent-key row; **wiring items** (spec2 §3.3): at a `Link` reached by `TO ←`, each `configEntry`-origin
   `BOUND_BY` target is a `config` item (`BOUND_BY ->`, distance +1, the link's status) listed once, its single `Bound`
   taken from the entry's lowest-`(siteId, ord)` edge as `bound_of_link` returns it (spec2 §3.3); the **depends-on rules**:
   a walk row ending on a `launchFact`-origin entry yields no item, and from a `Link` with no `TO` the
@@ -160,7 +164,7 @@ the earlier gains `Extended by:`. It states **only** the changes:
 - **Files:** `cpg/ccg/engine/answer_build.py` (assembles the canonical answer and runs `ccg.answer` validation),
   `cpg/ccg/engine/staleness.py` (**imports** `ccg.staleness` from P1-20; no second implementation),
   `cpg/tests/test_engine_answer.py`, `cpg/tests/test_engine_superset_dev.py` (marked `live`).
-- **Behaviours:** (1) staleness: each unit on any chain with its built commit and time, and whether it is stale-kept
+- **Behaviours:** (0) the builder maps a walk state to the hop's `state` by its kind, `site` included (`-answer-spec2.md` §3.6), adding `accessPath` for `path` only; (1) staleness: each unit on any chain with its built commit and time, and whether it is stale-kept
   or not mapped with the reason (FR-7, FR-7a; AC-9 code-snapshot stamp from `:Snapshot`); (2) the stamp carries
   `verdictLogOffset` 0 and the empty-log hash until P4; (3) `facts_bytes` is byte-identical for the same request run
   twice and across rebuilds from the same commits; (4) the **flow-fallback measurement, on development flow items only**

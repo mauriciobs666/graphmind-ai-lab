@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Extends:** `docs/plans/connected-code-graph-answer-spec.md`
 
-Revised 2026-11-12: §1.2 definition (item rules, record content) and §4.1/§4.2 (bounded result, final arrival set), from the P1-22 gate (`docs/reviews/connected-code-graph-p1-22.md` Q1, F5).
+Revised 2026-11-12: §1.2 definition (item rules, record content), §4.1/§4.2 (bounded result, final arrival set) and the `site` hop state (§3.6, §6, §7, §8), from the P1-22 gate (`docs/reviews/connected-code-graph-p1-22.md` Q1, F5, N1).
 
 This document states **only the changes** P1 makes to `docs/plans/connected-code-graph-answer-spec.md` (v1.3, "v1"
 below); anything not named here is as v1 says. It is step P1-00 of `docs/plans/connected-code-graph-p1-answers.md`,
@@ -225,6 +225,21 @@ AC-2's wiring files must be listed, and EP's `wiring` stratum scores them only a
   - EP §5.2.1's `BOUND_BY` row (`Link → ConfigEntry`, class D) becomes replayable under EP's own rule once P1 loads
     the edge. No index text changes.
 
+### 3.6 The `site` hop state: a `Link` a config entry entered
+
+A `ConfigEntry` anchor enters each `Link` it binds by `BOUND_BY <-` in the walk state `site(siteId)` (P1-22), so `VIA <-` lists only
+that site's `CallSite`. The hop **reports it as it is**: `state: "site"`, which v1 §5.2 defined as "the walk state's kind on arrival".
+- **Why not `value`.** v1 §5.2 and V13 take `(kind, id, state, accessPath)` as the walk's visited-set key. Reporting `site` as `value`
+  makes a chain that reaches the same `Link` once from the entry (`site`) and once by `TO <-` (`value`) a V13 cycle, though it is no cycle.
+- **No evidence is lost, none is added.** `accessPath` stays absent (V3: present exactly when the state is `path`); the `siteId` is the
+  following `CallSite` hop's `id` and the `Link` hop's `lifted[].siteId` (V5), so the state value carries no data field.
+- **The enum change is additive**, a minor (v1 §9), and 1.1 is unpublished: `Hop.state` gains `site` (§7.1).
+- **Shape (V5, 1.1).** On every document, a hop in state `site` is a `Link` hop entered by `BOUND_BY <-` from a `ConfigEntry` hop, and is
+  followed by its `CallSite` hop (`VIA <-`), never by a wiring `ConfigEntry` hop and never last; no other hop has state `site`. On a `"1.1"`
+  document the converse also holds: a `Link` hop entered by `BOUND_BY <-` from a `ConfigEntry` hop is in state `site`. A `"1.0"` document
+  keeps the v1 state of that `Link` and has no `site` hop (V17).
+- **Renderers** read `state` only for `path` and `DATA` (`ccg/render/common.py`), so a `site` hop renders as any `Link` hop (P1-24).
+
 ### 3.4 `MOUNTED_BY` evidence is not carried
 
 - A mount reaches an answer only through the `Link`'s status and reason, which the linker derived using it.
@@ -411,7 +426,7 @@ predates graph model v1. Passages not listed stand.
 | §4.1, "…the P1 engine's contract, not something the slice's readers can yet deliver: its reads do not return `Param`/`Ret`/`Cond` `path`/`repo`/`unit` …" | The contract stands. Graph model v1 stores `repoId`/`unitId`/`path` on `Symbol` and `CallSite` only (graph note §6.3), so a point hop's `repo`, `unit` and `path` are its owner's, read by the owner join (`-p1-graph.md` §5). That join, `LIFTED_VIA`'s `unit`/`repo`/`siteId` and the edge `reason` are P1-21's reads (C3). The golden's `recipe.queries` remains a hand-built fixture |
 | §4.3, `builtAt`/`failedAt` as facts; §6 "`stamp` and `staleness` are inputs read from the store (`builtAt` is the unit's, not a clock)" | For 1.1, §4.3, a stated exception to v1 §9's major rule |
 | §4.4, "P1's default bound must be >= 2, … recorded by S50 …; carry-over C4" and "counting `unexplored` is a P1 engine obligation [frozen, untested]" | §4.1, §4.2 (index D3) |
-| §5.2, `state` bullet: "`function` … retires with the `arg(i)` rows" | `function` stays, entered only in flag-false units by §5's entry rows |
+| §5.2, `state` bullet: "`function` … retires with the `arg(i)` rows"; its list `value`, `path`, `function`, `contract`, `key`, `end` | `function` stays, entered only in flag-false units by §5's entry rows; the list gains `site` (§3.6) |
 | §5.2, "A `reason` of the form `flow-unavailable:<lang>` … is carried by the first hop that crosses into the unit …" | §5 |
 | §5.2, `Hop.kind` list and `edgeType` vocabulary: "closed in v1; a new edge type is additive" | `Unit` and `TO_UNIT` are added (§3.5). Four names are prohibited on 1.1 hops (§3) |
 | §5.1 `subject`; §6 `items` order key | `UnitSubject` is added, with its order key (§3.5) |
@@ -435,6 +450,7 @@ The file and its `$id` `urn:ccg:answer-v1` stay the same, because 1.1 is a minor
 | `$defs.Bound` | add properties `launch: {$ref: "#/$defs/Launch"}`, `port: {type: integer, minimum: 1, maximum: 65535}`, `portOrigin: {type: string, enum: [explicit, env-default, compose, pack-default]}`, `packId: {type: string, pattern: "^[a-z][a-z0-9-]{0,39}$"}`. Remove `keyPath` from `required`. Add `oneOf: [{required: [keyPath]}, {required: [launch]}]`. Add `allOf`: `if {required: [port]} then {required: [portOrigin]}`; `if {required: [portOrigin]} then {required: [port]}`; `if {properties: {portOrigin: {const: pack-default}}, required: [portOrigin]} then {required: [packId]} else {not: {required: [packId]}}` |
 | `Hop.kind` enum | add `Unit` |
 | `Hop.edgeType` enum | add `TO_UNIT` (22 names); none removed |
+| `Hop.state` enum | add `site` (§3.6) |
 | `$defs.UnitSubject` (new) | `{type: {const: "unit"}, unitId: {pattern: 32-hex}}`, both required, closed; added to `Item.subject`'s `oneOf` |
 | root `description` | cite both documents and rules V1–V19 |
 
@@ -442,12 +458,12 @@ The file and its `$id` `urn:ccg:answer-v1` stay the same, because 1.1 is a minor
 
 | Rule | Change |
 |---|---|
-| V5 | The column is read from `request.direction`. **Impact:** a `Link` hop is followed by its `CallSite` (`VIA <-`), or, last, by a `BOUND_BY ->` `ConfigEntry` hop, in which case it carries exactly that entry in `bound` and no `lifted` (§3.3). **Depends-on:** a `Link` hop is entered by `VIA ->` from its `CallSite` and left by `TO ->` or `TO_UNIT ->`. In every case, `lifted[].siteId` names the link's site. A `Unit` hop is the last hop, entered from a `Link` by `TO_UNIT ->`, with `unit == id`; `TO_UNIT` arrives only at a `Unit` (§3.5). `_check_hops` gains a `direction` argument |
+| V5 | The column is read from `request.direction`. **Impact:** a `Link` hop is followed by its `CallSite` (`VIA <-`), or, last, by a `BOUND_BY ->` `ConfigEntry` hop, in which case it carries exactly that entry in `bound` and no `lifted` (§3.3). **Depends-on:** a `Link` hop is entered by `VIA ->` from its `CallSite` and left by `TO ->` or `TO_UNIT ->`. In every case, `lifted[].siteId` names the link's site. A `Unit` hop is the last hop, entered from a `Link` by `TO_UNIT ->`, with `unit == id`; `TO_UNIT` arrives only at a `Unit` (§3.5). **`site` state (§3.6):** on every document, a hop in state `site` is a `Link` hop entered by `BOUND_BY <-` from a `ConfigEntry` hop, and is followed by its `CallSite` hop (`VIA <-`), never by a wiring `ConfigEntry` hop and never last. On a `"1.1"` document the converse also holds: a `Link` hop entered by `BOUND_BY <-` from a `ConfigEntry` hop is in state `site`. A `"1.0"` document keeps the v1 state of that `Link` (V17). `_check_hops` gains a `direction` argument |
 | V3, V4, order | `KIND_FIELDS["Unit"]` has no fields. A `Unit` hop needs `repo`/`unit` but not `path`/`line`. `SUBJECT_ID["unit"] = "unitId"`. `_item_key` uses the subject unit's `rootPath` and 0 for a `unit` subject |
 | V9 | A `Unit` hop's `staleness.units` entry has `buildStatus` `not-mapped` |
 | V12 | `_check_f4` screens `Bound.keyPath` only when present, and screens `Bound.launch.{mountPath, service, envVar}` |
 | `facts_bytes` | For `"1.1"`, also drops `staleness.units[].builtAt` and `failedAt` (§4.3); `"1.0"` is unchanged |
-| **V17** (new) | **Version labels.** A `"1.0"` document carries no `provenance.cacheBypass`, no `Bound` without `keyPath`, no `Bound.{launch, port, portOrigin, packId}`, no `BOUND_BY ->` `ConfigEntry` hop, and no `Unit` hop or `unit` subject. A resolved `"1.1"` document has `depthBound.bound` ≥ 2 |
+| **V17** (new) | **Version labels.** A `"1.0"` document carries no `provenance.cacheBypass`, no `Bound` without `keyPath`, no `Bound.{launch, port, portOrigin, packId}`, no `BOUND_BY ->` `ConfigEntry` hop, no hop in state `site`, and no `Unit` hop or `unit` subject. A resolved `"1.1"` document has `depthBound.bound` ≥ 2 |
 | **V18** (new, 1.1) | §5 (a)–(e), with `FUNCTION_ENTRY` and `FLOW_ROWS` as module constants keyed by direction |
 | **V19** (new, 1.1) | No hop has `edgeType` in `PROHIBITED_EDGE_TYPES = frozenset({"DEFINED_BY", "LAUNCHES", "DEPENDS_ON", "FROM_DEP"})` |
 | public names | add `ANSWER_SCHEMA_VERSIONS = ("1.0", "1.1")`, `PROHIBITED_EDGE_TYPES`, `FUNCTION_ENTRY`, `FLOW_ROWS`; the `validate` docstring lists V1–V13 and V15–V19 |
@@ -465,9 +481,9 @@ that its base validates.
   - add `"Bound.keyPath": "keyPath"` and `"Bound.launch": "launch"`, the two `oneOf` lists the count walker counts;
   - add `"UnitSubject": "type unitId"`;
   - `INSTANCES` gains the three. `Bound.launch`'s instance is a 1.1 copy of `b_config()` whose first `Bound`
-    holds `launch` only, and `UnitSubject`'s is `B-unit`.
+    holds `launch` only and whose `Link` is in state `site` (§3.6), and `UnitSubject`'s is `B-unit`.
 - `test_every_object_of_the_schema_is_closed_and_it_names_its_spec`: its `$defs` name set gains `UnitSubject`.
-- `ENUMS`: `("Hop", "kind")` gains `Unit`, and `("Hop", "edgeType")` gains `TO_UNIT`.
+- `ENUMS`: `("Hop", "kind")` gains `Unit`, `("Hop", "edgeType")` gains `TO_UNIT`, and `("Hop", "state")` gains `site` (§3.6; delivered after P1-45, as P1-23's behaviour 0).
 
 Every other existing test stays as it is, including:
 - the 1.0 golden-based `flow-unavailable:python` acceptance;

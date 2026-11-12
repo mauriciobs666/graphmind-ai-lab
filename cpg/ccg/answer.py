@@ -593,11 +593,22 @@ def _check_interpretation(doc: dict) -> None:  # V2
         _fail("V2", "recipe.queries", "duplicate query name (§4.1: names unique)")
 
 
-def _check_link(w: str, chain: list[dict], i: int, direction: str) -> str | None:  # V5
-    """The shape around a ``Link`` hop (spec2 §3.3, §7.2); returns the site id its ``lifted`` entries must name (None: no site)."""
+def _entered_from_config_entry(hop: dict, prev: dict | None) -> bool:
+    return prev is not None and prev["kind"] == "ConfigEntry" and hop.get("edgeType") == "BOUND_BY" and hop.get("dir") == "<-"
+
+
+def _check_link(w: str, chain: list[dict], i: int, direction: str, v11: bool) -> str | None:  # V5
+    """The shape around a ``Link`` hop (spec2 §3.3, §3.6, §7.2); returns the site id its ``lifted`` entries must name (None: no site)."""
     hop = chain[i]
     prev = chain[i - 1] if i else None
     nxt = chain[i + 1] if i + 1 < len(chain) else None
+    entered = _entered_from_config_entry(hop, prev)
+    if hop["state"] == "site" and not entered:
+        _fail("V5", w, "a site Link hop is entered by BOUND_BY <- from a ConfigEntry hop (spec2 §3.6)")
+    if entered and v11 and hop["state"] != "site":
+        _fail("V5", w, "a Link hop entered by BOUND_BY <- from a ConfigEntry hop is in state site (spec2 §3.6)")
+    if hop["state"] == "site" and (nxt is None or nxt["kind"] != "CallSite"):
+        _fail("V5", w, "a site Link hop is followed by its CallSite hop (spec2 §3.6)")
     if direction == "depends-on":
         if prev is None or prev["kind"] != "CallSite" or hop.get("edgeType") != "VIA" or hop.get("dir") != "->":
             _fail("V5", w, "in depends-on a Link hop is entered by VIA -> from its CallSite hop")
@@ -630,7 +641,7 @@ def _check_unit_hop(w: str, chain: list[dict], i: int) -> None:  # V5
         _fail("V5", w, "a Unit hop's unit equals its id")
 
 
-def _check_hops(where: str, item: dict, direction: str) -> None:  # V3, V5, V6
+def _check_hops(where: str, item: dict, direction: str, v11: bool) -> None:  # V3, V5, V6
     chain = item["chain"]
     for i, hop in enumerate(chain):
         w = f"{where}.chain[{i}]"
@@ -658,8 +669,10 @@ def _check_hops(where: str, item: dict, direction: str) -> None:  # V3, V5, V6
             if f in hop:
                 _fail("V3", w, f"{f} does not belong to a {hop['kind']} hop")
         _check_unit_hop(w, chain, i)
+        if hop["state"] == "site" and hop["kind"] != "Link":
+            _fail("V5", w, "only a Link hop is in state site (spec2 §3.6)")
         if hop["kind"] == "Link":
-            site = _check_link(w, chain, i, direction)
+            site = _check_link(w, chain, i, direction, v11)
             tied = [(x["siteId"], x["ord"]) for x in hop.get("lifted", [])]
             if len(set(tied)) != len(tied):
                 _fail("V3", f"{w}.lifted", "duplicate (siteId, ord)")
@@ -850,6 +863,8 @@ def _check_labels(doc: dict) -> None:  # V17
             w = f"{where}.chain[{i}]"
             if hop["kind"] == "Unit":
                 _fail("V17", w, "a Unit hop is a 1.1 construct")
+            if hop["state"] == "site":
+                _fail("V17", w, "the site hop state is a 1.1 construct")
             if hop["kind"] == "ConfigEntry" and hop.get("edgeType") == "BOUND_BY" and hop.get("dir") == "->":
                 _fail("V17", w, "a wiring ConfigEntry hop (BOUND_BY ->) is a 1.1 construct")
             for j, b in enumerate(hop.get("bound", [])):
@@ -921,7 +936,7 @@ def validate(doc: dict) -> None:
     anchors = {_anchor_id(a): ANCHOR_HOP_KIND[a["type"]] for a in doc["interpretation"].get("request", {}).get("anchors", [])}
     direction = doc["interpretation"].get("request", {}).get("direction", "impact")
     for where, it in _all_items(doc):
-        _check_hops(where, it, direction)
+        _check_hops(where, it, direction, doc["answerSchemaVersion"] == "1.1")
         _check_item_rules(where, it, anchors)
     _check_groups(doc)
     _check_staleness(doc)
