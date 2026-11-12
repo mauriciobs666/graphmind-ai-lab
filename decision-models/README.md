@@ -102,7 +102,7 @@ or `AGENTS.md`. Run these from `decision-models/`:
   let through by a plain `resolve`, or ended by `--decline-topup`; a `rubric` halt is cleared only
   once the rubric has changed; an `unboundedCell` halt refuses a plain `resolve` (below).
 - **`start`** draws a `full` campaign's round 1 (⌈1.1 × the point's target⌉ seeds) and queues its
-  generation runs; it spends no tokens, `run` does. It refuses, writing nothing, a smoke or pilot
+  generation runs; it spends no tokens, `run` does. It refuses, writing no ledger event (it may leave `store/driver.lock`), a smoke or pilot
   campaign (a pilot starts with `pilot start`), one with no `install` record, a held lock, and a
   second call. After a crash between the draw and the queued runs `start` says the round is
   drawn; `run` queues the stranded seeds. Votes, the message-type tranche and top-ups then start

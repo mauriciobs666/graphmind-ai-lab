@@ -10,7 +10,7 @@
 
 - `driver start --root <campaign>` (`driver._start`, under `Campaign.locked()`) calls
   `begin_round(1)` and prints the seeds drawn and runs queued. It refuses, exit 1 and writing
-  nothing, a phase other than `full`, a campaign with no `install` record, and a campaign whose
+  no ledger event (it may leave `store/driver.lock`), a phase other than `full`, a campaign with no `install` record, and a campaign whose
   round 1 is drawn (the message names stranded seeds when a crash left some unqueued).
 - A crash after the draw: `start` retried refuses, and `driver run`'s `next` queues the stranded
   seeds (plan6 §3.8 "A half-written round"); a crash before `round-start` draws afresh.
@@ -19,8 +19,9 @@
   full-phase step lacks an entry point.
 
 **Verified:** `tests/test_driver.py` `start` round trips through `driver.main` on a tmp full
-campaign; mutants of each guard (phase, install, started, stranded hint, count, lock) redden it
-on a scratch copy.
+campaign; mutants of each guard (phase, install, started, count, lock) redden it on a scratch
+copy; two more (a role hard-coded in `_start`, the stranded hint always on) survived the first
+tests and are killed by the message-type-classifier round trip and the hint-absent assertion.
 
 ## 2026-11-10 — typed-decision-models U5.10b — `finalize`, dataset files, hand-offs
 

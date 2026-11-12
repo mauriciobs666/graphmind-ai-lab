@@ -106,16 +106,24 @@ def _full(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Campaign:
 
 def test_start_draws_round_one_and_queues_its_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
                                                    capsys: pytest.CaptureFixture) -> None:
-    from decisionmodels import seeds
     camp = _full(tmp_path, monkeypatch)
     assert driver.main(["start", "--root", str(camp.root)]) == 0
-    count = seeds.round_one_count("guard-judge")
+    count = 880
     state = Campaign(camp.root).state()
     assert [r["genRound"] for r in state.rounds] == [1] and len(state.rounds[0]["seeds"]) == count
     pending = [b for b in state.batches.values() if b.kind == "generate" and b.state == "pending"]
     assert sum(len(b.entries) for b in pending) == count
     assert capsys.readouterr().out.strip() == (
         f"round 1: {count} seeds drawn, {len(pending)} generation runs queued")
+
+
+def test_start_draws_the_role_specific_round_one_count(tmp_path: Path,
+                                                       monkeypatch: pytest.MonkeyPatch,
+                                                       capsys: pytest.CaptureFixture) -> None:
+    from test_topup import full_campaign
+    camp = full_campaign(tmp_path, monkeypatch, "message-type-classifier")
+    assert driver.main(["start", "--root", str(camp.root)]) == 0
+    assert capsys.readouterr().out.strip() == "round 1: 660 seeds drawn, 27 generation runs queued"
 
 
 def test_start_then_next_serves_the_first_run(tmp_path: Path,
@@ -165,6 +173,7 @@ def test_start_a_second_time_refuses_cleanly(tmp_path: Path, monkeypatch: pytest
     assert driver.main(["start", "--root", str(camp.root)]) == 1
     err = capsys.readouterr().err
     assert err.startswith("refused: round 1 is already drawn") and "Traceback" not in err
+    assert "not queued yet" not in err
     assert camp.ledger_path.read_bytes() == before
 
 
