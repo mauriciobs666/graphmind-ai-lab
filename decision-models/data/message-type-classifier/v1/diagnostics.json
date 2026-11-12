@@ -1,0 +1,454 @@
+{
+  "agreement": {
+    "byClass": {
+      "complaint": {
+        "items": 136,
+        "pairAgreement": 0.9803921568627451,
+        "threeZeroShare": 0.9705882352941176
+      },
+      "escalation": {
+        "items": 132,
+        "pairAgreement": 0.98989898989899,
+        "threeZeroShare": 0.9848484848484849
+      },
+      "order": {
+        "items": 137,
+        "pairAgreement": 0.9854014598540146,
+        "threeZeroShare": 0.9781021897810219
+      },
+      "other": {
+        "items": 122,
+        "pairAgreement": 1.0,
+        "threeZeroShare": 1.0
+      },
+      "question": {
+        "items": 133,
+        "pairAgreement": 0.9699248120300752,
+        "threeZeroShare": 0.9548872180451128
+      }
+    },
+    "intentLabelAgreement": {
+      "complaint": {
+        "items": 132,
+        "rate": 0.9772727272727273
+      },
+      "escalation": {
+        "items": 132,
+        "rate": 0.9772727272727273
+      },
+      "order": {
+        "items": 132,
+        "rate": 0.9924242424242424
+      },
+      "other": {
+        "items": 132,
+        "rate": 0.9242424242424242
+      },
+      "overall": {
+        "items": 660,
+        "rate": 0.9651515151515152
+      },
+      "question": {
+        "items": 132,
+        "rate": 0.9545454545454546
+      }
+    },
+    "ties": 0
+  },
+  "balanceEffect": {
+    "complaint": {
+      "n": 1980,
+      "slope": -0.2459535126014393
+    },
+    "escalation": {
+      "n": 1980,
+      "slope": 0.12579154862982558
+    },
+    "order": {
+      "n": 1980,
+      "slope": -0.4934046270156551
+    },
+    "other": {
+      "n": 1980,
+      "slope": -0.2338505171976715
+    },
+    "question": {
+      "n": 1980,
+      "slope": -0.14479709070313723
+    }
+  },
+  "cells": {
+    "none|complaint": {
+      "roundOne": {
+        "intentLabelAgreement": 0.9485294117647058,
+        "items": 136,
+        "pairAgreement": 0.9803921568627451,
+        "threeZeroShare": 0.9705882352941176
+      },
+      "topUp": {
+        "intentLabelAgreement": null,
+        "items": 0,
+        "pairAgreement": null,
+        "threeZeroShare": null
+      }
+    },
+    "none|escalation": {
+      "roundOne": {
+        "intentLabelAgreement": 0.9772727272727273,
+        "items": 132,
+        "pairAgreement": 0.98989898989899,
+        "threeZeroShare": 0.9848484848484849
+      },
+      "topUp": {
+        "intentLabelAgreement": null,
+        "items": 0,
+        "pairAgreement": null,
+        "threeZeroShare": null
+      }
+    },
+    "none|order": {
+      "roundOne": {
+        "intentLabelAgreement": 0.9562043795620438,
+        "items": 137,
+        "pairAgreement": 0.9854014598540146,
+        "threeZeroShare": 0.9781021897810219
+      },
+      "topUp": {
+        "intentLabelAgreement": null,
+        "items": 0,
+        "pairAgreement": null,
+        "threeZeroShare": null
+      }
+    },
+    "none|other": {
+      "roundOne": {
+        "intentLabelAgreement": 1.0,
+        "items": 122,
+        "pairAgreement": 1.0,
+        "threeZeroShare": 1.0
+      },
+      "topUp": {
+        "intentLabelAgreement": null,
+        "items": 0,
+        "pairAgreement": null,
+        "threeZeroShare": null
+      }
+    },
+    "none|question": {
+      "roundOne": {
+        "intentLabelAgreement": 0.9473684210526315,
+        "items": 133,
+        "pairAgreement": 0.9699248120300752,
+        "threeZeroShare": 0.9548872180451128
+      },
+      "topUp": {
+        "intentLabelAgreement": null,
+        "items": 0,
+        "pairAgreement": null,
+        "threeZeroShare": null
+      }
+    }
+  },
+  "labelled": 660,
+  "point": "message-type-classifier",
+  "positionEffect": {
+    "complaint": [
+      [
+        198,
+        0.17676767676767677
+      ],
+      [
+        198,
+        0.26262626262626265
+      ],
+      [
+        198,
+        0.1919191919191919
+      ],
+      [
+        198,
+        0.20202020202020202
+      ],
+      [
+        198,
+        0.26262626262626265
+      ],
+      [
+        198,
+        0.21212121212121213
+      ],
+      [
+        198,
+        0.17676767676767677
+      ],
+      [
+        198,
+        0.20707070707070707
+      ],
+      [
+        198,
+        0.21212121212121213
+      ],
+      [
+        198,
+        0.16666666666666666
+      ]
+    ],
+    "escalation": [
+      [
+        198,
+        0.2222222222222222
+      ],
+      [
+        198,
+        0.16161616161616163
+      ],
+      [
+        198,
+        0.18686868686868688
+      ],
+      [
+        198,
+        0.2222222222222222
+      ],
+      [
+        198,
+        0.16161616161616163
+      ],
+      [
+        198,
+        0.2222222222222222
+      ],
+      [
+        198,
+        0.18686868686868688
+      ],
+      [
+        198,
+        0.18686868686868688
+      ],
+      [
+        198,
+        0.2222222222222222
+      ],
+      [
+        198,
+        0.22727272727272727
+      ]
+    ],
+    "order": [
+      [
+        198,
+        0.22727272727272727
+      ],
+      [
+        198,
+        0.21717171717171718
+      ],
+      [
+        198,
+        0.18181818181818182
+      ],
+      [
+        198,
+        0.21717171717171718
+      ],
+      [
+        198,
+        0.20707070707070707
+      ],
+      [
+        198,
+        0.21717171717171718
+      ],
+      [
+        198,
+        0.21717171717171718
+      ],
+      [
+        198,
+        0.21212121212121213
+      ],
+      [
+        198,
+        0.16666666666666666
+      ],
+      [
+        198,
+        0.20202020202020202
+      ]
+    ],
+    "other": [
+      [
+        198,
+        0.17676767676767677
+      ],
+      [
+        198,
+        0.20202020202020202
+      ],
+      [
+        198,
+        0.23737373737373738
+      ],
+      [
+        198,
+        0.1717171717171717
+      ],
+      [
+        198,
+        0.13636363636363635
+      ],
+      [
+        198,
+        0.17676767676767677
+      ],
+      [
+        198,
+        0.19696969696969696
+      ],
+      [
+        198,
+        0.18686868686868688
+      ],
+      [
+        198,
+        0.16666666666666666
+      ],
+      [
+        198,
+        0.20707070707070707
+      ]
+    ],
+    "question": [
+      [
+        198,
+        0.19696969696969696
+      ],
+      [
+        198,
+        0.15656565656565657
+      ],
+      [
+        198,
+        0.20202020202020202
+      ],
+      [
+        198,
+        0.18686868686868688
+      ],
+      [
+        198,
+        0.23232323232323232
+      ],
+      [
+        198,
+        0.1717171717171717
+      ],
+      [
+        198,
+        0.2222222222222222
+      ],
+      [
+        198,
+        0.20707070707070707
+      ],
+      [
+        198,
+        0.23232323232323232
+      ],
+      [
+        198,
+        0.19696969696969696
+      ]
+    ]
+  },
+  "promptExamples": {
+    "items": 258,
+    "matching": 0,
+    "perExample": {
+      "Do you deliver on Sundays? If so I'd like two": 0,
+      "Where is my order?": 0,
+      "Where is my order? It was due yesterday": 0
+    }
+  },
+  "retired": {},
+  "rounds": [
+    {
+      "drawn": 660,
+      "genRound": 1,
+      "generationRuns": 30,
+      "generationTokens": {
+        "cacheRead": 382739,
+        "cacheWrite": 205952,
+        "input": 240,
+        "output": 93728
+      },
+      "items": 660,
+      "labelTokens": {
+        "cacheRead": 711042,
+        "cacheWrite": 436501,
+        "input": 336,
+        "output": 108261
+      },
+      "strata": {
+        "None": 660
+      }
+    }
+  ],
+  "screenHits": {
+    "byDifficulty": {
+      "clear": {
+        "hitSeeds": 0,
+        "hits": 0,
+        "seeds": 440
+      },
+      "near-miss": {
+        "hitSeeds": 4,
+        "hits": 4,
+        "seeds": 220
+      }
+    },
+    "byIntent": {
+      "complaint": {
+        "hitSeeds": 0,
+        "hits": 0,
+        "seeds": 132
+      },
+      "escalation": {
+        "hitSeeds": 0,
+        "hits": 0,
+        "seeds": 132
+      },
+      "order": {
+        "hitSeeds": 2,
+        "hits": 2,
+        "seeds": 132
+      },
+      "other": {
+        "hitSeeds": 2,
+        "hits": 2,
+        "seeds": 132
+      },
+      "question": {
+        "hitSeeds": 0,
+        "hits": 0,
+        "seeds": 132
+      }
+    },
+    "byPattern": {
+      "bindingMismatch": 4
+    }
+  },
+  "templates": {
+    "halts": [],
+    "hashes": [
+      {
+        "items": 660,
+        "runs": 28,
+        "templateHash": "49b3d9487725e006371c5c880197963deebdd3b801fbcdab43c27e71789fa23b"
+      }
+    ]
+  },
+  "turnCut": null
+}
