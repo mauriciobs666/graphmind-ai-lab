@@ -22,6 +22,10 @@
 # start_falkordb.sh records that tag, and the dummy server logs its bind time (run/listen.log); a2.4 then
 # counts only markers from hook runs wholly inside the refusal window. Do not widen it to a bare timestamp
 # window: runs straddling the kill or the server's bind legitimately start FalkorDB (intermittent false FAIL).
+# Known residual (a2.1): the kernel's flock(2) hands a released lock to a queued `flock -w` waiter non-atomically,
+# so the lock can read free for a few ms between the old server's exit and LOCK_ACQUIRED. a2.1 tolerates not-held
+# samples only in [LOCK_ACQUIRED-100 ms, LOCK_ACQUIRED] and prints how many it excused; a hook run landing in
+# that gap is the residual risk (a2.3 still asserts that no hook launch happened).
 # Exit status = number of failed assertions. Needs bash>=5, flock, curl, ss, python3.
 # Results: <root>/run/results.log (one PASS/FAIL line per assertion, with timings).
 
@@ -254,7 +258,11 @@ T_ACQ=$(ev_ts "$E" LOCK_ACQUIRED); T_S1=$(ev_ts "$E" STAGE1_START); T_S1E=$(ev_t
 T_S2=$(ev_ts "$E" STAGE2_START); T_S2E=$(ev_ts "$E" STAGE2_END); T_EX=$(ev_ts "$E" EXEC)
 T_W1E=$(ev_ts "$E" STAGE1_WORK_END); T_W2S=$(ev_ts "$E" STAGE2_WORK_START); T_W2E=$(ev_ts "$E" STAGE2_WORK_END)
 read -r n bad gap <<<"$(lock_stats "$R/lock-main.smp" 0 99999999999999)"
-check a2.1 "lock sampler (50 ms, whole run, kill..exec..serving): $n samples, $bad not-held, max gap $gap ms (want 0 not-held)" [ "$bad" -eq 0 -a "$n" -gt 50 ]
+# Known residual: flock(2) does not hand the lock to a queued `flock -w` waiter atomically, so when the old server
+# exits the lock can read free for a few ms before the waiter is woken. Not-held samples in [T_ACQ-100 ms, T_ACQ]
+# are therefore excluded (and counted in the text); anything earlier, or at/after T_ACQ, still fails.
+read -r nh_ok <<<"$(awk -v a=$(( ${T_ACQ:-0} - 100 )) -v b="${T_ACQ:-0}" '$2!=75&&$1>=a&&$1<=b{k++} END{print k+0}' "$R/lock-main.smp")"
+check a2.1 "lock sampler (50 ms, whole run, kill..exec..serving): $n samples, $bad not-held of which $nh_ok in the tolerated handoff window [T_ACQ-100 ms, T_ACQ], max gap $gap ms (want 0 outside it)" [ "$(( bad - nh_ok ))" -eq 0 -a "$n" -gt 50 -a -n "$T_ACQ" ]
 T_200=$(awk -v a=$((T_KILL+300)) '$1>a&&$2==200{print $1; exit}' "$R/health-main.smp"); : "${T_200:=$T_H}"
 read -r hn hbad <<<"$(hook_stats "$R/hook-main.smp" $((T_KILL+200)) $((T_200-100)))"
 check a2.2 "stub-tree hook loop (100 ms) that started after kill+200 ms and ended 100 ms before the first /health 200 sample: $hn runs, $hbad not 'already being started' (want 0 and >0 runs)" [ "$hbad" -eq 0 -a "$hn" -gt 5 ]
