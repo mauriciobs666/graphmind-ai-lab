@@ -18,6 +18,10 @@
 #   --mutant   run the wrapper after a deliberate defect; the run must report FAILs:
 #              nohold release_at_start release_before_exec gowait_release gotimeout_exit
 #              stage2_fail_continues env_leak nocd stage1_unordered
+# Stub FalkorDB-start attribution (a2.4): every hook run is tagged (HOOK_RUN=its start ms), the stub
+# start_falkordb.sh records that tag, and the dummy server logs its bind time (run/listen.log); a2.4 then
+# counts only markers from hook runs wholly inside the refusal window. Do not widen it to a bare timestamp
+# window: runs straddling the kill or the server's bind legitimately start FalkorDB (intermittent false FAIL).
 # Exit status = number of failed assertions. Needs bash>=5, flock, curl, ss, python3.
 # Results: <root>/run/results.log (one PASS/FAIL line per assertion, with timings).
 
@@ -96,7 +100,7 @@ EOF
 cat >"$S/falkor-chat/scripts/start_falkordb.sh" <<'EOF'
 #!/usr/bin/env bash
 S="$(cd "$(dirname "$0")/../.." && pwd)"
-printf '%s\n' "$(date +%s%3N)" >>"$S/run/falkordb.marker"
+printf '%s %s\n' "$(date +%s%3N)" "${HOOK_RUN:-0}" >>"$S/run/falkordb.marker"   # <epoch-ms> <start ms of the hook run that launched it>
 EOF
 cat >"$S/falkor-chat/scripts/dummy_server.py" <<'EOF'
 import os, signal, time, http.server
@@ -107,6 +111,8 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_response(200); self.send_header("Content-Length", "2"); self.end_headers(); self.wfile.write(b"ok")
     def log_message(self, *a): pass
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", int(os.environ["AGENT_TEAM_PORT"])), H)
+with open(os.path.join(RUN, "listen.log"), "a") as f:   # epoch-ms the port starts accepting (a2.4 window end)
+    f.write("%d\n" % int(time.time() * 1000))
 def term(sig, frm):                     # like uvicorn: stop listening first, then a slow graceful shutdown
     srv.socket.close()
     try: n = float(open(os.path.join(RUN, "slow_term")).read())
@@ -165,7 +171,7 @@ fi
 
 export HOME="$S/home"
 unset XDG_STATE_HOME
-run_hook() { CLAUDE_PROJECT_DIR="$S" XDG_STATE_HOME="$S/state" AGENT_TEAM_PORT=$PORT FALKORDB_PORT=$FPORT HOME="$S/home" \
+run_hook() { HOOK_RUN="${1:-0}" CLAUDE_PROJECT_DIR="$S" XDG_STATE_HOME="$S/state" AGENT_TEAM_PORT=$PORT FALKORDB_PORT=$FPORT HOME="$S/home" \
   bash "$S/claude/teco/hooks/ensure-environment.sh" </dev/null 2>&1; }
 hook_launch_lines() { grep -c 'ensure-environment.sh (teco) launching' "$SERVER_LOG" 2>/dev/null || true; }
 launch_wrapper() { # <flock -w secs> <state dir> [go timeout]
@@ -179,7 +185,7 @@ SP=""; HP=""; KP=""
 start_samplers() { # <tag>
   ( while :; do flock -n -E 75 "$LOCK" true; rc=$?; echo "$(now) $rc"; sleep 0.05; done ) >"$R/lock-$1.smp" 2>/dev/null & SP=$!
   ( while :; do c="$(health)"; echo "$(now) $c"; sleep 0.05; done ) >"$R/health-$1.smp" 2>/dev/null & HP=$!
-  ( while :; do t0=$(now); o="$(run_hook)"; t1=$(now)
+  ( while :; do t0=$(now); o="$(run_hook "$t0")"; t1=$(now)
       case "$o" in *"already being started"*) cl=A ;; "") cl=S ;; *) cl=O ;; esac
       echo "$t0 $t1 $cl"; [ "$cl" = A ] || printf '%s\n' "--- $t0 $cl" "$o" >>"$R/hookloop-$1.other"
       sleep 0.1; done ) >"$R/hook-$1.smp" 2>/dev/null & KP=$!
@@ -254,8 +260,18 @@ read -r hn hbad <<<"$(hook_stats "$R/hook-main.smp" $((T_KILL+200)) $((T_200-100
 check a2.2 "stub-tree hook loop (100 ms) that started after kill+200 ms and ended 100 ms before the first /health 200 sample: $hn runs, $hbad not 'already being started' (want 0 and >0 runs)" [ "$hbad" -eq 0 -a "$hn" -gt 5 ]
 HL=$(( $(hook_launch_lines) - H0 )); LL=$(( $(lines "$R/launches.log") - L0 ))
 check a2.3 "hook-launch log lines +$HL (want 0); stub start_agent_team launches +$LL (want 1: the wrapper's own exec)" [ "$HL" -eq 0 -a "$LL" -eq 1 ]
-FM=$(awk -v t="$T_H" '$1<t' "$R/falkordb.marker" 2>/dev/null | awk -v a="$T_KILL" '$1>=a' | wc -l)
-check a2.4 "stub start_falkordb marker lines timestamped between kill and first /health 200: $FM (want 0)" [ "$FM" -eq 0 ]
+# a2.4 attributes each stub start_falkordb marker to the hook run that fired it (HOOK_RUN = that run's start ms).
+# Only a hook run whose server probe saw the port REFUSED can be a defect: the hook starts FalkorDB on its own only
+# when the server probe did NOT refuse (a refusal goes to the server-launch branch, which skips that step). Runs
+# that straddle either edge are legitimate and excluded: one that began before the dummy stopped listening (probe
+# saw 200), one that ended after the exec'd server bound the port (probe may have seen 200; the first /health 200
+# *sample* lags the real bind, which was the intermittent a2.4 failure). So: runs that started after the first
+# refused /health sample following the kill, and finished (sampled t1) before the server's own listen timestamp.
+T_REF=$(awk -v a="$T_KILL" '$1>a&&$2==000{print $1; exit}' "$R/health-main.smp"); : "${T_REF:=0}"
+T_LIS=$(awk -v a="${T_EX:-0}" '$1>=a{print $1; exit}' "$R/listen.log" 2>/dev/null); : "${T_LIS:=0}"
+read -r FN FM <<<"$(awk -v ref="$T_REF" -v lis="$T_LIS" 'NR==FNR{ if($1>=ref && $2<lis && $1<lis){ t1[$1]=1; n++ } next }
+  ($2 in t1){ bad++ } END{printf "%d %d", n+0, bad+0}' "$R/hook-main.smp" "$R/falkordb.marker")"
+check a2.4 "stub start_falkordb marker lines fired by hook runs wholly inside the refusal window (first refused sample after kill .. server bind): $FM (want 0), over $FN such hook runs (want >0)" [ "$FM" -eq 0 -a "$T_REF" -gt 0 -a "$T_LIS" -gt 0 -a "$FN" -gt 5 ]
 BAD200=$(awk -v a=$((T_KILL+300)) -v b="${T_EX:-0}" '$1>a&&$1<b&&$2==200' "$R/health-main.smp" | wc -l)
 check a2.5 "port refused during stages: /health 200 samples between kill+300 ms and exec: $BAD200 (want 0); wrapper exec at +$(( ${T_EX:-0} - T_KILL )) ms, 200 at +$(( T_H - T_KILL )) ms" [ "$BAD200" -eq 0 -a -n "$T_EX" ]
 check a3.1 "go-wait with lock held: lock samples $T_GW..$T_GW_END all 75: $(lock_stats "$R/lock-main.smp" "${T_GW:-0}" $T_GW_END) (n bad gap)" \
