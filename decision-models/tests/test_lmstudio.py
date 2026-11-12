@@ -1,5 +1,5 @@
 """`decisionmodels.lmstudio`: the fit-only LM Studio client (typed-decision-models plan1 §3.4,
-plan2 §3.5, plan3 §3.3/§3.5, U6.1).
+plan2 §3.5, plan3 §3.3/§3.5, U6f.1, U6f.1b).
 
 Everything here runs against a fake opener: no socket is opened. The over-limit rule is asserted
 against the byte-copy of model-bench's `over-limit.jsonl` (`tests/fixtures/decision-contract/`,
@@ -538,3 +538,112 @@ def test_a_chat_timeout_is_a_timeout() -> None:
     client, _ = _client(TimeoutError("slow"))
     with pytest.raises(LMStudioCallTimeout):
         client.chat([], model="m", temperature=0.0, max_tokens=1, timeout_s=1.0)
+
+
+# --- residency (plan4 §3.11, U6f.1b) -------------------------------------------------------
+
+
+def _models_body(*rows: tuple[str, str]) -> dict[str, Any]:
+    return {
+        "object": "list",
+        "data": [{"id": i, "object": "model", "type": "llm", "state": s} for i, s in rows],
+    }
+
+
+def test_residency_returns_both_resident_models_in_order() -> None:
+    client, opener = _client(_models_body(("laya", "loaded"), ("h-model", "loaded")))
+    assert client.residency() == [
+        lmstudio.ResidentModel("laya", "loaded"),
+        lmstudio.ResidentModel("h-model", "loaded"),
+    ]
+    assert opener.requests[0].full_url == "http://lm.test:1234/api/v0/models"
+    assert opener.requests[0].get_method() == "GET"
+    assert opener.requests[0].data is None
+    assert opener.response is not None and opener.response.closed
+
+
+def test_residency_omits_a_model_the_catalog_does_not_list() -> None:
+    client, _ = _client(_models_body(("laya", "loaded")))
+    assert [m.id for m in client.residency()] == ["laya"]
+
+
+def test_residency_omits_not_loaded_rows_and_keeps_any_other_state_literally() -> None:
+    client, _ = _client(
+        _models_body(("laya", "not-loaded"), ("h-model", "loaded"), ("odd", "loading"))
+    )
+    assert client.residency() == [
+        lmstudio.ResidentModel("h-model", "loaded"),
+        lmstudio.ResidentModel("odd", "loading"),
+    ]
+
+
+def test_residency_of_an_all_not_loaded_catalog_is_empty() -> None:
+    client, _ = _client(_models_body(("laya", "not-loaded")))
+    assert client.residency() == []
+    client, _ = _client({"data": []})
+    assert client.residency() == []
+
+
+def test_residency_ids_are_exact_not_case_folded() -> None:
+    client, _ = _client(_models_body(("Laya", "loaded")))
+    assert [m.id for m in client.residency()] == ["Laya"]
+
+
+def test_residency_passes_the_timeout_through() -> None:
+    client, opener = _client(_models_body())
+    client.residency(timeout_s=3.5)
+    client.residency()
+    assert opener.timeouts == [3.5, 10.0]
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        b"not json",
+        [],
+        {"object": "list"},
+        {"data": {"laya": "loaded"}},
+        {"data": ["laya"]},
+        {"data": [{"state": "loaded"}]},
+        {"data": [{"id": "laya"}]},
+        {"data": [{"id": 3, "state": "loaded"}]},
+        {"data": [{"id": "laya", "state": None}]},
+    ],
+)
+def test_residency_malformed_body_is_a_failure_with_no_status(reply: Any) -> None:
+    client, _ = _client(reply)
+    with pytest.raises(LMStudioCallFailed, match=r"GET /api/v0/models") as info:
+        client.residency()
+    assert info.value.status is None and info.value.body is None
+
+
+def test_residency_one_bad_row_fails_the_whole_read() -> None:
+    client, _ = _client({"data": [{"id": "laya", "state": "loaded"}, {"id": "x"}]})
+    with pytest.raises(LMStudioCallFailed, match=r"data\[1\]"):
+        client.residency()
+
+
+def test_residency_http_error_carries_the_status() -> None:
+    client, _ = _client(_http_error(503, b"down"))
+    with pytest.raises(LMStudioCallFailed, match="HTTP 503") as info:
+        client.residency()
+    assert info.value.status == 503
+
+
+def test_residency_timeout_is_a_timeout() -> None:
+    for exc in (TimeoutError("slow"), urllib.error.URLError(TimeoutError("slow"))):
+        client, _ = _client(exc)
+        with pytest.raises(LMStudioCallTimeout, match="GET /api/v0/models: timed out after 10.0s"):
+            client.residency()
+
+
+def test_residency_connection_failure_is_a_failure_with_no_status() -> None:
+    client, _ = _client(urllib.error.URLError(ConnectionRefusedError("refused")))
+    with pytest.raises(LMStudioCallFailed, match="connection failed") as info:
+        client.residency()
+    assert info.value.status is None
+
+
+def test_residency_state_is_compared_exactly_not_case_folded() -> None:
+    client, _ = _client(_models_body(("laya", "Not-Loaded")))
+    assert client.residency() == [lmstudio.ResidentModel("laya", "Not-Loaded")]

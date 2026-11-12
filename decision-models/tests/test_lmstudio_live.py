@@ -29,3 +29,19 @@ def test_live_over_limit_body_is_recognised() -> None:
     long_input = "the quick brown fox jumps over the lazy dog " * 400
     result = LMStudio(_BASE).decide(long_input, [_QUESTION], model="laya", timeout_s=60.0)
     assert isinstance(result, OverLimit)
+
+
+def test_live_models_lists_a_model_with_a_state() -> None:
+    """plan4 §3.11's unverified premise: `GET /api/v0/models` lists a served model, `laya`, with
+    a `state`. Loads nothing; the raw row is read, so a catalog that lacks the row fails here
+    rather than being read as 'not resident'."""
+    import json
+    import urllib.request
+
+    with urllib.request.urlopen(f"{_BASE}/api/v0/models", timeout=10.0) as resp:
+        rows = json.loads(resp.read())["data"]
+    row = next((r for r in rows if r.get("id") == "laya"), None)
+    assert row is not None, [r.get("id") for r in rows]
+    assert isinstance(row["state"], str) and row["state"]
+    resident = [m.id for m in LMStudio(_BASE).residency()]
+    assert ("laya" in resident) == (row["state"] != "not-loaded")

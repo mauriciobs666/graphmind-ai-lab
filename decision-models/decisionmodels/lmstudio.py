@@ -1,10 +1,10 @@
 """The fit-only LM Studio client (typed-decision-models plan1 §3.4, plan2 §3.5, plan3 §3.3/§3.5).
 
-`fit.py` calls two things: the decision model's `POST /v1/decisions` (`LMStudio.decide`) and the
-hand-off model's chat call (`LMStudio.chat`), each with its own timeout and wall clock. Nothing
-else: no catalog, no residency probe, no load or unload. Those routes are not specified for
-decision-models by any plan (model-bench's runner owns loading, plan3 §3.7), so a fit relies on
-whatever is resident, or on LM Studio's JIT, and records nothing about it.
+`fit.py` calls three things: the decision model's `POST /v1/decisions` (`LMStudio.decide`), the
+hand-off model's chat call (`LMStudio.chat`), each with its own timeout and wall clock, and the
+residency read (`LMStudio.residency`, `GET /api/v0/models`, plan4 §3.11). Nothing else: no full
+catalog, no load or unload (a human loads both models before a fit; model-bench's runner owns
+loading, plan3 §3.7).
 
 This is a standalone copy of the slice of `model-bench/modelbench/lmstudio.py` a fit needs: FR-8
 and plan3 §2 forbid importing model-bench. The failure taxonomy is the same, cell for cell:
@@ -40,6 +40,8 @@ from typing import Any
 
 DECISIONS_ROUTE = "/v1/decisions"
 _CHAT_ROUTE = "/api/v0/chat/completions"
+_MODELS_ROUTE = "/api/v0/models"
+_NOT_LOADED = "not-loaded"
 
 #: plan3 §3.2: a call is over-limit iff its status is 500 and its error body contains this,
 #: case-sensitively. Any other 500 stays a failure.
@@ -104,6 +106,15 @@ class OverLimit:
     call's time."""
 
     wallClockMs: float
+
+
+@dataclass(frozen=True)
+class ResidentModel:
+    """One `/api/v0/models` row whose `state` is not `"not-loaded"`: `{id, state}`, the literal
+    `state` string kept (the bench's shape; any value but `"not-loaded"` means resident)."""
+
+    id: str
+    state: str
 
 
 @dataclass(frozen=True)
@@ -225,17 +236,11 @@ class LMStudio:
         self._base_url = base_url.rstrip("/")
         self._opener = opener
 
-    def _post(
-        self, path: str, payload: Mapping[str, Any], timeout_s: float
-    ) -> tuple[float, Any]:
-        """`(wallClockMs, parsed JSON)` on a 2xx whose body parses, the clock stopped at the last
-        byte of the body. A body that is not JSON is `LMStudioCallFailed(status=None)`."""
-        req = urllib.request.Request(
-            f"{self._base_url}{path}",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+    def _send(
+        self, req: urllib.request.Request, label: str, timeout_s: float
+    ) -> tuple[float, bytes]:
+        """`(wallClockMs, raw body)` on a 2xx, the clock stopped at the last byte of the body.
+        `label` (`"POST /path"`) prefixes every message."""
         start = time.monotonic()
         try:
             resp = self._opener(req, timeout=timeout_s)
@@ -252,34 +257,82 @@ class LMStudio:
             finally:
                 exc.close()
             raise LMStudioCallFailed(
-                f"POST {path}: HTTP {exc.code}: {_truncate(body)}",
+                f"{label}: HTTP {exc.code}: {_truncate(body)}",
                 status=exc.code,
                 body=body.decode("utf-8", errors="replace"),
                 wallClockMs=(time.monotonic() - start) * 1000.0,
             ) from exc
         except TimeoutError as exc:  # connect- and read-phase alike; not a URLError
-            raise LMStudioCallTimeout(f"POST {path}: timed out after {timeout_s}s") from exc
+            raise LMStudioCallTimeout(f"{label}: timed out after {timeout_s}s") from exc
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, TimeoutError):
-                raise LMStudioCallTimeout(f"POST {path}: timed out after {timeout_s}s") from exc
+                raise LMStudioCallTimeout(f"{label}: timed out after {timeout_s}s") from exc
             raise LMStudioCallFailed(
-                f"POST {path}: connection failed: {exc.reason}", status=None, body=None
+                f"{label}: connection failed: {exc.reason}", status=None, body=None
             ) from exc
         except http.client.HTTPException as exc:  # e.g. IncompleteRead; not an OSError
             raise LMStudioCallFailed(
-                f"POST {path}: {type(exc).__name__}: {exc}", status=None, body=None
+                f"{label}: {type(exc).__name__}: {exc}", status=None, body=None
             ) from exc
         except OSError as exc:
             raise LMStudioCallFailed(
-                f"POST {path}: {type(exc).__name__}: {exc}", status=None, body=None
+                f"{label}: {type(exc).__name__}: {exc}", status=None, body=None
             ) from exc
-        wall_clock_ms = (time.monotonic() - start) * 1000.0
+        return (time.monotonic() - start) * 1000.0, raw
+
+    @staticmethod
+    def _parse(raw: bytes, label: str) -> Any:
         try:
-            return wall_clock_ms, json.loads(raw)
+            return json.loads(raw)
         except ValueError as exc:
             raise LMStudioCallFailed(
-                f"POST {path}: response is not JSON: {_truncate(raw)}", status=None, body=None
+                f"{label}: response is not JSON: {_truncate(raw)}", status=None, body=None
             ) from exc
+
+    def _post(
+        self, path: str, payload: Mapping[str, Any], timeout_s: float
+    ) -> tuple[float, Any]:
+        """`(wallClockMs, parsed JSON)` on a 2xx whose body parses. A body that is not JSON is
+        `LMStudioCallFailed(status=None)`."""
+        req = urllib.request.Request(
+            f"{self._base_url}{path}",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        label = f"POST {path}"
+        wall_clock_ms, raw = self._send(req, label, timeout_s)
+        return wall_clock_ms, self._parse(raw, label)
+
+    def residency(self, *, timeout_s: float = 10.0) -> list[ResidentModel]:
+        """The models LM Studio reports resident: `GET /api/v0/models` rows whose `state` is not
+        `"not-loaded"`, in the response's order (a port of the bench's `residency`, plan4 §3.11).
+        `[]` is a real answer (nothing loaded). A body with no `data` list, or a row that is not
+        an object with a string `id` and `state`, is `LMStudioCallFailed(status=None)`; a timeout
+        is `LMStudioCallTimeout`; an HTTP error or no connection is `LMStudioCallFailed`. Ids are
+        compared by the caller, exactly (no case folding)."""
+        label = f"GET {_MODELS_ROUTE}"
+        req = urllib.request.Request(f"{self._base_url}{_MODELS_ROUTE}", method="GET")
+        _, raw = self._send(req, label, timeout_s)
+        body = self._parse(raw, label)
+        rows = body.get("data") if isinstance(body, Mapping) else None
+        if not isinstance(rows, list):
+            raise LMStudioCallFailed(
+                f"{label}: response has no 'data' list", status=None, body=None
+            )
+        resident: list[ResidentModel] = []
+        for index, row in enumerate(rows):
+            model_id = row.get("id") if isinstance(row, Mapping) else None
+            state = row.get("state") if isinstance(row, Mapping) else None
+            if not isinstance(model_id, str) or not isinstance(state, str):
+                raise LMStudioCallFailed(
+                    f"{label}: data[{index}] has no string 'id' and 'state'",
+                    status=None,
+                    body=None,
+                )
+            if state != _NOT_LOADED:
+                resident.append(ResidentModel(id=model_id, state=state))
+        return resident
 
     def decide(
         self,

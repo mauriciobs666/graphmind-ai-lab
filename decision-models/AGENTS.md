@@ -22,7 +22,7 @@ screen/cue-check, below), `runner.py` (`driver run`, `pause [--now]`, `resume`),
 `scripts/import_side_check_shingles.py` writes `data/guard-judge/side-check-shingles.txt`, hashes
 only) and `finalize.py` (the dataset writer). `agents/` holds the three agent definitions, spawn
 templates, `guard_hook.py` and `settings.json`. `lmstudio.py` is fit's client (`decide` returns
-`OverLimit` on plan3 §3.3's refusal; `chat`; no load/residency, which no plan gives decision-models);
+`OverLimit` on plan3 §3.3's refusal; `chat`; `residency()` reads `/api/v0/models` and returns the non-`not-loaded` rows, ids compared exactly; no load, a human loads both models: plan4 §3.11);
 `policy.py` is the pure `apply_policy` copy (`predicate-band`, `choice-confidence`; bounds `0 ≤ l ≤ h ≤ 1`, `0 ≤ c ≤ 1` refused as `ValueError`; `check_handoff_rule` is plan3 §3.2's one-way rule: an empty band or `c == 0` loads with a hand-off model, any policy that can hand off refuses `handoffModel: null`); `fit.py` and what follows are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
 `docs/test-reports/live-smoke-report.md`.
 
