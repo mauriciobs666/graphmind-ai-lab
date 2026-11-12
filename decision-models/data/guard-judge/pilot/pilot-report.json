@@ -1,0 +1,184 @@
+{
+  "assumes": "1.3 x the point's target as items, generated and labelled; generation runs of 25 seeds; three votes at the pilot's cap; no regeneration or top-up runs; F, c and the generator mean as measured here",
+  "blocks": {
+    "main": 1,
+    "recheck": 0
+  },
+  "cap": 50,
+  "delta": 0,
+  "dropped": {
+    "retryCapExceeded": {
+      "items": 0,
+      "seeds": 0
+    },
+    "safeguardSkipped": {
+      "items": 0,
+      "seeds": 0
+    }
+  },
+  "droppedScreenVote": {
+    "items": 0
+  },
+  "generatorMeanPerRun": {
+    "cacheRead": 13975.25,
+    "cacheWrite": 20509.0,
+    "input": 8.0,
+    "output": 14698.25
+  },
+  "labelRates": {
+    "turns": {
+      "counts": {
+        "false": 25,
+        "true": 25
+      },
+      "n": 50,
+      "p": {
+        "false": 0.5,
+        "true": 0.5
+      }
+    },
+    "understanding": {
+      "counts": {
+        "false": 20,
+        "true": 30
+      },
+      "n": 50,
+      "p": {
+        "false": 0.4,
+        "true": 0.6
+      }
+    }
+  },
+  "labeller": {
+    "cacheRead": {
+      "F": 11754.666666666668,
+      "c": 198.25333333333333
+    },
+    "cacheWrite": {
+      "F": 3166.125,
+      "c": 256.3175
+    },
+    "input": {
+      "F": 8.0,
+      "c": 0.0
+    },
+    "output": {
+      "F": 700.125,
+      "c": 42.6575
+    }
+  },
+  "missingCueCheck": {
+    "pilot": {
+      "failed": false,
+      "p": 0.7569444444444444,
+      "strata": [
+        {
+          "concordantRate": 0.0,
+          "counterCueRate": 0.5,
+          "m0": 14,
+          "m1": 2,
+          "stratum": "clear|false",
+          "x": 1,
+          "y": 0
+        },
+        {
+          "concordantRate": 0.0,
+          "counterCueRate": 0.0,
+          "m0": 14,
+          "m1": 3,
+          "stratum": "clear|true",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "concordantRate": 0.5714285714285714,
+          "counterCueRate": 0.0,
+          "m0": 7,
+          "m1": 2,
+          "stratum": "near-miss|false",
+          "x": 0,
+          "y": 4
+        },
+        {
+          "concordantRate": 0.0,
+          "counterCueRate": 0.0,
+          "m0": 4,
+          "m1": 4,
+          "stratum": "near-miss|true",
+          "x": 0,
+          "y": 0
+        }
+      ],
+      "sumX": 1
+    },
+    "recheck": null,
+    "state": "passed"
+  },
+  "n": 100,
+  "planFactor": 1.3,
+  "point": "guard-judge",
+  "recheckProjection": null,
+  "reprojectedTokens": {
+    "guard-judge": {
+      "generationRuns": 42,
+      "itemVotes": 3120,
+      "labelRuns": 63,
+      "tokens": {
+        "cacheRead": 1946055,
+        "cacheWrite": 1860554,
+        "input": 840,
+        "output": 794526,
+        "total": 4601975
+      }
+    },
+    "join-in-judge": {
+      "generationRuns": 21,
+      "itemVotes": 1560,
+      "labelRuns": 33,
+      "tokens": {
+        "cacheRead": 990659,
+        "cacheWrite": 935026,
+        "input": 432,
+        "output": 398313,
+        "total": 2324430
+      }
+    },
+    "message-type-classifier": {
+      "generationRuns": 32,
+      "itemVotes": 2340,
+      "labelRuns": 48,
+      "tokens": {
+        "cacheRead": 1475345,
+        "cacheWrite": 1408045,
+        "input": 640,
+        "output": 603769,
+        "total": 3487799
+      }
+    }
+  },
+  "reruns": 0,
+  "rngSeeds": [
+    310113205,
+    386081784,
+    1876126175,
+    2758528957,
+    3838522226
+  ],
+  "screenHits": {
+    "dropped": {
+      "bindingMismatch": 0,
+      "formMismatch": {},
+      "screenHits": 0
+    },
+    "firstPass": {},
+    "regeneration": 0
+  },
+  "stakeholderDecision": {
+    "cap": 50,
+    "decidedOn": "2026-11-11",
+    "outcome": "proceed",
+    "ref": "pilot report n=100 delta=0 cap=50, cue check passed; stakeholder 2026-11-11 'no worries about token cost today, lets go full speed ahead'; generator Opus 4.8 per stakeholder after safeguard RCA"
+  },
+  "voids": {},
+  "voteTie": 0
+}
