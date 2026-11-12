@@ -27,6 +27,7 @@ from decisionmodels.lmstudio import (
     LMStudioCallFailed,
     LMStudioCallTimeout,
     OverLimit,
+    failure_kind,
 )
 
 _OVER_LIMIT_ROWS = [
@@ -260,6 +261,21 @@ _BAD_BODIES: list[tuple[str, Any, list[dict[str, Any]]]] = [
         _with(_choice_body(), probabilities=[{"value": "zzz", "probability": 0.5}]),
         [CHOICE_Q],
     ),
+    ("answer-type-list", _with(_predicate_body(0.5), type=[]), [PREDICATE_Q]),
+    ("answer-type-dict", _with(_predicate_body(0.5), type={}), [PREDICATE_Q]),
+    ("choice-list", _choice_body([]), [CHOICE_Q]),
+    ("choice-dict", _choice_body({}), [CHOICE_Q]),
+    ("choice-nested-list", _choice_body([["question"]]), [CHOICE_Q]),
+    (
+        "probabilities-value-list",
+        _with(_choice_body(), probabilities=[{"value": [], "probability": 0.5}]),
+        [CHOICE_Q],
+    ),
+    (
+        "probabilities-value-dict",
+        _with(_choice_body(), probabilities=[{"value": {}, "probability": 0.5}]),
+        [CHOICE_Q],
+    ),
     ("confidence-out-of-range", _with(_choice_body(), confidence=2), [CHOICE_Q]),
     ("question-unanswered", _predicate_body(0.5), [PREDICATE_Q, CHOICE_Q]),
     (
@@ -286,6 +302,7 @@ def test_a_body_that_breaks_the_contract_is_a_failure_without_a_status(
         client.decide("x", questions, model="laya", timeout_s=1.0)
     assert info.value.status is None
     assert info.value.body is None
+    assert failure_kind(info.value) == "malformed"
 
 
 @pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity"])
@@ -301,6 +318,7 @@ def test_an_unparseable_body_is_a_failure_without_a_status() -> None:
     with pytest.raises(LMStudioCallFailed) as info:
         client.decide("x", [PREDICATE_Q], model="laya", timeout_s=1.0)
     assert info.value.status is None and info.value.body is None
+    assert failure_kind(info.value) == "malformed"
 
 
 # --- over-limit (plan3 §3.3, §3.5) -------------------------------------------------------------
@@ -328,9 +346,11 @@ def test_decide_through_an_http_error_follows_over_limit_jsonl(row: dict[str, An
         assert result.wallClockMs >= 0.0
         assert math.isfinite(result.wallClockMs)
         return
-    with pytest.raises(LMStudioCallFailed) as info:
+    prefix = rf"POST /v1/decisions: HTTP {row['status']}"
+    with pytest.raises(LMStudioCallFailed, match=prefix) as info:
         client.decide("x", [PREDICATE_Q], model="laya", timeout_s=3.0)
     assert info.value.status == row["status"]
+    assert failure_kind(info.value) == "http"
     assert info.value.body == (row["body"] or "")  # a failed error-body read is ""
 
 
@@ -340,6 +360,7 @@ def test_an_http_200_error_body_is_a_failure_not_an_over_limit() -> None:
     with pytest.raises(LMStudioCallFailed) as info:
         client.decide("x", [PREDICATE_Q], model="laya", timeout_s=1.0)
     assert info.value.status is None
+    assert failure_kind(info.value) == "malformed"
 
 
 def test_an_over_limit_clock_measures_the_failed_call() -> None:
@@ -438,6 +459,9 @@ def test_a_transport_failure_is_classified_on_connect(
     assert type(info.value) is expected
     if expected is LMStudioCallFailed:
         assert info.value.status is None and info.value.body is None  # type: ignore[attr-defined]
+        assert failure_kind(info.value) == "connection"
+    else:
+        assert failure_kind(info.value) == "timeout"
 
 
 @pytest.mark.parametrize(
@@ -524,14 +548,17 @@ def test_a_chat_body_without_usable_content_is_a_failure(reply: Any) -> None:
     with pytest.raises(LMStudioCallFailed, match="chat/completions") as info:
         client.chat([], model="m", temperature=0.0, max_tokens=1, timeout_s=1.0)
     assert info.value.status is None and info.value.body is None
+    assert failure_kind(info.value) == "malformed"
 
 
 def test_a_chat_http_error_carries_status_and_body_and_never_an_over_limit() -> None:
     (row,) = [r for r in _OVER_LIMIT_ROWS if r["case"] == "body-document-at-500"]
     client, _ = _client(_http_error(500, row["body"].encode()))
-    with pytest.raises(LMStudioCallFailed) as info:
+    prefix = r"POST /api/v0/chat/completions: HTTP 500"
+    with pytest.raises(LMStudioCallFailed, match=prefix) as info:
         client.chat([], model="m", temperature=0.0, max_tokens=1, timeout_s=1.0)
     assert info.value.status == 500 and info.value.body == row["body"]
+    assert failure_kind(info.value) == "http"
 
 
 def test_a_chat_timeout_is_a_timeout() -> None:
@@ -608,6 +635,7 @@ def test_residency_passes_the_timeout_through() -> None:
         {"data": [{"id": "laya"}]},
         {"data": [{"id": 3, "state": "loaded"}]},
         {"data": [{"id": "laya", "state": None}]},
+        {"data": [{"id": "laya", "state": 5}]},
     ],
 )
 def test_residency_malformed_body_is_a_failure_with_no_status(reply: Any) -> None:
@@ -615,6 +643,7 @@ def test_residency_malformed_body_is_a_failure_with_no_status(reply: Any) -> Non
     with pytest.raises(LMStudioCallFailed, match=r"GET /api/v0/models") as info:
         client.residency()
     assert info.value.status is None and info.value.body is None
+    assert failure_kind(info.value) == "malformed"
 
 
 def test_residency_one_bad_row_fails_the_whole_read() -> None:
@@ -625,9 +654,10 @@ def test_residency_one_bad_row_fails_the_whole_read() -> None:
 
 def test_residency_http_error_carries_the_status() -> None:
     client, _ = _client(_http_error(503, b"down"))
-    with pytest.raises(LMStudioCallFailed, match="HTTP 503") as info:
+    with pytest.raises(LMStudioCallFailed, match=r"GET /api/v0/models: HTTP 503") as info:
         client.residency()
     assert info.value.status == 503
+    assert failure_kind(info.value) == "http"
 
 
 def test_residency_timeout_is_a_timeout() -> None:
@@ -642,8 +672,162 @@ def test_residency_connection_failure_is_a_failure_with_no_status() -> None:
     with pytest.raises(LMStudioCallFailed, match="connection failed") as info:
         client.residency()
     assert info.value.status is None
+    assert failure_kind(info.value) == "connection"
 
 
 def test_residency_state_is_compared_exactly_not_case_folded() -> None:
     client, _ = _client(_models_body(("laya", "Not-Loaded")))
     assert client.residency() == [lmstudio.ResidentModel("laya", "Not-Loaded")]
+
+
+# --- the failure kind (plan4 §3.11, U6f.1c) -----------------------------------------------------
+
+
+def test_the_kind_is_required_and_closed() -> None:
+    with pytest.raises(TypeError):
+        LMStudioCallFailed("m", status=None, body=None)  # type: ignore[call-arg]
+    with pytest.raises(ValueError, match="kind"):
+        LMStudioCallFailed("m", status=None, body=None, kind="other")
+    with pytest.raises(ValueError, match="timeout"):
+        LMStudioCallFailed("m", status=None, body=None, kind="timeout")
+
+
+def test_http_is_the_kind_iff_a_status_is_set() -> None:
+    with pytest.raises(ValueError, match="http"):
+        LMStudioCallFailed("m", status=None, body=None, kind="http")
+    for kind in ("connection", "malformed"):
+        with pytest.raises(ValueError, match="http"):
+            LMStudioCallFailed("m", status=503, body="", kind=kind)
+    assert failure_kind(LMStudioCallFailed("m", status=503, body="", kind="http")) == "http"
+
+
+def test_a_timeout_reads_as_the_timeout_kind() -> None:
+    assert failure_kind(LMStudioCallTimeout("slow")) == "timeout"
+    assert LMStudioCallTimeout("slow").kind == "timeout"
+
+
+def test_failure_kind_refuses_a_foreign_exception() -> None:
+    with pytest.raises(TypeError):
+        failure_kind(ValueError("x"))  # type: ignore[arg-type]
+
+
+def _call(route: str, client: LMStudio) -> Any:
+    if route == "decide":
+        return client.decide("x", [PREDICATE_Q], model="laya", timeout_s=1.0)
+    if route == "chat":
+        return client.chat([], model="m", temperature=0.0, max_tokens=1, timeout_s=1.0)
+    return client.residency()
+
+
+_ROUTE_FAILURES: list[tuple[str, Callable[[], Any], str]] = [
+    ("http-503", lambda: _http_error(503, b"down"), "http"),
+    ("http-400-unreadable", lambda: _http_error(400, None), "http"),
+    ("refused", lambda: urllib.error.URLError(ConnectionRefusedError("no")), "connection"),
+    ("incomplete-read", lambda: http.client.IncompleteRead(b"x"), "connection"),
+    ("socket-error", lambda: ConnectionResetError("reset"), "connection"),
+    ("timeout", lambda: TimeoutError("slow"), "timeout"),
+    ("url-timeout", lambda: urllib.error.URLError(TimeoutError("slow")), "timeout"),
+    ("not-json", lambda: b"<html>", "malformed"),
+    ("json-but-wrong-shape", lambda: [1], "malformed"),
+    ("empty-object", lambda: {}, "malformed"),
+]
+
+
+@pytest.mark.parametrize("route", ["decide", "chat", "residency"])
+@pytest.mark.parametrize(
+    ("make", "kind"),
+    [(m, k) for _, m, k in _ROUTE_FAILURES],
+    ids=[i for i, _, _ in _ROUTE_FAILURES],
+)
+def test_every_failure_of_every_route_has_exactly_one_kind(
+    route: str, make: Callable[[], Any], kind: str
+) -> None:
+    client, _ = _client(make())
+    with pytest.raises(lmstudio.LMStudioError) as info:
+        _call(route, client)
+    assert failure_kind(info.value) == kind
+    assert (kind == "http") == (getattr(info.value, "status", None) is not None)
+
+
+# --- a 2xx body can never escape the taxonomy (P43-M1) ------------------------------------------
+
+_DEEP = 200_000
+_BIG_INT = "9" * 401  # under json's 4,300-digit cap, so json.loads accepts it; float() overflows
+
+
+def _pred_raw(probability: str) -> bytes:
+    answer = f'{{"type":"predicate","name":"advance","probability":{probability}}}'
+    return f'{{"answers":[{answer}]}}'.encode()
+
+
+def _choice_raw(confidence: str, entry_probability: str = "0.5") -> bytes:
+    entry = f'{{"value":"other","probability":{entry_probability}}}'
+    return (
+        '{"answers":[{"type":"choice","name":"kind","choice":"other",'
+        f'"probabilities":[{entry}],"confidence":{confidence}}}]}}'
+    ).encode()
+
+
+_HOSTILE_BODIES: list[tuple[str, bytes]] = [
+    ("deep-arrays", b"[" * _DEEP + b"]" * _DEEP),
+    ("deep-objects", b'{"a":' * _DEEP + b"1" + b"}" * _DEEP),
+    ("deep-unclosed", b"[" * _DEEP),
+    ("huge-int-score", _pred_raw(_BIG_INT)),
+    ("huge-negative-int-score", _pred_raw("-" + _BIG_INT)),
+    ("huge-int-confidence", _choice_raw(_BIG_INT)),
+    ("huge-int-entry-probability", _choice_raw("0.5", _BIG_INT)),
+    ("overlong-int", _pred_raw("9" * 5000)),
+    ("exponent-overflow", _pred_raw("1e999")),
+    (
+        "lone-surrogate-name",
+        b'{"answers":[{"type":"predicate","name":"\\ud800","probability":0.5}]}',
+    ),
+    ("nul-bytes", b"\x00\x00"),
+    ("bom", b"\xef\xbb\xbf{}"),
+    ("invalid-utf8", b"\xff\xfe\x00{"),
+    ("empty", b""),
+    ("huge-string", b'"' + b"x" * 2_000_000 + b'"'),
+    ("choices-null-question", b'{"choices":null,"answers":null}'),
+]
+
+
+@pytest.mark.parametrize("route", ["decide", "chat", "residency"])
+@pytest.mark.parametrize(
+    ("raw",), [(r,) for _, r in _HOSTILE_BODIES], ids=[i for i, _ in _HOSTILE_BODIES]
+)
+def test_a_hostile_2xx_body_is_always_a_malformed_failure(route: str, raw: bytes) -> None:
+    client, _ = _client(raw)
+    with pytest.raises(LMStudioCallFailed) as info:
+        _call(route, client)
+    assert failure_kind(info.value) == "malformed"
+    assert info.value.status is None and info.value.body is None
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [_pred_raw(_BIG_INT), _choice_raw(_BIG_INT), _choice_raw("0.5", _BIG_INT)],
+    ids=["probability", "confidence", "entry-probability"],
+)
+def test_a_decide_score_too_big_for_a_float_is_malformed_not_an_overflow(raw: bytes) -> None:
+    questions = [CHOICE_Q if b'"choice"' in raw else PREDICATE_Q]
+    client, _ = _client(raw)
+    with pytest.raises(LMStudioCallFailed, match="/v1/decisions") as info:
+        client.decide("x", questions, model="laya", timeout_s=1.0)
+    assert failure_kind(info.value) == "malformed"
+
+
+# --- the kind is read from the exception, never from its message (P43-m1) ------------------------
+
+
+def test_the_kind_is_never_sniffed_from_the_message() -> None:
+    misleading = LMStudioCallFailed(
+        "POST /x: HTTP 503 timed out", status=None, body=None, kind="connection"
+    )
+    assert failure_kind(misleading) == "connection"
+    assert failure_kind(LMStudioCallTimeout("connection failed: HTTP 503")) == "timeout"
+    http = LMStudioCallFailed("GET /x: timed out after 1s", status=503, body="", kind="http")
+    assert failure_kind(http) == "http"
+    malformed = LMStudioCallFailed(
+        "POST /x: HTTP 500: connection failed", status=None, body=None, kind="malformed"
+    )
+    assert failure_kind(malformed) == "malformed"

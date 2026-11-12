@@ -3591,3 +3591,49 @@ One shared `_send` ladder, so the GET inherits the POST's exact taxonomy with no
 
 ### Proposed REVIEW.md lines
 None.
+
+## Pass 43 — U6f.1c gate: the closed failure kind on `lmstudio.py` (2026-11-12)
+
+**Scope.** Uncommitted diff of `decision-models/` `decisionmodels/lmstudio.py`, `tests/test_lmstudio.py`, `README.md`, `AGENTS.md`, `docs/HISTORY.md` against plan4 v1.8 §3.11 (`failureKind`, `AbortRecord`), the U6f.1c row (§4.4, §5), fit note §4, P41-M1 and P42-m1/m2. Root `REVIEW.md` applied. Ran `tests/test_lmstudio.py` (140 passed, on a scratch copy and the tree); ad-hoc malformed inputs through a fake opener (`.../scratchpad/adv.py`, 50 cases over decide/chat/residency/transport); 12 own mutants of my own on a scratch copy (`.../scratchpad/mut.py`); the tree untouched.
+**Verdict: needs changes.** One major: two classes of server body still escape as non-`LMStudioError` exceptions, so a fit crashes with no `AbortRecord`, which §3.11's "every failure has one kind" forbids.
+CPG: considered, not relevant — one ~460-line client module, read directly.
+
+### Findings
+**P43-M1 (major, reproduced) — `RecursionError` and `OverflowError` escape the taxonomy.**
+- *Deep JSON:* `_parse` (`lmstudio.py:332`) catches only `ValueError`; `json.loads(b"["*200000+b"]"*200000)` raises `RecursionError` (not a `ValueError`). Escapes from `decide`, `chat` and `residency` (all three reproduced; deeply nested objects too).
+- *Huge integer score:* `_probability` (`:167`) does `float(raw)` on any `int`; `"probability": 1e400-as-digits` (an integer literal of 401 digits, under CPython's 4,300-digit parse cap, so `json.loads` accepts it) raises `OverflowError: int too large to convert to float`. Reproduced for `probability` (predicate), `confidence` and a `probabilities[].probability` path (same function). A 5,000-digit literal is already `ValueError` in `json.loads` and maps to `malformed` correctly.
+Why it matters: both are "a 2xx body that is unusable", exactly `malformed`'s definition; an `OverflowError` in the middle of a fit is a crash with no record, and `failure_kind` cannot classify it. Fix: `_parse` catches `(ValueError, RecursionError)`; `_probability` raises `_Malformed` on `OverflowError` (or tests `isinstance(raw, int) and abs(raw) > 1` first: an int outside `[0, 1]` is refused before `float()`). Tests: the two inputs above through each route in `_ROUTE_FAILURES` style (a `("deep-json", ...)` and a `("huge-int-score", ...)` row for decide at least, `deep-json` for all three). The guard is `except`-shaped, so state it in the same unit's test row, not as a new assertion inside the step it guards.
+Coverage probe (not a list): enumerate every call in `_parse`, `_parse_answers`, `decide`, `chat`, `residency` that can raise on *data-dependent* input and grep that each is guarded: `json.loads` (ValueError, RecursionError, UnicodeDecodeError ⊂ ValueError), `float(`/arithmetic on a parsed number, `in`/`.get`/indexing on parsed values, `set(`/`dict` keys from parsed values. I did this: only these two remain.
+
+**P43-m1 (minor, mutant) — "never from message text" is unpinned.** Planted `failure_kind` returning `"timeout" if "timed out" in str(exc) else exc.kind`, and another returning `"http"` when the message starts `POST`/contains `HTTP`: both survive (140 passed). The spec's explicit rule has no test that a misleading message cannot change the kind. Add one: `LMStudioCallFailed("POST /x: HTTP 503 timed out", status=None, body=None, kind="connection")` reads `connection`, and `LMStudioCallTimeout("connection failed")` reads `timeout`.
+
+**P43-n1 (nit) — a bad `base_url` raises a bare `ValueError`** (`LMStudio("nourl").residency()` → `unknown url type`, from `Request(...)`, outside `_send`). Caller configuration, not a server failure; fine for a typed-decision fit if `fit.py` validates the URL at start, but say so in the U6f.8a row (or leave: it fails loudly before any item). A custom opener raising a non-`OSError`/`HTTPException` is likewise out of scope. Also `status=0` and `status=True` pass the iff-check (`is not None`); harmless (`HTTPError.code` is an int from the wire).
+
+### Checks that pass
+1. *Transport raise sites (ran):* `TimeoutError`, `socket.timeout`, `URLError(TimeoutError)` → `timeout`; `URLError(str|None)`, `ConnectionResetError`, `BadStatusLine`, `InvalidURL`, `SSLError`, `IncompleteRead` on `read()` → `connection`; `HTTPError` (readable, unreadable body, any code) → `http` with `status`. Every `_send` site sets a kind; no site can trip the constructor (`http` always carries `exc.code`, others `None`).
+2. *Body sites (ran):* non-UTF-8, trailing garbage, empty, array/null top level, `answers: null`, dict `name`, `type` null/float/list, bool/nested `choice`, non-object `probabilities` entry, NaN, 5,000-digit int, bad chat `choices` shapes, residency non-list `data`/`None` row/numeric id → each exactly `malformed`, `status` `None`. A 2xx with a bad body is `malformed` with `status=None`: no conflict with "status iff `http`"; `AbortRecord.status` is `None` for it, as §3.11's table says.
+3. *OverLimit:* only `http` 500 + marker reaches it; every other `http` raises; mutants (500 without marker; 502) killed. `decide` re-raises the original exception, so its `kind` is intact.
+4. *Accessor:* `failure_kind` returns `kind` for both types, `TypeError` for anything else (tested); `LMStudioCallTimeout.kind` is a class attribute, so it cannot be mis-set. Constructor strictness only fires on a coder bug at a raise site, and the route sweep (3 routes x 10 failures) asserts exactly one kind and `http` iff `status`.
+5. *Tests:* beyond the coder's 37, 12 own mutants: killed 8 (chat no-content site relabelled, guard narrowed to dict on `choice`, over-limit any-500, URLError-timeout relabelled, class `kind` wrong, over-limit 502, `_parse` relabelled only for `POST`); survivors: the two message-sniffing ones (P43-m1) and two equivalents (`_unhashable` also catching `None`, `bool(status)` vs `is not None`).
+6. *Fit note §4 / plan:* `http` and `malformed` evidence, `timeout`/`connection` not: the kinds map to the plan's table cell for cell (the `connection` row's "`URLError` other than a timeout, `HTTPException`, `OSError`" matches the three sites). No exemption logic is in this unit.
+7. *Docs:* `AGENTS.md` 2,384 words, no line over 700 (`awk` empty); the `lmstudio.py` clause is replaced, not appended, but is now one long cell: acceptable under the bar. README says "live tests ... (`decide`, `chat` and `residency`)" (P42-m1 fixed); P42-m2 fixed (`state: 5` row, the `GET /api/v0/models: HTTP 503` and `POST ...: HTTP n` prefixes asserted). The stale `status=None` texts of the module and class docstrings are replaced; model-bench untouched and not imported. HISTORY's "exactly one kind" sweep claim holds only for the enumerated failures, which is the P43-M1 gap; its "37 mutants, no survivors" is accurate for the coder's set.
+
+### What's solid
+One kind at every site decided by the raiser; constructor and accessor are small and closed; the route x failure sweep is the right altitude and the `http`-iff-status invariant is tested on all three routes; `_unhashable` closes the P41-M1 `TypeError` for exactly the JSON types that can occur.
+
+### Proposed REVIEW.md lines
+None.
+
+## Pass 44 — U6f.1c fix round (2026-11-12)
+
+**Scope.** Re-check of Pass 43's findings against the tree. Ran `tests/test_lmstudio.py` (192 passed), my Pass 43 hostile inputs again, and a new sweep on a scratch copy; the tree untouched.
+**Verdict: approve.** No new finding.
+CPG: considered, not relevant — one client module, read directly.
+
+- **P43-M1 — fixed.** `_parse` catches `(ValueError, RecursionError)`; `_probability` turns `OverflowError` into `_Malformed`. Re-ran every Pass 43 escape case: 200,000-deep arrays and objects and 401-digit ints (probability, confidence, `probabilities[].probability`, negative too) are now `malformed` on decide, chat and residency. New probes, all `malformed` or a normal return: nesting depths 100-1100 (step 3) inside `choice`, `type`, `probabilities[].value` and `probability` (the near-limit `repr` of the offending value in the message never raised); lone-surrogate names, choices and chat content; `1e999`, `-1e999`, `1E+99999999999`; a 200,000-answer body; a 900-deep residency row. Broad `except Exception` correctly not used. Remaining escapes are only exceptions raised by the opener itself (a `ValueError`/`UnicodeEncodeError`/`KeyError`/`MemoryError`/`RecursionError` thrown from `urlopen`) and a bad `base_url`, which are caller or environment faults, not server responses (see P43-n1).
+- **P43-m1 — fixed.** Re-planted both message-sniffing `failure_kind` mutants (`"timed out"` and `"HTTP"` in `str(exc)`): each now reddens a test (was: survived).
+- **P43-n1 — unchanged, accepted.** Bare `ValueError` on a bad `base_url` stays; `fit.py` should validate the URL at start (U6f.8a row may say so).
+- **Mutants (own, new):** `_parse` catching `ValueError` only, `RecursionError` only, and the overflow handler removed: all killed.
+
+### Proposed REVIEW.md lines
+None.

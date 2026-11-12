@@ -57,8 +57,8 @@ votes of a settled round (U5.8b: `Campaign.queue_votes`, `decisionmodels/labels.
 pilot (U5.8c: `decisionmodels/pilot.py`, below), and rounds and top-up (U5.9: the message-type
 tranche, the top-up planner, the spend halt and `decisionmodels/diagnostics.py`, below), and
 `finalize` with the cells, splits and `generation.json` (U5.10: `decisionmodels/finalize.py`).
-Fitting's LM Studio client is built (U6f.1: `decisionmodels/lmstudio.py`, `decide` and `chat`, with
-the over-limit rule; `pytest -m live` runs the two live tests against a real server, default
+Fitting's LM Studio client is built (U6f.1/U6f.1b/U6f.1c: `decisionmodels/lmstudio.py`, `decide`, `chat` and
+`residency`, with the over-limit rule and a closed `failure_kind`; `pytest -m live` runs the live tests (`decide`, `chat` and `residency`) against a real server, default
 `http://localhost:1234`, override with `DM_LMSTUDIO_URL`), and so is the policy copy (U6f.2:
 `decisionmodels/policy.py`, `apply_policy` and the bounds and hand-off refusals, pinned by a byte-copy of
 model-bench's `apply-policy.jsonl`); `fit.py` and what follows are not.
