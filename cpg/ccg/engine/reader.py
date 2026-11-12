@@ -17,7 +17,7 @@ What it guarantees, by construction:
 
 Rows come back in a total order (``None`` last), whatever the server sent: a fact must not depend on read order (FR-19).
 Consumed by ``ccg.engine.bfs`` (P1-22): the walk calls :meth:`CypherReader.read` with an expansion name and sorts nothing; ``count(x)`` of ``name_in``/``name_out`` is interpreted there.
-SEAM(P1-39): ``snapshot`` and ``units`` are registered and returned raw; the stamp and the staleness block are built there.
+``snapshot`` and ``units`` are registered and returned raw; the stamp and the staleness block are built from them in ``ccg.engine.staleness`` and ``ccg.engine.answer_build``.
 """
 from __future__ import annotations
 

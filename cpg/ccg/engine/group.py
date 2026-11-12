@@ -2,7 +2,7 @@
 
 Contract: ``-answer-spec.md`` §5.1 (``directness``), §5.4 (a folded group is display only and enumerates every member as a full item), §6 (the ``items`` order, the
 ``groups`` order); ``-answer-spec2.md`` §3.5 (a ``unit`` item sorts by its ``rootPath`` in the path slot and 0 in the line slot); ``docs/plans/connected-code-graph.md`` §3.7
-and ``-p0-ml.md`` §8.3 (the fold rule). This module builds neither the answer document nor the builder (P1-39): it orders what the walk found and decides what folds.
+and ``-p0-ml.md`` §8.3 (the fold rule). The answer document is ``ccg.engine.answer_build``'s (P1-39b); this module orders what the walk found and decides what folds.
 
 **Distance (2)** is the walk's: :attr:`ccg.engine.bfs.Item.distance` is the sum of the increments of the chain's rows, which are 1 for exactly the inter-function hops
 (call, link, shared state, config) and 0 for every step inside a function (``-answer-spec2.md`` §1.2; pinned in ``tests/test_engine_bfs_pins.py``). Nothing here
@@ -12,7 +12,7 @@ recomputes it; :class:`Placed` carries it and :func:`directness` reads it (``dir
 the §6 rule, so the listing is grouped repository, component, distance (:meth:`Listing.sections`). Every key is compared as a Python ``str`` (code points: never a locale's
 collation, never normalized, so a composed and a decomposed spelling are two keys), and no step reads an insertion order: the same items in any order, with their facts
 and units in any order, give the same listing. A key is graph data and only compared, never interpreted. **This is the order of raw code points, not the canonical order**
-(NFC strings, ``ccg.answer.canonicalize``): P1-39 normalizes before emission and must not treat this order as the answer's bytes.
+(NFC strings, ``ccg.answer.canonicalize``): ``ccg.engine.answer_build`` normalizes before emission and never treats this order as the answer's bytes.
 
 **The fold.** An item is another candidate of a *resolved* call site only when its **own arrival** is the candidate hop (:func:`candidate_site`): its first ``possible`` hop is
 ``CALLS_NAME`` with reason ``resolution-unverified`` (the walk derives that reason from ``count(x)`` of the ``name_in``/``name_out`` read, ``ccg.engine.bfs``) and nothing
@@ -24,7 +24,7 @@ one**: the items and the members together are exactly the input, each once.
 
 **The precision figure stops here.** ``fold_languages`` is the only input the fold reads, a set of ``Unit.language`` values (TS/JS is ``"javascript"``): :func:`fold_languages`
 derives it from per-language measured ``(correct, resolved sites)`` pairs by the rule of ``-p0-ml.md`` §8.3 (at or above :data:`FOLD_THRESHOLD`, over at least
-:data:`MIN_RESOLVED_SITES` sites, in every configuration measured; a language not measured is listed). The pairs are supplied by P1-39 behaviour (5) (the P0 fitness
+:data:`MIN_RESOLVED_SITES` sites, in every configuration measured; a language not measured is listed). The pairs are supplied by P1-39 behaviour (5), ``ccg.engine.answer_build.FOLD_MEASURED`` (the P0 fitness
 report §a1.2; P1-15's M2 for an adopted indexer), not by this module; :class:`FoldGroup` and :class:`Listing` carry no figure, so the renderers receive none.
 
 **The reverse question (4)** is the ``depends-on`` column of the same walk, marked and grouped by the same code (:data:`QUESTIONS`, :func:`listing`).

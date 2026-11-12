@@ -651,3 +651,40 @@ def test_sections_build_one_section_object_per_section_not_one_per_item(monkeypa
 def test_a_section_after_the_first_collects_all_its_items():
     items, facts, units = many([("a", dict(unit="u1", root="a")), ("b1", dict(unit="u2", root="b", line=1)), ("b2", dict(unit="u2", root="b", line=2)), ("b3", dict(unit="u2", root="b", line=3))])
     assert [(s.unit, [p.item.id for p in s.items]) for s in group.group_items(items, facts, units).sections()] == [("u1", ["a"]), ("u2", ["b1", "b2", "b3"])]
+
+
+# ---------------------------------------------------------------------------------------------- spec2 §6 (P1-23c N1): a candidate reached through an argument row is listed, not folded
+
+def arg_row_graph():
+    """Flag-true unit (the ``arg(i)`` rows need it): ``F`` calls ``f`` at ``c``, which resolves to ``T`` and name-matches ``X``; both have a parameter ``x`` at index 0."""
+    g = G(unit="ua", flow=True)
+    set_root(g, "ua", "r")
+    for s in ("F", "T", "X"):
+        g.sym(s)
+    g.param("pT", "T", index=0, name="x"), g.param("pX", "X", index=0, name="x")
+    g.site("c", "F", callee="f"), g.calls("c", "T"), g.calls_name("c", "X", name="f")
+    return g
+
+
+def test_an_impact_candidate_reached_through_an_argument_row_stays_listed_in_no_group_while_the_depends_on_control_folds_it_into_group_c():
+    from ccg.engine import state as S
+    g = arg_row_graph()
+    got = group.listing(MemoryReader(g), ("CallSite", "c"), S.path_state("a0"), fold_languages={"python"})
+    x = next(p for p in got.items if p.item.id == "X")
+    assert [(s["edge"]["type"], s["edge"]["dir"]) for s in x.item.chain[1:]] == [("CALLS_NAME", "->"), ("HAS_PARAM", "->"), ("HAS_PARAM", "<-")]
+    assert (x.item.status, x.item.reason) == ("possible", "resolution-unverified")
+    assert group.candidate_site(x.item) is None and got.groups == ()
+    assert {p.item.id for p in got.items} == {"F", "T", "X"}      # F: the function that owns the anchor call site
+    control = group.listing(MemoryReader(g), ("Symbol", "F"), question="depends-on", fold_languages={"python"})
+    assert [(f.key, [m.item.id for m in f.members]) for f in control.groups] == [("c", ["X"])]
+    assert [p.item.id for p in control.items if p.item.id == "X"] == []
+
+
+@pytest.mark.parametrize("direction", ["<-", "->"])
+def test_the_argument_row_tail_has_no_site_in_either_direction_branch(direction):
+    tail = [hop("Symbol", "X", "path", edge("HAS_PARAM", "->")), hop("Symbol", "X", "end", edge("HAS_PARAM", "<-"))]
+    if direction == "->":
+        chain = [hop("CallSite", "c", "path"), hop("Symbol", "X", "path", CAND_OUT), *tail]
+    else:
+        chain = [hop("Symbol", "anchor", "value"), hop("CallSite", "c", "path", CAND), *tail]
+    assert group.candidate_site(synth("x", status="possible", chain=chain)[0]) is None

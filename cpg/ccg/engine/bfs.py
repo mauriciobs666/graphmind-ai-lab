@@ -30,8 +30,8 @@ that site's ``CallSite`` only. A ``Link`` is never an anchor (:class:`WalkError`
 tie-break term after length), which differ exactly on a labelled row. A point's unit is its owner's, joined before a gated row is asked.
 
 Not built here (named, never half-built):
-  * the answer builder (P1-39). Item grouping, distance and the reverse question are ``ccg.engine.group`` (P1-23c); the ``site`` hop schema landed in P1-23a.
-  * SEAM(P1-39): ``Link`` evidence (``lifted_of``, ``bound_out``; ``candidate_counts`` reads ``candidate_count``, ``None`` for "N unknown"), the ``Hop``/``Item`` documents, ``staleness`` and the stamp.
+  * the answer builder. Item grouping, distance and the reverse question are ``ccg.engine.group`` (P1-23c); the ``Hop``/``Item`` documents, the ``Link`` evidence (``lifted_of``, ``bound_out``; ``candidate_counts`` reads ``candidate_count``, ``None`` for
+    "N unknown", which the builder refuses), ``staleness`` and the stamp are ``ccg.engine.answer_build`` (P1-39b) and ``ccg.engine.staleness`` (P1-39a); the ``site`` hop schema landed in P1-23a.
   * **Rows of graph note §6.2 not walked in P1** (the plan's "as written" is narrowed to these four, each on purpose): depends-on ``BOUND_BY ->`` (a ``Link`` is left only by
     ``TO ->``/``TO_UNIT ->``, spec2 §3.3 V5), depends-on ``CONSUMES ->`` (no item kind carries it), ``VIA ->`` in ``arg(i)`` state (needs ``paramMap``, not stored,
     ``-p1-graph.md`` G12), and from a ``Param``, ``<-`` then ``CALLS <-`` (P5's RCA). Also not walked: ``READS``/``WRITES``, ``DEFINED_BY``, ``LAUNCHES``, ``RAN``,
@@ -198,7 +198,7 @@ def fingerprint(record: Mapping[str, Any]) -> str:
 
 #: ``recipe.algorithm.version`` -> the pinned fingerprint of the definition that version names. P1 ships one entry. P1-22 pinned ``1.1`` first; P1-23 re-pinned it (the
 #: flag gates, the ``function`` state and its labelled rows, ``flow:r``, ``Row.item``; the V-both-only item rules left the shipped record) because no answer carrying ``1.1`` has been emitted on ``main``: the
-#: builder (P1-39) does not exist, so ``1.1`` is unpublished and its literal may still move (``-answer-spec2.md`` §1.2). From P1-39 a change is ``1.2``.
+#: builder (P1-39b, ``ccg.engine.answer_build``) is the first thing that emits it: from its first commit on ``main`` ``1.1`` is published and a change is ``1.2`` (``-answer-spec2.md`` §1.2).
 ALGORITHM_VERSIONS: dict[str, str] = {"1.1": "5cf047c14e43da44d0363707d3036080"}
 
 
@@ -525,8 +525,8 @@ def candidate_counts(reader: Reader, pairs: Sequence[tuple[str, str]]) -> dict[t
 
     **A pair the read returns no row for is ``None``, "N unknown", never ``0`` or ``1``** (``docs/reviews/connected-code-graph-p1-21.md`` Pass 2 G1): the read joins on
     ``consumerKey`` and the assembler writes the key only when it is not null, and it joins the site's owner; an absent key or a site with no owner therefore returns nothing,
-    and ``1`` would claim "no other candidate" where the answer is "not known". Open for P1-39: the schema's ``candidateCount`` is ``>= 1`` on every ``VIA`` hop, so the
-    builder must raise a build error for a ``None``, not default it.
+    and ``1`` would claim "no other candidate" where the answer is "not known". The schema's ``candidateCount`` is ``>= 1`` on every ``VIA`` hop, so the builder
+    (``ccg.engine.answer_build``) raises a ``BuildError`` for a ``None``, never defaults it.
     """
     wanted = list(dict.fromkeys(tuple(p) for p in pairs))
     out: dict[tuple[str, str], int | None] = dict.fromkeys(wanted)
@@ -875,8 +875,9 @@ def walk(reader: Reader, anchor: Node, state: State | None = None, *, column: st
 
     The bounded result is everything reachable within the bound (``-answer-spec2.md`` §4.1): at each state the walk keeps every arrival no other arrival dominates
     on ``(possible hops, distance)`` and expands the state once per kept arrival.
-    **A missing anchor raises** :class:`GraphDataError` (the flow gate reads the anchor's unit and finds none); before P1-23 it returned an empty walk. An anchor comes from the
-    resolver over the same snapshot, so it is a stale-snapshot race: P1-39 maps it to a build error, never to a "no impact" answer.
+    **A missing point anchor raises** :class:`GraphDataError` (the flow gate reads the anchor's unit and finds none). A missing ``Symbol``, ``ContractPoint`` or ``ConfigEntry`` anchor does
+    not: no gated row leaves it, so the walk is empty. An anchor comes from the resolver over the same snapshot, so a missing one is a stale-snapshot race: the builder re-reads
+    the anchor and reports a build error, never a "no impact" answer (``ccg.engine.answer_build``).
     """
     bound = config.DEFAULT_DEPTH_BOUND if bound is None else bound
     level_guard = config.LEVEL_GUARD if level_guard is None else level_guard

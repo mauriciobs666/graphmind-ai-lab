@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Extends:** `docs/plans/connected-code-graph-answer-spec.md`
 
-Revised 2026-11-12: §1.2 definition (item rules, record content), §4.1/§4.2 (bounded result, final arrival set) and the `site` hop state (§3.6, §6, §7, §8), from the P1-22 gate (`docs/reviews/connected-code-graph-p1-22.md` Q1, F5, N1); §5's call-site state, argument-row gate, depends-on entry gate and data-error rule, from the P1-23b gate (`docs/reviews/connected-code-graph-p1-23b.md`, decisions 1, 2, 3, 6); the §6 row on v1 §5.4's group membership, from the P1-23c gate (`docs/reviews/connected-code-graph-p1-23c.md` F1).
+Revised 2026-11-12: adds the stamp-source row (§6) and the P1-39b staleness-source tests (§8).
 
 This document states **only the changes** P1 makes to `docs/plans/connected-code-graph-answer-spec.md` (v1.3, "v1"
 below); anything not named here is as v1 says. It is step P1-00 of `docs/plans/connected-code-graph-p1-answers.md`,
@@ -443,7 +443,8 @@ predates graph model v1. Passages not listed stand.
 | §5.1 `subject`; §6 `items` order key | `UnitSubject` is added, with its order key (§3.5) |
 | §5.2, `Bound` with `keyPath` required; "A `Link` hop is followed by the consumer `CallSite` hop" (V5) | §3.2, §3.3; the depends-on shape is in §3.3 |
 | §7.4 (3), "`bfs-v1` does not follow `CONTROLLED_BY` at all" | True of `1.0`. `1.1` follows it in flag-true units (P1-22 behaviour 3, with the C1 cycle test) and not in flag-false units (§5) |
-| §5.4, `other-possible-callees`: "the unresolved other candidates of one resolved call site" | Stands, and is read narrowly: a candidate is an item whose **own arrival** is the candidate hop, i.e. the item's first `possible` hop is `CALLS_NAME`/`resolution-unverified` and nothing follows it but the arrival itself (depends-on: the hop is the chain's last; impact: the hop is followed only by the `HAS_CALL <-` owner hop). An item further along a chain through a candidate (a caller of the candidate, the candidate's own callee) is not a candidate of that site: it is never a member, stays in `items`, and is `possible`/`resolution-unverified` by V7 (first possible hop). The fold is a display grouping decided per language by P1-39 (`docs/plans/connected-code-graph-p1-answers.md` P1-39 (5)) |
+| §5.4, `other-possible-callees`: "the unresolved other candidates of one resolved call site" | Stands, and is read narrowly: a candidate is an item whose **own arrival** is the candidate hop, i.e. the item's first `possible` hop is `CALLS_NAME`/`resolution-unverified` and nothing follows it but the arrival itself (depends-on: the hop is the chain's last; impact: the hop is followed only by the `HAS_CALL <-` owner hop). In the impact column a candidate reached through an argument row (`CALLS_NAME ->`, then `HAS_PARAM ->`, then the owner's `HAS_PARAM <-`) is therefore not an own arrival: it stays in `items`, `possible`/`resolution-unverified` (fail-open, nothing dropped), while the same item folds in the depends-on column. An item further along a chain through a candidate (a caller of the candidate, the candidate's own callee) is not a candidate of that site: it is never a member, stays in `items`, and is `possible`/`resolution-unverified` by V7 (first possible hop). The fold is a display grouping decided per language by P1-39 (`docs/plans/connected-code-graph-p1-answers.md` P1-39 (5)) |
+| §4.2 "Source" ("`:Snapshot` … has no verdict-log properties … the engine mints `0` and the constant"); §6 "the engine mints the verdict-log pair until P4"; carry-over C8 | `:Snapshot` stores `verdictLogOffset` `0` and `verdictLogHash` `EMPTY_VERDICT_LOG_HASH` from P1 (`-p1-graph.md` §3; the assembler writes them). The engine reads them and refuses a snapshot whose stored pair differs, or lacks it, before P4 (`ccg.engine.staleness.stamp`); it mints nothing. `snapshotId` is read from the node as before. C8 narrows to P4's chaining rule for offset > 0 |
 | Carry-over C4, C6 | C6 is closed here. C4's rule is §4, and its implementation is P1-22's |
 
 ## 7. Schema and validator changes
@@ -597,6 +598,14 @@ The mutation check (index §8) covers:
 - V18 (a)–(e);
 - V19;
 - the 1.1 `facts_bytes` projection.
+
+**Answer-builder staleness tests.** One answer-level test per source of a `staleness.units[]` entry, each with that unit on
+no other path and each killed by dropping its source from the builder's input to `staleness_block`: (1) an item's own
+unit; (2) a hop's unit on a chain (a hop in a unit no item is in); (3) a `lifted` unit; (4) a `bound` unit; (5) a unit
+reached only by a folded group member (so it is absent from `Listing.items`). A source that is missed fails V9 loudly, but
+only these tests say which source. A further test covers the N1 candidate rule (§6, v1 §5.4 row): a candidate reached through
+an argument row (`CALLS_NAME ->`, `HAS_PARAM ->`, `HAS_PARAM <-`) stays in `items` as `possible`/`resolution-unverified`
+in the impact column and folds in the depends-on column, with a control for an own-arrival candidate.
 
 ## 9. Risks and open questions
 
