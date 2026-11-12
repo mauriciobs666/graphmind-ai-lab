@@ -65,8 +65,9 @@ The following are **not** part of it, because they cannot change a fact:
 - MAJOR stays `1` for `algorithm.id` `bfs-v1`. A walk that is not a level-synchronous BFS with a state per entry
   gets a new `algorithm.id`, and that is a schema change (the `id` is a `const`).
 - Versions are never reused, and a published entry is never edited. An entry is **published** once an answer
-  carrying it has been emitted on `main`, which first happens at P1-39. Before that its literal may be re-pinned.
-  P1-23 re-pins `1.1` after P1-22 first pins it.
+  carrying it has been emitted on `main`. `1.1` is published by `ccg/engine/answer_build.py`; its fingerprint pin
+  (`ALGORITHM_VERSIONS` in `ccg/engine/bfs.py`) is `5cf047c14e43da44d0363707d3036080`, and any change to it needs a new
+  algorithm version.
 
 **Mechanism (P1-22 builds it).**
 - The walk executes its row table as data. The row table is a record the walk interprets, not a description kept
@@ -233,7 +234,7 @@ that site's `CallSite`. The hop **reports it as it is**: `state: "site"`, which 
   makes a chain that reaches the same `Link` once from the entry (`site`) and once by `TO <-` (`value`) a V13 cycle, though it is no cycle.
 - **No evidence is lost, none is added.** `accessPath` stays absent (V3: present exactly when the state is `path`); the `siteId` is the
   following `CallSite` hop's `id` and the `Link` hop's `lifted[].siteId` (V5), so the state value carries no data field.
-- **The enum change is additive**, a minor (v1 §9), and 1.1 is unpublished: `Hop.state` gains `site` (§7.1).
+- **The enum change is additive**, a minor (v1 §9), and 1.1 is published (§1.2): `Hop.state` gains `site` (§7.1).
 - **Shape (V5, 1.1).** On every document, a hop in state `site` is a `Link` hop entered by `BOUND_BY <-` from a `ConfigEntry` hop, and is
   followed by its `CallSite` hop (`VIA <-`), never by a wiring `ConfigEntry` hop and never last; no other hop has state `site`. On a `"1.1"`
   document the converse also holds: a `Link` hop entered by `BOUND_BY <-` from a `ConfigEntry` hop is in state `site`. A `"1.0"` document

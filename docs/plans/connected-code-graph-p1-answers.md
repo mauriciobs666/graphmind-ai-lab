@@ -118,7 +118,7 @@ the earlier gains `Extended by:`. It states **only** the changes:
   recomputes to the item's own cost (possible hops, distance, length) through the chain's own arrivals; (8) `algorithm.version`
   per `-answer-spec2.md` §1.2: the walk executes its row table as a data record (so P1-23's candidate walks are table variants, and only the shipped
   one is pinned), `ALGORITHM_VERSIONS` maps
-  `"1.1"` to the record's pinned fingerprint (P1-23 re-pins it before P1-39 publishes it), and a test fails if a
+  `"1.1"` to the record's pinned fingerprint (`5cf047c14e43da44d0363707d3036080` in `ccg/engine/bfs.py`; `1.1` is published by `ccg/engine/answer_build.py`), and a test fails if a
   row is added without changing it.
 - **Done / Gate:** `analyst`; mutation check on the arrival-dominance comparison, the bound and the `unexplored` count,
   and on every row of the table × each field (a field no code reads is removed from the table, not pinned).
