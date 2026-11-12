@@ -73,7 +73,7 @@ templates, `guard_hook.py` and `settings.json`. Fitting (U6) and what follows it
   side-check drop, random subsample per cell (keyed by the **majority** label), split by seed
   (eval first), eval-vs-calibration/train shingle drop last; `train` is empty. **A dropped eval
   slot is refilled from the same cell's unused candidates**, tested against the same
-  calibration/train shingles (calibration and train never change; no drop, no extra RNG draw);
+  calibration/train shingles (calibration and train never change; a run with no drop is unchanged; each deficit cell's shuffle advances the shared rng, so the walk is order-dependent across cells);
   `surplus` is what is left and `dropped.shingleSplit` counts assigned drops only. **Floors gate
   every finalize**: a cell under `evalFloorPerCell` (eval or calibration) refuses, writes no
   dataset, and `finalize()` (not the pure `build_dataset`) appends a `floor-short` event (`n` and
@@ -148,7 +148,11 @@ the three** that `three_votes`, `label_votes` and `vote_ties` read.
   gives the seeds per short stratum, `max ⌈shortfall / P̂(ℓ | s)⌉`; it names no label or intent, the
   draw is the design restricted to the stratum, and `P̂ = 0` raises `UnboundedCell(label, stratum)`,
   which `queue_topup` records as the `unbounded-halt` (`unboundedCell`, with the Wilson bound; no
-  `store/refusal`). `project_topup` (pure; seeds over round-1 `seeds`, live labelling rate, four
+  `store/refusal`). **A `floor-short` record raises its cells' targets**: `State.floor_targets()`
+  gives cell → `n + need` from the newest record, `topup_counts(extra=…)` uses `max(cell_target,
+  extra)` (never the sum; `need` 0 changes nothing) and `finalize._short_cells` calls the same
+  function; a null `need` (every eval item dropped) raises `UnboundedCell` for that cell, the same
+  halt, so the stakeholder routes (probe, decline, re-pin) are the way out. `project_topup` (pure; seeds over round-1 `seeds`, live labelling rate, four
   token classes) halts with `spend` when twice the projection exceeds round 1's total *including*
   `labelling-restart`/`tranche-restart` retirements (`Batch.retired_by`; a generation restart's are
   no round's); the reason prints both totals. A plain `resolve` lets a spend halt through and is

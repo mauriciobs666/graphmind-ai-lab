@@ -565,6 +565,19 @@ class State:
         return [seed for lists in draws.values()
                 for group in itertools.zip_longest(*lists) for seed in group if seed is not None]
 
+    def floor_targets(self) -> dict[tuple[str | None, str], int]:
+        """plan4 §3.6 "Drop-aware top-up": the newest `floor-short` record's raised targets, cell
+        → `n + need` (the need counts on top of the items the refusal held; `topup_counts` takes
+        the larger of it and `cell_target`). Empty with no record. A cell whose `need` is null
+        (every assigned eval item dropped: no survival rate) has no target: `UnboundedCell`,
+        the same halt as P̂ = 0."""
+        out: dict[tuple[str | None, str], int] = {}
+        for cell in (self.floor_short or {}).get("cells", ()):
+            if cell["need"] is None:
+                raise UnboundedCell(cell["label"], cell["stratum"])
+            out[(cell["stratum"], cell["label"])] = cell["n"] + cell["need"]
+        return out
+
     def labelled_cells(self) -> list[tuple[str | None, str]]:
         """plan4 §3.6 "Top-up planner": each labelled item's cell, as (design stratum, label):
         an accepted item with three votes and a majority. The stratum is its seed's, `None` for a
@@ -1246,9 +1259,13 @@ def cell_target(role: str) -> int:
     return 2 * load_point(role).definition["cells"]["evalPerCell"]
 
 
-def topup_counts(role: str, labelled: Iterable[tuple[str | None, str]]) -> dict[str | None, int]:
+def topup_counts(role: str, labelled: Iterable[tuple[str | None, str]],
+                 extra: Mapping[tuple[str | None, str], int] | None = None
+                 ) -> dict[str | None, int]:
     """plan4 §3.6 "Top-up planner", pure: the seeds to draw per short design stratum, from the
-    labelled items' cells (design stratum, label). A cell is short below `cell_target`. Per short
+    labelled items' cells (design stratum, label). A cell is short below its target:
+    `cell_target`, or the larger `extra` target of a cell a `floor-short` record raised
+    ("Drop-aware top-up": `State.floor_targets`, never the sum). Per short
     stratum `s` it is `max over its short cells ℓ of ⌈shortfall_ℓ / P̂(ℓ | s)⌉`, with `P̂(ℓ | s)`
     the share of `s`'s labelled items that carry ℓ (integer arithmetic). Nothing here names an
     intent: the draw is the design's own, restricted to `s`. A short cell with no labelled item
@@ -1258,12 +1275,13 @@ def topup_counts(role: str, labelled: Iterable[tuple[str | None, str]]) -> dict[
         labels.vote_key(v) for v in load_point(role).expected)), 0)
     for cell in labelled:
         counts[cell] += 1
-    target = cell_target(role)
+    base, raised = cell_target(role), extra or {}
     out: dict[str | None, int] = {}
     for stratum in design_strata(role):
         size = sum(n for (s, _), n in counts.items() if s == stratum)
         draw = 0
         for (cell_stratum, label), n in counts.items():
+            target = max(base, raised.get((cell_stratum, label), 0))
             if cell_stratum != stratum or n >= target:
                 continue
             if n == 0:
@@ -1683,15 +1701,15 @@ class Campaign:
         """plan4 §3.6 "Top-up planner" (phase `full`; plan6 §3.8): when every round is labelled
         and a cell is short, plan the next `genRound`. A pending probe (`resolve --probe-topup`)
         is planned first, before `topup_counts`: 25 seeds of its stratum alone. A short cell
-        with no labelled item raises `UnboundedCell`, which records the `unboundedCell` halt
-        (naming the cell, with the Wilson bound over the stratum's labelled items) and queues
-        nothing. Before it is issued the spend projection is compared (`project_topup`); over
-        half of round 1's tokens it records the `spend-halt` (`resolve` lets it through,
-        `--decline-topup` ends top-ups) and queues nothing. Otherwise it records the
-        `topup-plan` and draws every stratum before any run issues, the first with `begin_round`
-        and each further one with `extend=True`, then cuts the pooled seeds into runs
-        (`_queue_unbatched`). `[]` when nothing is short, a round is unlabelled, a halt is open
-        or top-ups were declined."""
+        with no labelled item, or a `floor-short` cell with a null `need`, raises `UnboundedCell`,
+        which records the `unboundedCell` halt (naming the cell, with the Wilson bound over the
+        stratum's labelled items) and queues nothing. Before it is issued the spend projection
+        is compared (`project_topup`); over half of round 1's tokens it records the `spend-halt`
+        (`resolve` lets it through, `--decline-topup` ends top-ups) and queues nothing.
+        Otherwise it records the `topup-plan` and draws every stratum before any run issues, the
+        first with `begin_round` and each further one with `extend=True`, then cuts the pooled
+        seeds into runs (`_queue_unbatched`). `[]` when nothing is short, a round is
+        unlabelled, a halt is open or top-ups were declined."""
         state = self.state()
         if (state.init["phase"] != "full" or state.topup_declined or state.halt is not None
                 or not state.rounds
@@ -1703,7 +1721,8 @@ class Campaign:
             need: dict[str | None, int] = {state.probe["designStratum"]: PROBE_SEEDS}
         else:
             try:
-                need = topup_counts(state.init["point"], state.labelled_cells())
+                need = topup_counts(state.init["point"], state.labelled_cells(),
+                                    state.floor_targets())
             except UnboundedCell as cell:
                 items = sum(1 for stratum, _ in state.labelled_cells()
                             if stratum == cell.stratum)

@@ -822,6 +822,9 @@ def test_a_cell_under_its_floor_refuses_every_finalize_short_cell_or_not(
     bench.generate()
     bench.vote(bench.agree)
     for short in (False, True):
+        if short:           # the first record's null `need` makes the cell's top-up due (U5.9b)
+            refused(bench, "top-up is still the stakeholder's to decline", short=True)
+            decline(bench)
         refused(bench, r"below its floor of 2 \(\(true, understanding\): eval 0, calibration 4\)",
                 floor_short=True, short=short, rng_seed=100 + short)
     cells = bench.camp.state().floor_short["cells"]
@@ -983,8 +986,11 @@ def test_an_eval_cell_under_its_floor_after_the_refill_refuses_and_records_floor
     assert by_cell == {US: (12, 4), UF: (12, 2), TS: (14, 9)}          # turns/false is not short
     state = bench.camp.state()
     assert SEED in state.held_rng_seeds
+    with pytest.raises(CampaignRefused, match="driver run` plans the top-up"):
+        bench.finalize("vy", rng_seed=SEED + 1)        # the raised targets make the top-up due
+    decline(bench)
     with pytest.raises(CampaignRefused, match=f"RNG seed {SEED} is already held"):
-        bench.finalize("vy", rng_seed=SEED)
+        bench.finalize("vy", short=True, rng_seed=SEED)
     assert not (bench.data / "guard-judge").exists()
     assert state.floor_short["rngSeed"] == SEED
 

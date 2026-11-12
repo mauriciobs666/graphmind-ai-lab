@@ -3410,3 +3410,30 @@ New scope: refill, floor gate, U5.10c row, re-pin. Rework growth: the U5.10 row 
 
 ### Growth-stops check
 New scope only. HISTORY entry cites the sections. U5.9b and U5.10d remain unbuilt; the U5.9b `need`-null rule (P35-m2) is the one plan edit this gate asks for. Proposed `REVIEW.md` lines: none.
+
+## Pass 36 — U5.9b gate: drop-aware top-up (2026-11-12)
+
+**Verdict: approve with suggestions.** No blocker. `CPG: considered, not relevant — a diff of three functions, read in full`.
+
+**Scope.** Uncommitted `decision-models/` diff (`State.floor_targets`, `topup_counts(extra)`, `queue_topup`, `_short_cells`, `test_topup.py` +15, two changed `test_finalize.py` tests, docs) against plan4 v1.4 §3.6 "Drop-aware top-up" and the U5.9b done list. Scratch copy and tmp campaigns under `scratchpad/`; no `driver run`, claude or `~/dm-campaigns`.
+
+**Dispositions (Pass 35).** m1 fixed (the "no extra draw" phrase replaced in `split.py`, AGENTS.md, HISTORY by the order-dependence statement). m2 fixed as ruled (null `need` raises `UnboundedCell`; see P36-m1 for the exit). m3 fixed (`test_install.py` 610/799 back to `claude-opus-5-5`; `git diff` shows only the named rows changed). n1 fixed ("refusal 5's floors", "no dataset is written"). Verified by reading the diff; AGENTS.md 2,274 words, no line over 700.
+
+**Executed.**
+- Mutants (scratch, `test_topup` + `test_finalize`): 9 of 10 killed: `extra` ignored; sum instead of max; `need` alone as target; `n + need + 1`; null need skipped; `queue_topup` not passing `extra`; `_short_cells` not passing it; the largest raised target applied to every label of the stratum; the record ignored (`[:0]`). The one survivor (`n >= target` to `n > target`) is equivalent: a cell at its target has shortfall 0 and draws 0. Fixtures are per-cell varied (n 132/…, different strata).
+- **Real scenario, tmp campaign (message-type, real sizes: 5 cells × 132 labelled, per-cell 60, floor 52; spans planted in 20 escalation eval items and 4 of the 12 unused):** `finalize --rng-seed` refuses with eval 48 / calibration 60 and appends `floor-short` `{n: 132, need: 6}`; `floor_targets` = 138; `_short_cells` and `topup_counts` give 30 seeds (⌈6·660/132⌉); a second finalize refuses "cells are short ... `driver run` plans the top-up"; `queue_topup` writes `topup-plan` [[None, 30]], `seed-draw`, `round-start`, two `queued` and no halt (projection 53,722 against 1,021,140 round-1 tokens). After the planted top-up round is generated and voted (escalation n 138, total 690) `_short_cells` is empty and `finalize` with a fresh seed passes (escalation eval 60, `d` 0.17, walked 11, refilled 10). The top-up items carry no overlap by construction, so this shows the path works, not that the floor is guaranteed (plan4 §3.6 says so).
+- Null-need path (tmp campaign, record `need: null` appended): `queue_topup` records `unboundedCell` and plans nothing; `resolve --probe-topup` plans the 25-seed probe; after the probe round is labelled `queue_topup` raises `unboundedCell` again, because the record persists.
+
+### Findings
+
+**P36-m1 (minor, plan gap to name) — a null-need cell has no automatic exit, and the halt text is wrong for it.** *Executed.* (i) The record persists until a newer `floor-short`, so `--probe-topup` plans its 25 seeds and then halts again with the cell now holding more items than the record's `n`; `finalize` is also refused while the halt is open. The only route is `resolve --decline-topup`, then `finalize --short` (floors still apply; a failing split appends a newer `floor-short`, which replaces the null). That is coherent with the ruling and with plan6 §3.8's stakeholder routes, but §3.6/U5.9b should say it, and say the probe does not clear a null need. Cheaper alternative the architect may prefer: `floor_targets` ignores a null-need record once the cell's labelled count exceeds the record's `n`, so the probe route works as for P̂ = 0. (ii) The halt text reads "cell (escalation) holds no labelled item" (`_halt_text` for `unboundedCell`), false for a null need (the cell holds 12 here); the `_short_cells` text was updated, the halt text was not. Add the cause to the `unbounded-halt` event or reword.
+
+**P36-m2 (minor) — the plan states no refusal order, and the two changed tests rely on one.** After a `floor-short` the raised target makes the cell short, so the order in `finalize()` is: version exists, readiness, top-up due (`--short` needs a decline), recheck, held seed, floors. This is coherent: a held-seed re-run before the top-up round is refused for the more useful reason, and the held-seed refusal is still asserted (after `decline`, `short=True`), with a new assertion that the top-up-due refusal comes first. The changed tests lose nothing they asserted. One consequence worth a sentence in §3.6: after a floor refusal an operator cannot simply retry with a fresh seed while the point is "short"; the top-up round (spend halt applies) or a decline plus `--short` is required. For join-in, whose surplus is large, that makes a lottery retry impossible by design.
+
+**P36-n1 (nit)** — HISTORY's "mutants on a scratch copy are listed in the run record" names no mutants; list them or drop the clause.
+
+### What's solid
+The max-not-sum target and the n-based record answer P34-B1 exactly (observed 132 → 138 → 30 seeds); the `unboundedCell` reuse needs no new halt kind; the spend halt, decline and reopen paths are untouched (`test_topup` covers the over-half halt and reopen).
+
+### Growth-stops check
+New scope (U5.9b). Plan4 got one line (row item (7)); no restated history. Proposed `REVIEW.md` lines: none.

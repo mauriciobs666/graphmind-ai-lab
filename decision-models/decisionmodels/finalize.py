@@ -22,7 +22,7 @@ only other writes are a `recheck-halt` and a `floor-short` (below). `--rng-seed`
 4. a short cell (fewer labelled items than `campaign.cell_target`): with no decline recorded the
    top-up is still due; after `resolve --decline-topup` the refusal names `--short` and
    `resolve --reopen-topup`. **`--short`** needs that decline, then finalizes with the short cells
-   printed (the floors of 5 still apply). `--short` on a point with no short cell is an ordinary
+   printed (refusal 5's floors still apply). `--short` on a point with no short cell is an ordinary
    finalize.
 5. **a cell under its floor** (`point.json`'s `evalFloorPerCell`, on every finalize): an eval or
    calibration cell below it after the splits, the shingle drop and the refill. `build_dataset`
@@ -185,9 +185,10 @@ def hash_refusal(state: State) -> str | None:
 def _short_cells(state: State, role: str) -> list[str]:
     """The cells below the planner's target, named for a refusal; empty when none is short."""
     try:
-        need = campaign.topup_counts(role, state.labelled_cells())
+        need = campaign.topup_counts(role, state.labelled_cells(), state.floor_targets())
     except campaign.UnboundedCell as exc:
-        return [f"({exc.label}, {exc.stratum or 'no stratum'}) has no labelled item"]
+        return [f"({exc.label}, {exc.stratum or 'no stratum'}) has no draw count "
+                "(no labelled item, or every eval item dropped)"]
     return [f"stratum {stratum or 'none'} needs about {seeds} more seeds"
             for stratum, seeds in need.items()]
 
@@ -297,7 +298,7 @@ def build_dataset(state: State, *, rng_seed: int, side_check: frozenset[str],
             f"a cell is below its floor of {floor} ("
             + "; ".join(f"({f.label}, {f.stratum or 'no stratum'}): eval {f.sizes['eval']}, "
                         f"calibration {f.sizes['calibration']}" for f in short)
-            + "): nothing is written; a `floor-short` event records each cell's n and the "
+            + "): no dataset is written; a `floor-short` event records each cell's n and the "
             "labelled items it needs, and holds the RNG seed",
             [{"stratum": f.stratum, "label": f.label, "n": f.n, "need": f.need(floor)}
              for f in short])

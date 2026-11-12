@@ -21,7 +21,7 @@ import pytest
 from test_campaign import GUARD_COMMAND, PROCEED, Clock, pilot_report
 from test_votes import BOTH_AS_FIXTURE
 
-from decisionmodels import campaign, driver, exchange, seeds
+from decisionmodels import campaign, driver, exchange, finalize, seeds
 from decisionmodels.campaign import Campaign, CampaignRefused, Serve, Stop
 
 TOKENS = {"input": 10, "cacheWrite": 20, "cacheRead": 30, "output": 40}   # 100 per run
@@ -1219,3 +1219,183 @@ def test_a_spend_halt_written_before_the_live_total_existed_still_prints() -> No
             "projection": {"projectedTokens": 10.0, "roundOneTokens": 20}}
     text = campaign._halt_text(halt)
     assert "projected 10 tokens against round 1's total 20" in text and "live" not in text
+
+
+# --- the drop-aware top-up: a `floor-short` record raises its cells' targets (U5.9b) -------------
+
+
+def message_cells(counts: tuple[int, ...]) -> list[tuple[str | None, str]]:
+    return [(None, label) for label, n in zip(MESSAGE_TYPES, counts, strict=True)
+            for _ in range(n)]
+
+
+def record(label: str, n: int, need: int | None, stratum: str | None = None) -> dict[str, Any]:
+    return {"stratum": stratum, "label": label, "n": n, "need": need}
+
+
+def floor_short(camp: Campaign, *cells: dict[str, Any], seed: int = 1) -> None:
+    camp._append({"event": "floor-short", "rngSeed": seed, "cells": list(cells)})
+
+
+def test_with_no_extra_target_the_planner_is_unchanged() -> None:
+    labelled = message_cells((132, 120, 120, 100, 120))
+    assert campaign.topup_counts("message-type-classifier", labelled) == {None: 119}
+    assert campaign.topup_counts("message-type-classifier", labelled, extra={}) == {None: 119}
+
+
+def test_a_cell_held_at_132_with_need_6_plans_the_draw_for_a_target_of_138() -> None:
+    # order holds 132 of 612 (cell target 120: not short on its own); target 138 is 6 short:
+    # ceil(6 * 612 / 132) = ceil(27.8) = 28. `cell_target + need` (126) would plan nothing.
+    labelled = message_cells((132, 120, 120, 120, 120))
+    assert campaign.topup_counts("message-type-classifier", labelled) == {}
+    assert campaign.topup_counts("message-type-classifier", labelled,
+                                 extra={(None, "order"): 138}) == {None: 28}
+
+
+def test_a_cell_below_its_target_with_a_record_has_the_larger_target_not_the_sum() -> None:
+    # escalation holds 100 (short by 20 already); a record of need 10 gives 110 < 120: the
+    # ordinary draw ceil(20 * 592 / 100) = 119 stands. A need of 30 gives 130: ceil(30*592/100).
+    labelled = message_cells((132, 120, 120, 100, 120))
+    assert campaign.topup_counts("message-type-classifier", labelled,
+                                 extra={(None, "escalation"): 110}) == {None: 119}
+    assert campaign.topup_counts("message-type-classifier", labelled,
+                                 extra={(None, "escalation"): 130}) == {None: 178}
+
+
+def test_the_largest_draw_over_the_raised_cells_of_a_stratum_wins() -> None:
+    labelled = message_cells((132, 125, 120, 120, 120))                 # n = 617
+    extra = {(None, "order"): 138, (None, "question"): 135}
+    # order: ceil(6 * 617 / 132) = 29; question: ceil(10 * 617 / 125) = 50
+    assert campaign.topup_counts("message-type-classifier", labelled, extra=extra) == {None: 50}
+
+
+def test_a_cell_that_reached_its_raised_target_plans_nothing() -> None:
+    labelled = message_cells((138, 120, 120, 120, 120))
+    assert campaign.topup_counts("message-type-classifier", labelled,
+                                 extra={(None, "order"): 138}) == {}
+
+
+def test_a_raised_target_applies_within_its_own_design_stratum_only() -> None:
+    labelled = (cells("turns", "true", 200) + cells("turns", "false", 210)
+                + cells("understanding", "true", 200) + cells("understanding", "false", 200))
+    out = campaign.topup_counts("guard-judge", labelled, extra={("turns", "false"): 215})
+    assert out == {"turns": ceil_div(5 * 410, 210)}                      # 10; understanding: none
+
+
+def ceil_div(a: int, b: int) -> int:
+    return -(-a // b)
+
+
+def test_the_state_reads_each_record_as_n_plus_need_and_the_newest_replaces_the_older(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = message_round_one(tmp_path, monkeypatch, target=13)
+    floor_short(camp, record("order", 132, 6), record("question", 125, 10))
+    assert camp.state().floor_targets() == {(None, "order"): 138, (None, "question"): 135}
+    floor_short(camp, record("complaint", 126, 3), seed=2)
+    assert camp.state().floor_targets() == {(None, "complaint"): 129}
+    assert camp.state().floor_targets() != {}
+
+
+def test_no_record_means_no_raised_targets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+                                            ) -> None:
+    camp = message_round_one(tmp_path, monkeypatch, target=13)
+    assert camp.state().floor_targets() == {}
+
+
+def test_a_null_need_raises_the_unbounded_cell_naming_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = message_round_one(tmp_path, monkeypatch, target=13)
+    floor_short(camp, record("order", 12, 3), record("other", 12, None))
+    with pytest.raises(campaign.UnboundedCell, match=r"\(other, no stratum\)"):
+        camp.state().floor_targets()
+
+
+def test_the_next_driver_run_plans_the_ordinary_draw_for_the_recorded_need(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # round 1 holds 12 per label of 60 (cell target 13). order: n = 12, need 2 -> 14: ceil(2 *
+    # 60 / 12) = 10 seeds; question: need 3 -> 15: 15 seeds, the pooled draw's max. The rest have
+    # no record and their own 13 is 1 short (5 seeds).
+    camp = message_round_one(tmp_path, monkeypatch, target=13)
+    floor_short(camp, record("order", 12, 2), record("question", 12, 3))
+    action = camp.next()
+    assert isinstance(action, Serve) and action.kind == "generate"
+    (plan,) = events_of(camp, "topup-plan")
+    assert plan["genRound"] == 2 and plan["strata"] == [[None, 15]]
+    assert camp.state().halt is None
+
+
+def test_a_need_of_zero_changes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = message_round_one(tmp_path, monkeypatch, target=13)
+    floor_short(camp, record("order", 12, 0), record("question", 12, 0))
+    camp.next()
+    (plan,) = events_of(camp, "topup-plan")
+    assert plan["strata"] == [[None, 5]]                                 # the ordinary draw
+
+
+def test_a_record_alone_plans_a_round_when_every_cell_holds_its_cell_target(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = message_round_one(tmp_path, monkeypatch, target=12)           # 12 per label: full
+    assert camp.queue_topup() == []
+    floor_short(camp, record("order", 12, 4))                            # target 16: ceil(4*60/12)
+    assert camp.queue_topup()
+    (plan,) = events_of(camp, "topup-plan")
+    assert plan["strata"] == [[None, 20]]
+
+
+def test_a_null_need_records_the_unbounded_halt_naming_the_cell_and_plans_nothing(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = message_round_one(tmp_path, monkeypatch, target=12)
+    floor_short(camp, record("order", 12, 4), record("escalation", 12, None))
+    assert camp.queue_topup() == []
+    (halt,) = events_of(camp, "unbounded-halt")
+    assert (halt["label"], halt["stratum"], halt["items"]) == ("escalation", None, 60)
+    state = camp.state()
+    assert state.halt["voidClass"] == "unboundedCell"
+    assert events_of(camp, "topup-plan") == [] and not any(r["genRound"] == 2
+                                                           for r in state.rounds)
+    stop = camp.next()
+    assert isinstance(stop, Stop) and stop.reason == "halted"
+    camp.resolve(decision="no (ref 9)", decline_topup=True)             # the stakeholder routes
+    assert camp.next() == Stop("done", "nothing is pending")
+
+
+def test_a_raised_target_that_projects_over_half_of_round_one_halts_for_spend_and_reopens(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = message_round_one(tmp_path, monkeypatch, target=12)
+    floor_short(camp, record("order", 12, 14))                          # 26: ceil(14*60/12) = 70
+    stop = camp.next()
+    assert isinstance(stop, Stop) and "spend" in stop.detail
+    (halt,) = events_of(camp, "spend-halt")
+    assert halt["genRound"] == 2 and halt["strata"] == [[None, 70]]
+    camp.resolve(decision="no (ref 9)", decline_topup=True)
+    assert camp.next() == Stop("done", "nothing is pending")
+    camp.resolve(decision="reopen (ref 10)", reopen_topup=True)
+    assert isinstance(camp.next(), Stop) and len(events_of(camp, "spend-halt")) == 2
+    camp.resolve(decision="yes (ref 11)")
+    assert isinstance(camp.next(), Serve)
+    assert events_of(camp, "topup-plan")[0]["strata"] == [[None, 70]]
+
+
+def test_a_filled_raised_target_plans_nothing_after_its_round(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = message_round_one(tmp_path, monkeypatch, target=12)
+    floor_short(camp, record("order", 12, 4))
+    assert camp.queue_topup()
+    generate_all(camp, message_item)
+    vote_all_synth(camp, lambda st, ref, vote: "order")                 # the 20 new seeds: order
+    assert camp.state().labelled_cells().count((None, "order")) == 32
+    assert camp.queue_topup() == []
+
+
+def test_finalizes_short_cells_use_the_same_raised_targets(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    labelled = message_cells((132, 120, 120, 120, 120))
+    state = campaign.State()
+    state.floor_short = {"rngSeed": 1, "cells": [record("order", 132, 6)]}
+    state.init = {"point": "message-type-classifier"}
+    monkeypatch.setattr(campaign.State, "labelled_cells", lambda self: labelled)
+    assert finalize._short_cells(state, "message-type-classifier") == [
+        "stratum none needs about 28 more seeds"]
+    state.floor_short = {"rngSeed": 1, "cells": [record("order", 132, None)]}
+    assert finalize._short_cells(state, "message-type-classifier") == [
+        "(order, no stratum) has no draw count (no labelled item, or every eval item dropped)"]

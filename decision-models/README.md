@@ -172,7 +172,10 @@ In a `full` campaign `driver run` keeps going after round 1 is labelled:
   the driver draws the next `genRound`: per short stratum, the most any short cell needs,
   `⌈shortfall / P̂(label | stratum)⌉`, from the **same design restricted to that stratum**, never
   to an intent. All strata are drawn before a run issues, and their seeds are cut into runs
-  together. Rounds repeat until every cell is full. A short cell with no labelled item cannot be
+  together. Rounds repeat until every cell is full. A cell that a `floor-short` record names
+  (finalize's refusal, above) is held to `max(target, n + need)` instead, so the next `driver run`
+  plans the same draw for it; a cell whose `need` is null (every eval item dropped) halts as
+  `unboundedCell` like a cell with no labelled item. A short cell with no labelled item cannot be
   planned: the driver halts (`unboundedCell`), naming the cell and the Wilson 95% upper bound on
   P(label | stratum) over the stratum's labelled items, and writes no `store/refusal`. A plain
   `resolve` is refused. `resolve --probe-topup --decision ...` draws one run of 25 seeds of that

@@ -607,7 +607,7 @@ DEFINITION_PLANTS = [
     ("missing permissionMode", "dm-labeler.md", drop_key("permissionMode"), "permissionMode"),
     ("driver with Bash", "dm-driver.md", swap("Agent(dm-generator, dm-labeler)",
                                                "Agent(dm-generator, dm-labeler), Bash"), "tools"),
-    ("driver model off the pin", "dm-driver.md", swap("claude-sonnet-5-5", "claude-opus-4-8"),
+    ("driver model off the pin", "dm-driver.md", swap("claude-sonnet-5-5", "claude-opus-5-5"),
      "model"),
     ("driver maxTurns off the pin", "dm-driver.md", swap("maxTurns: 3", "maxTurns: 4"),
      "maxTurns"),
@@ -796,7 +796,7 @@ def test_an_effort_other_than_the_installed_pin_is_environmental(tmp_path: Path)
 
 def test_a_model_other_than_the_installed_pin_is_environmental(tmp_path: Path) -> None:
     def plant(run: Any) -> None:
-        run.assistant("msg_s0003")[1]["message"]["model"] = "claude-opus-4-8"
+        run.assistant("msg_s0003")[1]["message"]["model"] = "claude-opus-5-5"
     assert planted(tmp_path, plant) == [(audit.ENVIRONMENTAL, "modelMismatch")]
 
 

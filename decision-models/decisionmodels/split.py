@@ -23,7 +23,8 @@ split by seed is a split by item, and a seed id repeated among candidates is an 
    unused candidates on the same `rng` and walks them; one sharing an 8-token span with any
    calibration or train item is a refill drop (`SplitResult.refill_dropped`), any other joins
    eval, until eval is at its size or the walk ends. Calibration and train never change, and a
-   run with no drop draws nothing more, so its output is what it was before the refill existed.
+   run with no drop has the output it had before the refill existed (each deficit cell's shuffle
+   advances the shared `rng`, so a later cell's walk depends on the cells before it).
 
 Cells and candidates are visited in a fixed order (cells by `str`, candidates by seed id) so a
 recorded `rng_seed` reproduces the split from the same candidates on the same Python minor
