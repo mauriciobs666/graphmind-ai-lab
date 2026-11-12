@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1)
 
-Revised 2026-11-12: P1-22 gate rulings (`docs/reviews/connected-code-graph-p1-22.md` Q1-Q4, N1, N2) folded into P1-22, P1-23 and P1-39 in place.
+Revised 2026-11-12: P1-22 and P1-23c gate rulings (`docs/reviews/connected-code-graph-p1-22.md` Q1-Q4, N1, N2; `docs/reviews/connected-code-graph-p1-23c.md` F1, F2, F4, F6) folded into P1-22, P1-23 and P1-39 in place.
 
 Part of `docs/plans/connected-code-graph-p1.md` (decisions D1–D11, the flow gate §5, step index §7). Contracts:
 answers `docs/plans/connected-code-graph-answer-spec.md` (canonical answer v1, `ccg/answer.py` is its validator),
@@ -155,8 +155,12 @@ the earlier gains `Extended by:`. It states **only** the changes:
   only (call, link, shared state, config); steps inside a function count 0; direct = distance 1; (3) items are
   grouped repository → component → distance, `confirmed` before `possible`, deterministic order, folded groups
   enumerate every member with its own chain; resolved calls' other candidates stay as `possible`/
-  `resolution-unverified`; the builder (this step) decides the fold, at or above the 0.95 precision threshold
-  (never dropped), and the renderers list every group member with its own chain (spec §6), receiving no precision figure; (4) the **reverse question** ("depends on") is the depends-on column with the same marking and grouping.
+  `resolution-unverified`; `group.py` folds an item only when its **own arrival** is the candidate hop (`-answer-spec2.md` §6, the §5.4 row;
+  items past a candidate stay listed), into one group per resolved site, and only for a language in the `fold_languages` set it is given
+  (`fold_languages(measured)`: `-p0-ml.md` §8.3's rule, exact 19/20, at least 60 resolved sites, every configuration measured; a language not in
+  `measured` is listed; keys are `Unit.language` values of the site's unit, TS/JS being `"javascript"`); P1-39 (5) supplies the measured pairs;
+  nothing is dropped, and the renderers list every group member with its own chain (spec §6), receiving no precision figure; the sort key is
+  spec v1 §6's `items` row exactly, with no trailing kind slot (V8 makes ids unique across `items` and members); (4) the **reverse question** ("depends on") is the depends-on column with the same marking and grouping.
 - **Gate:** `analyst`. **Needs:** 22, 18.
 
 ## P1-39 · staleness, stamp, answer builder, superset measurement — `tdd-engineer`
@@ -172,7 +176,18 @@ the earlier gains `Extended by:`. It states **only** the changes:
   validated): the share of those items that each of the four walks of `-p1-ml.md` §3.5
   (as-built, V-flow, V-both, V-union) lists, by language and signature, with the unlisted items' ids and the burden
   per anchor; the rule there picks the shipped walk, which P1-23 implements with its `algorithm.version` bump
-  (`-answer-spec2.md` §1.2); the `ccg-p1-flow-fallback-v1` record is committed before it runs; it runs on a throwaway instance (index §8).
+  (`-answer-spec2.md` §1.2); the `ccg-p1-flow-fallback-v1` record is committed before it runs; it runs on a throwaway instance (index §8); (5) **the fold's inputs** (P1-23 (3)): the builder
+  passes `group.listing`/`group_items` the set `group.fold_languages(measured)`, where `measured` maps a `Unit.language` value to its
+  `(correct, resolved sites)` pairs, one per configuration, from the **headline** table of the P0 fitness report
+  (`docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md` §a1.2, "P off / on"; the override runs of §a1.3 are secondary and
+  not read), transcribed as a committed constant with its citation; TS/JS is keyed `"javascript"`. For a language P1-15 adopted an indexer for,
+  the pairs are P1-15's M2 results on the merged output (`-p1-ml.md` §2.3; the record `ccg-p1-indexer-v1` holds only the pre-registered
+  criteria, not these figures) and replace the P0 pairs; a language P1-15 did not adopt, did not run or ended "not adopted" for keeps its
+  P0 pairs. A language with no pairs (Kotlin) is absent from `measured`, hence listed, never folded. A test asserts that the derived set
+  equals the report's fold/list column (today `javascript` and `go` fold; `python`, `java`, `csharp`, `cpp`, `kotlin` list). P1-39 does not wait on P1-15;
+  (6) the order of `Listing.items`, `groups` and `members` is by raw code point and is **not** the canonical order (the canonical one is by NFC
+  strings, spec v1 §6, which `answer.canonicalize` applies): the builder NFC-normalizes and strips before emission and never takes `group`'s
+  order as the bytes' order.
 - **Gate:** `analyst`; `data-scientist` reads the measurement. **Needs:** 23.
 
 ## P1-24 · renderers — `coder`

@@ -30,7 +30,7 @@ that site's ``CallSite`` only. A ``Link`` is never an anchor (:class:`WalkError`
 tie-break term after length), which differ exactly on a labelled row. A point's unit is its owner's, joined before a gated row is asked.
 
 Not built here (named, never half-built):
-  * item grouping and the builder (P1-23 behaviours (2)-(4), P1-39); the ``site`` hop schema (P1-23 (0)).
+  * the answer builder (P1-39). Item grouping, distance and the reverse question are ``ccg.engine.group`` (P1-23c); the ``site`` hop schema landed in P1-23a.
   * SEAM(P1-39): ``Link`` evidence (``lifted_of``, ``bound_out``; ``candidate_counts`` reads ``candidate_count``, ``None`` for "N unknown"), the ``Hop``/``Item`` documents, ``staleness`` and the stamp.
   * **Rows of graph note §6.2 not walked in P1** (the plan's "as written" is narrowed to these four, each on purpose): depends-on ``BOUND_BY ->`` (a ``Link`` is left only by
     ``TO ->``/``TO_UNIT ->``, spec2 §3.3 V5), depends-on ``CONSUMES ->`` (no item kind carries it), ``VIA ->`` in ``arg(i)`` state (needs ``paramMap``, not stored,

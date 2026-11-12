@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Extends:** `docs/plans/connected-code-graph-answer-spec.md`
 
-Revised 2026-11-12: §1.2 definition (item rules, record content), §4.1/§4.2 (bounded result, final arrival set) and the `site` hop state (§3.6, §6, §7, §8), from the P1-22 gate (`docs/reviews/connected-code-graph-p1-22.md` Q1, F5, N1); §5's call-site state, argument-row gate, depends-on entry gate and data-error rule, from the P1-23b gate (`docs/reviews/connected-code-graph-p1-23b.md`, decisions 1, 2, 3, 6).
+Revised 2026-11-12: §1.2 definition (item rules, record content), §4.1/§4.2 (bounded result, final arrival set) and the `site` hop state (§3.6, §6, §7, §8), from the P1-22 gate (`docs/reviews/connected-code-graph-p1-22.md` Q1, F5, N1); §5's call-site state, argument-row gate, depends-on entry gate and data-error rule, from the P1-23b gate (`docs/reviews/connected-code-graph-p1-23b.md`, decisions 1, 2, 3, 6); the §6 row on v1 §5.4's group membership, from the P1-23c gate (`docs/reviews/connected-code-graph-p1-23c.md` F1).
 
 This document states **only the changes** P1 makes to `docs/plans/connected-code-graph-answer-spec.md` (v1.3, "v1"
 below); anything not named here is as v1 says. It is step P1-00 of `docs/plans/connected-code-graph-p1-answers.md`,
@@ -443,6 +443,7 @@ predates graph model v1. Passages not listed stand.
 | §5.1 `subject`; §6 `items` order key | `UnitSubject` is added, with its order key (§3.5) |
 | §5.2, `Bound` with `keyPath` required; "A `Link` hop is followed by the consumer `CallSite` hop" (V5) | §3.2, §3.3; the depends-on shape is in §3.3 |
 | §7.4 (3), "`bfs-v1` does not follow `CONTROLLED_BY` at all" | True of `1.0`. `1.1` follows it in flag-true units (P1-22 behaviour 3, with the C1 cycle test) and not in flag-false units (§5) |
+| §5.4, `other-possible-callees`: "the unresolved other candidates of one resolved call site" | Stands, and is read narrowly: a candidate is an item whose **own arrival** is the candidate hop, i.e. the item's first `possible` hop is `CALLS_NAME`/`resolution-unverified` and nothing follows it but the arrival itself (depends-on: the hop is the chain's last; impact: the hop is followed only by the `HAS_CALL <-` owner hop). An item further along a chain through a candidate (a caller of the candidate, the candidate's own callee) is not a candidate of that site: it is never a member, stays in `items`, and is `possible`/`resolution-unverified` by V7 (first possible hop). The fold is a display grouping decided per language by P1-39 (`docs/plans/connected-code-graph-p1-answers.md` P1-39 (5)) |
 | Carry-over C4, C6 | C6 is closed here. C4's rule is §4, and its implementation is P1-22's |
 
 ## 7. Schema and validator changes
