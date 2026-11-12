@@ -1,0 +1,1927 @@
+{
+  "generator": {
+    "surface": "claude-code-subagent",
+    "tier": "opus",
+    "model": "claude-opus-4-8",
+    "effort": "medium"
+  },
+  "labeler": {
+    "surface": "claude-code-subagent",
+    "tier": "sonnet",
+    "model": "claude-sonnet-5-5",
+    "effort": "high"
+  },
+  "votesPerItem": 3,
+  "labelerTemperature": null,
+  "labelBatchCap": 50,
+  "promptSha256": {
+    "agentDefinition": {
+      "driver": "efcac6e8d0532a8e06ab33814cb2e19a07c3c069777bb4552059fc253a21043d",
+      "generator": "4b83cfeb7411ffc8fb58acae3cfed1395e23fdcd66cd90633acc97773bd43484",
+      "labeler": "4c52a330b0179cc396e67a20632822c820adf5af57d9e43b7441debe3f5b3ed5"
+    },
+    "spawnTemplate": {
+      "generator": "56f50f1b721f0eaa881f84a7739903e27531f99537e9d1f5b210834843bb862a",
+      "labeler": "56f50f1b721f0eaa881f84a7739903e27531f99537e9d1f5b210834843bb862a",
+      "driver": "727bdafcc9ec5d7ff56fe753e6bc8168753bbbfac3beeb09b02d69c82c2fdeb0"
+    },
+    "requestTemplate": {
+      "generator": "542e03f3f749ad8c8eb4bc5481d4d99ea255ea29ec8217f5b4cd6f071aa44893",
+      "labeler": "339cd795a786b25e402c816b5efbaccd848690359b8f410dd7afbe853c79f626"
+    },
+    "rubric": "f265d553fb82429e89ec8e73e17532d905bbd27cad22e473d1de2bf1429e8386",
+    "guardHook": "0edbaecbee410945c46a5ffff2004f29d9794be179b09c4b1a09e2220c0bfeb8"
+  },
+  "generatedAt": "2026-11-12T18:34:34Z",
+  "itemCount": 590,
+  "dropped": {
+    "voteTie": 0,
+    "shingleSplit": 35,
+    "shingleSideCheck": 0,
+    "screenHits": 0,
+    "retryCapExceeded": {
+      "seeds": 0,
+      "items": 0
+    },
+    "safeguardSkipped": {
+      "seeds": 0,
+      "items": 0
+    },
+    "formMismatch": {},
+    "bindingMismatch": 0
+  },
+  "runs": [
+    {
+      "runId": "run_0001",
+      "role": "generate",
+      "batchId": "bat_0001",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a090099817639349a",
+      "model": "claude-opus-4-8",
+      "requestSha256": "3584513d7bdf8f396b6f71d931c946e9723546c00e2e8f6e11c082c60999311a",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 8477,
+        "cacheRead": 10938,
+        "output": 2880
+      }
+    },
+    {
+      "runId": "run_0002",
+      "role": "generate",
+      "batchId": "bat_0002",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a069c233b51d1effd",
+      "model": "claude-opus-4-8",
+      "requestSha256": "562336aca691f7b6d3997490dc3d02e47592c1809aa7f330b68cd85187f7947f",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6656,
+        "cacheRead": 12837,
+        "output": 2928
+      }
+    },
+    {
+      "runId": "run_0003",
+      "role": "generate",
+      "batchId": "bat_0003",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "aa025ec2aaca35ad7",
+      "model": "claude-opus-4-8",
+      "requestSha256": "cf6e2910e0e3ba8587ae229bf17a6263c97f4ab8fe751bd998f73a3667a50707",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6474,
+        "cacheRead": 12816,
+        "output": 2776
+      }
+    },
+    {
+      "runId": "run_0004",
+      "role": "generate",
+      "batchId": "bat_0004",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "aa5e1153e11e49508",
+      "model": "claude-opus-4-8",
+      "requestSha256": "fbc5d1aacc6f012387bcac6f0406321cbe0d8d1e216138ec416e7e611ca1b4a5",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6743,
+        "cacheRead": 12875,
+        "output": 3007
+      }
+    },
+    {
+      "runId": "run_0005",
+      "role": "generate",
+      "batchId": "bat_0005",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "addebc258375cfd39",
+      "model": "claude-opus-4-8",
+      "requestSha256": "581f575060de63525970c83e9ecebe7b0880ff0179d5af266faca392b85c4769",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6748,
+        "cacheRead": 12900,
+        "output": 2992
+      }
+    },
+    {
+      "runId": "run_0006",
+      "role": "generate",
+      "batchId": "bat_0006",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "af17035d6fb730a05",
+      "model": "claude-opus-4-8",
+      "requestSha256": "5c073e648fde41cff91613f8f6f4f32aadf78329b2bd1821059dc811dbe688f4",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6448,
+        "cacheRead": 12837,
+        "output": 2721
+      }
+    },
+    {
+      "runId": "run_0007",
+      "role": "generate",
+      "batchId": "bat_0007",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "aac8952c140d1e3f1",
+      "model": "claude-opus-4-8",
+      "requestSha256": "cca7c05e88c052d337a031fbe179e6f8f5e434054be90e3cc62953c351319864",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6371,
+        "cacheRead": 12811,
+        "output": 2659
+      }
+    },
+    {
+      "runId": "run_0008",
+      "role": "generate",
+      "batchId": "bat_0008",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "abb0ce03a83084bfb",
+      "model": "claude-opus-4-8",
+      "requestSha256": "53b2510af7f4a52bb1b0ce7d63e707caf60c5dcf0530f2e6afc04602a1a22642",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6641,
+        "cacheRead": 12855,
+        "output": 2901
+      }
+    },
+    {
+      "runId": "run_0009",
+      "role": "generate",
+      "batchId": "bat_0009",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a83aff1ad97777918",
+      "model": "claude-opus-4-8",
+      "requestSha256": "4a42e3c26716745fdee4d7c5edf30f3675863b33e7dc3d4b4432b65799ded574",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6595,
+        "cacheRead": 12854,
+        "output": 2849
+      }
+    },
+    {
+      "runId": "run_0010",
+      "role": "generate",
+      "batchId": "bat_0010",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a5fcd87713476b37d",
+      "model": "claude-opus-4-8",
+      "requestSha256": "6876eb3fb2275033e0cca95ff6710038f4cc462a8c2f4187d08de1358e771a96",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6697,
+        "cacheRead": 12836,
+        "output": 2965
+      }
+    },
+    {
+      "runId": "run_0011",
+      "role": "generate",
+      "batchId": "bat_0011",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a9f06770f544895aa",
+      "model": "claude-opus-4-8",
+      "requestSha256": "04b30438bb52ddcdf4b0e24b08744aa4d1a652efc362de1dcb1c93f591ae5daa",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6756,
+        "cacheRead": 12902,
+        "output": 3040
+      }
+    },
+    {
+      "runId": "run_0012",
+      "role": "generate",
+      "batchId": "bat_0012",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "aef5d70c2d31aa366",
+      "model": "claude-opus-4-8",
+      "requestSha256": "49c6cd151e9eddb6ee96de2cefe801a105ae6845905be434b3c464944b439f00",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6776,
+        "cacheRead": 12866,
+        "output": 3027
+      }
+    },
+    {
+      "runId": "run_0013",
+      "role": "generate",
+      "batchId": "bat_0013",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a29600d392f1baa6f",
+      "model": "claude-opus-4-8",
+      "requestSha256": "8685111a8daf846ca29e255eadb32e297b64adb63f60e740cb59f90e999e82dd",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 7046,
+        "cacheRead": 12745,
+        "output": 3420
+      }
+    },
+    {
+      "runId": "run_0014",
+      "role": "generate",
+      "batchId": "bat_0014",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "afd36f9b7f6110e79",
+      "model": "claude-opus-4-8",
+      "requestSha256": "a25bfeb6304fe1c966787ee2d12103c65052cef57443c98aa70cc719ab634332",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6212,
+        "cacheRead": 12750,
+        "output": 2573
+      }
+    },
+    {
+      "runId": "run_0015",
+      "role": "generate",
+      "batchId": "bat_0015",
+      "attempt": 1,
+      "status": "void",
+      "voidClass": "run-attributable",
+      "voidReason": "outOfSpace",
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "ab33d7d0cc04de0f5",
+      "model": "claude-opus-4-8",
+      "requestSha256": "a20c94547665a74ff884dea7abb3754883ab898c3732d618eeadcd643c5fae7d",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6174,
+        "cacheRead": 12756,
+        "output": 2527
+      }
+    },
+    {
+      "runId": "run_0016",
+      "role": "generate",
+      "batchId": "bat_0015",
+      "attempt": 2,
+      "status": "void",
+      "voidClass": "run-attributable",
+      "voidReason": "outOfSpace",
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a2ec52723576fa248",
+      "model": "claude-opus-4-8",
+      "requestSha256": "9e36c65a8ac18636f48c584152717d38b156297a567b1060fab37e83344620f0",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 7154,
+        "cacheRead": 12801,
+        "output": 3504
+      }
+    },
+    {
+      "runId": "run_0017",
+      "role": "generate",
+      "batchId": "bat_0015",
+      "attempt": 3,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a25671465955b3407",
+      "model": "claude-opus-4-8",
+      "requestSha256": "8bc5b09b1a9e0482a9f8e0eb387dfe4e5f86fa9bbf0c2aa7750d26d4e885e0cf",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 7724,
+        "cacheRead": 13051,
+        "output": 4071
+      }
+    },
+    {
+      "runId": "run_0018",
+      "role": "generate",
+      "batchId": "bat_0016",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a73b9895180696683",
+      "model": "claude-opus-4-8",
+      "requestSha256": "6398c1652647660af4ccf322dc61abc800a9211ebf1cc58af53613ced92684a1",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6225,
+        "cacheRead": 12751,
+        "output": 2594
+      }
+    },
+    {
+      "runId": "run_0019",
+      "role": "generate",
+      "batchId": "bat_0017",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a96fe1a594ee262bd",
+      "model": "claude-opus-4-8",
+      "requestSha256": "9a7618d79f410d082609aa1f015c7b920faf3fac1306f31a1fec2c03329b7512",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6281,
+        "cacheRead": 12785,
+        "output": 2627
+      }
+    },
+    {
+      "runId": "run_0020",
+      "role": "generate",
+      "batchId": "bat_0018",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "ada90abae5d8522da",
+      "model": "claude-opus-4-8",
+      "requestSha256": "f67f663fe617ff4c205a5d2e6941ed262c24521ba5dec07a5ff067a352358be9",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6471,
+        "cacheRead": 12748,
+        "output": 2822
+      }
+    },
+    {
+      "runId": "run_0021",
+      "role": "generate",
+      "batchId": "bat_0019",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "aa350525ecce34ff3",
+      "model": "claude-opus-4-8",
+      "requestSha256": "dc4b397fae92a6c9f9439f77791c77c70084e9c206caf829b2e1bb280f7a20cf",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 7631,
+        "cacheRead": 14182,
+        "output": 2699
+      }
+    },
+    {
+      "runId": "run_0022",
+      "role": "generate",
+      "batchId": "bat_0020",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "ae8326f9cfcbe78b5",
+      "model": "claude-opus-4-8",
+      "requestSha256": "88a9b9c60994fdc0d3ecefee5233f28d2b734854419197914ada83b22a5ee94b",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 9387,
+        "cacheRead": 12794,
+        "output": 5734
+      }
+    },
+    {
+      "runId": "run_0023",
+      "role": "generate",
+      "batchId": "bat_0021",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a229d45a350773a02",
+      "model": "claude-opus-4-8",
+      "requestSha256": "77d48ba1525b9ef1f822f8d9f4a6f53ac7cbb449a220c9b33f98c6b5a03d805a",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 9643,
+        "cacheRead": 13046,
+        "output": 5984
+      }
+    },
+    {
+      "runId": "run_0024",
+      "role": "generate",
+      "batchId": "bat_0022",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a6700ea91d43026f0",
+      "model": "claude-opus-4-8",
+      "requestSha256": "acf184700ee2ab2c33a1ef5fbf1cfb822082783829f1cca104a73baa6ae8e83c",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 7662,
+        "cacheRead": 12781,
+        "output": 3997
+      }
+    },
+    {
+      "runId": "run_0025",
+      "role": "generate",
+      "batchId": "bat_0023",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a704c98035e9e35f8",
+      "model": "claude-opus-4-8",
+      "requestSha256": "cba6d7939e0395726967da9f788d8a8b1d7231d011cb3a7781c42c5bc0ae2ec8",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 7386,
+        "cacheRead": 12764,
+        "output": 3725
+      }
+    },
+    {
+      "runId": "run_0026",
+      "role": "generate",
+      "batchId": "bat_0024",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a05396ad54d2b48db",
+      "model": "claude-opus-4-8",
+      "requestSha256": "18d88b4a019be2773f48920e4b48cb9b79df803253cf4681845efe2abf63cd15",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6707,
+        "cacheRead": 12821,
+        "output": 3045
+      }
+    },
+    {
+      "runId": "run_0027",
+      "role": "generate",
+      "batchId": "bat_0025",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a5437fbdb119bc09c",
+      "model": "claude-opus-4-8",
+      "requestSha256": "af02332b17ee330d0a8204176deb107fb9793bca69ff2d6f6dc10314d7044347",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6340,
+        "cacheRead": 12745,
+        "output": 2697
+      }
+    },
+    {
+      "runId": "run_0028",
+      "role": "generate",
+      "batchId": "bat_0026",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a1ca45f4643b6c81d",
+      "model": "claude-opus-4-8",
+      "requestSha256": "5989fc3d6249624da4fc447d93ab08edfe38f579fb5a0e191425e1c8ccd29322",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6351,
+        "cacheRead": 12744,
+        "output": 2704
+      }
+    },
+    {
+      "runId": "run_0029",
+      "role": "generate",
+      "batchId": "bat_0027",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a65ae1c29aa236fe1",
+      "model": "claude-opus-4-8",
+      "requestSha256": "6643421a352289149195331414494353d22c8b918f4b2ce0c746bc241f443711",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 6708,
+        "cacheRead": 12756,
+        "output": 3049
+      }
+    },
+    {
+      "runId": "run_0030",
+      "role": "generate",
+      "batchId": "bat_0028",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "abe7040c1fbb4a585",
+      "model": "claude-opus-4-8",
+      "requestSha256": "6e6290cbe9a07613dc5fe845e54a427efd9a20bc0f4cda6ed586639467da575d",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "medium",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 3468,
+        "cacheRead": 11392,
+        "output": 1211
+      }
+    },
+    {
+      "runId": "run_0031",
+      "role": "label",
+      "batchId": "bat_0029",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a50772973b9c4df47",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "0f1a44bf12e863584eaba0df79b639f9001141ede2ab79a03d018d8cc83a323f",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 12418,
+        "cacheRead": 15248,
+        "output": 2627
+      }
+    },
+    {
+      "runId": "run_0032",
+      "role": "label",
+      "batchId": "bat_0030",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a0a94df7cdf706e30",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "5a2e8cefe2972ee1ac384b0aa27af525b8c549f9dfd752f259c205f7aeacd87c",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10313,
+        "cacheRead": 17154,
+        "output": 2294
+      }
+    },
+    {
+      "runId": "run_0033",
+      "role": "label",
+      "batchId": "bat_0031",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a9836024fcf19c34f",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "1ee9e9773d96fb6d41fad2c85836d1f283942e0b025c8ff6f7547377a01f1117",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10752,
+        "cacheRead": 17118,
+        "output": 2824
+      }
+    },
+    {
+      "runId": "run_0034",
+      "role": "label",
+      "batchId": "bat_0032",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a208575f85c569330",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "0a9d278b8caefef01b573de82fd047861a676f3c868bdeb1ad7607ee7e1248ef",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10811,
+        "cacheRead": 17328,
+        "output": 2727
+      }
+    },
+    {
+      "runId": "run_0035",
+      "role": "label",
+      "batchId": "bat_0033",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a8443787297f1f705",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "034fcfb29461f44652dd91c02491328f554a91a693bc40286905f1abb64abf79",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10884,
+        "cacheRead": 17419,
+        "output": 2682
+      }
+    },
+    {
+      "runId": "run_0036",
+      "role": "label",
+      "batchId": "bat_0034",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "ae60d83e0760e1ba9",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "ed820e30b684bb544234b8916e7efaf3022b5f1b1f2b2760a4df04fd78776a42",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 11156,
+        "cacheRead": 17595,
+        "output": 2971
+      }
+    },
+    {
+      "runId": "run_0037",
+      "role": "label",
+      "batchId": "bat_0035",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "afec5a9fa0f3270d5",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "9196978eb9bd300f88b0acde3b496b67d5c4d6355c93d19243f5f9dd7192d9f6",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10270,
+        "cacheRead": 17041,
+        "output": 2447
+      }
+    },
+    {
+      "runId": "run_0038",
+      "role": "label",
+      "batchId": "bat_0036",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a347c2f743c776cb6",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "1753df5e88edd990965c1acb9b8052a6a6e2cb225015fe3d9e14d783f21695fc",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 11302,
+        "cacheRead": 17441,
+        "output": 3078
+      }
+    },
+    {
+      "runId": "run_0039",
+      "role": "label",
+      "batchId": "bat_0037",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a6865a67473d53fed",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "9cc9287a094b97ac005a06fba9cbbddf36b3d23ceed7a62ec885ba4def6a9f14",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10867,
+        "cacheRead": 17159,
+        "output": 2773
+      }
+    },
+    {
+      "runId": "run_0040",
+      "role": "label",
+      "batchId": "bat_0038",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "aef093deebd9c3ec4",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "6ced2589db1f41a2869444e69bb47f0d30093cf8d2ce30d35e20bfe3127e30b1",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10207,
+        "cacheRead": 16928,
+        "output": 2400
+      }
+    },
+    {
+      "runId": "run_0041",
+      "role": "label",
+      "batchId": "bat_0039",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a1c2cb8fda02e9561",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "51cfbe82869acc5dc1459166c882d29a250571bb6f0f8369d13202ab29137337",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 11259,
+        "cacheRead": 17625,
+        "output": 2859
+      }
+    },
+    {
+      "runId": "run_0042",
+      "role": "label",
+      "batchId": "bat_0040",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a5d6dbbcddfb2bf5a",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "3a1e0d703fcc1a532b86879af1948f8db9a4e0d09ab4a613c38f6c05315f0663",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10228,
+        "cacheRead": 16867,
+        "output": 2560
+      }
+    },
+    {
+      "runId": "run_0043",
+      "role": "label",
+      "batchId": "bat_0041",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a772d9fcdc6530016",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "bb169cd72ddf38b8d94054453f5fbbf04d52e4737955a064d252a53221362001",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10986,
+        "cacheRead": 17166,
+        "output": 2936
+      }
+    },
+    {
+      "runId": "run_0044",
+      "role": "label",
+      "batchId": "bat_0042",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "ada9cb9fb1c59f724",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "4bac4969289d50df55cf5a6df0773c766ba557df287687547c1ebe0521b8fd06",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10493,
+        "cacheRead": 16983,
+        "output": 2617
+      }
+    },
+    {
+      "runId": "run_0045",
+      "role": "label",
+      "batchId": "bat_0043",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a7bc7d7ef1fd0bf4b",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "4c4db6eb47e88383aee5f3cdc62a3fa5aa35d79240807ef244e884308e657f9b",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10273,
+        "cacheRead": 17256,
+        "output": 2137
+      }
+    },
+    {
+      "runId": "run_0046",
+      "role": "label",
+      "batchId": "bat_0044",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a39db7c52f2c844b8",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "01ff7e07717caa2d9114096cc304d8986a4c442d4365684f98cdcb8b109306b0",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 11001,
+        "cacheRead": 17611,
+        "output": 2722
+      }
+    },
+    {
+      "runId": "run_0047",
+      "role": "label",
+      "batchId": "bat_0045",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a36c625afb3ca1aaf",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "9332992ba68dddca41d8c3454fb7bb782fed440d194c24871611ed186a33dc1d",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10534,
+        "cacheRead": 17423,
+        "output": 2333
+      }
+    },
+    {
+      "runId": "run_0048",
+      "role": "label",
+      "batchId": "bat_0046",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a63531a26cb01c04d",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "ead39f85f1a1853961cec62df1e6b853e69f41d4ff797a19f96d15f75a347456",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10664,
+        "cacheRead": 17244,
+        "output": 2773
+      }
+    },
+    {
+      "runId": "run_0049",
+      "role": "label",
+      "batchId": "bat_0047",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "ae0db3652ed852d1e",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "27db0713d95dc6fffa62b0cfec61dd9345b12314eb48b1a57b0a7c3e203fa273",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10846,
+        "cacheRead": 17105,
+        "output": 2959
+      }
+    },
+    {
+      "runId": "run_0050",
+      "role": "label",
+      "batchId": "bat_0048",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a5e8807943225d07c",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "de0a65ea7a95288e21d3e42c536d69595233652f7eb842b307b5a3c49957dfc5",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10892,
+        "cacheRead": 17138,
+        "output": 2889
+      }
+    },
+    {
+      "runId": "run_0051",
+      "role": "label",
+      "batchId": "bat_0049",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a30c02e492bf39f3a",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "7f1ab933e3f6babd4030da73422671423d138b4623410fbc488755d87409b142",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10753,
+        "cacheRead": 17378,
+        "output": 2600
+      }
+    },
+    {
+      "runId": "run_0052",
+      "role": "label",
+      "batchId": "bat_0050",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a3e6fbccd1f9f0031",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "2a8cab2338c60f4ad7cfe71d5e729a6bb1f4922e86a945c4c59477a590d2e769",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10550,
+        "cacheRead": 17154,
+        "output": 2555
+      }
+    },
+    {
+      "runId": "run_0053",
+      "role": "label",
+      "batchId": "bat_0051",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "aaf9f94b5098569aa",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "cf3a0f7e919da111c8147b0e7ceeae3a356c1a337d08346fbc6ed054afd74bb5",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 11381,
+        "cacheRead": 17524,
+        "output": 3239
+      }
+    },
+    {
+      "runId": "run_0054",
+      "role": "label",
+      "batchId": "bat_0052",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "aeb7a4387cac0e097",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "8994eb7ecb15bb011e73b48fa8cb2860712661a7d0306dac22cc65ca560ca396",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 5755,
+        "cacheRead": 13721,
+        "output": 1296
+      }
+    },
+    {
+      "runId": "run_0055",
+      "role": "label",
+      "batchId": "bat_0053",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a7504952af93fcf83",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "46b44d068ba7a7353fa20b50ebc65b9b877329b83213179fb13476647ac5c696",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10791,
+        "cacheRead": 17385,
+        "output": 2560
+      }
+    },
+    {
+      "runId": "run_0056",
+      "role": "label",
+      "batchId": "bat_0054",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a0f92b5f977300893",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "3939ad0ebf5856825461ccd789d78a6477a49d39d626c598fb109200bb28f52c",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10400,
+        "cacheRead": 16843,
+        "output": 2607
+      }
+    },
+    {
+      "runId": "run_0057",
+      "role": "label",
+      "batchId": "bat_0055",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a35a207cc00d629f5",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "b444c76ba3758c5112dac5104a879aac1169c9fc879cb3c3ce7203b27dd5812b",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 11202,
+        "cacheRead": 17408,
+        "output": 3003
+      }
+    },
+    {
+      "runId": "run_0058",
+      "role": "label",
+      "batchId": "bat_0056",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a9dc8f443a96d57f2",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "76f4c9dde05e5be28adb3bd7d5c60faa678d853b829afaf934ad5460245bb62f",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10912,
+        "cacheRead": 17406,
+        "output": 2800
+      }
+    },
+    {
+      "runId": "run_0059",
+      "role": "label",
+      "batchId": "bat_0057",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a1c07ebe4d6d852f0",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "a53140b1cc5b6ecfa114cc82fd06e0c440fe7b94d100a4f411a6d26c1f40f9f0",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10696,
+        "cacheRead": 17289,
+        "output": 2686
+      }
+    },
+    {
+      "runId": "run_0060",
+      "role": "label",
+      "batchId": "bat_0058",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a5ad6ca045396606f",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "70066e9c0a5a0a10064077a177fc84a5eea64540bffc3d10f76f56a734a5c6ea",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10416,
+        "cacheRead": 16720,
+        "output": 2789
+      }
+    },
+    {
+      "runId": "run_0061",
+      "role": "label",
+      "batchId": "bat_0059",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "ad9dad0a8f0be1db9",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "5194a1d88048095faae3155ef763edb1c52beeb5674d2fdefb7776c2e03e451b",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10785,
+        "cacheRead": 17367,
+        "output": 2665
+      }
+    },
+    {
+      "runId": "run_0062",
+      "role": "label",
+      "batchId": "bat_0060",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a7c5d7f9978ead085",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "f03e2a4ab58fa1c12641283d795f18f0bf29457e4299c25b66cbf5bf85c30cea",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10532,
+        "cacheRead": 17071,
+        "output": 2640
+      }
+    },
+    {
+      "runId": "run_0063",
+      "role": "label",
+      "batchId": "bat_0061",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "ac0518be31509e05c",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "0eaa839d726f889a986abfe8c07f0dd56523a706b5e04c7435e4c06da3c9dd11",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 5500,
+        "cacheRead": 13620,
+        "output": 1107
+      }
+    },
+    {
+      "runId": "run_0064",
+      "role": "label",
+      "batchId": "bat_0062",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "aa95b8e961d20988e",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "ce5e0cb29741dc78cba713a23fcf4b1768ece82e3ebd20dd553f2b5d4261ead8",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10429,
+        "cacheRead": 17225,
+        "output": 2364
+      }
+    },
+    {
+      "runId": "run_0065",
+      "role": "label",
+      "batchId": "bat_0063",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a6197ee170b308d5f",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "7ea68bc7c3712b02df54d7c7f6ba41673d1a66ae2b9280898f4abdd7fd300af1",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10561,
+        "cacheRead": 17074,
+        "output": 2736
+      }
+    },
+    {
+      "runId": "run_0066",
+      "role": "label",
+      "batchId": "bat_0064",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a533cb5a104a4456c",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "4ec0cbdb3dfd26d262209399e968db4b65b37544d74868e6e69227e4851525d9",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 11005,
+        "cacheRead": 17519,
+        "output": 2733
+      }
+    },
+    {
+      "runId": "run_0067",
+      "role": "label",
+      "batchId": "bat_0065",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "ab4ad44118fb8204f",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "2394944a156f02b18c8972205e96e4ee4163f29e86acdb5d83800b9734b1b57a",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10141,
+        "cacheRead": 17158,
+        "output": 2178
+      }
+    },
+    {
+      "runId": "run_0068",
+      "role": "label",
+      "batchId": "bat_0066",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "ae7fbb236fd67cd43",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "916d4f802d256916c465b29dbcf00d80c6fb1d815a029116845bede4c38da2a7",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10740,
+        "cacheRead": 17242,
+        "output": 2718
+      }
+    },
+    {
+      "runId": "run_0069",
+      "role": "label",
+      "batchId": "bat_0067",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "af2724f9d0fd8163e",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "f7471992fe2f50a7ec99ce9b6705a9eec94b2a2c074a776bcfb9538efa61dc5b",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10678,
+        "cacheRead": 17362,
+        "output": 2438
+      }
+    },
+    {
+      "runId": "run_0070",
+      "role": "label",
+      "batchId": "bat_0068",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a9befac61f72ef478",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "ec4c77527f390bc1211bfec212d17cd3827270811730273b7a0a948c3e44bc46",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 11015,
+        "cacheRead": 17160,
+        "output": 2927
+      }
+    },
+    {
+      "runId": "run_0071",
+      "role": "label",
+      "batchId": "bat_0069",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "a6b472bf1a3ea7d16",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "b67b79e55f17bf43b3f8ffc6cfa7b6793a1604ff0bc39a725f29946043378905",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 10743,
+        "cacheRead": 17266,
+        "output": 2722
+      }
+    },
+    {
+      "runId": "run_0072",
+      "role": "label",
+      "batchId": "bat_0070",
+      "attempt": 1,
+      "status": "ingested",
+      "voidClass": null,
+      "voidReason": null,
+      "claudeCodeVersion": "2.1.322",
+      "agentId": "ac9e8b6a6ef395349",
+      "model": "claude-sonnet-5-5",
+      "requestSha256": "abb267511ff3a91f99395927892db90368002a09bc6f81b70448165776a40897",
+      "instructions": [],
+      "sessionContextSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "thinking": {
+        "type": "adaptive",
+        "display": "omitted"
+      },
+      "effort": "high",
+      "tokens": {
+        "input": 8,
+        "cacheWrite": 5360,
+        "cacheRead": 13301,
+        "output": 1290
+      }
+    }
+  ]
+}
