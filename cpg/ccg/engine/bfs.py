@@ -25,11 +25,13 @@ that arrival, and :attr:`Walk.unexplored` counts the distinct stored edges of th
 **A config entry reaches only the sites it binds** (``-p1-graph.md`` G7, §5): ``BOUND_BY <-`` enters the ``Link`` in a ``site(siteId)`` state and ``VIA <-`` from it lists
 that site's ``CallSite`` only. A ``Link`` is never an anchor (:class:`WalkError`).
 
+**The flow fallback** (P1-23, ``ccg.engine.flow``): a row's ``gate`` names whose unit's ``Unit.flowAvailable`` it needs and its ``labelled`` bit makes a hop on it ``possible``
+(``flow-unavailable:<lang>`` when its own edge is confirmed). A hop's cost carries two bits: its status (counts toward the possible hops) and its own edge's status (the
+tie-break term after length), which differ exactly on a labelled row. A point's unit is its owner's, joined before a gated row is asked.
+
 Not built here (named, never half-built):
-  * SEAM(P1-23): the flow-fallback gate on ``Unit.flowAvailable`` (``DATA``/``CONTROLLED_BY``/``arg(i)`` rows not followed in a flag-false unit, the ``function`` state
-    and its labelled ``flow-unavailable:<lang>`` rows, the V-flow/V-both/V-union row-table variants), item grouping and the builder. Every unit is walked with the
-    precise rows. ``Unit`` facts are not read here; ``walk.facts`` carries the unit ids. P1-23 splits the hop-status and own-edge-status variable (marked SEAM below).
-  * SEAM(P1-23/P1-39): ``Link`` evidence (``lifted_of``, ``bound_out``, ``candidate_count``), the ``Hop``/``Item`` documents, ``staleness`` and the stamp.
+  * item grouping and the builder (P1-23 behaviours (2)-(4), P1-39); the ``site`` hop schema (P1-23 (0)).
+  * SEAM(P1-39): ``Link`` evidence (``lifted_of``, ``bound_out``; ``candidate_counts`` reads ``candidate_count``, ``None`` for "N unknown"), the ``Hop``/``Item`` documents, ``staleness`` and the stamp.
   * **Rows of graph note §6.2 not walked in P1** (the plan's "as written" is narrowed to these four, each on purpose): depends-on ``BOUND_BY ->`` (a ``Link`` is left only by
     ``TO ->``/``TO_UNIT ->``, spec2 §3.3 V5), depends-on ``CONSUMES ->`` (no item kind carries it), ``VIA ->`` in ``arg(i)`` state (needs ``paramMap``, not stored,
     ``-p1-graph.md`` G12), and from a ``Param``, ``<-`` then ``CALLS <-`` (P5's RCA). Also not walked: ``READS``/``WRITES``, ``DEFINED_BY``, ``LAUNCHES``, ``RAN``,
@@ -41,12 +43,13 @@ Not built here (named, never half-built):
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from ccg import ids as _ids
 from ccg.engine import config
+from ccg.engine import flow
 from ccg.engine import state as S
 from ccg.engine.reader import GraphDataError, Reader
 from ccg.engine.state import Key, Node, State
@@ -56,7 +59,7 @@ COLUMNS = (IMPACT, DEPENDS_ON)
 
 #: the identifier strings of the parts of the definition that are code (``-answer-spec2.md`` §1.2); changing the behaviour behind one means changing the string
 COST_ORDER = "possible,distance,length,own-possible,stable-key"
-FLOW_FALLBACK = "none"  # SEAM(P1-23): the flag gate and its labelled rows
+FLOW_FALLBACK = "unit-flag-gates,function-state,labelled-exit-rows"
 UNEXPLORED_RULE = "distinct-stored-edges,state-at-bound,increment-1,once"
 
 _OWNER = {"CallSite": "HAS_CALL", "Param": "HAS_PARAM", "Ret": "HAS_RETURN", "Cond": "HAS_COND"}
@@ -74,11 +77,12 @@ class WalkError(RuntimeError):
 
 #: the ``where`` tokens the walk branches on (a table field no code reads is not in the table): ``match-path`` (``DATA``: the state's path must overlap the edge's
 #: ``fromPath``), ``arg-path`` (only a state whose path names an argument enters), ``site-match`` (a ``Link`` in ``site`` state lists only the ``CallSite`` whose id is the
-#: state's path)
-WHERE_TOKENS = ("match-path", "arg-path", "site-match")
-#: the to-state tokens: a literal kind, ``path:r`` (the call's result), ``path:to`` (the edge's ``toPath``), ``path:arg`` (the entering path, unchanged),
-#: ``path:param`` (the index-matched parameter path, none when the parameter is not the one the path names), ``site`` (the ``siteId`` the step carries)
-TO_TOKENS = ("value", "contract", "end", "key", "function", "path:r", "path:to", "path:arg", "path:param", "site")
+#: state's path), ``callee-state`` (only a state whose path is ``callee``: a function reached as a callee by a candidate walk's added rows, ``ccg.engine.flow``)
+WHERE_TOKENS = ("match-path", "arg-path", "site-match", "callee-state")
+#: the to-state tokens: a literal kind, ``path:to`` (the edge's ``toPath``), ``path:arg`` (the entering path, unchanged), ``path:param`` (the index-matched parameter path, none
+#: when the parameter is not the one the path names), ``site`` (the ``siteId`` the step carries), ``flow:r`` (the call site reached: ``path r`` when its unit's flag is true,
+#: ``value`` when false, a unit with no ``path`` state; ``-answer-spec2.md`` §5), ``end:callee`` (state kind ``end`` with the path ``callee``: the hop state stays ``end``)
+TO_TOKENS = ("value", "contract", "end", "end:callee", "key", "function", "flow:r", "path:to", "path:arg", "path:param", "site")
 #: reads an adapter issues beyond its row's own: part of the definition (``-answer-spec2.md`` §1.2)
 EXTRA_READS = {"consumes_in": ("on_in", "via_in")}
 
@@ -88,7 +92,9 @@ class Row:
     """One row of the walk definition: from a node of ``src`` in one of ``kinds`` along ``edge`` in ``dir``.
 
     ``read`` is the reader name (or ``bound_of_link``), ``adapter`` names the code that maps its columns to steps, ``to`` one of :data:`TO_TOKENS`, ``inc`` the
-    distance increment, ``where`` one of :data:`WHERE_TOKENS` or empty.
+    distance increment, ``where`` one of :data:`WHERE_TOKENS` or empty, ``gate`` one of :data:`ccg.engine.flow.GATES` (whose unit's flag the row needs) and ``labelled``
+    whether a hop on it is ``possible``, ``flow-unavailable:<lang>`` when its own edge is confirmed (``-answer-spec2.md`` §5), and ``item`` the item kind (``symbol``) an arrival
+    by this row makes beyond the closed rules of :data:`_ITEM_RULES`: a candidate walk's table carries its own (``-p1-ml.md`` §3.5); no shipped row has one.
     """
     id: str
     column: str
@@ -101,43 +107,54 @@ class Row:
     to: str
     inc: int
     where: str = ""
+    gate: str = ""
+    labelled: bool = False
+    item: str = ""
 
     def record(self) -> dict[str, Any]:
         return {"id": self.id, "column": self.column, "src": self.src, "kinds": list(self.kinds), "read": self.read, "adapter": self.adapter, "edge": self.edge,
-                "dir": self.dir, "to": self.to, "inc": self.inc, "where": self.where}
+                "dir": self.dir, "to": self.to, "inc": self.inc, "where": self.where, "gate": self.gate, "labelled": self.labelled, "item": self.item}
 
 
 def _build_rows() -> tuple[Row, ...]:
-    def R(id, column, src, kinds, read, adapter, edge, dir, dst, to, inc, where=""):   # ``dst`` documents the arriving label; the walk never reads it
-        return Row(id, column, src, kinds, read, adapter, edge, dir, to, inc, where)
+    def R(id, column, src, kinds, read, adapter, edge, dir, dst, to, inc, where="", gate="", labelled=False):   # ``dst`` documents the arriving label; the walk never reads it
+        return Row(id, column, src, kinds, read, adapter, edge, dir, to, inc, where, gate, labelled)
 
     VP = ("value", "path")
     impact = [
-        R("calls_in", IMPACT, "Symbol", ("value",), "calls_in", "calls_in", "CALLS", "<-", "CallSite", "path:r", 1),
-        R("name_in", IMPACT, "Symbol", ("value",), "name_in", "name_in", "CALLS_NAME", "<-", "CallSite", "path:r", 1),
+        R("calls_in", IMPACT, "Symbol", ("value",), "calls_in", "calls_in", "CALLS", "<-", "CallSite", "flow:r", 1),
+        R("name_in", IMPACT, "Symbol", ("value",), "name_in", "name_in", "CALLS_NAME", "<-", "CallSite", "flow:r", 1),
+        # the labelled rows leaving ``function`` (``-answer-spec2.md`` §5, both columns): the callers of a function the walk reaches only at call level
+        R("calls_in:fn", IMPACT, "Symbol", ("function",), "calls_in", "calls_in", "CALLS", "<-", "CallSite", "flow:r", 1, labelled=True),
+        R("name_in:fn", IMPACT, "Symbol", ("function",), "name_in", "name_in", "CALLS_NAME", "<-", "CallSite", "flow:r", 1, labelled=True),
+        R("to_in:fn", IMPACT, "Symbol", ("function",), "to_in", "link_in", "TO", "<-", "Link", "value", 0, labelled=True),
         R("to_in:value", IMPACT, "Symbol", ("value",), "to_in", "link_in", "TO", "<-", "Link", "value", 0),
         R("to_in:contract", IMPACT, "Symbol", ("contract",), "to_in", "link_in", "TO", "<-", "Link", "contract", 0),
         R("provides_out", IMPACT, "Symbol", ("key",), "provides_out", "provides_out", "PROVIDES", "->", "ContractPoint", "contract", 0),
         # the arg(i)/Ret rows: a changed argument enters the callee, the index-matched parameter carries it on; the Ret summary is calls_in from a Ret-reached function
-        R("arg_calls_out", IMPACT, "CallSite", ("path",), "calls_out", "calls_out", "CALLS", "->", "Symbol", "path:arg", 1, "arg-path"),
-        R("arg_name_out", IMPACT, "CallSite", ("path",), "name_out", "name_out", "CALLS_NAME", "->", "Symbol", "path:arg", 1, "arg-path"),
-        R("arg_has_param", IMPACT, "Symbol", ("path",), "has_out:Param", "has_out", "HAS_PARAM", "->", "Param", "path:param", 0),
+        R("arg_calls_out", IMPACT, "CallSite", ("path",), "calls_out", "calls_out", "CALLS", "->", "Symbol", "path:arg", 1, "arg-path", "both:true"),
+        R("arg_name_out", IMPACT, "CallSite", ("path",), "name_out", "name_out", "CALLS_NAME", "->", "Symbol", "path:arg", 1, "arg-path", "both:true"),
+        R("arg_has_param", IMPACT, "Symbol", ("path",), "has_out:Param", "has_out", "HAS_PARAM", "->", "Param", "path:param", 0, gate="src:true"),
     ]
     for label in ("CallSite", "Param", "Ret", "Cond"):
-        impact.append(R(f"owner:{label}", IMPACT, label, VP, f"owner_of:{label}", "owner_of", _OWNER[label], "<-", "Symbol", "value" if label == "Ret" else "end", 0))
+        # a flag-true unit's function ends the walk (the precise rows decide what else changes), a flag-false unit's is a function reached at call level: ``function``
+        impact.append(R(f"owner:{label}", IMPACT, label, VP, f"owner_of:{label}", "owner_of", _OWNER[label], "<-", "Symbol", "value" if label == "Ret" else "end", 0,
+                        gate="" if label == "Ret" else "dst:true"))
+        if label != "Ret":
+            impact.append(R(f"owner:{label}:fn", IMPACT, label, VP, f"owner_of:{label}", "owner_of", _OWNER[label], "<-", "Symbol", "function", 0, gate="dst:false"))
     impact.append(R("owner:CallSite:contract", IMPACT, "CallSite", ("contract",), "owner_of:CallSite", "owner_of", "HAS_CALL", "<-", "Symbol", "end", 0))
     impact += [
-        R("data_in:Param", IMPACT, "Param", VP, "data_in:Param", "data_in", "DATA", "<-", "*", "path:to", 0, "match-path"),
-        R("data_in:CallSite", IMPACT, "CallSite", VP, "data_in:CallSite", "data_in", "DATA", "<-", "*", "path:to", 0, "match-path"),
-        R("controlled_in", IMPACT, "Cond", VP, "controlled_in", "controlled_in", "CONTROLLED_BY", "<-", "*", "value", 0),
-        R("via_in:value", IMPACT, "Link", ("value",), "via_in", "via_in", "VIA", "<-", "CallSite", "path:r", 1),
+        R("data_in:Param", IMPACT, "Param", VP, "data_in:Param", "data_in", "DATA", "<-", "*", "path:to", 0, "match-path", "src:true"),
+        R("data_in:CallSite", IMPACT, "CallSite", VP, "data_in:CallSite", "data_in", "DATA", "<-", "*", "path:to", 0, "match-path", "src:true"),
+        R("controlled_in", IMPACT, "Cond", VP, "controlled_in", "controlled_in", "CONTROLLED_BY", "<-", "*", "value", 0, gate="src:true"),
+        R("via_in:value", IMPACT, "Link", ("value",), "via_in", "via_in", "VIA", "<-", "CallSite", "flow:r", 1),
         R("via_in:contract", IMPACT, "Link", ("contract",), "via_in", "via_in", "VIA", "<-", "CallSite", "contract", 1),
         R("provides_in", IMPACT, "ContractPoint", ("contract",), "provides_in", "provides_in", "PROVIDES", "<-", "Symbol", "contract", 0),
         R("on_in", IMPACT, "ContractPoint", ("contract",), "on_in", "link_in", "ON", "<-", "Link", "contract", 0),
         R("consumes_in", IMPACT, "ContractPoint", ("contract",), "consumes_in", "consumes_in", "CONSUMES", "<-", "CallSite", "contract", 1),
         # a config entry reaches only the sites it binds (-p1-graph.md G7, §5): the Link is entered in a ``site`` state carrying the bound siteId
         R("bound_in", IMPACT, "ConfigEntry", ("value",), "bound_in", "bound_in", "BOUND_BY", "<-", "Link", "site", 1),
-        R("via_in:site", IMPACT, "Link", ("site",), "via_in", "via_in", "VIA", "<-", "CallSite", "path:r", 1, "site-match"),
+        R("via_in:site", IMPACT, "Link", ("site",), "via_in", "via_in", "VIA", "<-", "CallSite", "flow:r", 1, "site-match"),
         R("wiring", IMPACT, "Link", ("value", "contract"), "bound_of_link", "bound_of_link", "BOUND_BY", "->", "ConfigEntry", "end", 1),   # never from a Link a config entry entered: that Link is in ``site`` state
     ]
     depends = [
@@ -145,16 +162,20 @@ def _build_rows() -> tuple[Row, ...]:
         R("has_out:Param", DEPENDS_ON, "Symbol", ("value",), "has_out:Param", "has_out", "HAS_PARAM", "->", "Param", "value", 0),
         R("has_out:Ret", DEPENDS_ON, "Symbol", ("value",), "has_out:Ret", "has_out", "HAS_RETURN", "->", "Ret", "value", 0),
         R("has_out:Cond", DEPENDS_ON, "Symbol", ("value",), "has_out:Cond", "has_out", "HAS_COND", "->", "Cond", "value", 0),
-        R("calls_out", DEPENDS_ON, "CallSite", ("value",), "calls_out", "calls_out", "CALLS", "->", "Symbol", "value", 1),
-        R("name_out", DEPENDS_ON, "CallSite", ("value",), "name_out", "name_out", "CALLS_NAME", "->", "Symbol", "value", 1),
+        # a callee in a flag-false unit is a function reached at call level (``function``): the one row leaving it is ``has_out:CallSite:fn``
+        R("calls_out", DEPENDS_ON, "CallSite", ("value",), "calls_out", "calls_out", "CALLS", "->", "Symbol", "value", 1, gate="dst:true"),
+        R("calls_out:fn", DEPENDS_ON, "CallSite", ("value",), "calls_out", "calls_out", "CALLS", "->", "Symbol", "function", 1, gate="dst:false"),
+        R("name_out", DEPENDS_ON, "CallSite", ("value",), "name_out", "name_out", "CALLS_NAME", "->", "Symbol", "value", 1, gate="dst:true"),
+        R("name_out:fn", DEPENDS_ON, "CallSite", ("value",), "name_out", "name_out", "CALLS_NAME", "->", "Symbol", "function", 1, gate="dst:false"),
+        R("has_out:CallSite:fn", DEPENDS_ON, "Symbol", ("function",), "has_out:CallSite", "has_out", "HAS_CALL", "->", "CallSite", "value", 0, labelled=True),
         R("via_out", DEPENDS_ON, "CallSite", ("value",), "via_out", "via_out", "VIA", "->", "Link", "value", 1),
         R("to_out", DEPENDS_ON, "Link", ("value",), "to_out", "to_out", "TO", "->", "Symbol", "value", 0),
         R("to_unit_out", DEPENDS_ON, "Link", ("value",), "to_unit_out", "to_unit_out", "TO_UNIT", "->", "Unit", "end", 0),
     ]
     for label in ("CallSite", "Ret", "Cond"):
-        depends.append(R(f"data_out:{label}", DEPENDS_ON, label, ("value",), f"data_out:{label}", "data_out", "DATA", "->", "*", "value", 0))
+        depends.append(R(f"data_out:{label}", DEPENDS_ON, label, ("value",), f"data_out:{label}", "data_out", "DATA", "->", "*", "value", 0, gate="src:true"))
     for label in ("CallSite", "Ret", "Cond", "Param"):
-        depends.append(R(f"controlled_out:{label}", DEPENDS_ON, label, ("value",), f"controlled_out:{label}", "controlled_out", "CONTROLLED_BY", "->", "Cond", "value", 0))
+        depends.append(R(f"controlled_out:{label}", DEPENDS_ON, label, ("value",), f"controlled_out:{label}", "controlled_out", "CONTROLLED_BY", "->", "Cond", "value", 0, gate="src:true"))
     return tuple(impact + depends)
 
 
@@ -175,9 +196,10 @@ def fingerprint(record: Mapping[str, Any]) -> str:
     return _ids.tuple_id(["walkDefinition", json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=True)])
 
 
-#: ``recipe.algorithm.version`` -> the pinned fingerprint of the definition that version names. P1 ships one entry; P1-23 re-pins it before P1-39 publishes it
-#: (``-answer-spec2.md`` §1.2: a published entry is never edited).
-ALGORITHM_VERSIONS: dict[str, str] = {"1.1": "c314fe7c084ba7b951ad6aea505b089d"}
+#: ``recipe.algorithm.version`` -> the pinned fingerprint of the definition that version names. P1 ships one entry. P1-22 pinned ``1.1`` first; P1-23 re-pinned it (the
+#: flag gates, the ``function`` state and its labelled rows, ``flow:r``, ``Row.item``; the V-both-only item rules left the shipped record) because no answer carrying ``1.1`` has been emitted on ``main``: the
+#: builder (P1-39) does not exist, so ``1.1`` is unpublished and its literal may still move (``-answer-spec2.md`` §1.2). From P1-39 a change is ``1.2``.
+ALGORITHM_VERSIONS: dict[str, str] = {"1.1": "5cf047c14e43da44d0363707d3036080"}
 
 
 def algorithm_version(record: Mapping[str, Any] | None = None) -> str:
@@ -495,6 +517,32 @@ ADAPTERS: dict[str, Adapter] = {
 
 
 # ---------------------------------------------------------------------------------------------
+# Link evidence the builder reads (not a row of the walk).
+# ---------------------------------------------------------------------------------------------
+
+def candidate_counts(reader: Reader, pairs: Sequence[tuple[str, str]]) -> dict[tuple[str, str], int | None]:
+    """``N`` of each ``(siteId, linkId)`` ``VIA`` hop: the links of the site's owner that carry the same ``consumerKey``, itself included (``-p1-graph.md`` §5).
+
+    **A pair the read returns no row for is ``None``, "N unknown", never ``0`` or ``1``** (``docs/reviews/connected-code-graph-p1-21.md`` Pass 2 G1): the read joins on
+    ``consumerKey`` and the assembler writes the key only when it is not null, and it joins the site's owner; an absent key or a site with no owner therefore returns nothing,
+    and ``1`` would claim "no other candidate" where the answer is "not known". Open for P1-39: the schema's ``candidateCount`` is ``>= 1`` on every ``VIA`` hop, so the
+    builder must raise a build error for a ``None``, not default it.
+    """
+    wanted = list(dict.fromkeys(tuple(p) for p in pairs))
+    out: dict[tuple[str, str], int | None] = dict.fromkeys(wanted)
+    if not wanted:
+        return out
+    for r in reader.read("candidate_count", {"pairs": [list(p) for p in wanted]}):
+        if len(r) != 3:
+            raise _bad("candidate_count")
+        site, link, n = _s("candidate_count", r[0]), _s("candidate_count", r[1]), _i("candidate_count", r[2])
+        if (site, link) not in out or n < 1:       # the count includes the pair's own link, so a row says at least 1
+            raise _bad("candidate_count")
+        out[(site, link)] = n
+    return out
+
+
+# ---------------------------------------------------------------------------------------------
 # The walk.
 # ---------------------------------------------------------------------------------------------
 
@@ -507,6 +555,7 @@ class Edge:
     dir: str  # "<-" against the stored direction, "->" along it
     status: str
     reason: str | None = None
+    item: str = ""    # the item kind the row that made this edge adds (never part of the answer's hop)
 
     def as_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"type": self.type, "dir": self.dir, "status": self.status}
@@ -577,9 +626,11 @@ class Item:
         return next((s["edge"].get("reason") for s in self.chain if s["edge"] and s["edge"]["status"] == "possible"), None)
 
 
-_ITEM_RULES: dict[str, dict[tuple[str, str, str], str]] = {
-    IMPACT: {("Symbol", e, "<-"): "symbol" for e in _OWNER_EDGES} | {("ConfigEntry", "BOUND_BY", "->"): "config"},
-    DEPENDS_ON: {("Symbol", "CALLS", "->"): "symbol", ("Symbol", "CALLS_NAME", "->"): "symbol", ("Symbol", "TO", "->"): "symbol", ("Unit", "TO_UNIT", "->"): "unit"},
+#: the arriving (label, edge type, direction, state kind) that makes an item, per column; ``*`` matches any state. A candidate walk's added rows add item kinds of their own
+#: (``Row.item``).
+_ITEM_RULES: dict[str, dict[tuple[str, str, str, str], str]] = {
+    IMPACT: {("Symbol", e, "<-", "*"): "symbol" for e in _OWNER_EDGES} | {("ConfigEntry", "BOUND_BY", "->", "*"): "config"},
+    DEPENDS_ON: {("Symbol", "CALLS", "->", "*"): "symbol", ("Symbol", "CALLS_NAME", "->", "*"): "symbol", ("Symbol", "TO", "->", "*"): "symbol", ("Unit", "TO_UNIT", "->", "*"): "unit"},
 }
 
 
@@ -598,6 +649,7 @@ class Walk:
     best: dict[Key, Entry]
     cut: frozenset[tuple[str, str, str]]
     facts: dict[Node, dict[str, Any]]
+    units: dict[str, flow.UnitInfo]   # the flag and language of every unit the walk's gates read
 
     @property
     def unexplored(self) -> int:
@@ -621,7 +673,7 @@ class Walk:
             if k[:2] == self.anchor[:2]:
                 continue
             for e in self.arrivals[k]:
-                kind = rules.get((k[0], e.edge.type, e.edge.dir)) if e.edge is not None else None
+                kind = (rules.get((k[0], e.edge.type, e.edge.dir, k[2])) or rules.get((k[0], e.edge.type, e.edge.dir, "*")) or e.edge.item or None) if e.edge is not None else None
                 if kind is None:
                     continue
                 ident = (kind, k[1])
@@ -659,12 +711,12 @@ def _edge_id(row: Row, src_id: str, to_id: str) -> tuple[str, str, str]:
     return (row.edge, to_id, src_id) if row.dir == "<-" else (row.edge, src_id, to_id)
 
 
-def _to_state(row: Row, step: Step, k: Key) -> State | None:
+def _to_state(row: Row, step: Step, k: Key, dst: flow.UnitInfo | None) -> State | None:
     t = row.to
+    if t == "flow:r":
+        return S.path_state("r") if dst is not None and dst.flag else S.VALUE
     if t == "path:to":
         return S.path_state(step.to_path or "")
-    if t == "path:r":
-        return S.path_state("r")
     if t == "path:arg":
         return S.path_state(k[3])
     if t == "path:param":
@@ -674,6 +726,8 @@ def _to_state(row: Row, step: Step, k: Key) -> State | None:
         return None if p is None else S.path_state(p)
     if t == "site":
         return S.site_state(step.site or "")
+    if t == "end:callee":
+        return ("end", "callee")
     if t in ("value", "contract", "end", "key", "function"):
         return (t, "")
     raise WalkError("unknown to-state token")
@@ -685,9 +739,14 @@ def _merge(facts: dict[Node, dict[str, Any]], node: Node, new: Mapping[str, Any]
         cur.setdefault(k, v)
 
 
-def _owner_join(reader: Reader, facts: dict[Node, dict[str, Any]], visited: set[Key]) -> None:
-    """A point carries no ``repo``/``unit``/``path`` of its own: those are its owner's, read by the owner join for every reached point that lacks them."""
-    for label in ("CallSite", "Param", "Ret", "Cond"):
+_POINTS = ("CallSite", "Param", "Ret", "Cond")
+
+
+def _owner_join(reader: Reader, facts: dict[Node, dict[str, Any]], visited: Iterable[Key]) -> None:
+    """A point carries no ``repo``/``unit``/``path`` of its own: those are its owner's, read by the owner join for every reached point that lacks them (the walk joins
+    the sources of a flag-gated row early, since the gate needs the point's unit; the rest at the end)."""
+    visited = list(visited)
+    for label in _POINTS:
         need = sorted({k[1] for k in visited if k[0] == label and "unit" not in facts.get((label, k[1]), {})})
         if not need:
             continue
@@ -697,11 +756,15 @@ def _owner_join(reader: Reader, facts: dict[Node, dict[str, Any]], visited: set[
 
 @dataclass
 class _Move:
+    """``possible`` is the hop's status (it counts toward the chain's possible hops; true on a labelled row), ``own_possible`` its own edge's (the tie-break after
+    distance and length); they differ exactly on a labelled row whose own edge is confirmed (``-answer-spec2.md`` §5)."""
     frm: Entry
     row: Row
     step: Step
     to_state: State
     edge: Edge
+    possible: bool
+    own_possible: bool
 
 
 def _group_rows(table: Sequence[Row], column: str) -> dict[tuple[str, str], list[Row]]:
@@ -717,8 +780,35 @@ def _group_rows(table: Sequence[Row], column: str) -> dict[tuple[str, str], list
     return by_group
 
 
-def _expand(reader: Reader, by_group: Mapping[tuple[str, str], Sequence[Row]], entries: Sequence[Entry], facts: dict[Node, dict[str, Any]]) -> list[_Move]:
-    """Every (arrival, row, step) the rows allow from ``entries``, before the bound: the row semantics, shared with the oracle of ``tests/slice``."""
+class _Memo:
+    """One expansion's reads: a row pair that shares a read (``owner:X``/``owner:X:fn``, ``calls_out``/``calls_out:fn``) and the early owner join ask the reader once."""
+
+    def __init__(self, reader: Reader):
+        self._reader, self._seen = reader, {}
+
+    def read(self, name: str, params: Mapping[str, Any] | None = None) -> list[tuple]:
+        key = (name, json.dumps(params, sort_keys=True, default=list))
+        if key not in self._seen:
+            self._seen[key] = self._reader.read(name, params)
+        return self._seen[key]
+
+    def __getattr__(self, name: str):
+        return getattr(self._reader, name)
+
+
+def _unit_id(facts: Mapping[Node, dict[str, Any]], label: str, ident: str) -> str | None:
+    return facts.get((label, ident), {}).get("unit")
+
+
+def _expand(reader: Reader, by_group: Mapping[tuple[str, str], Sequence[Row]], entries: Sequence[Entry], facts: dict[Node, dict[str, Any]],
+            units: flow.Units | None = None) -> list[_Move]:
+    """Every (arrival, row, step) the rows allow from ``entries``, before the bound: the row semantics, shared with the oracle of ``tests/slice``.
+
+    A row with a ``gate`` is asked only of the sources whose unit's flag opens it, and followed only to the steps whose arriving unit's does (``ccg.engine.flow``); a
+    point's unit is its owner's, joined before the row is asked. A ``labelled`` row's hops are ``possible`` (``flow.labelled_edge``).
+    """
+    units = flow.Units(reader) if units is None else units
+    reader = _Memo(reader)
     out: list[_Move] = []
     groups: dict[tuple[str, str], list[Entry]] = {}
     for e in sorted(entries, key=lambda e: (e.key, e.cost, _stable(e.pred_key))):
@@ -728,26 +818,51 @@ def _expand(reader: Reader, by_group: Mapping[tuple[str, str], Sequence[Row]], e
             use = list(group)
             if row.where == "arg-path":
                 use = [e for e in use if S.is_arg_path(e.key[3])]
+            if row.where == "callee-state":
+                use = [e for e in use if e.key[3] == "callee"]
             if not use:
                 continue
+            needs_src = row.gate in flow.SRC_GATES or row.labelled
+            if needs_src:
+                if label in _POINTS:
+                    _owner_join(reader, facts, (e.key for e in use))
+                if any(_unit_id(facts, label, e.key[1]) is None for e in use):
+                    raise GraphDataError("a source node that a flow gate reads has no unit (a point with no owner, or a node carrying no unit)")
+                units.ensure(_unit_id(facts, label, e.key[1]) for e in use)
+                if row.gate in ("src:true", "src:false"):
+                    use = [e for e in use if flow.gate_open(row.gate, units.get(_unit_id(facts, label, e.key[1])), None)]
+                    if not use:
+                        continue
             src: dict[str, list[Entry]] = {}
             for e in use:
                 src.setdefault(e.key[1], []).append(e)
-            for step in ADAPTERS[row.adapter](reader, row, sorted(src), facts):
+            steps = ADAPTERS[row.adapter](reader, row, sorted(src), facts)
+            needs_dst = row.gate in flow.DST_GATES or row.to == "flow:r"
+            if needs_dst:
+                units.ensure(s.facts.get("unit") for s in steps)
+            for step in steps:
                 if step.src not in src:
                     raise GraphDataError(f"query {row.read!r} returned a row for an id it was not asked")
+                src_info = units.get(_unit_id(facts, label, step.src)) if needs_src else None
+                dst_info = units.get(step.facts.get("unit")) if needs_dst else None
+                if not flow.gate_open(row.gate, src_info, dst_info):
+                    continue
                 _merge(facts, (step.label, step.id), step.facts)
                 if step.src_facts:
                     _merge(facts, (label, step.src), step.src_facts)
-                edge = Edge(row.edge, row.dir, step.status, step.reason)
+                own_possible = step.status == "possible"
+                status, reason = step.status, step.reason
+                if row.labelled:
+                    status, reason = flow.labelled_edge(step.status, step.reason, flow.labelled_lang(src_info, dst_info))
+                edge = Edge(row.edge, row.dir, status, reason, row.item)
                 for e in src[step.src]:
                     if row.where == "match-path" and not S.data_edge_matches((e.key[2], e.key[3]), step.from_path or ""):
                         continue
                     if row.where == "site-match" and step.id != e.key[3]:
                         continue
-                    to_state = _to_state(row, step, e.key)
+                    to_state = _to_state(row, step, e.key, dst_info)
                     if to_state is not None:
-                        out.append(_Move(e, row, step, to_state, edge))
+                        out.append(_Move(e, row, step, to_state, edge, status == "possible", own_possible))
     return out
 
 
@@ -760,6 +875,8 @@ def walk(reader: Reader, anchor: Node, state: State | None = None, *, column: st
 
     The bounded result is everything reachable within the bound (``-answer-spec2.md`` §4.1): at each state the walk keeps every arrival no other arrival dominates
     on ``(possible hops, distance)`` and expands the state once per kept arrival.
+    **A missing anchor raises** :class:`GraphDataError` (the flow gate reads the anchor's unit and finds none); before P1-23 it returned an empty walk. An anchor comes from the
+    resolver over the same snapshot, so it is a stale-snapshot race: P1-39 maps it to a build error, never to a "no impact" answer.
     """
     bound = config.DEFAULT_DEPTH_BOUND if bound is None else bound
     level_guard = config.LEVEL_GUARD if level_guard is None else level_guard
@@ -772,6 +889,7 @@ def walk(reader: Reader, anchor: Node, state: State | None = None, *, column: st
     root = Entry((0, 0, 0, 0), None, None, start)
     kept: dict[Key, list[Entry]] = {start: [root]}
     facts: dict[Node, dict[str, Any]] = {}
+    units = flow.Units(reader)
     frontier: list[Entry] = [root]
     sizes: list[int] = []
     level = 0
@@ -782,15 +900,13 @@ def walk(reader: Reader, anchor: Node, state: State | None = None, *, column: st
         sizes.append(len(frontier))
         cuts: dict[int, set[tuple[str, str, str]]] = {}
         cands: dict[Key, list[tuple]] = {}
-        for mv in _expand(reader, by_group, frontier, facts):
+        for mv in _expand(reader, by_group, frontier, facts, units):
             base = mv.frm.cost
             if mv.row.inc and base[1] + mv.row.inc > bound:
                 cuts.setdefault(id(mv.frm), set()).add(_edge_id(mv.row, mv.frm.key[1], mv.step.id))
                 continue
-            # SEAM(P1-23): ``own`` is both the hop's status (cost[0], the possible-hops count) and its own edge's status (cost[3], the own-possible tie-break). P1-23's
-            # labelled rows make a hop ``possible`` while its own edge is ``confirmed``: split this variable there, or the tie-break can never decide anything.
-            own = 1 if mv.step.status == "possible" else 0
-            cost: Cost = (base[0] + own, base[1] + mv.row.inc, level, base[3] + own)
+            # the hop's status counts toward the possible hops, its own edge's toward the tie-break after length: they differ on a labelled row (``-answer-spec2.md`` §5)
+            cost: Cost = (base[0] + mv.possible, base[1] + mv.row.inc, level, base[3] + mv.own_possible)
             key: Key = (mv.step.label, mv.step.id, mv.to_state[0], mv.to_state[1])
             cands.setdefault(key, []).append((cost, _stable(mv.frm.key), mv.edge.sort_key(), mv.frm, mv.edge))
         for e in frontier:
@@ -810,4 +926,4 @@ def walk(reader: Reader, anchor: Node, state: State | None = None, *, column: st
     _owner_join(reader, facts, visited)
     best = {k: min(lst, key=lambda e: (e.cost, _stable(e.pred_key), e.edge.sort_key() if e.edge else ())) for k, lst in kept.items()}
     cut = frozenset().union(*(e.cuts for lst in kept.values() for e in lst))
-    return Walk(start, column, bound, rows_table, level, sizes, visited, kept, best, cut, facts)
+    return Walk(start, column, bound, rows_table, level, sizes, visited, kept, best, cut, facts, units.info)

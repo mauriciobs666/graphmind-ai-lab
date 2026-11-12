@@ -10,7 +10,7 @@ standing contracts:
 - `docs/plans/connected-code-graph-eval-protocol2-ml.md` (EP2);
 - the archived `docs/plans/connected-code-graph-p0-ml.md` (P0-ML).
 
-Revised 2026-11-10 in place (Pass 5, provisioning decision).
+Revised 2026-11-12 in place (§3.5 V-both and V-union walk definitions).
 
 A rule changed here applies from P1 on. The note holds method only. It writes no labels and names
 no held-out content. Figures are **re-derived** from the P0 artifacts (appendix scripts) unless
@@ -325,9 +325,27 @@ items' locators were validated):
   - the as-built walk;
   - **V-flow**: the flag-true rows (`DATA`, `CONTROLLED_BY`, `arg(i)`/`Ret`) walked in flag-false
     units, every added-row hop `possible`, `flow-unavailable:<lang>`;
-  - **V-both**: callers and callees to bound 2, every added-row hop `possible`;
-  - **V-union**: V-flow ∪ V-both, computed from the two listed sets.
+  - **V-both**: callers and callees to the depth bound (2, distance from the anchor), every
+    added-row hop `possible`. From a function the walk reached only at call level (`function`
+    state, distance `d`): `HAS_CALL →` (increment 0) to its call sites, then `CALLS →` /
+    `CALLS_NAME →` (increment 1) to the callee, an impact item; from a callee so reached, the same
+    two steps again, to the bound (callee at call depth `k` has distance `d + k`, listed iff
+    `≤ 2`). Callees are followed in a state of their own: a callee's own callers are never walked, and a function that merely owns an affected point in a
+    flag-true unit (`end`) never expands callees. The callee chain is not gated by flags; on real
+    data a callee shares the language, hence the flag, of the function that opened it (`CALLS` stays
+    within a language, `Unit.flowAvailable` is per language), and the label's `<lang>` is the
+    language of the hop's source unit as for every labelled hop;
+  - **V-union**: the **union of the two row tables** (V-flow's added rows and V-both's added
+    rows), measured as the walk that could ship, because the shipped object is a table. Its
+    listed set strictly contains the union of the two listed sets (V-both's callee rows also leave
+    functions that V-flow's rows reach); the set union of the V-flow and V-both lists is reported
+    beside it as a lower bound, not used by the rule.
 - Burden per dev anchor, for each walk.
+- For V-both and V-union, the items listed only through a second-level callee hop, reported
+  beside `s` (it shows whether depth 2 earned its burden); not used by the rule.
+- The item rules a walk needs live in that walk's table (the table is the walk): V-both's
+  callee-arrival item rules are part of the V-both and V-union candidate tables and enter the
+  shipped fingerprint only if one of those walks ships.
 
 **Rule.**
 - Ship the walk with the **lowest dev burden among those with the maximum `s`**.

@@ -15,20 +15,25 @@ from test_engine_bfs_rows import contract_graph
 
 #: row id -> (distance increment, to-state token, edge type, direction)
 PINS = {
-    "calls_in": (1, "path:r", "CALLS", "<-"), "name_in": (1, "path:r", "CALLS_NAME", "<-"), "to_in:value": (0, "value", "TO", "<-"), "to_in:contract": (0, "contract", "TO", "<-"),
+    "calls_in": (1, "flow:r", "CALLS", "<-"), "name_in": (1, "flow:r", "CALLS_NAME", "<-"), "to_in:value": (0, "value", "TO", "<-"), "to_in:contract": (0, "contract", "TO", "<-"),
     "provides_out": (0, "contract", "PROVIDES", "->"), "arg_calls_out": (1, "path:arg", "CALLS", "->"), "arg_name_out": (1, "path:arg", "CALLS_NAME", "->"),
     "arg_has_param": (0, "path:param", "HAS_PARAM", "->"),
     "owner:CallSite": (0, "end", "HAS_CALL", "<-"), "owner:Param": (0, "end", "HAS_PARAM", "<-"), "owner:Ret": (0, "value", "HAS_RETURN", "<-"), "owner:Cond": (0, "end", "HAS_COND", "<-"),
     "owner:CallSite:contract": (0, "end", "HAS_CALL", "<-"),
     "data_in:Param": (0, "path:to", "DATA", "<-"), "data_in:CallSite": (0, "path:to", "DATA", "<-"), "controlled_in": (0, "value", "CONTROLLED_BY", "<-"),
-    "via_in:value": (1, "path:r", "VIA", "<-"), "via_in:contract": (1, "contract", "VIA", "<-"), "provides_in": (0, "contract", "PROVIDES", "<-"), "on_in": (0, "contract", "ON", "<-"),
-    "consumes_in": (1, "contract", "CONSUMES", "<-"), "bound_in": (1, "site", "BOUND_BY", "<-"), "via_in:site": (1, "path:r", "VIA", "<-"), "wiring": (1, "end", "BOUND_BY", "->"),
+    "via_in:value": (1, "flow:r", "VIA", "<-"), "via_in:contract": (1, "contract", "VIA", "<-"), "provides_in": (0, "contract", "PROVIDES", "<-"), "on_in": (0, "contract", "ON", "<-"),
+    "consumes_in": (1, "contract", "CONSUMES", "<-"), "bound_in": (1, "site", "BOUND_BY", "<-"), "via_in:site": (1, "flow:r", "VIA", "<-"), "wiring": (1, "end", "BOUND_BY", "->"),
     "has_out:CallSite": (0, "value", "HAS_CALL", "->"), "has_out:Param": (0, "value", "HAS_PARAM", "->"), "has_out:Ret": (0, "value", "HAS_RETURN", "->"),
     "has_out:Cond": (0, "value", "HAS_COND", "->"), "calls_out": (1, "value", "CALLS", "->"), "name_out": (1, "value", "CALLS_NAME", "->"), "via_out": (1, "value", "VIA", "->"),
     "to_out": (0, "value", "TO", "->"), "to_unit_out": (0, "end", "TO_UNIT", "->"),
     "data_out:CallSite": (0, "value", "DATA", "->"), "data_out:Ret": (0, "value", "DATA", "->"), "data_out:Cond": (0, "value", "DATA", "->"),
     "controlled_out:CallSite": (0, "value", "CONTROLLED_BY", "->"), "controlled_out:Ret": (0, "value", "CONTROLLED_BY", "->"), "controlled_out:Cond": (0, "value", "CONTROLLED_BY", "->"),
     "controlled_out:Param": (0, "value", "CONTROLLED_BY", "->"),
+    # P1-23: the rows that enter ``function`` (a flag-false unit's function) and the labelled rows leaving it (``-answer-spec2.md`` §5); their gates and labels are pinned in
+    # ``test_engine_flow.py``
+    "owner:CallSite:fn": (0, "function", "HAS_CALL", "<-"), "owner:Param:fn": (0, "function", "HAS_PARAM", "<-"), "owner:Cond:fn": (0, "function", "HAS_COND", "<-"),
+    "calls_in:fn": (1, "flow:r", "CALLS", "<-"), "name_in:fn": (1, "flow:r", "CALLS_NAME", "<-"), "to_in:fn": (0, "value", "TO", "<-"),
+    "calls_out:fn": (1, "function", "CALLS", "->"), "name_out:fn": (1, "function", "CALLS_NAME", "->"), "has_out:CallSite:fn": (0, "value", "HAS_CALL", "->"),
 }
 #: adapter -> where the arriving hop's status and reason come from (the behaviour of each is pinned in ``test_engine_bfs_rows.py``)
 STATUS_SOURCE = {

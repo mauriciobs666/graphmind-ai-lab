@@ -20,16 +20,18 @@ from test_engine_bfs_rows import caller_chain, contract_graph, depends_graph, wi
 
 #: ``ccg.ids.tuple_id(["walkDefinition", <canonical JSON of bfs.definition()>])`` of the shipped table, pinned here as a literal: a row, a row field, a cost/fallback/
 #: unexplored identifier or ``DEFAULT_DEPTH_BOUND`` that changes makes this fail until the definition gets a new version (``-answer-spec2.md`` §1.2).
-PINNED_1_1 = "c314fe7c084ba7b951ad6aea505b089d"
+PINNED_1_1 = "5cf047c14e43da44d0363707d3036080"
 
 
 # --------------------------------------------------------------------------- the level guard (a cycle that escapes the visited set raises, never loops)
 
 def cond_chain(m: int):
-    """``k0`` guards ``k1`` guards ... ``k<m>`` (every hop distance 0), no owners: the walk needs ``m + 1`` levels."""
+    """``k0`` guards ``k1`` guards ... ``k<m>`` (every hop distance 0), every cond owned by one function (the flow gate reads a point's unit through its owner): the
+    walk needs ``m + 1`` levels."""
     g = G()
+    g.sym("Own")
     for i in range(m + 1):
-        g.node("Cond", pointId=f"k{i}", line=i, code="if x")
+        g.cond(f"k{i}", "Own", line=i)
     for i in range(m):
         g.controlled("Cond", f"k{i+1}", f"k{i}")
     return g
@@ -38,7 +40,7 @@ def cond_chain(m: int):
 def test_the_default_level_guard_is_64_and_a_walk_of_exactly_64_levels_passes():
     assert config.LEVEL_GUARD == 64
     w = run(cond_chain(63), ("Cond", "k0"), S.VALUE)
-    assert w.levels == 64 and len(w.visited) == 64
+    assert w.levels == 64 and len(w.visited) == 65      # 64 conds and their one owner
 
 
 def test_a_chain_deeper_than_64_levels_raises_and_names_the_guard_not_a_value():
@@ -215,7 +217,7 @@ def test_an_unknown_start_state_is_refused():
 
 def test_every_row_reads_a_registered_query_through_a_registered_adapter_and_ids_are_unique():
     rows = bfs.ROWS
-    assert len({r.id for r in rows}) == len(rows) and len(rows) == 40
+    assert len({r.id for r in rows}) == len(rows) and len(rows) == 49
     for r in rows:
         assert (r.read in QUERIES) or r.read == "bound_of_link", r.id
         assert r.adapter in bfs.ADAPTERS and r.column in bfs.COLUMNS and r.inc in (0, 1) and r.dir in ("<-", "->"), r.id
@@ -225,8 +227,10 @@ def test_every_row_reads_a_registered_query_through_a_registered_adapter_and_ids
 
 def test_every_non_empty_where_token_is_one_the_walk_branches_on_and_each_is_used_by_a_shipped_row():
     """A table field no code reads would version the table without constraining the walk: ``where`` has three tokens, each branched on in ``bfs._expand``, each used."""
-    assert bfs.WHERE_TOKENS == ("match-path", "arg-path", "site-match")
-    assert {r.where for r in bfs.ROWS} - {""} == set(bfs.WHERE_TOKENS)
+    from ccg.engine import flow
+    assert bfs.WHERE_TOKENS == ("match-path", "arg-path", "site-match", "callee-state")
+    assert {r.where for r in bfs.ROWS} - {""} == {"match-path", "arg-path", "site-match"}                       # the shipped table
+    assert {r.where for r in flow.candidate_table("V-union")} - {""} == set(bfs.WHERE_TOKENS)                  # ``callee-state`` is a candidate walk's
     src = open(bfs.__file__).read()
     for tok in bfs.WHERE_TOKENS:
         assert f'row.where == "{tok}"' in src, tok
@@ -269,12 +273,13 @@ def test_a_row_field_changed_in_the_table_changes_the_walk():
 def test_the_walk_reads_only_names_the_row_table_names():
     r = MemoryReader(contract_graph())
     bfs.walk(r, ("ContractPoint", "cp1"))
-    table_reads = {row.read for row in bfs.ROWS} | {"on_in", "via_in", "owner_of:CallSite", "owner_of:Param", "owner_of:Ret", "owner_of:Cond"}
+    table_reads = {row.read for row in bfs.ROWS} | {"on_in", "via_in", "owner_of:CallSite", "owner_of:Param", "owner_of:Ret", "owner_of:Cond", "units"}
     assert set(r.names()) <= table_reads
 
 
 def test_a_reached_point_carries_its_owners_repo_unit_and_path_from_the_owner_join():
     g = G()
+    g.unit_node("ub", "repo-b")
     g.sym("A", path="lib/a.py"), g.sym("B", path="svc/b.py", unit="ub", repo="repo-b"), g.site("cb", "B", unit="ub", repo="repo-b"), g.calls("cb", "A"), g.ret("rb", "B")
     g.data("Ret", "rb", "CallSite", "cb", "r", "ret")
     f = run(g, ("Symbol", "A")).facts
@@ -300,12 +305,14 @@ def test_a_state_improved_below_the_bound_drops_the_edges_counted_cut_from_its_e
 def test_the_definition_record_holds_the_table_the_identifiers_and_the_bound():
     d = bfs.definition()
     assert d["id"] == "bfs-v1" and d["costOrder"] == "possible,distance,length,own-possible,stable-key" and d["depthBound"] == 2
-    assert d["flowFallback"] == "none" and d["unexplored"] == "distinct-stored-edges,state-at-bound,increment-1,once"
+    assert d["flowFallback"] == "unit-flag-gates,function-state,labelled-exit-rows" and d["unexplored"] == "distinct-stored-edges,state-at-bound,increment-1,once"
     assert [r["id"] for r in d["rows"]] == [r.id for r in bfs.ROWS]
-    assert {k for r in d["rows"] for k in r} == {"id", "column", "src", "kinds", "read", "adapter", "edge", "dir", "to", "inc", "where"}     # no field no code reads
-    assert d["items"]["impact"] == [["ConfigEntry", "BOUND_BY", "->", "config"], ["Symbol", "HAS_CALL", "<-", "symbol"], ["Symbol", "HAS_COND", "<-", "symbol"],
-                                    ["Symbol", "HAS_PARAM", "<-", "symbol"], ["Symbol", "HAS_RETURN", "<-", "symbol"]]
-    assert d["items"]["depends-on"] == [["Symbol", "CALLS", "->", "symbol"], ["Symbol", "CALLS_NAME", "->", "symbol"], ["Symbol", "TO", "->", "symbol"], ["Unit", "TO_UNIT", "->", "unit"]]
+    assert {k for r in d["rows"] for k in r} == {"id", "column", "src", "kinds", "read", "adapter", "edge", "dir", "to", "inc", "where", "gate", "labelled", "item"}     # no field no code reads
+    assert d["items"]["impact"] == [["ConfigEntry", "BOUND_BY", "->", "*", "config"],
+                                    ["Symbol", "HAS_CALL", "<-", "*", "symbol"], ["Symbol", "HAS_COND", "<-", "*", "symbol"], ["Symbol", "HAS_PARAM", "<-", "*", "symbol"],
+                                    ["Symbol", "HAS_RETURN", "<-", "*", "symbol"]]
+    assert d["items"]["depends-on"] == [["Symbol", "CALLS", "->", "*", "symbol"], ["Symbol", "CALLS_NAME", "->", "*", "symbol"], ["Symbol", "TO", "->", "*", "symbol"],
+                                        ["Unit", "TO_UNIT", "->", "*", "unit"]]
 
 
 def test_the_fingerprint_is_tuple_id_over_the_canonical_json_of_the_record():

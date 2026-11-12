@@ -369,7 +369,8 @@ def test_a_name_candidate_is_possible_and_the_reason_depends_on_whether_the_site
 
 @pytest.mark.parametrize("count,reason", [(0, "name-match"), (1, "resolution-unverified"), (2, "resolution-unverified"), (7, "resolution-unverified")])
 def test_the_count_column_alone_decides_the_reason(count, reason):
-    r = ScriptedReader({"name_in": [("A", "cs", "repo-a", "ua", "a.py", 5, "a", count)], "owner_of:CallSite": [("cs", "F", "repo-a", "ua", "F", "a.py", 1, 9, None)]})
+    r = ScriptedReader({"name_in": [("A", "cs", "repo-a", "ua", "a.py", 5, "a", count)], "owner_of:CallSite": [("cs", "F", "repo-a", "ua", "F", "a.py", 1, 9, None)],
+                        "units": [("ua", "repo-a", "", "python", "fresh", None, None, None, None, True)]})
     w = bfs.walk(r, ("Symbol", "A"))
     assert w.best[("CallSite", "cs", "path", "r")].edge.reason == reason and w.best[("CallSite", "cs", "path", "r")].edge.status == "possible"
 

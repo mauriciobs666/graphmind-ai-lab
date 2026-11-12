@@ -18,10 +18,10 @@ class G:
     """A graph in ``GraphRows`` shape with one-line adders. Every adder returns the id it made; ``u`` is the unit the symbol lives in (flag-true by default, set
     explicitly: P1-23's flag gate must change no pin here)."""
 
-    def __init__(self, repo: str = "repo-a", unit: str = "ua", *, flow: bool = True):
+    def __init__(self, repo: str = "repo-a", unit: str = "ua", *, flow: bool = True, lang: str = "python"):
         self.rows = GraphRows()
         self.repo, self.unit = repo, unit
-        self.unit_node(unit, repo, flow=flow)
+        self.unit_node(unit, repo, flow=flow, lang=lang)
 
     def node(self, label, **props):
         self.rows.nodes.setdefault(label, []).append(props)
@@ -29,8 +29,8 @@ class G:
     def edge(self, src, etype, dst, s, t, **p):
         self.rows.edges.setdefault((src, etype, dst), []).append({"s": s, "t": t, **({"p": p} if p else {})})
 
-    def unit_node(self, unit, repo=None, *, flow=True, root=""):
-        self.node("Unit", unitId=unit, repoId=repo or self.repo, rootPath=root, language="python", buildStatus="fresh", flowAvailable=flow)
+    def unit_node(self, unit, repo=None, *, flow=True, root="", lang="python"):
+        self.node("Unit", unitId=unit, repoId=repo or self.repo, rootPath=root, language=lang, buildStatus="fresh", flowAvailable=flow)
         return unit
 
     def sym(self, sid, qname=None, *, path="a.py", start=1, end=9, unit=None, repo=None, name=None):
@@ -138,6 +138,13 @@ class MemoryReader:
         """The edges ``(i:src)-[etype]->(y:dst)``: ``[(y id, props)]``."""
         return self._by_s[(src, etype, dst)].get(i, []) if (src, etype, dst) in self._by_s else []
 
+    def _q_units(self, i):
+        u = self.n("Unit", i)
+        if not u:
+            return []
+        return [(i, u.get("repoId"), u.get("rootPath"), u.get("language"), u.get("buildStatus"), u.get("builtCommit"), u.get("builtAt"), u.get("failedAt"), u.get("failReason"),
+                 u.get("flowAvailable"))]
+
     def _sym_row(self, sid):
         s = self.n("Symbol", sid)
         return (sid, s.get("repoId"), s.get("unitId"), s.get("qname"), s.get("path"), s.get("lineStart"))
@@ -162,9 +169,25 @@ class MemoryReader:
         if fn is None:
             raise NotImplementedError(f"MemoryReader has no {name}")
         out = []
+        if name == "candidate_count":
+            for site, link in (params or {}).get("pairs", []):
+                out.extend(self._candidate_count(site, link))
         for i in list((params or {}).get("ids", [])):
             out.extend(fn(i))
         return sorted((tuple(r) for r in out), key=_row_key)
+
+    def _q_candidate_count(self, i):
+        return []       # asked by ``pairs``, answered in ``read``
+
+    def _candidate_count(self, site, link):
+        """``candidate_count``: no row when the ``VIA`` edge has no ``consumerKey`` or the site has no owner (``docs/reviews/connected-code-graph-p1-21.md`` G1); else the links of the owner's sites that
+        carry the same key, the pair's own included."""
+        keys = [p.get("consumerKey") for lid, p in self.outof("CallSite", "VIA", "Link", site) if lid == link and p.get("consumerKey") is not None]
+        owners = [s for s, _ in self.into("Symbol", "HAS_CALL", "CallSite", site)]
+        if not keys or not owners:
+            return []
+        links = {lid for o in owners for sib, _ in self.outof("Symbol", "HAS_CALL", "CallSite", o) for lid, p in self.outof("CallSite", "VIA", "Link", sib) if p.get("consumerKey") == keys[0]}
+        return [(site, link, len(links))]
 
     # -- impact
     def _q_calls_in(self, i):

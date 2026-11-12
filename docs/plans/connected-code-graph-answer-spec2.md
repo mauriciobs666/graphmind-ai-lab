@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Extends:** `docs/plans/connected-code-graph-answer-spec.md`
 
-Revised 2026-11-12: §1.2 definition (item rules, record content), §4.1/§4.2 (bounded result, final arrival set) and the `site` hop state (§3.6, §6, §7, §8), from the P1-22 gate (`docs/reviews/connected-code-graph-p1-22.md` Q1, F5, N1).
+Revised 2026-11-12: §1.2 definition (item rules, record content), §4.1/§4.2 (bounded result, final arrival set) and the `site` hop state (§3.6, §6, §7, §8), from the P1-22 gate (`docs/reviews/connected-code-graph-p1-22.md` Q1, F5, N1); §5's call-site state, argument-row gate, depends-on entry gate and data-error rule, from the P1-23b gate (`docs/reviews/connected-code-graph-p1-23b.md`, decisions 1, 2, 3, 6).
 
 This document states **only the changes** P1 makes to `docs/plans/connected-code-graph-answer-spec.md` (v1.3, "v1"
 below); anything not named here is as v1 says. It is step P1-00 of `docs/plans/connected-code-graph-p1-answers.md`,
@@ -346,6 +346,11 @@ crosses into the unit" sentence, and it is the one definition P1-23 implements.
 - the `arg(i)`/`Ret` rows: `CALLS →` into a callee, the index-matched `HAS_PARAM →`, and the `Ret` summary.
 
 No hop whose unit is flag-false has state `path`.
+- A call site that a resolved `CALLS ←`, `CALLS_NAME ←` or `VIA ←` reaches is state `path r` in a flag-true unit and
+  `value` in a flag-false one (never `path`), so the rule above holds and V3 (`accessPath` only for `path`) is unaffected.
+- The argument rows (`arg(i)`) `CALLS →`/`CALLS_NAME →` into a callee are followed only when both the call site's unit and
+  the callee's unit are flag-true: the callee's flag is what keeps the callee out of `path`; the caller's matters only for an
+  anchor call site in `path` state.
 
 **The closed list of labelled rows.** The walk definition (§1.2) has one state for a function whose callers it
 reaches only at call level: `function`. The rows that enter it, and the rows labelled when leaving it, are these
@@ -356,10 +361,16 @@ and no others. Both kinds apply only inside a flag-false unit, because a flag-tr
 | impact | `HAS_CALL ←`, `HAS_PARAM ←`, `HAS_COND ←` from one of the function's points, outside contract mode (where `HAS_CALL ←` ends in `end`) | `CALLS ←`, `CALLS_NAME ←`, `TO ←` |
 | depends-on | `CALLS →`, `CALLS_NAME →` into a callee | `HAS_CALL →` |
 
+The unit that gates a depends-on `function` entry is the arriving callee's, the unit of the `function`-state hop it leaves.
+
 The following rows do not enter the state, so their continuations are not labelled:
 - `HAS_RETURN ←`, which enters `value`: a changed return reaches the callers through a resolved call;
 - an anchor `Symbol`: a changed function changes its direct callers;
 - `PROVIDES ←`, `TO ←` in contract mode, `VIA ←`, and §3.3's wiring row.
+
+A node with no unit, a gated point with no owner, or a unit with no `Unit` row is a data error, fail-closed
+(`GraphDataError`; no label or gate is guessed). So is an anchor absent from the snapshot, which P1-39 reports as a build
+error and never as an empty (no-impact) answer.
 
 The state is part of the visited key (`-p0-graph.md` §3.1), so a hop's label depends only on its row and the unit
 flag. It never depends on the path taken to reach the hop.

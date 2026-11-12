@@ -1,8 +1,8 @@
 """Walk states and access paths (C-1001 P1-22; ``docs/plans/connected-code-graph-p1-answers.md`` P1-22 Files).
 
 A frontier entry is ``(label, id, state kind, state path)`` (``-p0-graph.md`` §3.1, the visited-set key). The kinds are the closed six below; ``function`` is the
-state of a function reached only at call level (``-answer-spec2.md`` §5). SEAM(P1-23): the rows that enter and leave ``function`` in a flag-false unit are built
-there; the shipped P1-22 table never enters it (every unit is walked with the precise rows), only a row-table variant can.
+state of a function reached only at call level (``-answer-spec2.md`` §5). The shipped table enters it only in a flag-false unit (``ccg.engine.flow``, P1-23) and leaves it by the closed labelled rows. The path of a state kind is part of its key; ``end`` with the path
+``callee`` is a candidate walk's callee state (the answer's hop state stays ``end``).
 
 Access paths are the grammar of ``-bundle-spec3.md`` §1.1/§5.1: ``a<i>``, ``recv``, ``kw.<name>`` (an argument), ``p<i>``, ``recv``, ``r`` (a definition),
 ``ret``, each followed by fields (``.ident`` or ``["json"]``).

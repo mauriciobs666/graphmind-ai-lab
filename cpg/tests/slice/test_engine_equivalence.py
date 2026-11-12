@@ -12,12 +12,14 @@ Plan: ``docs/plans/connected-code-graph-p1-answers.md`` P1-22 (1). Two oracles, 
 """
 from __future__ import annotations
 
+import copy
 import dataclasses
 import hashlib
 import importlib.util
 import json
 import random
 import sys
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -199,7 +201,10 @@ def slice_rows():
     for name, sha in SHA256.items():
         assert hashlib.sha256((S14A / name).read_bytes()).hexdigest() == sha, f"{name}: not the artifact the oracle was pinned to"
     bundles = [[json.loads(line) for line in (S14A / name).read_text().splitlines()] for name in sorted(SHA256)]
-    return _load("load").build_rows(bundles, _load("assemble").assemble(bundles))
+    rows = _load("load").build_rows(bundles, _load("assemble").assemble(bundles))
+    for unit in rows.nodes.get("Unit", []):
+        unit["flowAvailable"] = True   # the walk gates on the flag (P1-23): the slice's walk follows the precise rows everywhere, so its units are flag-true
+    return rows
 
 
 @pytest.fixture(scope="module")
@@ -261,7 +266,8 @@ DELTAS = {
     "p0.nothing": (_TWENTY, {}),
     "buildUrl": (_TWENTY, {}),
 }
-#: regression pin (what the run observed under the shipped table at bound 2, not an oracle): (items, states, unexplored, maximum item distance)
+#: COUNTERFACTUAL regression pin: every slice unit is flag-true here (the slice's walk follows the precise rows everywhere), which no P1 language is; the real flag-false world is
+#: pinned by ``test_the_real_flag_false_slice_...`` below. What the run observed under the shipped table at bound 2, not an oracle: (items, states, unexplored, maximum item distance)
 SHIPPED_OBSERVED = {"p0": (22, 157, 5, 2), "p0.path": (3, 18, 0, 1), "p0.method": (2, 10, 0, 1), "p0.query": (2, 22, 0, 1), "p0.nothing": (1, 2, 0, 0), "buildUrl": (1, 4, 0, 1)}
 
 
@@ -290,3 +296,27 @@ def test_api_fetch_stays_confirmed_as_the_direct_resolved_caller_of_the_anchor_s
     (item,) = w.items()
     assert item.id == slice_walks.api and (item.status, item.distance, item.possible_hops) == ("confirmed", 1, 0)
     assert [s["edge"]["type"] for s in item.chain[1:]] == ["CALLS", "HAS_CALL"]
+
+
+@_marked
+def test_the_real_flag_false_slice_lists_the_callers_possible_and_leaves_the_direct_caller_confirmed(slice_rows):
+    """The shipped table over the slice as the spike loader writes it (``Unit.flowAvailable`` absent, which reads false: every P1 language is flag-false, index §5):
+    ``-answer-spec2.md`` §5's consequences on real data. Observed, not an oracle."""
+    rows = copy.copy(slice_rows)
+    rows.nodes = {**slice_rows.nodes, "Unit": [{k: v for k, v in u.items() if k != "flowAvailable"} for u in slice_rows.nodes["Unit"]]}
+    reader = MemoryReader(SimpleNamespace(rows=rows))
+    qn = {s["qname"]: s["symbolId"] for s in rows.nodes["Symbol"]}
+    qname = {v: k for k, v in qn.items()}
+    api, bu = qn["salesperson/src/api/client.ts::apiFetch"], qn["salesperson/src/api/client.ts::buildUrl"]
+    index = {p["pointId"]: p["index"] for p in rows.nodes["Param"]}
+    p0 = next(e["t"] for e in rows.edges[("Symbol", "HAS_PARAM", "Param")] if e["s"] == api and index[e["t"]] == 0)
+    w = bfs.walk(reader, ("Param", p0), S.path_state("p0"))
+    assert (len(w.items()), len(w.visited), w.unexplored) == (19, 38, 6)
+    assert Counter((i.status, i.reason, i.distance) for i in w.items()) == Counter({("confirmed", None, 0): 1, ("possible", "flow-unavailable:javascript", 1): 9,
+                                                                                    ("possible", "flow-unavailable:javascript", 2): 9})
+    w = bfs.walk(reader, ("Symbol", bu), S.VALUE)
+    assert (len(w.items()), len(w.visited), w.unexplored) == (10, 21, 9)
+    got = {qname[i.id]: (i.status, i.reason, i.distance) for i in w.items()}
+    assert got.pop("salesperson/src/api/client.ts::apiFetch") == ("confirmed", None, 1)
+    assert len(got) == 9 and set(got.values()) == {("possible", "flow-unavailable:javascript", 2)}
+    assert all(q.startswith("salesperson/src/api/endpoints.ts::") for q in got)
