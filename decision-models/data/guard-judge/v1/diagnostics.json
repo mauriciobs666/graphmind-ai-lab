@@ -1,0 +1,329 @@
+{
+  "agreement": {
+    "byClass": {
+      "false": {
+        "items": 424,
+        "pairAgreement": 0.9764150943396226,
+        "threeZeroShare": 0.964622641509434
+      },
+      "true": {
+        "items": 456,
+        "pairAgreement": 0.9853801169590644,
+        "threeZeroShare": 0.9780701754385965
+      }
+    },
+    "intentLabelAgreement": {
+      "false": {
+        "items": 440,
+        "rate": 0.9454545454545454
+      },
+      "overall": {
+        "items": 880,
+        "rate": 0.9636363636363636
+      },
+      "true": {
+        "items": 440,
+        "rate": 0.9818181818181818
+      }
+    },
+    "ties": 0
+  },
+  "balanceEffect": {
+    "false": {
+      "n": 2640,
+      "slope": 0.09355241382805349
+    },
+    "true": {
+      "n": 2640,
+      "slope": 0.09355241382805297
+    }
+  },
+  "cells": {
+    "turns|false": {
+      "roundOne": {
+        "intentLabelAgreement": 0.963963963963964,
+        "items": 222,
+        "pairAgreement": 0.984984984984985,
+        "threeZeroShare": 0.9774774774774775
+      },
+      "topUp": {
+        "intentLabelAgreement": null,
+        "items": 0,
+        "pairAgreement": null,
+        "threeZeroShare": null
+      }
+    },
+    "turns|true": {
+      "roundOne": {
+        "intentLabelAgreement": 0.9724770642201835,
+        "items": 218,
+        "pairAgreement": 0.9847094801223242,
+        "threeZeroShare": 0.9770642201834863
+      },
+      "topUp": {
+        "intentLabelAgreement": null,
+        "items": 0,
+        "pairAgreement": null,
+        "threeZeroShare": null
+      }
+    },
+    "understanding|false": {
+      "roundOne": {
+        "intentLabelAgreement": 1.0,
+        "items": 202,
+        "pairAgreement": 0.966996699669967,
+        "threeZeroShare": 0.9504950495049505
+      },
+      "topUp": {
+        "intentLabelAgreement": null,
+        "items": 0,
+        "pairAgreement": null,
+        "threeZeroShare": null
+      }
+    },
+    "understanding|true": {
+      "roundOne": {
+        "intentLabelAgreement": 0.9243697478991597,
+        "items": 238,
+        "pairAgreement": 0.9859943977591037,
+        "threeZeroShare": 0.9789915966386554
+      },
+      "topUp": {
+        "intentLabelAgreement": null,
+        "items": 0,
+        "pairAgreement": null,
+        "threeZeroShare": null
+      }
+    }
+  },
+  "labelled": 880,
+  "missingCueCheck": {
+    "p": 0.15871288363113709,
+    "strata": [
+      {
+        "concordantRate": 0.023255813953488372,
+        "counterCueRate": 0.1111111111111111,
+        "m0": 129,
+        "m1": 18,
+        "stratum": "clear|false",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "concordantRate": 0.0,
+        "counterCueRate": 0.0,
+        "m0": 122,
+        "m1": 25,
+        "stratum": "clear|true",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "concordantRate": 0.171875,
+        "counterCueRate": 0.2222222222222222,
+        "m0": 64,
+        "m1": 9,
+        "stratum": "near-miss|false",
+        "x": 2,
+        "y": 11
+      },
+      {
+        "concordantRate": 0.0,
+        "counterCueRate": 0.0,
+        "m0": 36,
+        "m1": 37,
+        "stratum": "near-miss|true",
+        "x": 0,
+        "y": 0
+      }
+    ],
+    "sumX": 4
+  },
+  "point": "guard-judge",
+  "positionEffect": {
+    "false": [
+      [
+        264,
+        0.4772727272727273
+      ],
+      [
+        264,
+        0.5227272727272727
+      ],
+      [
+        264,
+        0.44696969696969696
+      ],
+      [
+        264,
+        0.49242424242424243
+      ],
+      [
+        264,
+        0.4772727272727273
+      ],
+      [
+        264,
+        0.5075757575757576
+      ],
+      [
+        264,
+        0.5265151515151515
+      ],
+      [
+        264,
+        0.42045454545454547
+      ],
+      [
+        264,
+        0.4318181818181818
+      ],
+      [
+        264,
+        0.4962121212121212
+      ]
+    ],
+    "true": [
+      [
+        264,
+        0.5227272727272727
+      ],
+      [
+        264,
+        0.4772727272727273
+      ],
+      [
+        264,
+        0.553030303030303
+      ],
+      [
+        264,
+        0.5075757575757576
+      ],
+      [
+        264,
+        0.5227272727272727
+      ],
+      [
+        264,
+        0.49242424242424243
+      ],
+      [
+        264,
+        0.4734848484848485
+      ],
+      [
+        264,
+        0.5795454545454546
+      ],
+      [
+        264,
+        0.5681818181818182
+      ],
+      [
+        264,
+        0.5037878787878788
+      ]
+    ]
+  },
+  "promptExamples": null,
+  "retired": {},
+  "rounds": [
+    {
+      "drawn": 880,
+      "genRound": 1,
+      "generationRuns": 37,
+      "generationTokens": {
+        "cacheRead": 538083,
+        "cacheWrite": 718082,
+        "input": 298,
+        "output": 520287
+      },
+      "items": 880,
+      "labelTokens": {
+        "cacheRead": 1192661,
+        "cacheWrite": 838943,
+        "input": 434,
+        "output": 153786
+      },
+      "strata": {
+        "None": 880
+      }
+    }
+  ],
+  "screenHits": {
+    "byDifficulty": {
+      "clear": {
+        "hitSeeds": 0,
+        "hits": 0,
+        "seeds": 587
+      },
+      "near-miss": {
+        "hitSeeds": 1,
+        "hits": 1,
+        "seeds": 293
+      }
+    },
+    "byIntent": {
+      "false": {
+        "hitSeeds": 1,
+        "hits": 1,
+        "seeds": 440
+      },
+      "true": {
+        "hitSeeds": 0,
+        "hits": 0,
+        "seeds": 440
+      }
+    },
+    "byPattern": {
+      "bindingMismatch": 1
+    }
+  },
+  "templates": {
+    "halts": [],
+    "hashes": [
+      {
+        "items": 880,
+        "runs": 37,
+        "templateHash": "4e8809bc8861d35a6f4d6100cfaa5d7e4feec64bbbc0901d85574b8c7302b064"
+      }
+    ]
+  },
+  "turnCut": {
+    "cut": {
+      "intentLabelAgreement": {
+        "false": {
+          "items": 77,
+          "rate": 1.0
+        },
+        "overall": {
+          "items": 176,
+          "rate": 0.9659090909090909
+        },
+        "true": {
+          "items": 99,
+          "rate": 0.9393939393939394
+        }
+      },
+      "items": 176
+    },
+    "notCut": {
+      "intentLabelAgreement": {
+        "false": {
+          "items": 363,
+          "rate": 0.9338842975206612
+        },
+        "overall": {
+          "items": 704,
+          "rate": 0.9630681818181818
+        },
+        "true": {
+          "items": 341,
+          "rate": 0.9941348973607038
+        }
+      },
+      "items": 704
+    }
+  }
+}
