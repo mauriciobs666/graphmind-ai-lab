@@ -1,0 +1,258 @@
+{
+  "agreement": {
+    "byClass": {
+      "false": {
+        "items": 224,
+        "pairAgreement": 0.9910714285714286,
+        "threeZeroShare": 0.9866071428571429
+      },
+      "true": {
+        "items": 216,
+        "pairAgreement": 0.9969135802469136,
+        "threeZeroShare": 0.9953703703703703
+      }
+    },
+    "intentLabelAgreement": {
+      "false": {
+        "items": 220,
+        "rate": 0.9954545454545455
+      },
+      "overall": {
+        "items": 440,
+        "rate": 0.9863636363636363
+      },
+      "true": {
+        "items": 220,
+        "rate": 0.9772727272727273
+      }
+    },
+    "ties": 0
+  },
+  "balanceEffect": {
+    "false": {
+      "n": 1320,
+      "slope": -0.9731157225474312
+    },
+    "true": {
+      "n": 1320,
+      "slope": -0.9731157225474311
+    }
+  },
+  "cells": {
+    "none|false": {
+      "roundOne": {
+        "intentLabelAgreement": 0.9776785714285714,
+        "items": 224,
+        "pairAgreement": 0.9910714285714286,
+        "threeZeroShare": 0.9866071428571429
+      },
+      "topUp": {
+        "intentLabelAgreement": null,
+        "items": 0,
+        "pairAgreement": null,
+        "threeZeroShare": null
+      }
+    },
+    "none|true": {
+      "roundOne": {
+        "intentLabelAgreement": 0.9953703703703703,
+        "items": 216,
+        "pairAgreement": 0.9969135802469136,
+        "threeZeroShare": 0.9953703703703703
+      },
+      "topUp": {
+        "intentLabelAgreement": null,
+        "items": 0,
+        "pairAgreement": null,
+        "threeZeroShare": null
+      }
+    }
+  },
+  "labelled": 440,
+  "point": "join-in-judge",
+  "positionEffect": {
+    "false": [
+      [
+        132,
+        0.44696969696969696
+      ],
+      [
+        132,
+        0.5075757575757576
+      ],
+      [
+        132,
+        0.49242424242424243
+      ],
+      [
+        132,
+        0.5075757575757576
+      ],
+      [
+        132,
+        0.5606060606060606
+      ],
+      [
+        132,
+        0.5757575757575758
+      ],
+      [
+        132,
+        0.5681818181818182
+      ],
+      [
+        132,
+        0.44696969696969696
+      ],
+      [
+        132,
+        0.45454545454545453
+      ],
+      [
+        132,
+        0.5151515151515151
+      ]
+    ],
+    "true": [
+      [
+        132,
+        0.553030303030303
+      ],
+      [
+        132,
+        0.49242424242424243
+      ],
+      [
+        132,
+        0.5075757575757576
+      ],
+      [
+        132,
+        0.49242424242424243
+      ],
+      [
+        132,
+        0.4393939393939394
+      ],
+      [
+        132,
+        0.42424242424242425
+      ],
+      [
+        132,
+        0.4318181818181818
+      ],
+      [
+        132,
+        0.553030303030303
+      ],
+      [
+        132,
+        0.5454545454545454
+      ],
+      [
+        132,
+        0.48484848484848486
+      ]
+    ]
+  },
+  "promptExamples": {
+    "items": 186,
+    "matching": 0,
+    "perExample": {
+      "Ask Nova later": 0,
+      "Morning Nova, how's your week going?": 0,
+      "Nova, can you check this?": 0,
+      "Thanks Nova! Bia, can you bring the cake?": 0
+    }
+  },
+  "retired": {},
+  "rounds": [
+    {
+      "drawn": 440,
+      "genRound": 1,
+      "generationRuns": 18,
+      "generationTokens": {
+        "cacheRead": 239604,
+        "cacheWrite": 262296,
+        "input": 144,
+        "output": 183656
+      },
+      "items": 440,
+      "labelTokens": {
+        "cacheRead": 590817,
+        "cacheWrite": 386883,
+        "input": 220,
+        "output": 73467
+      },
+      "strata": {
+        "None": 440
+      }
+    }
+  ],
+  "screenHits": {
+    "byDifficulty": {
+      "clear": {
+        "hitSeeds": 0,
+        "hits": 0,
+        "seeds": 293
+      },
+      "near-miss": {
+        "hitSeeds": 0,
+        "hits": 0,
+        "seeds": 147
+      }
+    },
+    "byIntent": {
+      "false": {
+        "hitSeeds": 0,
+        "hits": 0,
+        "seeds": 220
+      },
+      "true": {
+        "hitSeeds": 0,
+        "hits": 0,
+        "seeds": 220
+      }
+    },
+    "byPattern": {}
+  },
+  "templates": {
+    "halts": [],
+    "hashes": [
+      {
+        "items": 440,
+        "runs": 18,
+        "templateHash": "28bc552798f239584709fb041f8fcb68f6566d139e99b1457aa6a2854a5b5f91"
+      }
+    ]
+  },
+  "turnCut": {
+    "cut": {
+      "intentLabelAgreement": {
+        "overall": {
+          "items": 0,
+          "rate": null
+        }
+      },
+      "items": 0
+    },
+    "notCut": {
+      "intentLabelAgreement": {
+        "false": {
+          "items": 220,
+          "rate": 0.9954545454545455
+        },
+        "overall": {
+          "items": 440,
+          "rate": 0.9863636363636363
+        },
+        "true": {
+          "items": 220,
+          "rate": 0.9772727272727273
+        }
+      },
+      "items": 440
+    }
+  }
+}
