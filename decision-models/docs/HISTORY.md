@@ -2,6 +2,13 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-12 — typed-decision-models U6f.2 — `policy.py`, the policy copy
+
+**What:** plan4 §4.4 U6f.2 (plan3 §3.2; v1.3 §3.3). `decisionmodels/policy.py` is a standalone copy of model-bench's `apply_policy` (FR-8: no import): `PolicyDecision`, `apply_policy(policy, answer: lmstudio.DecisionAnswer)` for `predicate-band` (yes iff `p >= h`, no iff `p < l`, else hand-off) and `choice-confidence` (the choice iff `confidence >= c`), the bounds refusal (`0 <= l <= h <= 1`, `0 <= c <= 1`; bool, NaN, inf, non-numbers, missing keys refused, before any answer is read) and the other-type refusal. Plan3 §3.2's one-way rule is `can_hand_off` plus `check_handoff_rule(policy, handoff_model)`: it refuses bounds, then a handing-off policy with `None`; an empty band or `c == 0` loads with or without a hand-off model.
+- `tests/fixtures/decision-contract/apply-policy.jsonl` is a byte-copy (22 rows; added to `test_decision_contract.py`'s guarded list, now eight files); `tests/test_policy.py` asserts every row against `apply_policy`, plus the refusals.
+
+**Verified:** `tests/test_policy.py`; 23 mutants on a scratch copy (`>=`/`>` at `p == h`, `p == l` and `c`; `l <= h` as `<`; the bound's `0` and `1` ends; bounds check removed from `apply_policy` and from `check_handoff_rule`; `l`/`h` swapped in either test; `minConfidence` ignored; the choice replaced by `True`; bool accepted as a bound; `can_hand_off` at `l == h`, `c == 0` and `c == 1`; the hand-off refusal removed, always firing, or firing on an empty policy; `PolicyDecision` invariant and the `p is None` check dropped) each redden a test. One survivor, equivalent: `math.isfinite` in the bound check (NaN and inf already fail `0 <= v <= 1`). U6f.2 is plan4's fit series, not plan6's U6.x.
+
 ## 2026-11-12 — typed-decision-models U6.1 — the fit-only LM Studio client
 
 **What:** the first slice of U6 (plan1 §U6; plan2 §3.5; plan3 §3.3, §3.5). `decisionmodels/lmstudio.py` is a standalone copy of the part of model-bench's client a fit needs (FR-8: no import): `LMStudio.decide` (`POST /v1/decisions`; returns `DecisionResult` or `OverLimit(wallClockMs)`) and `LMStudio.chat` (the hand-off model, `POST /api/v0/chat/completions`), `is_over_limit` / `OVER_LIMIT_MARKER`, and model-bench's failure taxonomy (`LMStudioCallTimeout`, `LMStudioCallFailed(status, body)`; `body` is the whole error body, and `wallClockMs` is kept on the HTTP-error raise so `OverLimit` has the failed call's time). No load, unload or residency call: no plan gives decision-models one (plan3 §3.7 is the bench runner's).

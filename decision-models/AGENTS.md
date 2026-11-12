@@ -23,7 +23,7 @@ screen/cue-check, below), `runner.py` (`driver run`, `pause [--now]`, `resume`),
 only) and `finalize.py` (the dataset writer). `agents/` holds the three agent definitions, spawn
 templates, `guard_hook.py` and `settings.json`. `lmstudio.py` is fit's client (`decide` returns
 `OverLimit` on plan3 §3.3's refusal; `chat`; no load/residency, which no plan gives decision-models);
-`fit.py` and what follows are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
+`policy.py` is the pure `apply_policy` copy (`predicate-band`, `choice-confidence`; bounds `0 ≤ l ≤ h ≤ 1`, `0 ≤ c ≤ 1` refused as `ValueError`; `check_handoff_rule` is plan3 §3.2's one-way rule: an empty band or `c == 0` loads with a hand-off model, any policy that can hand off refuses `handoffModel: null`); `fit.py` and what follows are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
 `docs/test-reports/live-smoke-report.md`.
 
 ## Load-bearing invariants
@@ -39,7 +39,7 @@ templates, `guard_hook.py` and `settings.json`. `lmstudio.py` is fit's client (`
   it writes hashes only. A new exemption is a plan change.
 - **Contract copies are byte-copies, never regenerated or edited here.**
   `tests/fixtures/decision-contract/*.jsonl` are copies of model-bench's canonical vectors (v1.3
-  §3.2.2; seven files, `over-limit.jsonl` included); `tests/test_decision_contract.py` asserts each byte-identical (skips only when
+  §3.2.2; eight files, `over-limit.jsonl` and `apply-policy.jsonl` included); `tests/test_decision_contract.py` asserts each byte-identical (skips only when
   `model-bench/` is absent). A red equality test means re-copy from
   `model-bench/tests/fixtures/decision-contract/` in the unit adding the matching code. Reading
   model-bench from `tests/` is allowed (FR-8 scope).

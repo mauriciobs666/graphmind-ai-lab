@@ -59,7 +59,9 @@ tranche, the top-up planner, the spend halt and `decisionmodels/diagnostics.py`,
 `finalize` with the cells, splits and `generation.json` (U5.10: `decisionmodels/finalize.py`).
 Fitting's LM Studio client is built (U6.1: `decisionmodels/lmstudio.py`, `decide` and `chat`, with
 the over-limit rule; `pytest -m live` runs the two live tests against a real server, default
-`http://localhost:1234`, override with `DM_LMSTUDIO_URL`); `fit.py` and what follows are not.
+`http://localhost:1234`, override with `DM_LMSTUDIO_URL`), and so is the policy copy (U6f.2:
+`decisionmodels/policy.py`, `apply_policy` and the bounds and hand-off refusals, pinned by a byte-copy of
+model-bench's `apply-policy.jsonl`); `fit.py` and what follows are not.
 Labelling requests render all three points' items (U5.2b-render: the join-in and message-type
 renderers, pinned by byte-copies of model-bench's render vectors and `normalize-turns.jsonl`).
 The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
