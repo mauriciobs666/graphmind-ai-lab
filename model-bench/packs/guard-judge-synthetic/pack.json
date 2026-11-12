@@ -1,0 +1,62 @@
+{
+  "packId": "guard-judge-synthetic",
+  "packVersion": "v1",
+  "role": "guard-judge",
+  "schemaVersion": 1,
+  "description": "typed-decision-models: the guard-judge decision point's synthetic eval split, imported from decision-models by scripts/import_decision_pack.py. Labels are an unreviewed LLM's (FR-5).",
+  "scorer": "classification",
+  "environment": {
+    "requires": [
+      "lmstudio-chat",
+      "lmstudio-decisions"
+    ]
+  },
+  "prompt": {
+    "systemPrompt": "prompts/judge.md",
+    "toolSchemas": null,
+    "temperature": 0.0,
+    "maxTokens": 256
+  },
+  "data": {
+    "items": "items.jsonl"
+  },
+  "sampling": {
+    "seed": 20261101,
+    "pairingKey": [
+      "itemId"
+    ],
+    "analysisUnit": "itemId"
+  },
+  "metrics": {
+    "verdictMetrics": [
+      "falseAdvanceRateByUnderstanding",
+      "falseAdvanceRateByTurns",
+      "falseSuspendRateByUnderstanding",
+      "falseSuspendRateByTurns"
+    ],
+    "headlineMetric": null
+  },
+  "decisionPoint": {
+    "answer": {
+      "type": "predicate"
+    },
+    "incumbent": "qwen/qwen3-4b-2507"
+  },
+  "labels": {
+    "source": "llm-unreviewed",
+    "labeler": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "surface": "claude-code-subagent",
+      "effort": "high"
+    },
+    "generator": {
+      "provider": "anthropic",
+      "model": "claude-opus-4-8",
+      "surface": "claude-code-subagent",
+      "effort": "medium"
+    },
+    "inputs": "synthetic"
+  },
+  "provenance": "PROVENANCE.md"
+}

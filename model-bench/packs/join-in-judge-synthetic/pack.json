@@ -1,0 +1,60 @@
+{
+  "packId": "join-in-judge-synthetic",
+  "packVersion": "v1",
+  "role": "join-in-judge",
+  "schemaVersion": 1,
+  "description": "typed-decision-models: the join-in-judge decision point's synthetic eval split, imported from decision-models by scripts/import_decision_pack.py. Labels are an unreviewed LLM's (FR-5).",
+  "scorer": "agreement",
+  "environment": {
+    "requires": [
+      "lmstudio-chat",
+      "lmstudio-decisions"
+    ]
+  },
+  "prompt": {
+    "systemPrompt": "prompts/join-in-handoff.md",
+    "toolSchemas": null,
+    "temperature": 0.0,
+    "maxTokens": 256
+  },
+  "data": {
+    "items": "items.jsonl"
+  },
+  "sampling": {
+    "seed": 20261101,
+    "pairingKey": [
+      "itemId"
+    ],
+    "analysisUnit": "itemId"
+  },
+  "metrics": {
+    "verdictMetrics": [
+      "agreeWhenYes",
+      "agreeWhenNo"
+    ],
+    "headlineMetric": null
+  },
+  "decisionPoint": {
+    "answer": {
+      "type": "predicate"
+    },
+    "incumbent": null
+  },
+  "labels": {
+    "source": "llm-unreviewed",
+    "labeler": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "surface": "claude-code-subagent",
+      "effort": "high"
+    },
+    "generator": {
+      "provider": "anthropic",
+      "model": "claude-opus-4-8",
+      "surface": "claude-code-subagent",
+      "effort": "medium"
+    },
+    "inputs": "synthetic"
+  },
+  "provenance": "PROVENANCE.md"
+}

@@ -147,11 +147,14 @@ def _dataset(base: Path, role: str, *, evals: int = MIN_EVAL_ITEMS, others: int 
 
 
 def _mb_root(base: Path) -> Path:
-    """A model-bench root holding byte-copies of every committed `packs/<role>-synthetic/` and the
-    guard's side-check source."""
+    """A model-bench root holding byte-copies of every `packs/<role>-synthetic/prompts/` and the
+    guard's side-check source. Only `prompts/` is copied: `pack.json`, `items.jsonl` and
+    `PROVENANCE.md` are importer output, present or absent in the real tree depending on whether a
+    dataset was imported, so a hermetic root starts without them."""
     root = base / "model-bench"
     for role in ROLES:
-        shutil.copytree(_MB / "packs" / f"{role}-synthetic", root / "packs" / f"{role}-synthetic")
+        pack = f"{role}-synthetic"
+        shutil.copytree(_MB / "packs" / pack / "prompts", root / "packs" / pack / "prompts")
     (root / "packs" / SIDE).mkdir(parents=True)
     shutil.copyfile(_SIDE_CHECK_SOURCE, root / "packs" / SIDE / "items.jsonl")
     return root
