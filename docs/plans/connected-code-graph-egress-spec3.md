@@ -1,8 +1,8 @@
 # Connected code graph — egress broker and offline-build sandbox spec (P1, option C)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Version:** 1.4 · **Supersedes:** `docs/plans/connected-code-graph-egress-spec.md`, `docs/plans/connected-code-graph-egress-spec2.md` · **Extended by:** `docs/plans/connected-code-graph-egress-spec4.md`, `docs/plans/connected-code-graph-bundle-spec6.md` · **Reviews:** `docs/reviews/connected-code-graph-egress-spec3.md`, `docs/reviews/connected-code-graph-egress-spec3-security.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Version:** 1.5 · **Supersedes:** `docs/plans/connected-code-graph-egress-spec.md`, `docs/plans/connected-code-graph-egress-spec2.md` · **Extended by:** `docs/plans/connected-code-graph-egress-spec4.md`, `docs/plans/connected-code-graph-bundle-spec6.md` · **Reviews:** `docs/reviews/connected-code-graph-egress-spec3.md`, `docs/reviews/connected-code-graph-egress-spec3-security.md`
 
-*2026-11-10 (v1.4): §7.4's closed frontend set gains the two indexer entries.*
+*2026-11-12 (v1.5): AC-8 text (§8.1-§8.3, §9, §10.2, R-E3) revised to the P1-31 harness, `cpg/sandbox/ac8/`.*
 
 ## 0. Scope, sources and how to read this
 
@@ -989,7 +989,8 @@ its `#!` line; `bash offline-run.sh` with a hostile `BASH_ENV` is outside it (ES
 
 ## 8. AC-8, P1 scenario
 
-AC-8 part 1 (proposal §5.3; P1-31 builds the harness, P1-40 runs it): one scenario, a **full refresh
+AC-8 part 1 (proposal §5.3; P1-31 builds the harness, `cpg/sandbox/ac8/`, with stand-in components only; P1-40
+runs it against the real ones, §8.1): one scenario, a **full refresh
 plus queries** of a mixed fixture system, judged from records. Under option C **the scenario's
 network has no route out, and the logging proxy is a detector: the main run passes only with zero
 `conn` records**, because no allow in P1 can produce a proxied connection (index §6). There is no
@@ -1001,9 +1002,20 @@ network has no route out, and the logging proxy is a detector: the main run pass
 |---|---|---|
 | Broker | host process, production shape (§2.0) | host; `local` entries only can complete (P-e) |
 | Refresh orchestration and the runner | host processes: the runner needs the Docker daemon, and a container given the daemon's socket would be an escape | sandbox invocations `--network none` (§7) |
-| Answer-path components: `ccg` MCP server and CLI (P1-25), plain-language front (P1-26) | containers, `--user <broker uid>:<broker gid>`, `--cap-drop ALL`, on a rootful engine without userns-remap (under remapping or rootless Docker `SO_PEERCRED` reports another uid, and P-c fails) | the scenario network `ccg-ac8-<scenarioId>` (`--internal`, see P-a); the broker directory bind-mounted **read-only** at a fixed path with `CCG_BROKER_SOCKET` naming the socket in it (a `connect()` on a read-only mount works, an unlink or bind does not: inferred, which P-c's connect verifies); `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` naming the detector |
-| Store | the throwaway instance (`infra/ccg-falkordb.sh --throwaway`, P1-48) | attached to the scenario network for the answer path; the host refresh reaches it on its loopback-published port |
-| Detector | a container | the scenario network only; it accepts TCP on 80, 443 and 3128, writes one `conn` record `{ts, srcAddr, srcPort, dstAddr, dstPort, bytesOut, bytesIn}` per connection, and closes without forwarding. Its only writable mount is `<auditDir>/detector/`, where it writes `conn.jsonl` and the markers of P-d |
+| Answer-path components: `ccg` MCP server and CLI (P1-25), plain-language front (P1-26) | containers (P1-31 starts **stand-ins**: the toolchain image running `perl -e sleep`, named by `--components`, default `answer,front`; the real ones are P1-40's, below), `--user <broker uid>:<broker gid>`, `--cap-drop ALL`, `--read-only`, `--security-opt no-new-privileges`, on a rootful engine without userns-remap (under remapping or rootless Docker `SO_PEERCRED` reports another uid, and P-c fails) | the scenario network `ccg-ac8-<scenarioId>` (`--internal`, see P-a); the broker directory bind-mounted **read-only** at a fixed path with `CCG_BROKER_SOCKET` naming the socket in it (a `connect()` on a read-only mount works, an unlink or bind does not: inferred, which P-c's connect and its `EROFS` leg verify); `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` naming the detector |
+| Store | P1-31: a stand-in the harness creates itself (`--store-standin`: a TCP listener on 6379, on the scenario network only). It has no option to attach a caller's container (that container would stay multi-homed with a route out, a way out no probe sees) and does not use `infra/ccg-falkordb.sh --throwaway`. P1-40: a harness-created real store (below) | the scenario network only |
+| Detector | a container | the scenario network only; it listens on IPv4 TCP 80, 443 and 3128, never answers and closes without forwarding. Its only writable mount is `<auditDir>/detector/`. A connection is one `conn` record `{ts, srcAddr, srcPort, dstAddr, dstPort, bytesOut, bytesIn}` in `conn.jsonl`, **except** one whose first bytes are `AC8PROBE:<nonce>\n` with a nonce listed in `probe-tokens` (`<nonce> <label>` per line, 0600, in the host directory no component mounts) and not yet used: that is the harness's own positive-control connection, filed in `probe.jsonl` as the same record plus `probe = <label>` (`<component>/<phase>`), and is not a `conn`. A token-less, wrong or replayed nonce is a `conn`. Markers (written once, O_EXCL): `start.marker` on SIGUSR1; `flush.marker` on SIGUSR2, carrying `residue`: the detector first drains (accepts and logs until no listener has a queued connection, the kernel accept queue from `/proc/net/tcp` included, and none is still being read; at most 30 s) and `residue` is what was still unlogged, 0 on a clean drain. On SIGTERM it drains once more and exits; the harness stops it and verifies it stopped before anything is judged. A final marker with the post-flush residue (required 0) ends the log |
+
+**P1-31 and P1-40.** P1-31 provides stand-in components, store, resolver (`--stub-resolver`), model
+(`--stub-model`) and, for the sandbox witnesses, `--witness-parse` (the harness itself runs one
+`joern-parse` per repository), and records each one it used as `selfTest` (§8.2, verdict). P1-40 adds:
+(a) a harness-created real store on the scenario network only, with Redis's `REPLICAOF` (and its alias
+`SLAVEOF`), `MIGRATE` and `MODULE` disabled, because a store that can be told to dial out is a way out no
+probe sees; (b) a mode that probes the real P1-25/P1-26 containers in place, which keep `--cap-drop ALL`
+(the probe attribution relies on no `CAP_NET_RAW` to forge a source address), with a probe delivery that
+needs no interpreter in the image (the probe is Perl); (c) a probe container with a fixed address, the
+detector classifying by source IP, which P1-31 deferred (`docs/reviews/connected-code-graph-p1-31-security.md`
+Pass 2); (d) a real run with `selfTest == []`.
 
 **Preconditions.** A scenario that cannot establish one is a **failed** run, never a skipped one.
 - **P-a, no route but the two (the acceptance probe).** From each component container, after the
@@ -1018,32 +1030,55 @@ network has no route out, and the logging proxy is a detector: the main run pass
     interface other than `lo`: without one Linux rejects the connect with `EINVAL` before sending
     (kernel `tcp_v6_connect`, not probed), which proves nothing;
   - `1.1.1.1:443` and `[2606:4700:4700::1111]:443` fail the same way;
-  - **positive control:** the same probe code reports the store's port and the detector's ports as
-    accepting; if it does not, the probe is broken and the run fails.
+  - **positive control:** the same probe code connects (TCP) to the store's port and to each of the
+    detector's three ports; if one does not accept, the probe is broken and the run fails. The probe
+    first sends each detector connection a fresh single-use nonce (one per component, phase and port),
+    so the detector files it as a probe record by nonce, not as a `conn` (§8.1 Detector row). The
+    inventory and the nonces reach the probe on stdin, never argv: a nonce on argv is readable from
+    `/proc/<pid>/cmdline` by any same-uid process in the container and sits in `docker events`.
 
   `--internal` alone fails this, because containers on an internal network still reach host services
-  through the bridge's address (S04 gate M4). P1-31 (`devops`) chooses the mechanism; P-a is the
-  acceptance criterion whatever is chosen. Candidates, in the order to verify: `--internal` with
-  `-o com.docker.network.bridge.gateway_mode_ipv4=isolated` (and `…_ipv6=isolated` where IPv6 is
-  enabled), which Docker documents as assigning no address to the bridge; the bridge option
-  `com.docker.network.bridge.inhibit_ipv4`, whose effect on the bridge's IPv6 link-local address is
-  unprobed. A `DOCKER-USER` rule is not a candidate: that chain is reached from `FORWARD`, and traffic
-  to the host's own addresses is delivered through `INPUT` (inferred). **No fallback in P1:** if
-  neither candidate passes, P1-31 escalates for a plan revision (R-E3). Answer containers on
-  `--network none` would fail P-a's positive control and, through a Unix-socket store endpoint, P-c,
-  and no step builds that store path.
-- **P-b, no DNS out.** `getent ahosts example.com` fails in each component container (A2).
+  through the bridge's address (S04 gate M4). **The mechanism (P1-31):** `docker network create
+  --internal -o com.docker.network.bridge.gateway_mode_ipv4=isolated`, IPv6 not enabled (the network
+  must report `Internal` true and `EnableIPv6` false), and the bridge device `br-<id12>` must **exist and
+  carry no address**. The harness reads that with `ip -j address show dev`; no answer (missing device,
+  `ip` failing, output not JSON or an empty interface list) is *unknown* and refuses with exit 70, never
+  "no address". It needs the engine to be this host's: a `DOCKER_HOST` that is not a local unix socket, or
+  a context other than `default`, refuses. The bridge option `…inhibit_ipv4` was not tried. A
+  `DOCKER-USER` rule is not a candidate: that chain is reached from `FORWARD`, and traffic to the host's
+  own addresses is delivered through `INPUT` (inferred). P-a is the acceptance criterion whatever the
+  mechanism. **No fallback in P1:** if the mechanism fails, P1-31 escalates for a plan revision (R-E3).
+  Answer containers on `--network none` would fail P-a's positive control and, through a Unix-socket
+  store endpoint, P-c, and no step builds that store path.
+- **P-b, no DNS out.** Three legs, each in each component container, all required (A2 is §7.3's, with a
+  stricter first leg): `getent ahosts example.com` exits **2** (not found) within 5 s, so a missing
+  `getent` (127), a signal or a timeout is not a pass; `getent hosts localhost` succeeds; and Docker's
+  embedded DNS resolves the detector's container name to its address, which shows the resolver cut off
+  from the outside while one that otherwise works.
 - **P-c, one host socket.** The broker's socket is the only host Unix socket visible in a component
-  container (A3), a `connect()` to it from the container succeeds, and `AF_VSOCK` fails there (A7).
-- **P-d, the window.** The detector writes a start marker before the first `policy` record and a flush
-  marker after the last record; a `conn` outside the window fails the run, and so does a missing
-  marker.
+  container (A3), a `connect()` to it from the container succeeds, creating a file beside it fails with
+  `EROFS` (the directory is mounted read-only), and `AF_VSOCK` fails there (A7).
+- **P-d, the window, exactly.** The detector writes a start marker before the first audit record of any
+  kind (broker `policy`, `decision`, `close`, or `sandbox`) and a flush marker after the last. The run
+  fails on: a `conn` anywhere, inside or outside the window; a missing, malformed or inverted marker, or a
+  missing, malformed or partial detector log; an audit record (broker or sandbox) before the start marker
+  or after the flush marker; flush `residue` other than 0, or a final marker whose post-flush residue is
+  not 0. Probe records are attributed exactly: each `probe.jsonl` record's label is an expected
+  `<component>/<phase>`, its `srcAddr` is that component container's address, its time lies inside that
+  probe's own interval (2 s slack), and each probe has one record for each of the three detector ports and
+  none more; the total equals what the probes report sending. A forged or replayed nonce therefore lands
+  as a `conn`, and a hidden one as a count or attribution failure.
 - **P-e, the allow-list.** Every `outbound` and `hosted` host is under `.invalid` (RFC 6761), so no
-  non-local allow can connect. Before the run, the harness calls the broker's resolve function
-  (`ccg.broker.policy.resolve`) on every non-local host of the scenario manifest and requires
-  `resolve-failed` for each; **positive control:** the same assertion, run against a stub resolver
-  that answers one of those names, must flag it. The manifest has at least one `hosted` model entry
-  and one `outbound` entry of each kind the controls use; `local` is LM Studio or a stub model on
+  non-local allow can connect. `ccg.broker.policy.resolve` does not exist: the broker's address path is
+  `ccg.broker.addr.validate` with its `default_resolver`, which the server itself uses. The harness
+  calls it (`assertions.py pre-e`) on every non-local host of the scenario manifest and requires
+  `resolve-failed` for each, **before the run** (`run.sh` refuses before it creates any network or
+  container) and **again after** it, over the scenario's copy of the manifest. Only a host that passed
+  the `.invalid` check is resolved: a real hostname is reported, never looked up. **Positive control:**
+  the same assertion, run against a stub resolver that answers one of those names, must flag it. The real
+  resolver sends DNS from the host (`.invalid` names only; twice per run and on every `verify`);
+  `--stub-resolver` sends none and is a self-test stand-in. The manifest has at least one `hosted` model
+  entry and one `outbound` `idp` entry (the controls use them); `local` is LM Studio or a stub model on
   loopback. The harness checks the manifest against the `allowListDigest` of every `policy` record.
 - **P-f, a mixed system.** At least one local-only and one hosted-default repository
   (`cpg/fixtures/system1`, P1-40).
@@ -1063,27 +1098,34 @@ flag, `kotlin2cpg --jar4import-url` (`sandbox` refused, 64, no container per `do
 refresh with `--override hosted` on a local-only repository (`P2-OVERRIDE-REFUSED`) and one with
 `local` on a hosted-default repository (`P3-OVERRIDE-LOCAL`).
 
-**Detector control scenario**, run separately before the main run, because any `conn` fails a run:
-the detector is started, a component container connects to it once, and the harness's verdict
-function must fail on the resulting `conn` record; a `conn` planted before the start marker and one
-after the flush marker must each be flagged too.
+**Detector control scenario**, run separately before the main run, on its own throwaway no-route network
+against its own detector, because any `conn` fails a run. A component container connects four times: with
+no token, with a wrong nonce, with the correct nonce, and replaying it; a second container holds 40 idle
+connections across the flush. The control must show: the detector routed each as stated (the token-less,
+wrong and replayed connections and the 40 are `conn` records, all logged inside the window; exactly one
+probe record, labelled for the correct nonce); flush residue 0; the verdict function fails on the real
+`conn`; fails on a copy planted before the start marker and on one after the flush marker; fails on a
+flush marker reporting pending connections (a planted residue of 3); and passes the same window with no
+`conn` (a verdict that always fails would satisfy the others).
 
 ### 8.2 The rows, as P1 computes them
 
 *L* is the set of codebases with `effective = local-only` in a run's `policy` record; *W* is the
 scenario window (P-d). Rows keep ES1 §8's numbering. **Computed** means the check can fail in this
 scenario; **vacuous** means nothing in P1 can make it fail (no such allow can exist under P-e, or the
-value is a runner constant, §5.3), and the report says so; P1-29's unit tests carry the positive cases
-of the rules involved.
+value is a runner constant, §5.3), and the report says so; a vacuous row (8.2, 8.4, 8.12) **fails** if
+the thing that cannot exist turns up. A computed row over an empty witness set fails (8.1, 8.5, 8.6, 8.7,
+8.8, 8.9, 8.15; P-g makes the sets non-empty). P1-29's unit tests carry the positive cases of the rules
+involved.
 
 | # | Assertion (proposal §5.3, requirements AC-8) | P1 status | Check |
 |---|---|---|---|
-| 8.1 | A local-only codebase makes zero connections outside the allow-list | computed | No `conn` record in *W*. Every allow with `codebases ∩ L ≠ ∅` has `rule ∈ {R1, R4}` (P-g makes the set non-empty). |
+| 8.1 | A local-only codebase makes zero connections outside the allow-list | computed | P-d's `conn` verdict (no `conn`, markers, residue 0). Every allow with `codebases ∩ L ≠ ∅` has `rule ∈ {R1, R4}` (P-g makes the set non-empty). |
 | 8.2 | …the only allowed outbound ones are its own git remotes, the vulnerability-database job, allow-listed IdP, access-check or PR services | **vacuous** | No `R2`, `R3` or `R4` allow can exist under option C and P-e; the `git-fetch` control appears as an `R2` deny (counted under the controls). The report lists every allow with `privateAddress = true` (expected: none). |
 | 8.3 | …request bodies carry nothing beyond repository names and identity | computed (negative); positive half vacuous | The two `R4` controls are denies with `payload-shape`. Every `R4` allow would need `transport = structured`, `payloadClass = repo-names-and-identity`, `payloadFields ⊆ {repoNames, identity.subject, identity.issuer}`; none can exist under P-e. |
 | 8.4 | The vulnerability-database job is separate and never sees repository content | **vacuous** | No `vulndb` run has a P1 caller (§2.4a), and `sandbox.runId` is a runner constant. |
-| 8.5 | A local-only build makes no dependency download | computed; proxied half vacuous | The `dependency-download` control is an `R8` deny, and no allow has that purpose. Every non-refused `sandbox` record in *W* has its backend's network-namespace flag in `launcherArgv`: `--network none` for `container`, `--unshare-all` without `--share-net` for `namespace` (§7.1). All records, not only *L*'s, since P1 has no controlled mode; `network` and `netnsDistinct` are constants and prove nothing. |
-| 8.6 | Every fetch-capable frontend is invoked with its fetch flags off, from the command lines | computed | For every non-refused `sandbox` record in *W*: §7.5 re-run on `toolArgv`, against the lists at `listDigest`, gives no hit; `forbiddenHits = []`; `launcherArgv` has 8.5's backend flag; `envKeys` has no §7.6 forbidden name. The forbidden-flag control is `refused`, `exitCode = 64`. |
+| 8.5 | A local-only build makes no dependency download | computed; proxied half vacuous | The `dependency-download` control is an `R8` deny, and no allow has that purpose. Every non-refused `sandbox` record in *W* has its backend's network-namespace flag in `launcherArgv`: `--network none` for `container`, `--unshare-all` without `--share-net` for `namespace` (§7.1); no such record in *W* fails the row. All records, not only *L*'s, since P1 has no controlled mode; `network` and `netnsDistinct` are constants and prove nothing. |
+| 8.6 | Every fetch-capable frontend is invoked with its fetch flags off, from the command lines | computed | For every non-refused `sandbox` record in *W* (none fails the row): §7.5 re-run on `toolArgv`, against the lists at `listDigest`, gives no hit; `forbiddenHits = []`; `launcherArgv` has 8.5's backend flag; `envKeys` has no §7.6 forbidden name. The forbidden-flag control is `refused`, `exitCode = 64`. |
 | 8.7 | In a mixed system, a question touching only hosted repositories is still interpreted by a local model | computed | In a run with `systemLocalOnly = true`, every allow with `component = answer.interpret` has `rule = R1` (P-g makes the set non-empty); the hosted control is a deny with `rule = R5`. |
 | 8.8 | An answer touching a local-only repository is handled entirely locally | computed | Selected by `runId` alone: for every `answer` run whose `policy.codebases ∩ L ≠ ∅`, every `decision` of that run has `requestMode = local-only` and every allow `rule ∈ {R1, R4}`. |
 | 8.9 | In a system containing a local-only repository, every model call goes to a `local` endpoint | computed | Every allow with `purpose = model-call` in a run with `systemLocalOnly = true` has `rule = R1`. |
@@ -1093,10 +1135,18 @@ of the rules involved.
 | 8.13 | …with no import-name service | **vacuous** (§6); residue computed | The `--jar4import-url` control is refused, and so is every record in *W* whose `toolArgv` contains that flag. (`liftedHits` is a runner constant.) |
 | 8.14 | Re-checked as each phase adds outbound traffic | computed | Every record in *W* validates against `egress-audit-v1.schema.json` or `sandbox-record-v1.schema.json` (closed enums). A new outbound path needs a new `Component` or `Purpose`, which revises this spec and re-runs AC-8. |
 | 8.15 | No request can opt out of the sticky rule by under-declaring | (i) computed; (ii), (iii) vacuous | (i) No allow in a run with *L* ≠ ∅ has `codebases = []` (checked over the answer runs' allows). (ii) No `R8`/`R9` allow can exist. (iii) A `refresh` run has no allows in P1. |
-| 8.16 | (P1) The broker's own connections match its decisions | computed when provisioned; otherwise **unrun** | The harness starts the broker under `strace -f -e trace=connect,sendto,sendmsg`; every non-`AF_UNIX` `connect` in *W* equals the `resolvedAddr` and port of some allow, and no resolver traffic appears before an allow. **Positive control:** the trace parser, run on a trace of a small program that dials an unlisted address, must flag it. `strace` is not installed on this host; provisioning it is `devops`'s call, and an unprovisioned row is reported unrun, not passed. |
+| 8.16 | (P1) The broker's own connections match its decisions | computed when `strace` is installed (6.8 here); otherwise **unrun** (`CCG_AC8_NO_STRACE=1` forces it) | The harness starts the broker under `strace -f --seccomp-bpf -ttt -e trace=%network` (`--seccomp-bpf`: only the traced calls stop the broker). In *W*, every non-`AF_UNIX` `connect`, and every addressed `sendto`/`sendmsg`/`sendmmsg`, equals the `resolvedAddr` and port of an allow decided at or before it, **each allow matching one call** (one-to-one, earliest first); port-53 traffic before an allow is a violation by the same rule. A `socket` of a domain other than `AF_UNIX`/`AF_INET`/`AF_INET6`/`AF_NETLINK`, and a `connect` whose address cannot be parsed, are violations. The trace must be non-empty and hold at least as many IP connects in *W* as there are allows (each allow implies a connect). **Positive control:** the same parser, run on a trace of a small program that dials an unlisted loopback address, must flag that dial. An unprovisioned row is reported unrun, not passed. |
 
 **Added for P1:** every allow in *W* has exactly one `close` (an allow without one is reported as an
-interrupted exchange and fails the run).
+interrupted exchange and fails the run), and every `close` names an allow.
+
+**Verdict and exit codes.** `fail` (exit 1) if any row, precondition or control failed. Otherwise
+`incomplete` (exit 3) if a row is unrun (8.16 without `strace`) **or** the run used a self-test stand-in
+(`facts.json` `selfTest` non-empty: `stub-resolver`, `stub-model`, `store-standin`, `witness-parse`);
+a `facts.json` without a `selfTest` list fails. Otherwise `pass` (exit 0). **P1-40's acceptance is exit 0
+with `selfTest == []`.** Because P1-31 has only the store stand-in, no P1-31 run can end `pass`; its
+ceiling is `incomplete`. The harness itself exits 64 (usage) or 70 (a precondition it owns could not be
+established) before any verdict; a run that leaves resources behind warns and keeps its verdict's exit code.
 
 ### 8.3 What the scenario cannot see
 
@@ -1108,6 +1158,14 @@ interrupted exchange and fails the run).
   records.
 - **UDP and DNS**, which `conn` cannot record: P-a and P-b cover them. The sandbox-side escape probes
   (§7.3) run inside the scenario on the backend it uses.
+- **What `conn == 0` shows.** The harness measures three things: the isolated network and the in-container
+  probes (P-a, P-b, P-c) saw no route; the broker's own calls match its allows (8.16); the detector saw no
+  TCP connection to its ports 80, 443 and 3128, that is, no component honoured the proxy variables. It does
+  not show that no component attempted other egress: with no route, a direct attempt fails locally and the
+  detector cannot see it. The in-container probes run as the components' own uid, so a hostile component
+  could falsify them (theoretical for the stand-ins).
+- **The `--workload` command** runs as a host process (`bash -c`, the host's environment and network),
+  outside the detector, the strace and the scenario network. It is the caller's own command, not measured.
 
 ## 9. Evidence
 
@@ -1117,12 +1175,15 @@ interrupted exchange and fails the run).
   machine): the Docker daemon is the native Linux engine (Docker Engine – Community 29.7.2), so a
   Unix socket bind-mounted into a container reaches the host broker; `ip -j -d address show` reports
   the Docker bridge `docker0` with `linkinfo.info_kind = bridge` and its prefix; `/usr/bin/ip` and
-  `/etc/ssl/certs/ca-certificates.crt` exist; `strace` is not installed; the runner's record writer
+  `/etc/ssl/certs/ca-certificates.crt` exist; the runner's record writer
   emits exactly §5.3's field set and writes `network`, `networkName`, `runId` and `liftedHits` as
   literals; its re-exec check admits `PWD`, `OLDPWD`, `SHLVL` and `_` (§7.7).
+- **Harness review (2026-11-12, static plus the unit tier):** `strace` 6.8 is installed, and
+  `strace -f --seccomp-bpf -e trace=%network` on a local `AF_UNIX` connect parses under 8.16's parser
+  without a violation (`docs/reviews/connected-code-graph-p1-31.md`, Pass 2).
 - **Not probed, and marked where used:** WSL mirrored networking's sharing of Linux `localhost`
-  listeners with Windows (§2.0); either P-a candidate on this engine; a `connect()` through a
-  read-only bind mount (§8.1); the `DOCKER-USER` chain's reach (§8.1).
+  listeners with Windows (§2.0); P-a's mechanism on a full run (P1-31's live subset is reported, not
+  re-run here; the full run is P1-40's); the `DOCKER-USER` chain's reach (§8.1).
 
 ## 10. What gets built, and the consequences for other steps
 
@@ -1218,7 +1279,7 @@ end-to-end `scip-python` run is not the oracle: at 0.6.8 its probe strips the wo
 | P1-20 | **Needs P1-29**: `refresh(..., override=None)` opens a `refresh` run only when an override is given (§2.1), fails if the broker is absent then, and names the `policy` record in its report; a test shows no direct-connection fallback. |
 | P1-25 | No broker call and no dependency on P1-29; widens `test_no_network.py` (§10.1). |
 | P1-26 | One `answer` run per question at its first model call (§2.1); fixes the `local` entry's `paths`; a test shows a missing or latched broker fails the call with no direct connection attempted. |
-| P1-31, P1-40 | P1-31 **needs P1-18**: `assertions.py` validates against its `sandbox-record-v1.schema.json` (8.14). §8: the topology, P-a–P-g, the controls, the detector control scenario, the row table; no `conn` ↔ `decision` join in P1. |
+| P1-31, P1-40 | P1-31 **needs P1-18**: `assertions.py` validates against its `sandbox-record-v1.schema.json` (8.14). §8: the topology, P-a–P-g, the controls, the detector control scenario, the row table; no `conn` ↔ `decision` join in P1. P1-31 delivers stand-ins; P1-40's additions are §8.1's "P1-31 and P1-40". |
 | P1-32, P1-37, P1-39, P1-41, P1-42, P1-47 | **Unaffected:** they refresh without an override, which needs no broker (§2.1). A step that adds an override needs a broker loaded with that system's manifest. |
 
 ### 10.3 Documentation follow-ups (not build units)
@@ -1236,8 +1297,8 @@ citation of ES1 §5.3; §5.4 here is the check's current home.
 - **R-E2: host processes are not network-confined in production P1.** I2 holds for our code by the
   import-boundary test and review; a third-party library that opens its own connection would pass
   it. The AC-8 scenario confines the answer path only.
-- **R-E3: P-a's mechanism is documented but unverified on this engine.** If neither candidate passes
-  the probe, `devops` escalates for a plan revision (§8.1) rather than relaxing P-a.
+- **R-E3: P-a's mechanism is chosen (§8.1) but its full-run evidence is P1-40's.** If it fails the
+  probe, `devops` escalates for a plan revision (§8.1) rather than relaxing P-a.
 - **R-E4: the scenario needs a rootful native engine without userns-remap** (the native engine is
   verified here); Docker Desktop's WSL integration or rootless Docker would need another path to the
   broker.
