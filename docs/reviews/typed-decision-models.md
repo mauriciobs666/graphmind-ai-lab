@@ -2241,3 +2241,40 @@ these hold:
 - plan4 §3.9 cites §Q6 and names the new interface;
 - §Q6 states the empty-cell and non-contributing-cell values;
 - `grep -n 'genRunId ICC)' docs/plans/typed-decision-models4.md` returns nothing.
+
+## Pass 37 — U6.1 gate: the fit-only LM Studio client (2026-11-12)
+
+**Scope.** Uncommitted `decision-models/` U6.1: `decisionmodels/lmstudio.py`, `tests/test_lmstudio.py`, `tests/test_lmstudio_live.py`, `over-limit.jsonl` copy, `test_decision_contract.py`, `pyproject.toml`, `AGENTS.md`, `README.md`, `docs/HISTORY.md`. Baseline: plan1 U6, plan2 §3.5/§4.1, plan3 §3.3/§3.5/§4.1, against `model-bench/modelbench/lmstudio.py` (read whole). No `decision-models/REVIEW.md` exists; root `REVIEW.md` applied.
+**Verdict: approve with suggestions** (no blocker; one major test-strength gap).
+CPG: considered, not relevant — a new ~350-line standalone module read in full against its source; no cross-module impact to trace.
+
+**Verified (run).** `cmp` of `over-limit.jsonl` against model-bench's: identical, and the byte-identity test covers it. FR-8: only a docstring mentions `model-bench`; `test_fr8_isolation.py` + `test_decision_contract.py` + `test_lmstudio.py` = 191 passed; `ruff check .` clean. `-m live` on the command line overrides `addopts` (`pytest -m live --collect-only` collects exactly the 2 live tests); the only mark other than `parametrize`/`usefixtures` in the tree is `live`, so `-m 'not live'` hides nothing else. Not run: the full suite (the caller's 1861 passed, 2 deselected is inherited) and the two live tests (need LM Studio). AGENTS.md 2,296 words, no line >700 chars.
+
+**Port faithfulness: faithful.** Read side by side: `_post` is bench's `_raw_post` rung for rung (HTTPError first, `TimeoutError`, URLError-with-timeout reason, `HTTPException`, `OSError`; error body whole, `errors="replace"`, `""` on failed read; clock stopped after the body read). `_parse_answers`/`_probability` are identical. `decide` returns `OverLimit` only via `is_over_limit` (status `== 500` and case-sensitive `"too large to process"`; 400, 200-with-error-body, empty/None body, uppercase all raise), and the 200-body path is `status=None`. `chat` drops `tools`/stats/runtime, as intended. The `wallClockMs` kwarg on `LMStudioCallFailed` is a declared addition that carries the failed call's time into `OverLimit`; it is sound. Nit: `json.loads(raw)` on bytes accepts UTF-16/32 where bench decodes UTF-8 strictly; not reachable from LM Studio.
+
+### Findings
+
+**P37-M1 (major, verified by mutant) — the success-path latency is untested.** `DecisionResult.wallClockMs` / `ChatResult.wallClockMs` are the fit's latency terms (`t̄_{L|H}`, plan3 §3.5), yet both tests assert only `>= 0.0` (`test_lmstudio.py` predicate and chat tests). On a scratch copy, `wallClockMs=0.0` in both result constructors, and `wall_clock_ms = 0.0` in `_post`, each left all 74 tests green (the `start` skew and no-`close` mutants did redden). Only the `OverLimit` clock is pinned. Fix: reuse `test_an_over_limit_clock_measures_the_failed_call`'s `time.monotonic` patch to assert an exact value on a successful `decide` and `chat` (e.g. 250.0 ms) — the assertion that fails if the clock is stopped before the body read or zeroed.
+
+**P37-m1 (minor, verified by mutant) — request body checked on one question and one choice only.** `"questions": list(questions)[:1]` in `decide` and `choices[-1]` in `chat` both survive. The two-question test checks the response parse, not the payload. Fix: assert `opener.payload["questions"] == [PREDICATE_Q, CHOICE_Q]` in that test, and a two-choice chat body expecting `choices[0]`.
+
+**P37-m2 (minor) — stale count in `tests/test_decision_contract.py:7`**: "byte-copies of five of them" now precedes a list of seven (`over-limit.jsonl` added by this unit; `_VECTOR_FILES` has seven). AGENTS.md's "seven files" is right. Fix the docstring to "the seven".
+
+**P37-n1 (nit)** — `HISTORY.md`'s mutant list is accurate for what it names but omits P37-M1's class; once M1 is fixed, add it to the list. The live over-limit test hard-codes laya's 512-token batch and `laya` served; HISTORY states it was not run, which is honest.
+
+**What's solid.** Marker/status rule exactly plan3 §3.3, with the whole 8-row vector driven both as the pure predicate and through `decide` with a real `HTTPError`; "chat never returns OverLimit" is tested; model/timeout/temperature/max_tokens/messages/route/header/method mutants each redden a test; `live` deselection is clean; docs (AGENTS.md, README, HISTORY) match the code.
+
+### The coder's seven gaps (for the architect before U6.5)
+
+Rulings needed (real): **1, 4, 5**; **2** is real but small; **3, 6, 7** are not blocking.
+
+1. **Hand-off prompt home — real; needs an architect ruling.** The fit scores every calibration item with the hand-off LLM's own answer (`D_c = Σ model wrong − LLM wrong`, note §Q2.1), so it must send the same messages the bench's `handoff` surface sends (plan1: the scorer's `build_messages`) and the runtime sends. FR-8 forbids a runtime read of model-bench, so the plan must name one home. The coder's proposal (prompts as data under `points/<role>/`, guarded by a byte-equality test against the bench/falkor-chat source, skipped when absent as in v1.3 §3.2.2) fits the existing pattern; the ruling is the choice, plus that the guard test exists. Without it, fit and eval measure different hand-off prompts and the bar is not about the artifact served.
+2. **Instruction texts — real, small.** Plan2 §3.5 says "at most five, one the minimal control" but not who writes them. `points/<role>/instructions.json` is the natural home (plan1 puts per-point templates in `points/`); a one-line ruling, plus whether the texts need a data-scientist look as the rubrics do.
+3. **Fit layout/CLI — not blocking.** Plan2 §3.5 already fixes `data/<role>/<datasetVersion>/fits/<candidateId>.fit-report.json`; the coder's `.fit.txt`/`.json` siblings are consistent with the fit manifest of plan1 (`<candidateId>.fit.txt`). Coder may decide, recording the CLI in U6.5's HISTORY entry.
+4. **Candidates per point and who chooses the hand-off LLM — real; ruling needed.** Plan1 U6 says "one candidate per point" with a hand-off model; plan3 §3.5 says "U6 produces a `handoffModel: null` candidate whenever it emits a decision-only one"; plan1 U7 lists both a decision-only and a hand-off candidate per point. Read together, two candidates per point are intended, but the plan never states it. Because plan3 §3.2 refuses a non-empty band with `handoffModel: null`, the decision-only fit is a different search (empty band; instruction text and cutoff only), so the ruling must say which searches run. The hand-off LLM: plan1 fixes the incumbent for the guard; for new abilities "the chosen local LLM" must be named (cite the U0 decision, or add the id).
+5. **Residency — real; ruling needed.** Note §Q6 says both models must be explicitly loaded because a JIT hand-off evicts the decision model, and §Q6 treats fitting as "a third load". `lmstudio.py` deliberately records no residency (plan3 §3.7 gives loading to the bench runner), so the fit's latency terms rest on an unrecorded state. The ruling is a precondition (human loads both before `fit`) plus either a recorded residency read in the fit report or an explicit statement that the fit's latency is nominal and the bar is the bench's. Without one, a thrashing fit silently yields `s` values that do not transfer.
+6. **Fit-time timeouts — not blocking.** Pin constants in `fit.py` (bench's 180 s chat; `decisionTimeoutSeconds` is already a fit input per plan2 §3.5) and record them in the fit report.
+7. **Calibration `max_tokens`/`temperature` — fold into 1.** They must equal the bench's chat-arm values for the same pack, or the hand-off answers differ; that is one parity ruling with the prompt, not a separate one.
+
+### Open questions
+- For `teco`: does the Pass-37 numbering belong in this file? It has no Pass 14–36 here (those are in `typed-decision-models4-impl.md`); I followed the brief.

@@ -21,8 +21,9 @@ screen/cue-check, below), `runner.py` (`driver run`, `pause [--now]`, `resume`),
 `split.py` (pure: the 8-token shingle rule and cells-then-splits, plan4 §3.6;
 `scripts/import_side_check_shingles.py` writes `data/guard-judge/side-check-shingles.txt`, hashes
 only) and `finalize.py` (the dataset writer). `agents/` holds the three agent definitions, spawn
-templates, `guard_hook.py` and `settings.json`. Fitting (U6) and what follows it are unbuilt
-(`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
+templates, `guard_hook.py` and `settings.json`. `lmstudio.py` is fit's client (`decide` returns
+`OverLimit` on plan3 §3.3's refusal; `chat`; no load/residency, which no plan gives decision-models);
+`fit.py` and what follows are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
 `docs/test-reports/live-smoke-report.md`.
 
 ## Load-bearing invariants
@@ -38,7 +39,7 @@ templates, `guard_hook.py` and `settings.json`. Fitting (U6) and what follows it
   it writes hashes only. A new exemption is a plan change.
 - **Contract copies are byte-copies, never regenerated or edited here.**
   `tests/fixtures/decision-contract/*.jsonl` are copies of model-bench's canonical vectors (v1.3
-  §3.2.2; six files, the renderer and `normalize-turns.jsonl` ones included); `tests/test_decision_contract.py` asserts each byte-identical (skips only when
+  §3.2.2; seven files, `over-limit.jsonl` included); `tests/test_decision_contract.py` asserts each byte-identical (skips only when
   `model-bench/` is absent). A red equality test means re-copy from
   `model-bench/tests/fixtures/decision-contract/` in the unit adding the matching code. Reading
   model-bench from `tests/` is allowed (FR-8 scope).
@@ -187,7 +188,7 @@ the three** that `three_votes`, `label_votes` and `vote_ties` read.
 
 - Run the suite **from `decision-models/`**: `.venv/bin/pytest -q`, `.venv/bin/ruff check .`.
   `pythonpath = ["."]` lets it run without the editable install.
-- No network and no LM Studio in the default suite; tests write under `tmp_path`. Runner tests
+- No network and no LM Studio in the default suite (`addopts` deselects `-m live`; the live tests are human-run); tests write under `tmp_path`. Runner tests
   launch only the fake `claude` `tests/test_runner.py` writes, under a fake `HOME`: never the real
   CLI or `~/.claude`.
 - U5.x units serialize on `docs/HISTORY.md` (plan4 §4.3): one entry per unit, most recent first.

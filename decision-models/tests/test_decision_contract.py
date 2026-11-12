@@ -4,7 +4,7 @@ v1.3 §3.2, §3.2.2, §3.5).
 
 model-bench owns the canonical golden vectors (`model-bench/tests/fixtures/decision-contract/`).
 This suite asserts `decisionmodels.render` and `decisionmodels.hashing` against **byte-copies** of
-five of them under `tests/fixtures/decision-contract/`:
+seven of them under `tests/fixtures/decision-contract/`:
 
 * `render-guard.jsonl` — `render_guard_input(condition, understanding, recentTurns)`; expected
   strings produced by falkor-chat's real `_render_judge_user`;
@@ -14,6 +14,8 @@ five of them under `tests/fixtures/decision-contract/`:
   strings written by hand from the plans' canonical text (falkor-chat has no such renderer);
 * `normalize-turns.jsonl` — `normalize_turns(thread)`, expected turns produced by falkor-chat's
   real `guards._recent_turns`;
+* `over-limit.jsonl` — plan3 §3.3's `is_over_limit` rows, asserted in `tests/test_lmstudio.py`
+  (here only the byte-identity);
 * `dataset-shape.jsonl` — plan6 §3.7's dataset contract vector (`generation.json`, items and
   `splits.json`, one line per role; `docs/plans/typed-decision-models6.md`, U6.6), which
   `finalize`'s output is checked against (U5.10). Here only its items are checked against this
@@ -49,6 +51,7 @@ _VECTOR_FILES = (
     "normalize-turns.jsonl",
     "input-hash.jsonl",
     "dataset-shape.jsonl",
+    "over-limit.jsonl",
 )
 
 
