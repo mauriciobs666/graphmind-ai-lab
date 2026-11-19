@@ -2,14 +2,14 @@
 
 Spec: ``docs/plans/connected-code-graph-answer-spec.md`` (v1.2, S33) -- the document (§2-§5), ordering and
 canonical bytes (§6), the F-3/F-4/F-12/G-1 obligations (§7), the validator rules V1-V16 (§8) -- and its P1 extension
-``docs/plans/connected-code-graph-answer-spec2.md`` (schema 1.1, §7.2: V5's wiring/depends-on/``Unit`` clauses, V9's
-``not-mapped`` check, V17-V19, the 1.1 ``facts_bytes`` projection). The shapes live in
+``docs/plans/connected-code-graph-answer-spec2.md`` (schemas 1.1 and 1.2, §7.2: V5's wiring/depends-on/``Unit`` clauses, V9's
+``not-mapped`` check, V17-V20, the 1.1-or-later ``facts_bytes`` projection, the 1.2 ``notices``). The shapes live in
 ``ccg/schemas/answer-v1.schema.json``; the schema is necessary, not sufficient, and this module adds what JSON
 Schema cannot say (derivations, anchor chaining, staleness set equality, id recomputation, the F-4 token screen).
 
-Public API: ``loads``/``validate`` (V1-V13, V15-V19), ``canonicalize``/``dumps`` (sort every array per §6, then validate and
+Public API: ``loads``/``validate`` (V1-V13, V15-V20), ``canonicalize``/``dumps`` (sort every array per §6, then validate and
 serialize), ``is_canonical``, ``facts_bytes`` (§6's boundary), ``fence_data`` (§7.2), ``mask_identifier`` (§7.3),
-``DATA_FIELDS``, ``EMPTY_VERDICT_LOG_HASH``, ``ENGINE_REASON_CODES``, ``ANSWER_SCHEMA_VERSIONS``, ``PROHIBITED_EDGE_TYPES``,
+``DATA_FIELDS``, ``EMPTY_VERDICT_LOG_HASH``, ``ENGINE_REASON_CODES``, ``ANSWER_SCHEMA_VERSIONS``, ``is_1_1_or_later``, ``PROHIBITED_EDGE_TYPES``,
 ``FUNCTION_ENTRY``, ``FLOW_ROWS``; plus the ``samplingHash``/``cacheKey`` helpers.
 """
 
@@ -59,15 +59,20 @@ ARRAY_RULES = {
     "Recipe.queries": "name", "Hop.lifted": "(siteId, ord)", "Hop.bound": "ord",
     "Item.chain": "unsorted: path order", "SymbolSubject.ownedRegions": "unsorted: as stored",
     "interpretation.rcaMarks": "unsorted: empty in v1",
+    "notices": "code", "Notice.langs": "code point",
 }
 
 #: V1: identity strings (§6) are stripped as well as NFC; ids are held to their patterns by the schema.
 #: ``rootPath``, ``urlPath``, ``verbPath``, ``accessPath`` (the last two beyond spec §6's list) and the elements of ``paths`` are path-like data compared field by field (AC-24), so held to the same bar.
 IDENTITY_KEYS = frozenset({"qname", "path", "keyPath", "calleeName", "keyNorm", "name", "rootPath", "urlPath", "verbPath", "accessPath", "paths"})
 SUBJECT_ID = {"symbol": "symbolId", "config": "entryId", "unit": "unitId"}
-#: spec2 §1.1: the labels the validator accepts, against one schema; V17-V19 say what each label may carry.
-ANSWER_SCHEMA_VERSIONS = ("1.0", "1.1")
-#: spec2 §3 (V19): edge types that no hop of a 1.1 document may carry (the schema's enum keeps them: removal is major).
+#: spec2 §1.1: the labels the validator accepts, against one schema; V17-V20 say what each label may carry.
+ANSWER_SCHEMA_VERSIONS = ("1.0", "1.1", "1.2")
+#: spec2 §1.1: V17's bound, V18, V19, the ``facts_bytes`` projection and the hop flag hold from this label on (the labels after ``"1.0"``).
+_FROM_1_1 = frozenset(ANSWER_SCHEMA_VERSIONS[1:])
+#: spec2 §5.1: the one ``Notice.code`` of P1 (the schema's enum is the source; V20 reads it by name).
+FLOW_NOTICE = "flow-not-enumerated"
+#: spec2 §3 (V19): edge types that no hop of a 1.1-or-later document may carry (the schema's enum keeps them: removal is major).
 PROHIBITED_EDGE_TYPES = frozenset({"DEFINED_BY", "LAUNCHES", "DEPENDS_ON", "FROM_DEP"})
 #: spec2 §5 (V18), per column (``request.direction``): the ``(edgeType, dir)`` rows that enter the ``function`` state (to a
 #: ``Symbol``), and the closed list of labelled rows that leave it. A hop on a labelled row is ``possible``.
@@ -488,6 +493,11 @@ def _item_key(item: dict, roots: dict[str, str]):
             path, pos, s[SUBJECT_ID[s["type"]]])
 
 
+def is_1_1_or_later(doc: dict) -> bool:
+    """spec2 §1.1: the one test of the rules that apply to ``"1.1"`` and ``"1.2"`` alike (never ``== "1.1"``)."""
+    return doc["answerSchemaVersion"] in _FROM_1_1
+
+
 def canonicalize(doc: dict) -> dict:
     """A copy of ``doc`` with every array sorted per §6 (``chain`` and ``ownedRegions`` keep their order)."""
     d = copy.deepcopy(doc)
@@ -515,6 +525,10 @@ def canonicalize(doc: dict) -> dict:
             _canon_item(m)
         g["members"].sort(key=lambda it: _item_key(it, roots))
     d["groups"].sort(key=lambda g: (g["kind"], g["key"]))
+    if "notices" in d:
+        for n in d["notices"]:
+            n["langs"].sort()
+        d["notices"].sort(key=lambda n: n["code"])
     return d
 
 
@@ -530,7 +544,8 @@ def is_canonical(data: bytes) -> bool:
 
 def facts_bytes(doc: dict) -> bytes:
     """§6: the canonical bytes without ``interpretation.provenance`` and, for a resolved answer, ``interpretation.lookups``;
-    a ``"1.1"`` document also drops every ``staleness.units[].builtAt`` and ``failedAt`` (spec2 §4.3).
+    a ``"1.1"`` or ``"1.2"`` document also drops every ``staleness.units[].builtAt`` and ``failedAt`` (spec2 §4.3);
+    ``notices`` stays (spec2 §5.1).
 
     A projection of a document the caller already holds as valid (it came from ``loads`` or went through ``dumps``): it
     deliberately does not re-validate, so facts of a document under construction can be compared, and an invalid one
@@ -540,7 +555,7 @@ def facts_bytes(doc: dict) -> bytes:
     interp.pop("provenance", None)
     if interp["status"] == "resolved":
         interp.pop("lookups", None)
-    if d["answerSchemaVersion"] == "1.1":  # spec2 §4.3: a build's wall-clock time is not a fact of the answer
+    if is_1_1_or_later(d):  # spec2 §4.3: a build's wall-clock time is not a fact of the answer
         for u in d["staleness"]["units"]:
             u.pop("builtAt", None)
             u.pop("failedAt", None)
@@ -849,10 +864,13 @@ _BOUND_1_1_FIELDS = ("launch", "port", "portOrigin", "packId")
 
 
 def _check_labels(doc: dict) -> None:  # V17
-    """Version labels (spec2 §7.2): a ``"1.0"`` document carries no 1.1 construct; a resolved ``"1.1"`` one is bounded at >= 2."""
-    if doc["answerSchemaVersion"] == "1.1":
+    """Version labels (spec2 §7.2): a ``"1.0"`` document carries no 1.1 construct; a resolved ``"1.1"`` or ``"1.2"`` one is
+    bounded at >= 2; a ``"1.0"`` or ``"1.1"`` one carries no ``notices``."""
+    if doc["answerSchemaVersion"] != "1.2" and "notices" in doc:
+        _fail("V17", "notices", "notices is a 1.2 field")
+    if is_1_1_or_later(doc):
         if doc["interpretation"]["status"] == "resolved" and doc["depthBound"].get("bound", 0) < 2:
-            _fail("V17", "depthBound.bound", "a resolved 1.1 answer records a depth bound of at least 2 (spec2 §4.1)")
+            _fail("V17", "depthBound.bound", "a resolved 1.1-or-later answer records a depth bound of at least 2 (spec2 §4.1)")
         return
     if "cacheBypass" in doc["interpretation"].get("provenance", {}):
         _fail("V17", "interpretation.provenance.cacheBypass", "cacheBypass is a 1.1 field")
@@ -873,8 +891,8 @@ def _check_labels(doc: dict) -> None:  # V17
 
 
 def _check_flow_rows(doc: dict) -> None:  # V18
-    """Spec2 §5 (a)-(e), 1.1 only: where the ``function`` state is entered, which rows leave it, and what they are labelled."""
-    if doc["answerSchemaVersion"] != "1.1":
+    """Spec2 §5 (a)-(e), 1.1 or later: where the ``function`` state is entered, which rows leave it, and what they are labelled."""
+    if not is_1_1_or_later(doc):
         return
     column = doc["interpretation"].get("request", {}).get("direction", "impact")
     entry, rows = FUNCTION_ENTRY[column], FLOW_ROWS[column]
@@ -901,12 +919,31 @@ def _check_flow_rows(doc: dict) -> None:  # V18
 
 
 def _check_prohibited_edges(doc: dict) -> None:  # V19
-    if doc["answerSchemaVersion"] != "1.1":
+    if not is_1_1_or_later(doc):
         return
     for where, it in _all_items(doc):
         for i, hop in enumerate(it["chain"]):
             if hop.get("edgeType") in PROHIBITED_EDGE_TYPES:
-                _fail("V19", f"{where}.chain[{i}].edgeType", f"{hop['edgeType']} is on no 1.1 hop (spec2 §3)")
+                _fail("V19", f"{where}.chain[{i}].edgeType", f"{hop['edgeType']} is on no 1.1-or-later hop (spec2 §3)")
+
+
+def _check_notices(doc: dict) -> None:  # V20
+    """Spec2 §5.1 (a)-(c), ``"1.2"`` only: ``notices`` rides a resolved answer, one per code, and covers every labelled language."""
+    if doc["answerSchemaVersion"] != "1.2":
+        return
+    notices = doc.get("notices", [])
+    if notices and doc["interpretation"]["status"] != "resolved":
+        _fail("V20", "notices", "(a) notices appears only on a resolved answer")
+    codes = [n["code"] for n in notices]
+    if len(codes) != len(set(codes)):
+        _fail("V20", "notices", "(b) one Notice per code")
+    covered = {lang for n in notices if n["code"] == FLOW_NOTICE for lang in n["langs"]}
+    for where, it in _all_items(doc):
+        for i, hop in enumerate(it["chain"]):
+            reason = hop.get("reason", "")
+            if reason.startswith(_FLOW_PREFIX) and reason[len(_FLOW_PREFIX):] not in covered:
+                _fail("V20", f"{where}.chain[{i}].reason",
+                      f"(c) {reason} needs its language in the langs of a {FLOW_NOTICE} notice")
 
 
 def _describe(error) -> str:
@@ -924,7 +961,7 @@ def _describe(error) -> str:
 
 
 def validate(doc: dict) -> None:
-    """Schema plus V1-V13 and V15-V19 (V14 is ``unclassified_strings``, a property of the schema); raises ``AnswerError``."""
+    """Schema plus V1-V13 and V15-V20 (V14 is ``unclassified_strings``, a property of the schema); raises ``AnswerError``."""
     if not isinstance(doc, dict):
         raise AnswerError("V1: an answer is one JSON object")
     _check_values(doc)
@@ -936,7 +973,7 @@ def validate(doc: dict) -> None:
     anchors = {_anchor_id(a): ANCHOR_HOP_KIND[a["type"]] for a in doc["interpretation"].get("request", {}).get("anchors", [])}
     direction = doc["interpretation"].get("request", {}).get("direction", "impact")
     for where, it in _all_items(doc):
-        _check_hops(where, it, direction, doc["answerSchemaVersion"] == "1.1")
+        _check_hops(where, it, direction, is_1_1_or_later(doc))
         _check_item_rules(where, it, anchors)
     _check_groups(doc)
     _check_staleness(doc)
@@ -951,3 +988,4 @@ def validate(doc: dict) -> None:
     _check_labels(doc)
     _check_flow_rows(doc)
     _check_prohibited_edges(doc)
+    _check_notices(doc)

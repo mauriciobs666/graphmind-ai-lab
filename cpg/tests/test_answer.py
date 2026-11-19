@@ -268,6 +268,7 @@ def accepts(base: dict, mutate) -> None:
 
 # --- 1. canonical bytes are order-independent, array by array (§6) ---------------------------------
 
+SHUFFLE_CANONICALIZE_ONLY = {"notices"}  # P1 has one Notice code, so two notices cannot validate: ordered via ``canonicalize``, below
 SHUFFLE_EXEMPT = {"Item.chain", "SymbolSubject.ownedRegions", "interpretation.rcaMarks"}  # unsorted by rule, §6
 
 
@@ -299,14 +300,15 @@ SHUFFLE_CASES = {
     "Recipe.queries": (golden, lambda d: d["recipe"]["queries"]),
     "Hop.lifted": (golden, lambda d: d["items"][0]["chain"][2]["lifted"]),
     "Hop.bound": (b_config, bound_of),
+    "Notice.langs": (lambda: _b_notices_two(), lambda d: d["notices"][0]["langs"]),
 }
 
 
 def test_the_array_coverage_probe_matches_the_schema_and_the_rule_table():
     derived = answer.array_paths()
     assert derived == set(answer.ARRAY_RULES)
-    assert derived - SHUFFLE_EXEMPT == set(SHUFFLE_CASES)
-    assert len(derived) == 15
+    assert derived - SHUFFLE_EXEMPT - SHUFFLE_CANONICALIZE_ONLY == set(SHUFFLE_CASES)
+    assert len(derived) == 17  # P1-45b: notices and Notice.langs
 
 
 @pytest.mark.parametrize("array", sorted(SHUFFLE_CASES))
@@ -900,7 +902,7 @@ def test_every_object_of_the_schema_is_closed_and_it_names_its_spec():
     assert "NOT sufficient" in schema["description"] and "connected-code-graph-answer-spec" in schema["description"]
     assert set(schema["$defs"]) == {"Request", "AnchorSymbol", "AnchorContract", "AnchorConfig", "Scope", "Lookup", "Provenance", "Recipe",
                                     "Stamp", "DepthBound", "Unit", "Item", "SymbolSubject", "ConfigSubject", "Hop", "Lifted", "Bound",
-                                    "Launch", "Group", "UnitSubject"}
+                                    "Launch", "Group", "UnitSubject", "Notice"}
     for path, node in answer._iter_schema(schema):
         if node.get("type") == "object":
             assert node.get("additionalProperties") is False, path
@@ -1832,6 +1834,7 @@ INSTANCES = {
     "UnitSubject": (b_unit, lambda d: d["items"][0]["subject"]),
     "Launch": (b_launch, lambda d: d["items"][0]["chain"][1]["launch"]),
     "Group": (b_group, lambda d: d["groups"][0]),
+    "Notice": (lambda: b_notice(), lambda d: d["notices"][0]),
 }
 
 REQUIRED = {
@@ -1848,6 +1851,7 @@ REQUIRED = {
     "Hop": "kind id state", "Lifted": "ord siteId kind id repo unit path line urlPath name",
     "Bound": "ord entryId repo unit path line", "Bound.keyPath": "keyPath", "Bound.launch": "launch",
     "UnitSubject": "type unitId", "Launch": "launchKind", "Group": "kind key reason count members",
+    "Notice": "code langs",
 }
 REQUIRED_PAIRS = [(loc, f) for loc, fields in REQUIRED.items() for f in fields.split()]
 
@@ -1955,6 +1959,7 @@ ENUMS = {  # location -> field -> allowed values (spec §3-§5)
     ("Bound", "portOrigin"): "explicit env-default compose pack-default",
     ("Hop", "dir"): "<- ->", ("Hop", "status"): "confirmed possible", ("Hop", "state"): "value path function contract key end site",
     ("Item", "status"): "confirmed possible", ("Item", "directness"): "direct indirect",
+    ("Notice", "code"): "flow-not-enumerated",
     ("Group", "kind"): "other-possible-callees runtime-built-access", ("Group", "reason"): "resolution-unverified runtime-built",
 }
 
@@ -2437,11 +2442,11 @@ def _prov(d: dict) -> dict:
     return d["interpretation"]["provenance"]
 
 
-def test_the_1_1_bases_validate_and_the_version_set_is_exactly_1_0_and_1_1():
+def test_the_1_1_bases_validate_and_the_version_set_is_exactly_1_0_1_1_and_1_2():
     for build in (b_11, b_prov_11, b_chain, b_wire, b_dep, b_dep_11, b_unit):
         validate(build())
-    assert answer.ANSWER_SCHEMA_VERSIONS == ("1.0", "1.1")
-    for bad in ("1.2", "1", "2.0", "1.1.0", 11):
+    assert answer.ANSWER_SCHEMA_VERSIONS == ("1.0", "1.1", "1.2")  # P1-45b moved this pin (spec2 §8.1)
+    for bad in ("1.3", "1", "2.0", "1.1.0", 11):
         rejects(b_11(), lambda d, bad=bad: d.update(answerSchemaVersion=bad), "schema")
     assert golden()["answerSchemaVersion"] == "1.0"
 
@@ -2910,3 +2915,212 @@ def test_v5_a_site_link_follows_a_config_entry_hop_and_nothing_else():
     for x in (sym_hop(mk_sym("pre", "svc/pre.py", 3), u, "value", edge="CALLS"),
               site_hop("pre", u, 3, "g", "value", "HAS_CALL")):
         rejects(b_site(), lambda d, x=x: _before_site_link(d, x), "V5.*site Link")
+
+
+# --- P1-45b: schema 1.2, the optional root ``notices``, V20, the 1.1-or-later helper (spec2 §1.1, §5.1, §7.2, §8.1) ----------------
+
+NOTICE = {"code": "flow-not-enumerated", "langs": ["python"]}
+
+
+def to_12(d: dict) -> dict:
+    d["answerSchemaVersion"] = "1.2"
+    return d
+
+
+def b_12() -> dict:  # B-1.2: B-1.1 relabelled
+    return to_12(b_11())
+
+
+def b_notice() -> dict:  # B-notice: B-flow relabelled, plus a notice naming its one labelled language
+    d = to_12(b_flow())
+    d["notices"] = [copy.deepcopy(NOTICE)]
+    return d
+
+
+def _b_notices_two() -> dict:
+    """B-notice whose notice names two languages out of order (and, for the ordering test, a second labelled language)."""
+    d = _b_flow_two_langs()
+    d["notices"] = [{"code": "flow-not-enumerated", "langs": ["python", "javascript"]}]
+    return d
+
+
+def _b_flow_two_langs() -> dict:
+    """B-flow plus an item whose chain leaves a javascript function-state hop on a ``flow-unavailable:javascript`` row."""
+    d = to_12(b_flow())
+    u, w = U1["unitId"], U2["unitId"]
+    fb, fw, fz = mk_sym("fb", line=30), mk_sym("fw", "web/w.js", 9, "javascript"), mk_sym("fz", "web/z.js", 3, "javascript")
+    flow_py = dict(status="possible", reason="flow-unavailable:python")
+    flow_js = dict(status="possible", reason="flow-unavailable:javascript")
+    chain = [sym_hop(SA, u), site_hop("fa1", u, 12, "g", "value", "CALLS"), sym_hop(fb, u, "function", edge="HAS_CALL"),
+             hop("Link", H("fl2"), "contract", edge="TO", **flow_py),
+             hop("CallSite", H("fcs2"), "contract", w, "web/w.js", 5, repo=REPO, edge="VIA", candidateCount=1, calleeName="x"),
+             sym_hop(fw, w, "function", edge="HAS_CALL"),
+             site_hop("fw1", w, 6, "k", "value", "CALLS", **flow_js), sym_hop(fz, w, "end", edge="HAS_CALL")]
+    d["items"].append(mk_item(fz, chain, 2))
+    return d
+
+
+def test_v20_the_1_2_bases_validate_and_1_3_is_rejected():
+    validate(b_12())
+    validate(b_notice())
+    validate(_b_flow_two_langs() | {"notices": [{"code": "flow-not-enumerated", "langs": ["javascript", "python"]}]})
+    validate(golden())
+    for build in (b_11, b_flow, b_dflow, b_unit, b_chain, b_wire):
+        validate(build())
+    rejects(b_12(), lambda d: d.update(answerSchemaVersion="1.3"), "schema")
+
+
+def test_notices_is_optional_and_the_1_2_base_without_it_validates():
+    base = b_12()
+    assert "notices" not in base
+    validate(base)
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda d: d.update(notices=[]),
+    lambda d: d["notices"][0].update(langs=[]),
+    lambda d: d["notices"][0].update(langs=["python", "python"]),
+    lambda d: d["notices"][0].update(code="flow-unknown"),
+    lambda d: d["notices"][0].update(extra=1),
+    lambda d: d["notices"][0].update(langs=["Python"]),
+    lambda d: d["notices"][0].pop("langs"),
+    lambda d: d["notices"][0].pop("code"),
+], ids=["empty-notices", "empty-langs", "duplicate-lang", "other-code", "extra-key", "upper-case-lang", "no-langs", "no-code"])
+def test_notices_schema_rejections(mutate):
+    rejects(b_notice(), mutate, "schema")
+
+
+def test_v17_a_1_0_or_1_1_document_carries_no_notices():
+    rejects(b_notice(), lambda d: d.update(answerSchemaVersion="1.1"), "V17")
+    rejects(b_notice(), lambda d: d.update(answerSchemaVersion="1.0"), "V17")
+    for base in (b_11, golden):  # no other construct of the label is in play: the notice alone is the V17
+        rejects(base(), lambda d: d.update(notices=[copy.deepcopy(NOTICE)]), "V17")
+    accepts(b_12(), lambda d: d.update(notices=[copy.deepcopy(NOTICE)]))
+
+
+def test_v20_coverage_a_labelled_hop_needs_its_language_in_a_notice():
+    validate(b_flow() | {"answerSchemaVersion": "1.1"})
+    doc = to_12(b_flow())
+    with pytest.raises(AnswerError, match="V20"):
+        validate(doc)
+    rejects(b_notice(), lambda d: d["notices"][0].update(langs=["javascript"]), "V20")
+    rejects(b_notice(), lambda d: d.update(notices=[{"code": "flow-not-enumerated", "langs": ["go", "javascript"]}]), "V20")
+
+
+def test_v20_coverage_needs_every_labelled_language_not_just_one():
+    base = _b_flow_two_langs() | {"notices": [{"code": "flow-not-enumerated", "langs": ["javascript", "python"]}]}
+    validate(base)
+    rejects(base, lambda d: d["notices"][0].update(langs=["python"]), "V20")
+    rejects(base, lambda d: d["notices"][0].update(langs=["javascript"]), "V20")
+
+
+def test_v20_one_notice_per_code():
+    rejects(b_notice(), lambda d: d["notices"].append({"code": "flow-not-enumerated", "langs": ["python"]}), "V20")
+
+
+def test_v20_notices_only_on_a_resolved_answer():
+    amb = to_12(b_amb())
+    validate(amb)
+    rejects(amb, lambda d: d.update(notices=[copy.deepcopy(NOTICE)]), "V20")
+    unres = to_12(b_unres())
+    validate(unres)
+    rejects(unres, lambda d: d.update(notices=[copy.deepcopy(NOTICE)]), "V20")
+
+
+def test_v20_the_converse_is_valid_a_notice_with_no_labelled_hop():
+    accepts(b_12(), lambda d: d.update(notices=[{"code": "flow-not-enumerated", "langs": ["go"]}]))
+
+
+def test_notices_are_facts_and_build_times_still_drop_on_a_1_2_document():
+    base = b_12()
+    later = copy.deepcopy(base)
+    later["staleness"]["units"][0]["builtAt"] = "2026-11-03T00:00:00Z"
+    assert facts_bytes(later) == facts_bytes(base)
+    assert dumps(later) != dumps(base)
+    with_notice = copy.deepcopy(base)
+    with_notice["notices"] = [copy.deepcopy(NOTICE)]
+    assert facts_bytes(with_notice) != facts_bytes(base)
+    assert dumps(with_notice) != dumps(base)
+    stale = to_12(to_11(b_stale()))
+    moved = copy.deepcopy(stale)
+    moved["staleness"]["units"][0]["failedAt"] = "2026-11-09T00:00:00Z"
+    assert facts_bytes(moved) == facts_bytes(stale)
+
+
+def test_canonicalize_sorts_notices_by_code():
+    base = b_notice()
+    # the code order (a-code first) and the langs order (go after python is NOT first) differ, so the sort key is visible
+    base["notices"] = [{"code": "flow-not-enumerated", "langs": ["go"]}, {"code": "a-code", "langs": ["python"]}]
+    assert [n["code"] for n in answer.canonicalize(base)["notices"]] == ["a-code", "flow-not-enumerated"]
+
+
+def test_dumps_sorts_notice_langs_and_notices_by_code():
+    base = _b_notices_two()
+    out = json.loads(dumps(base))
+    assert out["notices"][0]["langs"] == ["javascript", "python"]
+    again = copy.deepcopy(base)
+    again["notices"][0]["langs"].reverse()
+    assert dumps(again) == dumps(base)
+
+
+def test_the_1_1_or_later_rules_hold_on_a_1_2_document():
+    # V18 (item C of B-flow: a labelled row's language) and (a)
+    base = b_notice()
+    rejects(base, lambda d: _set_hop(d, 2, 3, status="possible", reason="flow-unavailable:javascript"), r"V18.*\(d\)")
+    rejects(base, lambda d: d["items"][0]["chain"][1].update(state="function"), r"V18.*\(a\)")
+    # V19
+    for edge in sorted(answer.PROHIBITED_EDGE_TYPES):
+        rejects(b_12(), lambda d, e=edge: d["items"][0]["chain"][1].update(edgeType=e), "V19")
+    # V17's bound
+    rejects(b_12(), lambda d: d["depthBound"].update(bound=1), "V17")
+    # the hop flag of V5 (a wiring chain's Link in state site is a 1.1-or-later reading)
+    wire = to_12(b_wire())
+    validate(wire)
+    # facts_bytes drops builtAt: covered above
+    assert answer.is_1_1_or_later({"answerSchemaVersion": "1.2"})
+    assert answer.is_1_1_or_later({"answerSchemaVersion": "1.1"})
+    assert not answer.is_1_1_or_later({"answerSchemaVersion": "1.0"})
+
+
+def test_a_1_2_document_holds_a_config_entered_link_to_state_site():
+    base = to_12(b_site())
+    validate(base)
+    for state in ("contract", "value", "key", "end", "function"):
+        rejects(base, lambda d, state=state: _site_chain(d)[1].update(state=state), "V5")
+
+
+def test_the_new_array_rules_name_their_order():
+    assert answer.ARRAY_RULES["notices"] == "code" and answer.ARRAY_RULES["Notice.langs"] == "code point"
+
+
+def _labelled_last_chain() -> list[dict]:
+    """SA -> site -> fb (function) -> fl, a Symbol hop that IS the last hop and carries ``flow-unavailable:python``."""
+    u = U1["unitId"]
+    fl = mk_sym("fl", line=50)
+    flow = dict(status="possible", reason="flow-unavailable:python")
+    return [sym_hop(SA, u), site_hop("fa9", u, 12, "g", "value", "CALLS"), sym_hop(mk_sym("fb", line=30), u, "function", edge="HAS_CALL"),
+            sym_hop(fl, u, "end", edge="CALLS", direction="<-", **flow)], fl
+
+
+def test_v20_coverage_sees_a_labelled_last_hop_of_a_chain():
+    chain, fl = _labelled_last_chain()
+    base = to_12(mk_doc([anchor_of(SA)], [mk_item(fl, chain, 2)], units=[U1]))
+    base["depthBound"] = {"bound": 2, "unexplored": 0}
+    base["notices"] = [copy.deepcopy(NOTICE)]
+    validate(base)
+    rejects(base, lambda d: d.pop("notices"), "V20")
+
+
+def test_v20_coverage_sees_a_labelled_hop_of_a_group_member():
+    u = U1["unitId"]
+    first = site_hop("gm1", u, 11, "g", "value", "CALLS_NAME", status="possible", reason="resolution-unverified")
+    chain, fl = _labelled_last_chain()
+    chain.insert(1, first)  # the first possible hop sets the member's reason, so the group's reason holds
+    member = mk_item(fl, chain, 3)
+    group = {"kind": "other-possible-callees", "key": H("gm"), "reason": "resolution-unverified", "count": 1, "members": [member]}
+    base = to_12(mk_doc([anchor_of(SA)], groups=[group], units=[U1]))
+    base["depthBound"] = {"bound": 3, "unexplored": 0}
+    base["notices"] = [copy.deepcopy(NOTICE)]
+    validate(base)
+    assert base["items"] == []
+    rejects(base, lambda d: d.pop("notices"), "V20")
