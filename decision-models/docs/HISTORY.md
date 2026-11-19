@@ -2,6 +2,16 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-19 — typed-decision-models U6f.8a — the call collector
+
+**What:** plan4 `docs/plans/typed-decision-models4.md` v1.13 §3.11, §4.4/§5 row U6f.8a; fit note `docs/plans/typed-decision-models-fit-ml.md` §4 (incl. "The exclusion must fire"); gates `docs/reviews/typed-decision-models.md` Pass 52–53. `decisionmodels/fitcalls.py`:
+- residency check (`check_start`/`check_end`; a model absent or gone, or a read that raises, refuses and writes nothing), `FitInputs`, `AbortRecord` and its writer (`fits/abort-<UTC ts>-<runId>.json`, one file, nothing else), `Disposition` (exempt only on its exact `(itemId, callKind, textId, failureKind, status)`);
+- `collect_calls`: one hand-off call per item and one decision call per item and text; `OverLimit` is `over-limit`; any other failure aborts; a parse failure is an `ok` call on the parser's fallback, counted; `ScoredCall.answer` shapes per §3.11; `CollectedCalls.maxProbabilities` carries `max(probabilities)` for `maxProbAuc` (no entry for an `ok` choice call with an empty list, which the client contract allows); a `Disposition`'s call that returns `ok` or over-limit, or is never made, raises `ExclusionDidNotFire`, nothing written;
+- `summarize_calls`/`wilson_upper` (count, median, max, `k`, `n`, Wilson 95% upper bound capped at 1, half-budget count).
+Round trip through `guard_ladder`/`predicate_ladder`/`choice_ladder` pinned for all three roles and both families. Open for U6f.8b: the policy for an `ok` choice call with no `maxProbabilities` entry (exploratory AUC only).
+
+**Verified:** `tests/test_fitcalls.py` (63); delegate's mutants (21/23 first round, 17 and 7 later, all killed bar one equivalent); the gate's 24 own mutants; my own (decide sent the hand-off input; chat timeout halved) killed; full suite re-run by the coordinator.
+
 ## 2026-11-19 — typed-decision-models U6f.3c, U6f.4c — hand-off call parity, question files
 
 **What:** plan4 `docs/plans/typed-decision-models4.md` §3.11, §4.4/§5 rows U6f.3c/U6f.4c; gate `docs/reviews/typed-decision-models.md` Pass 51; question review `decision-models/docs/reviews/typed-decision-models-ml.md` Pass 1–2.

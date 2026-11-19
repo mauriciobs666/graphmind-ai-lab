@@ -154,6 +154,13 @@ is the sole home of its fields.
   (b)), so a 500 and a 503 are not pooled. A `timeout` depends on load: its lever is
   `--decision-timeout-seconds`, and an item that still cannot run goes to `architect`.
 
+- **The exclusion must fire.** If an excluded call succeeds in the rerun, the fit refuses before writing
+  any artifact (report-and-refuse, naming the exclusion): the disposition's premise, a failure that is
+  the item's property, is falsified, and applying it anyway would drop an item on a call that can succeed,
+  a selection on the outcome. The operator reruns without the flag and the success is ordinary data. The
+  call's elapsed time stays out of the refused fit. `summarize_calls` takes every call, before any
+  exclusion pruning, so the failed calls count in `k` and `n`.
+
 The disposition follows the bench's row for that call (§Q4.3), so the fit sees what the bench
 will:
 - **Guard, hand-off chat failure:** the item leaves the calibration set, for every text and both
