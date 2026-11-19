@@ -2,6 +2,14 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-11-19 — ccg impact-answer seam (P1-27)
+
+- **What:** added one step-5 bullet before "CPG freshness": for a `ccg`-covered system, an architect/implementer brief carries the impact answer verbatim (CLI via Bash, no new tool grant), its stamp, a staleness note and the answer's `notices` text; no stamp, no dispatch; no "safe/complete/no impact" wording; `stale-kept` stated, never omitted; a typed error is stated as `ccg unavailable: <code>` and the old CPG line applies. The CPG-freshness bullet is retitled to uncovered systems and `cpg_*` graphs, body unchanged.
+- **Why:** `docs/plans/connected-code-graph-p1-answers.md` P1-27 (N-COBB). Verified 2026-11-19: the flow notice (`docs/plans/connected-code-graph-answer-spec2.md` §5.1) says flow-dependent effects of flag-false languages may be missing from the list, so the control half of FR-8/AC-25 is not met there and the brief must not imply otherwise; the `clients` run from any cwd (editable install), `teco` lacks `mcp__ccg__*` tools so it uses the CLI.
+- **Gate fixes (same day):** one rule for every failure (non-zero exit, typed error, no JSON, no stamp: `ccg unavailable: <reason>`, old CPG line, no deadlock); concrete `kind:name` anchor example; renderer's literal staleness wording incl. `not mapped, never built`; empty-views note; CPG bullet retitled; `claude/README.md` teco row updated.
+- **Gate pass 2 (N1/N2):** dropped `exit 3` (it needs `--fail-on`); `anchor-ambiguous`/`anchor-unresolved` (exit 2, JSON on stderr, candidates in `error.detail`) carved out of the failure rule; a delivered ambiguous document (exit 0) goes to the specialist; `bad-request` gets one corrected retry.
+- **Plan items:** none. Companions: `skills/cpg-analysis/SKILL.md` §5, root `.mcp.json` `ccg` entry, `cpg/tests/test_atrest.py` allowlist.
+
 ## 2026-11-10 — work-items bullet (commit discipline)
 
 - **What:** added one step-5 bullet: legacy mint on first cite/open; `wi flush` + `.work-items/registry.jsonl` in the allocating unit's explicit-path commit; ledger units not forced into the scheme.

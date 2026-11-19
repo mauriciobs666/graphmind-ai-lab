@@ -556,8 +556,13 @@ TOOL_FLAGS = ("--allowedTools", "--allowed-tools", "--tools")
 # other parameter name fails closed until it is reviewed and added here.
 SAFE_TOOL_PARAMS = {"request", "anchor", "system", "scope", "cypher", "depth", "depth_bound", "use_case",
                     "question", "cacheBypass", "timeoutMs"}   # P1-25b: free text, a boolean, an integer; none names a file
-# Exact launch strings of the `.mcp.json` `ccg` entry that P1-27 adds under review; empty until then.
-MCP_LAUNCH_ALLOWLIST: set[str] = set()
+# Exact string values of the `.mcp.json` `ccg` entry reviewed in P1-27 that carry a path-like character: the `bash -c`
+# launch string (a fixed path under the repo's `cpg/`, no credential, no argument from the model) and the loopback
+# FalkorDB host. Changing the entry means changing this set: a review event.
+MCP_LAUNCH_ALLOWLIST: set[str] = {
+    'cd "$CLAUDE_PROJECT_DIR/cpg" && exec .venv/bin/python -m clients.mcp.server',
+    "127.0.0.1",
+}
 BUNDLE_STORE_NAMES = {"read_bundle", "bundle_dir", "bundle_path", "prune_unit", "read_private", "atrest"}
 NUL = "\0"                                            # pattern_escapes(NUL) is True: fail closed
 # P2-2: the reviewed launch argv (run-writer.sh's single ARGV=( ... ) block). A flag not listed here fails

@@ -12,6 +12,16 @@
     "falkor-chat-agent-team": {
       "type": "streamable-http",
       "url": "http://localhost:8200/mcp"
+    },
+    "ccg": {
+      "command": "bash",
+      "args": ["-c", "cd \"$CLAUDE_PROJECT_DIR/cpg\" && exec .venv/bin/python -m clients.mcp.server"],
+      "env": {
+        "CCG_SYSTEM": "graphmind-ai-lab",
+        "CCG_FALKORDB_HOST": "127.0.0.1",
+        "CCG_FALKORDB_PORT": "6390"
+      },
+      "timeout": 60000
     }
   }
 }

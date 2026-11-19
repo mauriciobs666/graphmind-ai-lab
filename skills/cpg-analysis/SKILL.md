@@ -14,7 +14,8 @@ description: >-
   in skills/joern-cpg/references/cpg-model.md; this skill does not restate it.
   Requires a CPG already built and loaded by the joern-cpg pipeline; building or
   loading one routes to graph-dba (an on-demand capability, not routine).
-allowed-tools: mcp__cypher__query, Bash, Read
+  For a system the connected code graph (`ccg`) covers, prefer its four tools (section 5).
+allowed-tools: mcp__cypher__query, mcp__ccg__ask, mcp__ccg__resolve, mcp__ccg__refresh, mcp__ccg__raw_query, Bash, Read
 ---
 
 # cpg-analysis — query a loaded CPG in FalkorDB
@@ -284,3 +285,23 @@ approximation.
 Each recipe states its purpose, the one parameter to change, the parameterized
 Cypher, the expected shape of results, and its known limits. Recipes assume the
 schema in `cpg-model.md` and the idioms above; they do not restate them.
+
+## 5. The `ccg` tools — the connected code graph (systems `ccg` covers)
+
+For a system with a `ccg` store (`cpg/ccg/system.yaml`; Claude Code wiring: the `ccg` entry of the root `.mcp.json`),
+ask `ccg` before writing `cpg_*` Cypher; the `cpg_*` recipes above stay for graphs without one. Reference:
+`cpg/README.md` (`clients/` row) and `docs/plans/connected-code-graph-answer-spec2.md` §5.1. Same four operations
+on the CLI: `cd cpg && .venv/bin/python -m clients.cli.main {ask,resolve,refresh,raw}`.
+
+| Tool | Use |
+|---|---|
+| `mcp__ccg__ask` | `request={"useCase":"impact"\|"depends-on","anchor":{...}}` returns the canonical answer JSON (`stamp`, `staleness`, `items`, `notices`). `question=` (plain language) is not built yet. |
+| `mcp__ccg__resolve` | `anchor` (`symbol`/`name`/`location`/`contract`/`config` kinds) returns candidates with ids. Run it when the anchor is a bare name; an `anchor-ambiguous`/`anchor-unresolved` error carries the candidates, so pick none for the user. |
+| `mcp__ccg__refresh` | rebuilds from local clones (`scope` = repoIds). A unit that fails stays `stale-kept` with `failedAt`; report it as such. |
+| `mcp__ccg__raw_query` | read-only Cypher on the `ccg` graph, for what `ask` cannot say. Not the `cpg_*` schema. |
+
+Reading an answer — what it supports and what it does not:
+- Quote the **stamp** (`snapshotId`) and the **staleness** (each unit's `buildStatus`, `builtAt`/`failedAt`) with any conclusion; an answer without them is not usable.
+- **`notices`** (`flow-not-enumerated`, with `langs`): in those languages the walk followed call, link and wiring edges but not data, return-value, argument or control-flow edges, so flow-dependent effects **may be missing from the list**. Repeat the renderer's text verbatim (`ccg.render.common.flow_notice_lines`; `--format text` prints it); never paraphrase it away.
+- An empty or short `items` list is **not** evidence of no impact, and the answer never licenses "safe", "complete" or "no impact" for a flag-false language. Treat the control-flow half of a change's reach there as unanswered and read the code or use the `cpg_*` recipes for it.
+- Tool errors are typed (`store-error`, `not-built`, `bad-request`, `anchor-*`, ...): state the `code`; do not retry with a guessed anchor.

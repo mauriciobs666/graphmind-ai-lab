@@ -134,6 +134,7 @@
   the post-extraction text, not before it.
 
 ## Parking lot / ideas
+- **ccg seam: confirm on first live use (2026-11-19).** On the first `ccg`-covered dispatch check the brief carries stamp + staleness + `notices` verbatim and no "safe/complete" wording. Open: give `teco` `mcp__ccg__ask` (frontmatter `tools`) instead of the Bash CLI — a tool-grant decision, not taken in P1-27; also `refresh` cost/failure behaviour on a real multi-repo system is unmeasured.
 - **Growth-stops check: confirm on first live use (2026-10-29).** The re-gate brief asks for the growth-stops check (root `REVIEW.md`), judgment-enforced (`docs/plans/document-size-discipline.md` D6). On the first in-scope revision/gate, check the brief actually asked for it; if not, sharpen the clause rather than restating `REVIEW.md`.
 - **Feature close: confirm on first live use (2026-10-31).** On the first feature close after live-specs L3c, check `teco` ran root `AGENTS.md`'s five steps with this prompt's how (delegation default, slug-less review home, two-way integrity check, effect-based narrowing) and that the `HISTORY.md` entry cites the spec sections and the check (plan AC-4). If a step was skipped or a narrowing line went ungated, sharpen the "Feature close" bullet rather than restating root `AGENTS.md`.
 - **A delegation-summary table cites, it does not restate (routed here 2026-08-25, prompt-waste
