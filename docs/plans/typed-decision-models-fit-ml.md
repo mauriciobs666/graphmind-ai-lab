@@ -179,10 +179,15 @@ will:
   off (or decided by that text), so the ladder sees the cost as a price on a larger `s`. The failed
   call's elapsed time enters `t̄_{L|H}` (§Q4.3, FR-10 row); a 180 s timeout can lower `s_350` visibly,
   which is the correct, conservative reading.
-- **Effect on the T ladder.** An item fail-closed in a class lowers that class's agreement by
-  `1/n_class` wherever it is handed off. At 60 per class one item costs 1.7 pp, so one item can move the
-  chosen rung (0.94 against 0.93). The report prints, per class, the fail-closed count `k` and `n_class`,
-  and the agreement ceiling `1 − k/n_class` for a band that hands them off.
+- **Effect on the T ladder.** An item whose fail-closed answer is wrong lowers its class's agreement by
+  `1/n_class` wherever it is handed off: every message-type item, and a join-in item only when its label
+  is *yes* (the fail-closed *no* is right on a label-*no* item). At 60 per class one item costs 1.7 pp,
+  so one item can move the chosen rung. The report prints, per class, `n_class`, `k` (distinct items
+  with at least one disposition) and `kWrong` (those whose fail-closed answer is wrong), and the agreement
+  ceiling `(n_class − kWrong)/n_class` for a band that hands them off. A ceiling below the attainable
+  agreement would not be a ceiling, so `k` alone is not used. The guard has no per-class figure; it
+  prints the exclusion `k/n` and the floor re-check. With more than two matching records, the first valid
+  pair in file-name order is used.
 - **No numeric cap: sound.** The floor re-check bounds the guard, fail-closed scoring bounds the
   new-ability points, and each exclusion costs two aborted fits and a ledger line. The report prints
   exclusions as `k/n` with the Wilson 95% upper bound.

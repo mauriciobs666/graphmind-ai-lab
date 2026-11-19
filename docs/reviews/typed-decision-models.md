@@ -2618,3 +2618,49 @@ No blocker. P54-M1–M3 and m1 are `coder`'s test additions for the commit round
 
 ### Stopping condition
 No blocker or major. P55-m1/m2 are `coder`'s, foldable into the commit round.
+
+## Pass 56 — U6f.8c gate: `exclusion.py`, `test_exclusion.py`, `fit.py` flag wiring (2026-11-19)
+
+**Scope.** `decision-models/decisionmodels/exclusion.py`, `tests/test_exclusion.py`, the `fit.py` diff vs HEAD and the replaced `test_fit_cli.py` test, against plan4 v1.16 §3.11 "Recorded dispositions", §4.4/§5 row U6f.8c and fit note §4/§6, read with `fitcalls.py` (`collect_calls`, `Disposition`), `fitstats.py`. Method choices are the `data-scientist`'s. Ran `test_exclusion.py`, `test_fit_cli.py`, `test_fit.py`, `test_fr8_isolation.py` (200 passed), `ruff check` (clean); full suite not run. 66 mutants on a scratch copy (bytecode off, fresh copy each); a probe run of a rerun failing with 503 against 500-records. Growth-stops: new scope only.
+**Verdict: approve with suggestions.** (a)–(e), the flag grammar and every effect do what the plan says; P56-M1 must close before 9b consumes `ClassFigures`.
+
+**Held (verified).** Each clause (a)–(e) has its own fixture varying one property (runId, one record, item/call/text, 500 vs 503, failureKind pair, each of the seven `inputs` keys, `timeout`/`connection`, `residencyNow` None / either model absent); 27 of 29 clause/effect/grammar mutants killed (status or failureKind dropped from the pair test, runId, floor `<=`/49/always, evidence set, either resident model, k counted per disposition, class label, pruning of calls/labels/cells/maxProbabilities, `reason` citing one file, the item id or `status` in the Disposition). `summarize_calls` is fed the full calls (`test_a_rerun_with_the_recorded_exclusion...` asserts `handoff.n == 204` against 203 kept: a pruned-feed mutant is killed); `analyze_fit` gets one pruned set for both candidates (full calls, labels or cells mutants killed). The two checks cannot disagree: `collect_calls` aborts on any other kind/status (run: 503 against recorded 500 gave a third record, exit 1) so `_fired_call` is a redundant standalone guard. Two dispositions on one item (hand-off + decision) and one on the control are covered; the guard floor is 50 passes / 49 refuses. FR-8 test green, no forbidden fragment in the new files; `exclusion.py` 359 lines, one concern.
+
+### Findings
+
+**P56-M1 (major, by reading + HEAD/working-tree diff of the fit note) — the per-class ceiling is not the working tree's.** `exclusion.py:apply_dispositions` computes `k` = distinct items under any disposition and `ceiling = (n_class-k)/n_class`; `ClassFigures` has no `kWrong`. The uncommitted `typed-decision-models-fit-ml.md` §4 (diff vs HEAD) says: `k` as here, plus `kWrong` (items whose fail-closed answer is wrong: every message-type item, a join-in item only when its label is *yes*) and ceiling `(n_class-kWrong)/n_class`, "k alone is not used" because it understates the ceiling. For a join-in *no* item under a disposition the code reports 3/4 where the attainable agreement is 1.0. Add `kWrong` (the fail-closed answer is `False`/no label, from `labels`) and the new ceiling, with a fixture whose class has a disposition on a label-*no* item (ceiling stays 1), and update the U6f.8c row. If the `data-scientist` ruling differs, this closes as no-change.
+
+**P56-m1 (minor, verified by mutant) — "record check precedes any residency read" is unpinned.** Moving `build_dispositions` after `check_start` survives (also after the first `check_start` only): the refusal tests assert `not fits(data).exists()` and the message, but `Client.residency` has no counter. Give the fake a call counter and assert zero `residency`/`chat`/`decide` calls on each record-check refusal (the plan's order statement); the existing "found 0" assert already kills the after-`collect_calls` move.
+
+**P56-m2 (minor, verified by mutant) — `record_from_json`/`load_abort_records` guards are unpinned.** Dropping the schema check, the `status` type check (a `True`/string status) and widening the glob to `*.json` all survive. Add: two otherwise good records, one with another `schema` string, one with `"status": true`, refused as "found"/skipped notes; and a `calls`-like non-abort `*.json` in the dir ignored.
+
+**P56-m3 (minor, by reading) — the floor refusal comes after 5N live calls.** `run_fit` calls `apply_dispositions` after `collect_calls`, but the floor re-check needs only the flags and `calibration.cells`. A flag that cannot pass the floor costs the full run before it refuses. Check it in `build_dispositions`' caller before `check_start` (keep the post-call `ExclusionDidNotFire` path). Scope note for the `data-scientist`: the re-check covers every cell, so a cell already under 50 refuses an exclusion in another cell, and a cell emptied entirely escapes it (`_cell_counts` names come from `cells`, fine, but a 1-item cell is not reachable by any test).
+
+**P56-m4 (minor, verified equal by reading, unpinned) — one rule in two places.** `_guard_effects` (`text-left-selection` / `concordant`) re-implements `fit._decision_failure_texts`. They agree today (per item, non-control text, failing set against all texts); nothing ties them, so a change to one leaves the report lying. Add a run-level test (guard fixture, decision disposition on a non-control text and on the control): the effect label equals whether `analysis.scores[...].leftSelection == "decision-failure"` for that text. Or compute the label from `_decision_failure_texts`.
+
+**P56-n1 (nit).** `test_the_exclude_item_flag_needs_a_reason` (replaced test) asserts only `SystemExit`, not code 2 or zero calls; `test_exclusion.py` covers it fully, so it is redundant, not wrong; nothing else relied on the flag's absence (`grep` of tests; `fit.py` changes leave the 200 tests, incl. the Pass 54/55 pins, green). A repeated `--reason` is silently last-wins; only the guard role runs through `run_fit` with a disposition (join-in/message-type effects are unit-level only), so one join-in CLI fixture would exercise `apply_dispositions` role wiring.
+
+**Mutants (66).** Survived and real: P56-m1 (2 forms), m2 (3). Survived and equivalent: `callKind` unmatched in the record filter (the text id fixes the kind), `textId`/`failureKind` read from record `a` instead of the flag/`b` (equal by (b)), `residencyStart` unused, `failing` including hand-off failures (such an item is removed first). The coder's 34 mutants and 3 added tests are its figures.
+
+### Stopping condition
+No blocker. P56-M1 is `coder`'s once the `data-scientist` ruling is final; m1–m4 are test/ordering additions for the commit round.
+
+## Pass 57 — U6f.8c fix round re-check (2026-11-19)
+
+**Scope.** `exclusion.py`, `fit.py`, `test_exclusion.py`, `test_fit_cli.py` after the Pass 56 fixes, with the `data-scientist`'s `kWrong` ruling (fit note §4). Re-ran `test_exclusion.py`, `test_fit_cli.py`, `test_fit.py`, `test_fr8_isolation.py` (214 passed; full suite not run), a CLI probe, and 19 mutants on a fresh scratch copy (bytecode off). Growth-stops: no prior finding restated.
+**Verdict: approve with suggestions.** No blocker or major; one new minor.
+
+**Dispositions (Pass 56).**
+- **M1: closed.** `ClassFigures.kWrong` and ceiling `(n_class-kWrong)/n_class`; join-in counts only label-yes items, message-type every item (also when the item's label equals the dispositioned call's class: the fail-closed "no label" is never a label), the guard has no per-class figure. Mutants killed: `kWrong = k` always, `= 0`, inverted label test, message-type zeroed by label, ceiling from `k`.
+- **m1: closed.** Moving the record check after `check_start` is killed (it was the survivor).
+- **m2: closed.** Schema check, `status` type check and a `*.json` glob mutants all killed. An invalid `abort-*.json` is skipped into the refusal text and never enters `matching`, so it cannot count toward (a)'s two distinct files.
+- **m3: closed, with one gap.** The pre-call `check_guard_floor` and the one in `apply_dispositions` share one function and the same `removed` expression (hand-off dispositions only), so a hand-off plus decision disposition on one item removes the same set in both; ghost items are filtered by the same `i in cells`, so they cannot make the two disagree (a ghost then fails at `ExclusionDidNotFire`). Dropping the pre-check is killed. See P57-m1.
+- **m4: closed.** Effect-label inversion and the control branch mutants killed.
+- **n1: closed.** Probe (guard, 50 per cell): `--exclude-item` alone, `--reason` alone and `--reason` twice each exit 2 with distinct messages and no calls; a valid hand-off flag at the floor exits 1 `refused:` before any call. "Last wins" survives as equivalent (the repeat is refused first).
+
+### Findings
+
+**P57-m1 (minor, verified by mutant) — the pre-call floor check's input is unpinned.** Replacing its `removed` by every disposition's item (`fit.py`, the generator over `dispositions`) survives all 214 tests: a decision-only disposition on a cell at exactly 50 would be refused before any call. The unit test for "no re-check without a hand-off exclusion" calls `apply_dispositions`, not `run_fit`. Add a run-level fixture (50 per cell, a decision disposition only) that completes. A second survivor, `gone = set(removed)` (a ghost hand-off item refusing on the floor before `ExclusionDidNotFire`), differs only in which refusal is printed: equivalent.
+
+### Stopping condition
+No blocker or major. P57-m1 is `coder`'s test addition for the commit round.

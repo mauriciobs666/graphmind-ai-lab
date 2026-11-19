@@ -239,7 +239,7 @@ def test_validate_url_accepts_http_and_https_with_a_host() -> None:
         validate_url("lm.example")
 
 
-def test_the_exclude_item_flag_is_not_part_of_this_unit(tmp_path: Path) -> None:
+def test_the_exclude_item_flag_needs_a_reason(tmp_path: Path) -> None:
     data = write_data(tmp_path, "guard-judge")
     with pytest.raises(SystemExit):
         main([*argv(tmp_path, data, "guard-judge"), "--exclude-item", "x:handoff"])

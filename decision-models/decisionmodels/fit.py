@@ -53,10 +53,20 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from decisionmodels import render
+from decisionmodels.exclusion import (
+    DispositionReport,
+    ExclusionFlag,
+    ExclusionRefused,
+    apply_dispositions,
+    build_dispositions,
+    check_guard_floor,
+    parse_exclude_item,
+)
 from decisionmodels.fitcalls import (
     CalibrationItem,
     CallSummary,
     CollectedCalls,
+    ExclusionDidNotFire,
     FitAborted,
     FitInputs,
     ResidencyRefused,
@@ -548,6 +558,8 @@ class FitRun:
     collected: CollectedCalls
     analysis: FitAnalysis
     summaries: Mapping[str, CallSummary] = field(default_factory=dict)
+    #: the listed dispositions with their effects, per-class figures (U6f.9b prints them)
+    dispositions: DispositionReport = DispositionReport((), (), None)
 
 
 def validate_url(url: str) -> str:
@@ -575,12 +587,15 @@ def run_fit(
     fits_dir: Path,
     data_dir: Path = DATA_DIR,
     fit_dir: Path = FIT_DIR,
+    exclusions: Sequence[ExclusionFlag] = (),
+    reason: str | None = None,
 ) -> FitRun:
-    """Residency start check, the shared calls once, residency end check, the analysis.
+    """Record check, residency start check, the shared calls once, residency end check, the
+    dispositions' effects (`exclusion.apply_dispositions`), the analysis. The call summaries are
+    computed over the full calls, before any exclusion pruning.
 
-    Raises `FitRefused`/`ResidencyRefused` (nothing written; a bad input is a `FitRefused`) or
-    `FitAborted` (the one abort record). The disposition wiring is U6f.8c's: `dispositions` is
-    empty here.
+    Raises `FitRefused`/`ResidencyRefused`/`ExclusionRefused`/`ExclusionDidNotFire` (nothing
+    written; a bad input is a `FitRefused`) or `FitAborted` (the one abort record).
     """
     if not (
         isinstance(decision_timeout_seconds, int | float)
@@ -610,6 +625,12 @@ def run_fit(
         handoffModel=handoff_model,
         decisionTimeoutSeconds=float(decision_timeout_seconds),
     )
+    dispositions = build_dispositions(exclusions, reason, inputs=inputs, fits_dir=fits_dir)
+    if role == "guard-judge":  # fail fast: the floor depends on the flags and the cells only
+        check_guard_floor(
+            calibration.cells,  # type: ignore[arg-type]
+            (d.itemId for d in dispositions if d.callKind == "handoff"),
+        )
     start = check_start(client, inputs)
     collected = collect_calls(
         client,
@@ -618,18 +639,33 @@ def run_fit(
         texts=texts,
         residency_start=start,
         fits_dir=fits_dir,
-        dispositions=(),
+        dispositions=dispositions,
     )
     end = check_end(client, inputs)
+    applied = apply_dispositions(
+        role,
+        collected,
+        dispositions,
+        labels=calibration.labels,
+        cells=calibration.cells,
+        texts=texts,
+    )
     analysis = analyze_fit(
-        role, collected, labels=calibration.labels, cells=calibration.cells, texts=texts
+        role, applied.collected, labels=applied.labels, cells=applied.cells, texts=texts
     )
     summaries = summarize_calls(
         collected.calls,
         decision_timeout_seconds=inputs.decisionTimeoutSeconds,
         parse_failures=collected.parseFailures,
     )
-    return FitRun(inputs, tuple(texts), start, end, collected, analysis, summaries)
+    return FitRun(inputs, tuple(texts), start, end, collected, analysis, summaries, applied.report)
+
+
+def _exclude_item(value: str) -> ExclusionFlag:
+    try:
+        return parse_exclude_item(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -644,6 +680,18 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         type=float,
         help="the decision call's budget; also what the candidate ships. No default.",
+    )
+    parser.add_argument(
+        "--exclude-item",
+        action="append",
+        default=[],
+        type=_exclude_item,
+        metavar="ID:CALLKIND[:TEXTID]",
+        help="a recorded item disposition (needs two matching abort records and --reason); "
+        "repeatable, never a default; TEXTID exactly when CALLKIND is decision.",
+    )
+    parser.add_argument(
+        "--reason", action="append", help="why the item is excluded; required with --exclude-item"
     )
     parser.add_argument("--data-dir", type=Path, default=DATA_DIR)
     parser.add_argument(
@@ -660,6 +708,9 @@ def _summary_lines(run: FitRun) -> list[str]:
             f"{sel.candidate}: text {sel.textId!r}, rung {chosen.ladder.rung}, "
             f"noEligibleText={sel.noEligibleText}"
         )
+    for effect in run.dispositions.effects:
+        d = effect.disposition
+        lines.append(f"excluded {d.callKind} call of {d.itemId} ({effect.effect}): {d.reason}")
     return lines
 
 
@@ -667,7 +718,13 @@ def main(argv: Sequence[str] | None = None, *, client: Any = None) -> int:
     """Run a fit and print the selections. Emission is U6f.9b's. Exit 0, or 1 on a refusal (no file
     written) or an abort (one abort record). `client` is injected by tests; the default is
     `LMStudio(--lmstudio-url)`."""
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.reason is not None and len(args.reason) > 1:
+        parser.error("--reason is given more than once")
+    reason = args.reason[0] if args.reason else None
+    if bool(args.exclude_item) != (reason is not None):
+        parser.error("--exclude-item and --reason go together")
     try:
         url = validate_url(args.lmstudio_url)
         fits_dir = args.fits_dir or args.data_dir / args.role / args.dataset_version / "fits"
@@ -680,8 +737,10 @@ def main(argv: Sequence[str] | None = None, *, client: Any = None) -> int:
             decision_timeout_seconds=args.decision_timeout_seconds,
             fits_dir=fits_dir,
             data_dir=args.data_dir,
+            exclusions=args.exclude_item,
+            reason=reason,
         )
-    except (FitRefused, ResidencyRefused) as exc:
+    except (FitRefused, ResidencyRefused, ExclusionRefused, ExclusionDidNotFire) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 1
     except FitAborted as exc:

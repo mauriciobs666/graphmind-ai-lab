@@ -2,6 +2,14 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-19 — typed-decision-models U6f.8c — recorded item dispositions
+
+**What:** plan4 `docs/plans/typed-decision-models4.md` v1.16 §3.11 "Recorded dispositions", §4.4/§5 row U6f.8c; fit note `docs/plans/typed-decision-models-fit-ml.md` §4; gates `docs/reviews/typed-decision-models.md` Pass 56–57. `decisionmodels/exclusion.py` and `--exclude-item <id>:<callKind>[:<textId>] --reason <text>` in `fit.py` (repeatable; `--reason` exactly once; `textId` exactly for `decision`):
+- `build_dispositions` accepts a flag only when two `abort-*.json` records satisfy (a)-(e), first valid pair in file-name order; evidence kinds `http`/`malformed`; a named file that is not a valid record is skipped and named in the refusal; `reason` cites both file names. The record check and, for a guard hand-off exclusion, the floor fail-fast (`check_guard_floor`: 49 per cell refuses, 50 passes) run before the residency read and any call.
+- `apply_dispositions` applies a disposition only to a call that failed this run (else `ExclusionDidNotFire`). A guard hand-off exclusion removes the item from labels, cells and every call for both candidates; a guard decision failure prunes nothing (the text leaves selection in `analyze_fit` unless it is the control or every text failed the item); join-in and message-type failures stay fail-closed, reported per class as `n_class`, `k`, `kWrong` (join-in: label-yes items; message-type: all) and the ceiling `(n_class - kWrong)/n_class`. `summarize_calls` still reads the full calls. `FitRun.dispositions` (`DispositionReport`) is what U6f.9b prints.
+
+**Verified:** `tests/test_exclusion.py` (77 tests incl. the run-level pins); the delegate's 50 mutants (survivors equivalent), the gate's ~85 own; my own (evidence kinds widened) killed; full suite re-run by the coordinator, ruff clean.
+
 ## 2026-11-19 — typed-decision-models U6f.8b — selection, split-half and the fit CLI
 
 **What:** plan4 `docs/plans/typed-decision-models4.md` v1.15 §3.11, §4.4/§5 row U6f.8b; fit note `docs/plans/typed-decision-models-fit-ml.md` §3, §6; gates `docs/reviews/typed-decision-models.md` Pass 54–55. `decisionmodels/fit.py` and `python -m decisionmodels.fit`:
