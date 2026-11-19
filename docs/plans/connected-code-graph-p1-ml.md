@@ -545,8 +545,9 @@ From P1 on, this section replaces EP §11.3's sentence. The requirements side is
 The rest of the record is EP §12.3.
 
 - **`algorithm.version`** is the exact string the engine emits at the freeze commit, in the
-  `MAJOR.MINOR` form and with the value answer-spec2 §1.2 finally fixes. EP §12.3's `"<semver>"`
-  placeholder means that string, compared by string equality.
+  `MAJOR.MINOR` form. It is **`"1.2"`** (V-both, `bfs-v1`; fingerprint pin
+  `39e7ab0280ea38fcba30754caa2595b0` in `ALGORITHM_VERSIONS`, answer-spec2 §1.2), compared by string
+  equality; `"1.1"` (caller-only) is not the gated algorithm.
   - The walk changes this note recommends or records (§3.5's fallback walk, §6.6's labelling) are
     walk-definition changes and bump it under that section's rule.
   - The record therefore follows them.

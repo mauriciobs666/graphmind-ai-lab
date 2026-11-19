@@ -1,6 +1,6 @@
 # Connected code graph — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** C-1001 (M10) · **Last updated:** 2026-11-01
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** C-1001 (M10) · **Last updated:** 2026-11-19
 
 ## Intent
 
@@ -123,6 +123,13 @@ actually benefits from each one:
 - FR-8 — When an impact cannot be proven (e.g. a runtime-built URL, a dynamic import), it is still
   listed, marked as *possible* with the reason for doubt. Missing a real impact is worse than a
   false alarm.
+  **Status (2026-11-19):** met for impacts the walk can reach by call, link and wiring edges. **Not
+  met** for flow-dependent impact (through data values, return values, arguments or control
+  conditions) in languages whose flow analysis is off: the shipped fallback lists 9 of 28 on the
+  4-anchor dev set (in-sample screen, pooled interval optimistic because items cluster), and every
+  such answer carries a notice that flow-dependent effects "may be missing from this list". Closing
+  it is measured on the held-out `flow` stratum at the AC-5 gate (see
+  `docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md`, `docs/plans/connected-code-graph-answer-spec2.md` §5.1).
 - FR-9 — Whether analysis runs locally or uses hosted services (including LLMs) is **configurable**.
   Both must be supported. Each codebase has a default setting, and a single run may override it,
   except that a codebase set to local-only can never be overridden into using hosted services. When
@@ -461,6 +468,11 @@ builds them has measured reality. AC-1 to AC-6 exercise impact mapping (FR-11)._
   grouped by repository and component, then by distance, confirmed before possible. Asking the
   reverse question, "what does this depend on?", for the same function lists its dependencies the
   same way (FR-11).
+  **Status (2026-11-19):** the shape half (direct/indirect, distance, grouping, reverse question) is
+  as specified. The control half is **not met** for flag-false flow: the shipped fallback does not
+  list the guarded point in the general case (9 of 28 dev items listed; in-sample screen), and the
+  answer says flow-dependent effects "may be missing from this list". Open until the held-out `flow`
+  stratum reports; the stakeholder accepted this state on 2026-11-19.
 - AC-26 (Arduino; later, not phase-blocking) — Given an Arduino sketch split across several `.ino` files, with no hand-written
   function declarations, its functions and the calls between its files are mapped, and an impact
   question about one of its functions lists its callers in the other files (FR-1, FR-11).
@@ -754,3 +766,4 @@ None.
   AC-5 (OpenTelemetry strata), AC-6, AC-7, AC-8, AC-13 (topic and library-signature kinds), AC-17,
   AC-22, AC-23 and FR-1's non-Python/TS languages; closures per `docs/plans/connected-code-graph.md`
   v3.4 §4.1.
+- 2026-11-19 — The pre-registered flow-fallback experiment picked the V-both walk (9 of 28 dev items listed; no walk reaches 28 of 28): accept it with FR-8 and AC-25's control half recorded as not met for flag-false flow, and ship the "may be missing from this list" notice? → **Accept + add notice.** Closing is judged on the held-out `flow` stratum at the AC-5 gate (FR-8, AC-25).

@@ -1565,14 +1565,15 @@ record.
   "packSetHash": "<64 hex>",
   "coreCommit": "<40 hex>",
   "coreTreeHash": "<64 hex>",
-  "algorithm": {"id": "<S20 choice>", "version": "<semver>"},
+  "algorithm": {"id": "bfs-v1", "version": "<MAJOR.MINOR>"},
   "defaultDepthBound": 2,
   "firstContactDate": "2027-01-15",
   "recordedBy": "teco"
 }
 ```
 
-The example values are illustrative.
+The example values are illustrative, except the `ac5-gate-1` record's `algorithm`, which is `{"id": "bfs-v1", "version": "1.2"}` (V-both, fingerprint
+`39e7ab0280ea38fcba30754caa2595b0`, answer-spec2 §1.2; `1.1`, the caller-only walk, is not the gated algorithm). `version` is compared by string equality with what the engine emits.
 
 - **`packSetHash`** = SHA-256 over the canonical JSON (bundle spec §3.1) of the array, sorted by
   path, of `[relpath, sha256(file bytes)]` for **every** file under `cpg/packs/`. It covers all

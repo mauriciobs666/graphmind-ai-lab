@@ -313,7 +313,11 @@ two answers (one planted function, two dependency entries).
 
 **P1 form (flow flag false for both languages; index `docs/plans/connected-code-graph-p1.md` §5).** The tables above are the
 flag-true form. Each manifest row below also carries a `p1Form` field; the P1 gate (P1-41) asserts it, and a flag-true
-re-run asserts the form above. A row not listed here has one form. Under a false flag only the flow-dependent hops are
+re-run asserts the form above. The P1 walk is V-both (answer algorithm and schema label `"1.2"`,
+`docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` §2): its callee runs add `possible`/`flow-unavailable:<lang>`
+callee items, so the `p1Form` expected items of DF-1 to DF-4 and CD-1 to CD-4 (and any other impact-column row whose walk reaches a flag-false function with
+callees) are re-derived at P1-41, not in this plan. Each resolved P1 answer over flag-false code also carries `notices` `flow-not-enumerated`
+(`docs/plans/connected-code-graph-answer-spec2.md` §5.1). A row not listed here has one form. Under a false flag only the flow-dependent hops are
 `possible`/`flow-unavailable:python`; a resolved direct call stays `confirmed` (`-answer-spec2.md` §5).
 
 | Row | P1 form (status / reason) | Note |
@@ -321,7 +325,7 @@ re-run asserts the form above. A row not listed here has one form. Under a false
 | DF-1 | `svc:core/flow.py::apply_discount` (d1) `confirmed` / `resolved-call` | a direct caller of the changed symbol, no labelled hop |
 | DF-2 | `svc:api/orders.py::create_order` (d2) `possible` / `flow-unavailable:python` | two calls away through a flow-dependent hop (`-answer-spec2.md` §5 `B-flow` item B) |
 | DF-3 | `web:app/src/ui/OrderTotal.tsx::OrderTotal` (d3) `possible` / `flow-unavailable:python` | the `TO ←` row into LNK-36 leaves the `function`-state `create_order` (`B-flow` item C) |
-| CD-1, CD-3 | not asserted | the control half is "reported not closed" unless P1-39's walk lists the guarded point |
+| CD-1, CD-3 | not asserted | the control half is "reported not closed": V-both does not list the guarded point in the general case (`docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` §2.3) |
 | CD-2 | not asserted; carries the caller `svc:core/flow.py::finalize` (d1) `possible` / `flow-unavailable:python` (group fx-svc / core / 1) | the caller of the function holding the changed condition |
 | RV-1 | `svc:db/orders.py::connect` (d2) `possible` / `flow-unavailable:python`; others as above | |
 | RV-2 | `svc:db/orders.py::load_rate` (d2) `possible` / `flow-unavailable:python`; others as above | |
