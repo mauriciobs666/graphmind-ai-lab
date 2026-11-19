@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1)
 
-Revised 2026-11-12: P1-22 and P1-23c gate rulings (`docs/reviews/connected-code-graph-p1-22.md` Q1-Q4, N1, N2; `docs/reviews/connected-code-graph-p1-23c.md` F1, F2, F4, F6) folded into P1-22, P1-23 and P1-39 in place.
+Revised 2026-11-19: V-both ships (P1-23, P1-39 rows) and the flow notice is built by P1-45b, P1-23d, P1-39d and P1-24b, in that order (`-answer-spec2.md` §5, §5.1); `docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` is the decision's source.
 
 Part of `docs/plans/connected-code-graph-p1.md` (decisions D1–D11, the flow gate §5, step index §7). Contracts:
 answers `docs/plans/connected-code-graph-answer-spec.md` (canonical answer v1, `ccg/answer.py` is its validator),
@@ -23,7 +23,7 @@ the earlier gains `Extended by:`. It states **only** the changes:
   fields or an explicit prohibition (EP §5.2.1's four class-X edge types are carried by no P1 answer hop; `LAUNCHES`
   is the `.mcp.json` launch chain and is needed in P1, the others are P3 and are forbidden until then);
 - the `algorithm.version` value and bump rule for P1's rows (C6): P1 ships `bfs-v1` at the version this document
-  names (the plan expects `1.1`) and retires `function-level-continuation` with the `arg(i)`/`Ret` rows
+  names (`1.1`, then `1.2` for V-both; `-answer-spec2.md` §1.2) and retires `function-level-continuation` with the `arg(i)`/`Ret` rows
   (`ENGINE_REASON_CODES` then drops it);
 - the depth-bound default (index D3) and `unexplored` counting (C4);
 - §5 of the index: how a `flow-unavailable:<lang>` item is built, so P1-23 has one definition.
@@ -118,7 +118,7 @@ the earlier gains `Extended by:`. It states **only** the changes:
   recomputes to the item's own cost (possible hops, distance, length) through the chain's own arrivals; (8) `algorithm.version`
   per `-answer-spec2.md` §1.2: the walk executes its row table as a data record (so P1-23's candidate walks are table variants, and only the shipped
   one is pinned), `ALGORITHM_VERSIONS` maps
-  `"1.1"` to the record's pinned fingerprint (`5cf047c14e43da44d0363707d3036080` in `ccg/engine/bfs.py`; `1.1` is published by `ccg/engine/answer_build.py`), and a test fails if a
+  each version to its record's pinned fingerprint (`1.1`: `5cf047c14e43da44d0363707d3036080` in `ccg/engine/bfs.py`, published by `ccg/engine/answer_build.py`; `1.2`: the V-both record, P1-23d), and a test fails if a
   row is added without changing it.
 - **Done / Gate:** `analyst`; mutation check on the arrival-dominance comparison, the bound and the `unexplored` count,
   and on every row of the table × each field (a field no code reads is removed from the table, not pinned).
@@ -139,10 +139,10 @@ the earlier gains `Extended by:`. It states **only** the changes:
   stay `confirmed`; **the labelled set is the closed row table of `-answer-spec2.md` §5**: the rows continuing from a
   `function`-state hop, in both columns (a direct resolved caller of an anchor `Symbol` is not labelled), plus the
   added-row hops of a candidate walk (`-p1-ml.md` §6.6); **candidate walks:** besides the as-built table, P1-23
-  builds V-flow, V-both and V-union (`-p1-ml.md` §3.5) as row-table variants chosen by an engine-internal parameter
-  (never a request field), each added hop `possible`/`flow-unavailable:<lang>`, one test per table; P1-39's rule picks
-  the shipped table, and a shipped table other than `-answer-spec2.md` §5's is a walk-definition change (its §1.2
-  bump, and §5 revised by its owner before it ships); a test plants one caller reached through a resolved and a name-matched site, **the name-matched
+  built V-flow, V-both and V-union (`-p1-ml.md` §3.5) as row-table variants chosen by an engine-internal parameter
+  (never a request field), each added hop `possible`/`flow-unavailable:<lang>`, one test per table; **V-both ships**
+  (P1-39's pre-registered rule, `docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` §2), as `-answer-spec2.md` §5's callee run at `algorithm.version` `1.2`, and
+  P1-23d adds the table and its `1.2` pin and P1-39d makes it the default; the caller-only table (`1.1`, `flow.candidate_table("as-built")`), V-flow and V-union stay as non-shipped candidate tables, one test per table; a test plants one caller reached through a resolved and a name-matched site, **the name-matched
   site sorting first by stable key**, and expects the resolved chain (the mutant it kills: the own-possible
   tie-break dropped; P1-22 computes one `possible` variable for the hop's labelled status and its own edge's status, and
   P1-23 splits them where the first labelled row lands, so that test can fail); P1-22 already built the wiring row,
@@ -163,6 +163,27 @@ the earlier gains `Extended by:`. It states **only** the changes:
   spec v1 §6's `items` row exactly, with no trailing kind slot (V8 makes ids unique across `items` and members); (4) the **reverse question** ("depends on") is the depends-on column with the same marking and grouping.
 - **Gate:** `analyst`. **Needs:** 22, 18.
 
+## P1-45b · schema 1.2, `notices`, V20, the 1.1-or-later helper — `tdd-engineer`
+
+`-answer-spec2.md` §1.1, §5.1, §7, §8.1. **Needs:** 45. **Blocks:** P1-23d, P1-39d, P1-24b. **Gate:** `analyst`. First of the four: it changes no document that `"1.0"` or `"1.1"` accepts or rejects today.
+
+- **Files:** `cpg/ccg/schemas/answer-v1.schema.json`, `cpg/ccg/answer.py` (`ANSWER_SCHEMA_VERSIONS`, `ARRAY_RULES`, `canonicalize`, `facts_bytes`, `_check_labels`, `_check_flow_rows`, `_check_hops`'s flag, the V19 check, new `_check_notices`, `validate`, and the docstrings/messages that say "1.1" for "1.1 or later"), `cpg/tests/test_answer.py`.
+- **Behaviours:** the schema, V17 and V20 of §5.1/§7; one 1.1-or-later helper replaces every `== "1.1"`; the golden `answer-ac1.json` stays `"1.0"` and unchanged. Tests in the order of §8.1's P1-45b list, test-first.
+- **Done at its commit:** the builder still emits `"1.1"` and every existing engine test is green unchanged; every `"1.0"` and `"1.1"` base validates as before; `"1.2"` bases validate and V20 bites; the §8.1 mutants are killed.
+
+## P1-23d · the V-both table: constant, `1.2` pin, V18's callee run — `tdd-engineer`
+
+Stakeholder decision 2026-11-19 (`-answer-spec2.md` §5): V-both ships. **Needs:** 23, 39, 45b. **Blocks:** P1-39d, P1-41, P1-42, P1-37. **Gate:** `analyst`. It does not flip the default walk or the builder (P1-39d does), so no commit emits or accepts a `"1.1"` V-both document.
+
+- **Files:** `cpg/ccg/engine/bfs.py` (`ROWS`, new V-both constant and `SHIPPED_ROWS`, `definition`, `ALGORITHM_VERSIONS`), `cpg/ccg/engine/flow.py` (`candidate_table`, `CANDIDATES`), `cpg/ccg/answer.py` (new `CALLEE_ROWS`, `_check_flow_rows`),
+  `cpg/tests/test_engine_flow.py`, `test_engine_bfs_guards.py`, `test_answer.py`, `test_engine_superset_dev.py`.
+- **Behaviours:** (1) `bfs.ROWS` stays the caller-only table (published `1.1`); the four V-both rows move out of `flow.candidate_table` into a `bfs` constant and `SHIPPED_ROWS` is `ROWS` plus them; `candidate_table("V-both")` returns `SHIPPED_ROWS`, the other three names keep their meaning
+  (`candidate_table("as-built") == bfs.ROWS`, its record's `algorithm_version` is still `"1.1"`); `walk(table=None)`, `definition()` with no argument and `build_answer` are **unchanged**; (2) `ALGORITHM_VERSIONS` gains `"1.2"`, the fingerprint of the record of `SHIPPED_ROWS`, pinned as a
+  literal computed by the implementer, `"1.1"` untouched; (3) V18 per `-answer-spec2.md` §5 and §8.1, **`"1.2"` only**: `CALLEE_ROWS` and clauses (b)–(d) in a run, (f), (g); `FLOW_ROWS` and `"1.1"` behaviour unchanged, so a `"1.1"` document with a `HAS_CALL →` exit stays rejected by (e);
+  (4) the live measuring test `test_engine_superset_dev.py` and `cpg/eval/superset_dev.py` refuse once a pinned engine file differs, so only `test_the_real_phase` is marked run-at-the-pinned-engine history (skipped with that reason; the committed result is the record; `test_the_digest_and_the_candidate_measurement_run_over_the_store` keeps running), and a re-run gets its own `v2` record; every assertion that takes the default table as its baseline is re-derived in the unit that flips it (P1-39d), and `test_a_candidate_walk_has_no_algorithm_version_only_the_shipped_table_has` (`test_engine_flow.py`) is re-derived here, since `candidate_table("V-both")` now returns the shipped table; (5) one test per table stays in `test_engine_flow.py`.
+- **Done at its commit:** suite green; `"1.1"` documents are accepted and rejected exactly as before (the relabelled `B-both` is rejected); the `"1.2"` `B-both` fixture validates; the fingerprint of `SHIPPED_ROWS` maps to `"1.2"`; the analyst gate's mutation check covers every added row × field, V18's new clauses and the `1.2` pin.
+  P1-41's expected P1 forms are re-derived once P1-39d lands (the callee items are new `possible` items at distance ≤ 2 in a flag-false answer).
+
 ## P1-39 · staleness, stamp, answer builder, superset measurement — `tdd-engineer`
 
 - **Files:** `cpg/ccg/engine/answer_build.py` (assembles the canonical answer and runs `ccg.answer` validation),
@@ -175,8 +196,9 @@ the earlier gains `Extended by:`. It states **only** the changes:
   (`cpg/eval/dev/ac5-flow.jsonl`), on the snapshot built at `EVAL_COMMIT` (where the dev items' locators were
   validated): the share of those items that each of the four walks of `-p1-ml.md` §3.5
   (as-built, V-flow, V-both, V-union) lists, by language and signature, with the unlisted items' ids and the burden
-  per anchor; the rule there picks the shipped walk, which P1-23 implements with its `algorithm.version` bump
-  (`-answer-spec2.md` §1.2); the `ccg-p1-flow-fallback-v1` record is committed before it runs; it runs on a throwaway instance (index §8); (5) **the fold's inputs** (P1-23 (3)): the builder
+  per anchor; the rule there picked V-both (`safeClaim` false: 9 of 28 listed, no walk at n/n;
+  `cpg/eval/results/ccg-p1-flow-fallback-v1.json`; reading in `docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md`), which P1-23d and P1-39d ship at `algorithm.version` `1.2`
+  (`-answer-spec2.md` §1.2); the measurement is done and nothing in this unit waits on a pick; the `ccg-p1-flow-fallback-v1` record was committed before it ran; it runs on a throwaway instance (index §8); (5) **the fold's inputs** (P1-23 (3)): the builder
   passes `group.listing`/`group_items` the set `group.fold_languages(measured)`, where `measured` maps a `Unit.language` value to its
   `(correct, resolved sites)` pairs, one per configuration, from the **headline** table of the P0 fitness report
   (`docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md` §a1.2, "P off / on"; the override runs of §a1.3 are secondary and
@@ -188,7 +210,21 @@ the earlier gains `Extended by:`. It states **only** the changes:
   (6) the order of `Listing.items`, `groups` and `members` is by raw code point and is **not** the canonical order (the canonical one is by NFC
   strings, spec v1 §6, which `answer.canonicalize` applies): the builder NFC-normalizes and strips before emission and never takes `group`'s
   order as the bytes' order.
-- **Gate:** `analyst`; `data-scientist` reads the measurement. **Needs:** 23.
+- **Gate:** `analyst`; `data-scientist` read the measurement (the result note above). **Needs:** 23.
+
+## P1-39d · the engine flip and the flow notice — `tdd-engineer`
+
+`-answer-spec2.md` §5.1 (trigger), §8.1 (the moved assertions). **Needs:** 23d, 45b. **Blocks:** P1-25, P1-41, P1-42. **Gate:** `analyst`. One commit makes the shipped walk V-both, the label `"1.2"` and `notices` present together.
+
+- **Files:** `cpg/ccg/engine/bfs.py` (`walk`, `definition` default to `SHIPPED_ROWS`; `Walk`: new `flow_langs`, derived from `Walk.visited`), `cpg/ccg/engine/flow.py` (`Units.ensure`, the existing `units` read, for the visited code nodes' units),
+  `cpg/ccg/engine/answer_build.py` (`build_answer`: `"answerSchemaVersion": "1.2"`, `notices`, the version of a `table=None` document), `cpg/tests/test_engine_answer.py`, `test_engine_answer_v18.py`, `test_engine_flow.py`, `test_engine_bfs_guards.py`.
+- **Behaviours:** (1) the default table, label and version flip as above; (2) `flow_langs` is the set of `Unit.language` of flag-false units hosting a visited `Symbol`, `CallSite` or point node, the anchor included; a unit with no `Unit` row or no unit on a visited code node is a `GraphDataError`, a missing language is one only for a flag-false unit (§5.1);
+  (3) `build_answer` sets `notices` to `[{"code": "flow-not-enumerated", "langs": sorted(flow_langs)}]` when non-empty and omits the key otherwise; (4) tests: a flag-false python anchor with callers lists them and carries `[python]`; **a flag-false anchor with no listed item carries it**;
+  a flag-true anchor and its callers carry none; a mixed python (false) and javascript (true) chain names python only; an unbound config anchor and a contract-point anchor carry none; a bound config anchor reaching a flag-false `CallSite` carries that language; the depends-on column behaves the same;
+  a flag-true unit with no language does not raise; the notice is identical for the same request run twice and in `facts_bytes` across rebuilds; the new `units` read adds a name to `recipe.queries` where none was read, and those pins change here;
+  (5) the assertions that move, by name (`-answer-spec2.md` §8.1): `test_engine_answer.py::test_a_direct_caller_builds_a_valid_resolved_1_1_answer_whose_chain_is_the_walks` (label) and `::test_the_recipe_names_the_shipped_definition_the_guards_and_every_query_the_build_ran` (algorithm `"1.2"`), and in `test_engine_answer_v18.py` the shipped-population label check and
+  `test_a_candidate_table_document_carries_the_unpublished_version_and_the_shipped_one_1_1` (the population's shipped table inverts: `table=None` is V-both, as-built passes `bfs.ROWS`). The snapshot-row `"1.1"` pins (graph-model version) stay. **The unit re-derives every assertion that takes the default table as its baseline**, at least these families: `test_engine_bfs_guards` (the default definition, rows and version tests), `test_engine_answer` (the depth-bound and `unexplored` test now lists the callee), `test_engine_answer_v18` (the other candidate-table tests), `test_engine_flow` (the V-flow, V-both and candidate-version tests and the read-count cases).
+- **Done at its commit:** every answer the builder returns validates under V20 and V18's `"1.2"` rules; a flag-false V-both answer lists callees with `possible`/`flow-unavailable:<lang>`; mutants killed: the anchor omitted from the visited set, a flag-true language included, the zero-item answer losing the notice, `notices` dropped from `facts_bytes`.
 
 ## P1-24 · renderers — `coder`
 
@@ -206,6 +242,18 @@ the earlier gains `Extended by:`. It states **only** the changes:
   summary prompt (C2, answer spec §7.1–§7.2); `viaData` is never rendered as "path-matched" for an item whose
   chain has no `DATA` hop.
 - **Gate:** `analyst`; mutation check on the fence and the mask.
+
+## P1-24b · renderers show the flow notice — `coder`
+
+`-answer-spec2.md` §5.1 (wording, placement). **Needs:** 24, 45b. **Blocks:** P1-25, P1-26 (both call `flow_notice_lines`). **Gate:** `analyst`; the wording is the stakeholder-visible part.
+
+- **Files:** `cpg/ccg/render/common.py` (new `FLOW_NOTICE_TEXT` template, `FLOW_NOTICE_BANNED`, `flow_notice_lines(doc)`), `cpg/ccg/render/text.py` (`render_text`), `cpg/ccg/render/markdown.py` (`render_markdown`),
+  `cpg/ccg/render/__init__.py` (`summary_input`), `cpg/tests/test_render.py`, `cpg/tests/golden/render/` (a `"1.2"` golden with a notice).
+- **Behaviours:** (1) `render_text` and `render_markdown` print the notice directly after `counts_line` and before `reach_note` and any item, for every resolved document with `notices`, including one with no items; Markdown as a blockquote under `## Summary`;
+  (2) the wording is §5.1's: every `langs` entry named, flow-dependent effects "may be missing from this list", the walk did not follow data, return-value, argument or control-flow edges (call, link and wiring edges were followed), absence not evidence that no such effect exists, never "none"/"nothing", the same text for both columns; (3) a test over the rendered notice of one impact and one depends-on document applies §5.1's ban
+  (case-insensitive whole words `safe`, `complete`, `exhaustive`, `full`, `guarantee`, `guaranteed`; phrases `no impact`, `all impacts`; `incomplete` allowed) and the no-digit-outside-a-language rule, with `langs` substituted; (4) `summary_input` adds `notice flow-not-enumerated: <langs>` (a minted enum and langs only) and still validates first;
+  (5) a document without `notices` renders byte-for-byte as before (the existing goldens are unchanged).
+- **Done at its commit:** mutants killed: the call dropped from either renderer, the notice moved below the items, a language omitted, the template gaining a banned word or the word "none", the zero-item answer rendering no notice.
 
 ## P1-25 · clients: `ccg` MCP server, CLI, `raw_query` — `coder`
 
@@ -235,13 +283,14 @@ the earlier gains `Extended by:`. It states **only** the changes:
   outside `ccg/refresh.py`, `ccg/front/interpret.py` and `ccg/front/summary.py` (`ccg.broker.client` only; the
   clients themselves open no broker run); each is a named mutant the test must kill;
   (8) it calls `validate` first and renders only a valid document; a test passes an invalid answer and asserts
-  nothing is rendered.
+  nothing is rendered; (9) **the flow notice is never dropped** (Needs P1-24b for the text path) (`-answer-spec2.md` §5.1): the MCP `ask` and the CLI return the canonical document unchanged, so `notices` is in the JSON; a text-mode
+  output is `ccg.render.render_text`; a test asserts a document with `notices` comes back from MCP and CLI with the field intact, and that `--fail-on` exit codes are unchanged by it (§9, Q-1).
 - **Gate:** `analyst`; AC-16, AC-21 evidence is P1-42's.
 
 ## P1-26 · plain-language front — `coder`
 
 Blocked on `-p1-ml.md` question 3 (model, prompt, grammar, sampling, smoke protocol, `CAP`), on the broker core
-(P1-29), on P1-25 (the `ccg/front` modules sit under its import-boundary test) and on P1-45 (`cacheBypass` in provenance). Two dispatches (parsers+resolver first, interpreter+cache+summary second).
+(P1-29), on P1-24b (the summary calls `flow_notice_lines`), on P1-25 (the `ccg/front` modules sit under its import-boundary test) and on P1-45 (`cacheBypass` in provenance). Two dispatches (parsers+resolver first, interpreter+cache+summary second).
 - **Files:** `cpg/ccg/front/parsers.py` (deterministic: stack traces are P5, so P1 parses routes, `file:line`,
   `path::symbol`, qnames, and diffs only as far as "not built"), `resolve.py` (deterministic resolver over
   `engine/anchors.py`), `interpret.py` (one-shot schema-constrained extraction of the use case and anchor spans),
@@ -264,7 +313,8 @@ Blocked on `-p1-ml.md` question 3 (model, prompt, grammar, sampling, smoke proto
   attempted; and P1-25's `cpg/tests/test_no_network.py` passes unchanged with `ccg/front` present; (7) a
   question about a use case P1 does not build is understood and answered "not built in this phase" with the
   request echoed; (8) no file under `cpg/ccg/front/` is `.md` (D5); (9) `summary.py` calls `validate` first and
-  renders only a valid document, with a test on an invalid one.
+  renders only a valid document, with a test on an invalid one; (10) (Needs P1-24b) a summary of a document with `notices` is always followed by `ccg.render.common.flow_notice_lines(doc)` verbatim, assembled by
+  code, not restated by the model; a test with a stub model that omits it still shows it (`-answer-spec2.md` §5.1).
 - **Gate:** `analyst`; `data-scientist` for the method. The AC-24 smoke run is P1-35.
 
 ## P1-27 · `teco` v1 and the usage skill — `cobb`
@@ -276,6 +326,6 @@ The unit's questions are in the index §9 (N-COBB). **Files** (all agent-definit
 the freshness recipe stay), `claude/teco/kaizen/` per `claude/AGENTS.md`'s update rule, `claude/AGENTS.md` and
 `skills/README.md` rows if wording changes, and the repo-root `.mcp.json` entry for the `ccg` server, which carries **no credential** (the server reads `CCG_CREDENTIALS_DIR`, P1-02; Claude-Code-only wiring, like `cypher`; OpenCode/Kiro wiring is C-310's problem, not P1's).
 - **Behaviours (reviewable, not executable):** a brief for an architect or implementer on a covered system names the
-  answer, the stamp and the staleness note; an uncovered system keeps the old line; a refresh failure is surfaced
+  answer, the stamp, the staleness note and the answer's `notices` (the flow notice, `-answer-spec2.md` §5.1) verbatim when present; an uncovered system keeps the old line; a refresh failure is surfaced
   as "stale-kept" and never silently omitted.
 - **Gate:** `analyst`; `cobb` keeps final say on prompts.

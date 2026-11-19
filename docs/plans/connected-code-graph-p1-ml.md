@@ -1,6 +1,6 @@
 # Connected code graph — P1 method note (indexers, flow, interpreter, noise, first gate)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (P1) · **Reviews:** `docs/reviews/connected-code-graph-p1-ml.md` · **Extended by:** `docs/plans/connected-code-graph-p1-flow-prereg.md`
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (P1) · **Reviews:** `docs/reviews/connected-code-graph-p1-ml.md` · **Extended by:** `docs/plans/connected-code-graph-p1-flow-prereg.md`, `docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md`
 
 Unit N-ML of `docs/plans/connected-code-graph-p1.md` §9. It answers that row's six questions for
 P1-15, P1-26, P1-34–P1-37, P1-39 and P1-47. It states only what P1 changes or fixes against the
@@ -10,7 +10,7 @@ standing contracts:
 - `docs/plans/connected-code-graph-eval-protocol2-ml.md` (EP2);
 - the archived `docs/plans/connected-code-graph-p0-ml.md` (P0-ML).
 
-Revised 2026-11-12 in place (§3.5 V-both and V-union walk definitions).
+Revised 2026-11-19 in place (§3.5 Record line cites the result and the decision).
 
 A rule changed here applies from P1 on. The note holds method only. It writes no labels and names
 no held-out content. Figures are **re-derived** from the P0 artifacts (appendix scripts) unless
@@ -362,7 +362,7 @@ already accept `possible` for an impact that cannot be proven.
 - If the as-built walk or V-both ships and does not list the guarded point, AC-25 is not closed. Only
   a stakeholder waiver would close it.
 
-**Record:** `ccg-p1-flow-fallback-v1`, before P1-39 runs.
+**Record:** `ccg-p1-flow-fallback-v1` (+ `-tool`, `-snapshot`), committed before it ran; result `cpg/eval/results/ccg-p1-flow-fallback-v1.json`; reading and P1-39 decision (V-both ships; no walk at n/n; FR-8 and AC-25's control half not met for flag-false flow) in `docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md`.
 
 ## 4. Question 3 — the interpreter and the AC-24 smoke
 

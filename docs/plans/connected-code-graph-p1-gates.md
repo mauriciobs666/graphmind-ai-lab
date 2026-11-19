@@ -146,10 +146,10 @@ re-gate of the test plan. **Output:** the report section. **Gate:** `analyst`.
 ## P1-42 · fixture gate, part 2: AC-level assertions — `qa-engineer`
 
 **Proving-repo asks on dev anchors** (`cpg/eval/dev/ac5-*.jsonl`, never held-out): AC-1 (changing a `falkor-chat` server endpoint lists its storefront callers with chains), AC-2 (changing a `falkor-chat` MCP tool lists its callers, prompts and wiring, the wiring entries as `config` items per `-answer-spec2.md` §3.3), AC-4 (changing a `cypher-mcp` tool lists the agent and skill scripts and the launch chain, the chain as the `Link`'s `bound[]`, spec2 §3.2), each with its chain; a dev gold item that is wrong is reported and, once confirmed, excluded as `key-error` (the P1-37 class), so a mislabelled dev item never blocks the gate; the held-out strata of P1-37 are the AC-5 evidence. AC-6's P1 kinds (runtime-built URL, dynamic import, example config, prompt mention; ≥ 3 planted instances per kind
-in different syntactic shapes, none `confirmed`, the planted consumer's own item carrying the kind's edge-level reason, not `flow-unavailable` (`-answer-spec2.md` §5), TP-009); AC-25's planted fixtures **in the form index §5 states** (the data-flow effect as a caller chain, `possible`; for the control-dependency effect, the callers of the function holding the changed condition and, if P1-39's shipped walk lists it, the guarded point `possible`, otherwise the guarded-code item reported not closed); the reverse question; AC-9 stamp; AC-16 pin-and-replay across MCP, CLI,
+in different syntactic shapes, none `confirmed`, the planted consumer's own item carrying the kind's edge-level reason, not `flow-unavailable` (`-answer-spec2.md` §5), TP-009); AC-25's planted fixtures **in the form index §5 states** (the data-flow effect as a caller chain, `possible`; for the control-dependency effect, the callers of the function holding the changed condition; **the "not closed" branch is chosen**: V-both ships, the guarded point is not asserted `possible`, and the control half is reported "not closed, because the shipped fallback does not list guarded code; FR-8 not met for flag-false flow" (stakeholder decision 2026-11-19, `-answer-spec2.md` §5); each planted flag-false answer also asserts the flow notice (`-answer-spec2.md` §5.1) naming python, in the JSON and in `render_text` and `render_markdown`); the reverse question; AC-9 stamp; AC-16 pin-and-replay across MCP, CLI,
 structured echo and raw recipe; AC-17 for code location and contract point; AC-11 (grouped text and Markdown report, P1-38); AC-18 for impact answers (every item
 with its chain, file and line); AC-21 (a write through `raw_query`, and a direct `GRAPH.QUERY`/`GRAPH.PROFILE` with
-the `ccg_raw_<s>` credential: refused, stamp unchanged). **Gate:** `analyst`. **Needs:** 41, 26.
+the `ccg_raw_<s>` credential: refused, stamp unchanged). **Gate:** `analyst`. **Needs:** 41, 26, 39d, 24b.
 
 ## P1-34 · flow re-measurement — `data-scientist` + `qa-engineer`
 
@@ -268,6 +268,8 @@ green, P1-34's decision is recorded, no builder has touched held-out items.
 3. **On any miss:** the run is reported as run and P1-43 starts.
 4. **Possible-precision thresholds:** gate 1 gates at Q ≤ 4 only; the other three are reported with their intervals
    and gate from the next gate on (P1-43, else P2's first gate; `-p1-ml.md` §5.3).
+5. **Fallback wording:** the report states that V-both is the shipped flag-false fallback and uses only the allowed wording of `docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` §2 (dev, in-sample screen;
+   FR-8 not met for flow-dependent impact in flag-false languages); no "safe", "complete" or per-language rate.
 - **Gate:** `analyst` on the report; `data-scientist` on method. **Output:** `docs/test-reports/
   connected-code-graph-p1-report.md`, the gate section.
 
@@ -288,7 +290,7 @@ Root-cause and fix on dev; every item of a missed item's cluster moves to dev; r
 - **AC-closure table** (index §8): each AC of the proposal's P1 row — AC-1, AC-2, AC-4 closed; AC-5 per stratum;
   AC-6 for the P1 kinds; AC-8 part 1; AC-9 (code-snapshot stamp); AC-9b closed; AC-10 (impact stages, via P1-27);
   AC-11 (impact); AC-16 closed (impact, four clients); AC-17 (code location, contract point); AC-18 (impact
-  answers); AC-21 closed; AC-24 smoke; AC-25 closed — with the closing step, evidence file, and "reported not
+  answers); AC-21 closed; AC-24 smoke; AC-25 closed for its data-flow half, **not closed for its control half** (the shipped V-both fallback, `-answer-spec2.md` §5) — with the closing step, evidence file, and "reported not
   closed, because" for any that did not come out (the `flow` stratum, AC-25's confirmed form, the vacuous AC-8 rows).
 - **`analyst` implementation review** of the whole phase diff: `docs/reviews/connected-code-graph-p1-impl.md`,
   including the growth-stops check; no close on "needs changes".

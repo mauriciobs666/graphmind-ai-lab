@@ -1,8 +1,8 @@
-# Connected code graph: canonical answer spec, P1 changes (schema 1.1, `bfs-v1` 1.1)
+# Connected code graph: canonical answer spec, P1 changes (schema 1.2, `bfs-v1` 1.2)
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Extends:** `docs/plans/connected-code-graph-answer-spec.md`
 
-Revised 2026-11-12: adds the stamp-source row (§6) and the P1-39b staleness-source tests (§8).
+Revised 2026-11-19: V-both is the shipped flow-fallback table (§5, §1.2: `bfs-v1` `1.2`) and every flag-false answer carries the flow notice (§5.1: schema `1.2`, V20).
 
 This document states **only the changes** P1 makes to `docs/plans/connected-code-graph-answer-spec.md` (v1.3, "v1"
 below); anything not named here is as v1 says. It is step P1-00 of `docs/plans/connected-code-graph-p1-answers.md`,
@@ -11,6 +11,8 @@ schema edits it requires are P1-45's (§7, §8). The engine behaviour it fixes i
 P1-26's.
 
 Decisions it relies on:
+- the stakeholder's 2026-11-19 decision on the flow fallback (§5): V-both ships; FR-8 and AC-25's control half are recorded not met for flag-false flow; the answer states the omission (§5.1);
+- the P1-39c result `docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` (§2) and its record `ccg-p1-flow-fallback-v1`;
 - index `docs/plans/connected-code-graph-p1.md` D2, D3 and §5;
 - the eval protocol `docs/plans/connected-code-graph-eval-protocol-ml.md` ("EP") §3.5, §5.2.1, §10.4, §12.3;
 - graph model v1 `docs/plans/connected-code-graph-p0-graph.md` §1.5, §3, and its P1 successor
@@ -23,32 +25,36 @@ CPG: considered, not relevant — a contract specification; no loaded `cpg_*` gr
 
 ## 1. Version values
 
-### 1.1 `answerSchemaVersion` is `"1.1"`
+### 1.1 `answerSchemaVersion` is `"1.2"`
 
-§2–§3 add optional fields and one hop kind, and relax two rules:
+`"1.2"` adds one optional root field, `notices` (§5.1), and rule V20; every `"1.1"` and `"1.0"` document stays valid, so by v1 §9 it is a
+**minor** bump. `"1.1"` is published (the builder `ccg.engine.answer_build.build_answer` emits it on `main`, from commit `d02de630`), and a
+published label is never edited, so the field cannot join `"1.1"`.
+- The P1 engine emits `"1.2"`. The validator accepts `"1.0"`, `"1.1"` and `"1.2"` against one schema.
+- V17 keeps a `"1.1"` label free of `notices` (§7.2). Every rule this document states for `"1.1"` documents (V17's bound, V18, V19, the `facts_bytes`
+  projection) applies to `"1.1"` and `"1.2"` alike; V20 and §5's callee run (V18's `CALLEE_ROWS` and clauses (f), (g)) apply to `"1.2"` only. A `"1.1"` document
+  is accepted and rejected exactly as before: a V-both chain (a `HAS_CALL →` exit from `function`) stays a V18 (e) rejection under `"1.1"`.
+- `notices` is part of the facts (it is not dropped by `facts_bytes`).
+
+What `"1.1"` added: §2–§3 add optional fields and one hop kind, and relax two rules:
 - `Bound.keyPath` is no longer always required.
 - V5 now admits the wiring and depends-on `Link` shapes. As v1 wrote V5, it rejected every depends-on chain through
   a link.
 
-Every `1.0` document stays valid, so by v1 §9 this is a **minor** bump.
-- The P1 engine emits `"1.1"`.
-- The validator accepts `"1.0"` and `"1.1"` against one schema.
-- V17 (§7.2) keeps a `"1.0"` label free of 1.1 constructs.
-- V18 and V19, which are tightenings, apply to `"1.1"` documents only.
-- The stored golden `cpg/tests/golden/answer-ac1.json` stays `"1.0"` and unchanged.
+V17 (§7.2) keeps a `"1.0"` label free of 1.1 constructs, and V18 and V19, which are tightenings, apply to `"1.1"` and `"1.2"` documents only.
+The stored golden `cpg/tests/golden/answer-ac1.json` stays `"1.0"` and unchanged.
 
 v1 §9's rules are otherwise unchanged.
 
 ### 1.2 `recipe.algorithm.version`: the value P1 ships and the bump rule (carry-over C6)
 
-**The value is `"1.1"`.** It was derived from the current code, not taken from the plan's prior. The schema
-constrains `Recipe.algorithm.version` only by the pattern `^[0-9]+\.[0-9]+$`, and `ccg/answer.py` checks no
-value. The golden carries `"1.0"`, the name of the slice's walk (`impact.py`, v1 §11). Nothing else has ever
-emitted a version. P1's walk is the first changed definition, so it takes the next minor.
+**The value is `"1.2"`.** `"1.1"` names the caller-only walk and is published; V-both is a changed definition (§5), so it takes the next minor.
+The schema constrains `Recipe.algorithm.version` only by the pattern `^[0-9]+\.[0-9]+$`, and `ccg/answer.py` checks no
+value. The golden carries `"1.0"`, the name of the slice's walk (`impact.py`, v1 §11).
 
 **What a version names.** One version names exactly one **walk definition**. The definition is:
 - the row table: for each row, the edge type, `dir`, column (impact, contract, depends-on), from-state kinds,
-  to-state kind, distance increment, and status/reason labelling, including §5's labelled rows, §3.3's wiring row and §3.5's `TO_UNIT` row;
+  to-state kind, distance increment, and status/reason labelling, including §5's labelled rows and callee run, §3.3's wiring row and §3.5's `TO_UNIT` row;
 - the item rules: which arriving hop makes an item, per column (`symbol`, `config`, `unit`);
 - the cost order, which is `(possible hops, distance, length)`, then fewer hops whose own edge is `possible` (§5),
   then the predecessor's stable key;
@@ -65,9 +71,9 @@ The following are **not** part of it, because they cannot change a fact:
 - MAJOR stays `1` for `algorithm.id` `bfs-v1`. A walk that is not a level-synchronous BFS with a state per entry
   gets a new `algorithm.id`, and that is a schema change (the `id` is a `const`).
 - Versions are never reused, and a published entry is never edited. An entry is **published** once an answer
-  carrying it has been emitted on `main`. `1.1` is published by `ccg/engine/answer_build.py`; its fingerprint pin
-  (`ALGORITHM_VERSIONS` in `ccg/engine/bfs.py`) is `5cf047c14e43da44d0363707d3036080`, and any change to it needs a new
-  algorithm version.
+  carrying it has been emitted on `main`. `1.1` is published by `ccg/engine/answer_build.py` (from commit `d02de630`); its fingerprint pin
+  (`ALGORITHM_VERSIONS` in `ccg/engine/bfs.py`) is `5cf047c14e43da44d0363707d3036080`, stays in the mapping and is never edited. `1.2` is
+  the V-both definition; P1-23d pins its literal from the shipped record. A change to either needs a new algorithm version.
 
 **Mechanism (P1-22 builds it).**
 - The walk executes its row table as data. The row table is a record the walk interprets, not a description kept
@@ -87,9 +93,9 @@ The following are **not** part of it, because they cannot change a fact:
 - A row added without a new table entry fails the check. This is P1-22 behaviour 8's test.
 
 **Granularity.**
-- P1-22 and P1-23 between them build the whole definition, and both land before any answer builder exists
-  (P1-39). So P1 ships exactly one entry, `1.1`.
-- A definition change merged after `1.1` is published is `1.2`, and so on.
+- P1-22 and P1-23 built the caller-only definition and the builder (P1-39b) published it as `1.1`. The V-both definition (P1-23d) is
+  `1.2`, the only version the engine emits from then on; the caller-only table stays a non-shipped candidate table whose fingerprint is `1.1`'s.
+- A definition change merged after `1.2` is published is `1.3`, and so on.
 - `1.0` names the slice's walk, and the golden keeps it. It is not an engine table entry: no valid 1.1 answer can
   carry it (V17 requires a bound, and the slice's walk has none), and P1-22's equivalence harness compares item
   sets, not answers.
@@ -332,10 +338,16 @@ refreshed" is unchanged. A `"1.0"` document's `facts_bytes` is v1's.
 
 ## 5. The flow fallback: which hops a flag-false unit makes `possible`
 
-**Stakeholder decision (2026-11-09).** Only the flow-dependent call-continuation hops become `possible`. Items
+**Stakeholder decisions.**
+- **2026-11-09.** Only the flow-dependent call-continuation hops become `possible`. Items
 reached by resolved edges stay `confirmed` when no flow-dependent row is on their chain. This is the method
 owner's recommendation (`docs/plans/connected-code-graph-p1-ml.md` §6.5). It replaces v1 §5.2's "first hop that
-crosses into the unit" sentence, and it is the one definition P1-23 implements.
+crosses into the unit" sentence.
+- **2026-11-19.** The shipped table is **V-both** (`docs/plans/connected-code-graph-p1-ml.md` §3.5's pre-registered rule picked it,
+  `docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` §2). V-flow and V-union do not ship. No walk lists every dev flow item,
+  so FR-8 and AC-25's control half are recorded **not met** for flow-dependent impact in a flag-false language, and the answer says so (§5.1).
+
+The one definition P1-23 and P1-23d implement is this section.
 
 **Flag-false unit.**
 - A unit is flag-false when its `Unit.flowAvailable` is `false`. The assembler always writes the flag
@@ -359,10 +371,21 @@ and no others. Both kinds apply only inside a flag-false unit, because a flag-tr
 
 | Column | Rows that enter `function` (to a `Symbol`) | Labelled rows (leaving `function`) |
 |---|---|---|
-| impact | `HAS_CALL ←`, `HAS_PARAM ←`, `HAS_COND ←` from one of the function's points, outside contract mode (where `HAS_CALL ←` ends in `end`) | `CALLS ←`, `CALLS_NAME ←`, `TO ←` |
+| impact | `HAS_CALL ←`, `HAS_PARAM ←`, `HAS_COND ←` from one of the function's points, outside contract mode (where `HAS_CALL ←` ends in `end`) | `CALLS ←`, `CALLS_NAME ←`, `TO ←`, and `HAS_CALL →` (§5's callee run) |
 | depends-on | `CALLS →`, `CALLS_NAME →` into a callee | `HAS_CALL →` |
 
 The unit that gates a depends-on `function` entry is the arriving callee's, the unit of the `function`-state hop it leaves.
+
+**The callee run (impact column, V-both).** From a `function`-state hop at distance `d` the walk also lists the function's **callees**, to the bound:
+- `HAS_CALL →` (increment 0) to the function's call sites. The hop is state `end`, labelled, and is not an item.
+- `CALLS →` or `CALLS_NAME →` (increment 1) from such a call site to the callee `Symbol`: state `end`, labelled, an item of kind `symbol`. The callee is listed
+  while `d` plus its call depth is at most the bound.
+- From a callee so reached, the same two steps again (`HAS_CALL →`, then `CALLS →`/`CALLS_NAME →`), still to the bound.
+
+A **callee run** is the maximal chain suffix those rows make. It never re-enters `function`, and the walk never takes a callee's own callers. A function that owns an
+affected point in a flag-true unit (state `end`) and an anchor `Symbol` never open a run, because only a `function`-state hop does. The run is not flag-gated: a callee
+shares the language, hence the flag, of the function that opened it (`CALLS` stays within a language; `Unit.flowAvailable` is per language). The label's `<lang>` is,
+as for every labelled hop, the `lang` of hop *i*−1's unit.
 
 The following rows do not enter the state, so their continuations are not labelled:
 - `HAS_RETURN ←`, which enters `value`: a changed return reaches the callers through a resolved call;
@@ -401,9 +424,10 @@ flag. It never depends on the path taken to reach the hop.
   - contract consumers' functions;
   - wiring items.
 - Callers of a function that holds a changed point are `possible`, `flow-unavailable:<lang>`, and so are their
-  callers in turn.
+  callers in turn. So are its callees, and their callees, to the bound (the callee run).
 - AC-6's planted kinds keep their edge-level reasons.
-- AC-25 is as index §5 states.
+- FR-8 and AC-25's control half are **not met** for flow-dependent impact in a flag-false language: the guarded point is not asserted `possible`, and every such
+  answer carries the notice of §5.1.
 - AC-5's confirmed-precision bar has a population to measure.
 - **For P1-22.** Its row and equivalence fixtures set `Unit.flowAvailable` explicitly. The flag is `true` for the
   `arg(i)`/`Ret`/`CONTROLLED_BY` rows, so P1-23's flag gate changes none of those pins. The slice-equivalence item
@@ -416,11 +440,65 @@ item and member hop *i* ≥ 1:
 - (c) `flow-unavailable:*` appears only on a labelled row leaving a `function`-state hop, and never on
   `CALLS_NAME` (whose own edge is always `possible`);
 - (d) its `<lang>` equals the `lang` of hop *i*−1's unit;
-- (e) a hop whose predecessor is in state `function` arrives by a labelled row of its column. This closes the list
+- (e) a hop whose predecessor is in state `function` arrives by a labelled row of its column (impact: the four of the table above). This closes the list
   of exits, so no unlisted continuation can yield a `confirmed` item.
+
+The callee run is a **`"1.2"` rule**: under `"1.1"`, `FLOW_ROWS["impact"]` is unchanged and a `HAS_CALL →` exit from `function` is rejected by (e), so the published label's valid set does not widen.
+A hop is **in a callee run** (impact column only) when it is a `HAS_CALL →` hop whose predecessor is in state `function` or is a callee `Symbol` hop of a run, or a
+`CALLS →`/`CALLS_NAME →` hop whose predecessor is a `HAS_CALL →` hop of a run. (a)–(d) read "leaving a `function`-state hop" as "leaving a `function`-state hop or being in a
+callee run", and add:
+- (f) after a callee `Symbol` hop of a run the only continuation is `HAS_CALL →` (also in the run); after a `HAS_CALL →` hop of a run the only continuation is `CALLS →` or
+  `CALLS_NAME →`. This closes the run's exits as (e) closes `function`'s.
+- (g) a callee run occurs only in the impact column, and every item it ends in has a `symbol` subject.
 
 The answer does not carry the flag, so whether `function` occurs only in flag-false units is P1-23's test, not the
 validator's.
+
+### 5.1 The flow notice: `notices`
+
+No walk lists every flow-dependent impact in a flag-false language (§5, 2026-11-19), so the answer says what it does not enumerate. The statement is part of the
+document, not of a renderer, so a JSON client sees it and a renderer cannot forget it.
+
+**Shape (schema `"1.2"`, §7.1).** The root gains the optional `notices`, an array of `Notice {code, langs}`.
+- `code` is an engine-minted enum with one value in P1, `flow-not-enumerated`. It is not a `reasons.yaml` reason code (no item carries it).
+- `langs` is a non-empty array of `lang` values (the pattern of `Unit.lang`), without duplicates.
+- Absent exactly when there is nothing to state: `[]` is not representable (`minItems` 1), as `recipe.guards.visitedSeedsAnchor` has one encoding. At most one `Notice` per `code`.
+- Canonical order: `notices` by `code`, `langs` by code point (`ARRAY_RULES`).
+- `notices` is in `facts_bytes`: it is a fact about the answer, determined by the snapshot, so AC-16's equality across clients covers it. It carries no wording and no
+  figure, so it adds no `DATA_FIELDS` entry.
+
+**Trigger (the engine's, P1-39d).** A resolved answer, either column, carries `flow-not-enumerated` with `langs` = the set of `Unit.language` values of the **flag-false units that
+host a code node the walk visited**: the visited set (`bfs.Walk.visited`), the anchor included, restricted to `Symbol`, `CallSite` and point nodes (`Param`, `Ret`, `Cond`, …;
+a point's unit is its owner's). It does not depend on the items: an answer that lists nothing for a flag-false anchor carries it, because that is where silence misleads most.
+- `Link`, `ConfigEntry`, `ContractPoint` and `Unit` nodes do not trigger it. A config anchor with a binding does reach a code node (`bound_in` then `via_in:site` visit the bound `CallSite` within the minimum bound), so
+  only an unbound config anchor or a contract-point anchor yields no code node, hence no notice.
+- An ambiguous or unresolved answer has no walk and no notice.
+- **Missing data fails closed (decision).** A visited code node with no unit, or whose unit has no `Unit` row, is a data error (`GraphDataError`), as §5 says for a gated row, so the omission is never silently unstated. A unit's
+  language is required only when its flag is false (a flag-true unit with no language is not an error). The extra `units` read adds a `recipe.queries` name to answers that did not read units before (P1-39d updates those pins).
+- A flag-true language is never in `langs`.
+
+**Validator (V20, `"1.2"` only, §7.2).** The answer does not carry the flag, so the validator checks what the answer does carry (the posture of V18's last paragraph):
+- (a) `notices` appears only on a `"1.2"` document and only when `interpretation.status` is `resolved`;
+- (b) one `Notice` per `code`;
+- (c) **coverage:** every `<lang>` of a `flow-unavailable:<lang>` reason on any hop or item is in `langs` of a `flow-not-enumerated` notice. A labelled hop proves its unit is
+  flag-false, so no answer can carry a labelled hop and omit the notice.
+
+The converse (a notice with no labelled hop, as in an answer that lists nothing) is valid, and the exact trigger is P1-39d's engine test.
+
+**Wording (renderers, P1-24b).** The template lives in `ccg.render.common` and is deterministic text; no model writes it; it reads the same for both columns. V-both lists some flow-dependent items, so the text states a partial list, never an empty one. It must:
+- name every language of `langs`, and say that flow-dependent effects there (those that travel through data values, return values, arguments or control conditions) **may be missing from this list**;
+- say that in those languages the walk did not follow data, return-value, argument or control-flow edges (call, link and wiring edges were followed), and that an item's absence is not evidence that no such effect exists;
+- not say or imply that nothing was listed (no `none`, no `nothing`);
+- never match, case-insensitively and as whole words, `safe`, `complete`, `exhaustive`, `full`, `guarantee`, `guaranteed`, or the phrases `no impact`, `all impacts` (`incomplete` and `unsafe` are therefore allowed words; the test runs on the rendered text with `langs` substituted),
+  contain no digit outside a language name, and give no rate or count: the measured share is development-set, in-sample, and lives only in the documents that cite it.
+Tests render one impact and one depends-on document and assert each statement.
+
+**Where it is shown.** Directly after the counts line and before any item, in every output that shows items, including when there are none:
+- `ccg.render.text.render_text` and `ccg.render.markdown.render_markdown`, through a new `ccg.render.common.flow_notice_lines(doc)`;
+- `ccg.render.summary_input`: one line `notice flow-not-enumerated: <langs>` (codes only), and the plain-language summary (P1-26) is always followed by the renderer's notice text, not by
+  a model's restatement;
+- the CLI and MCP `ask` (P1-25) return the canonical document unchanged, so the field is in the JSON; a client that prints text prints `render_text`. No client strips, reorders or
+  summarises `notices` away. A notice does not change `--fail-on` exit codes (§9, Q-1).
 
 ## 6. v1 text this document replaces
 
@@ -431,7 +509,7 @@ predates graph model v1. Passages not listed stand.
 | v1 passage | Now |
 |---|---|
 | §1 table, row "Function-level continuation is `possible` / `function-level-continuation`" | In 1.1 the same continuation rows are §5's labelled rows, with reason `flow-unavailable:<lang>` and only in flag-false units. `viaData` stands |
-| §2 table, `answerSchemaVersion` `"1.0"`; §9 "v1 is `"1.0"`" | `"1.1"` is current; `"1.0"` is still accepted (§1.1) |
+| §2 table, `answerSchemaVersion` `"1.0"`; §9 "v1 is `"1.0"`" | `"1.2"` is current; `"1.0"` and `"1.1"` are still accepted (§1.1) |
 | §3, bullet "How AC-24 reads `status`" | Replaced by a citation of EP §10.4, the predicate's home (N-3) |
 | §3 `provenance` table | Gains `cacheBypass` (§2) |
 | §4.1, "The slice's walk (`impact.py`) is `"1.0"`; P1's added rows … bump it (carry-over C6)" | §1.2 |
@@ -450,7 +528,8 @@ predates graph model v1. Passages not listed stand.
 
 ## 7. Schema and validator changes
 
-P1-45 makes these edits, and only these. `cpg/ccg/registry/reasons.yaml` and the golden are **not** edited.
+P1-45 made these edits, and only these, except the rows marked **P1-45b** (the notice and the 1.1-or-later helper, §5.1: `tdd-engineer`, before P1-23d) and **P1-23d** (the V-both rows of V18).
+`cpg/ccg/registry/reasons.yaml` and the golden are **not** edited.
 `ENGINE_REASON_CODES`, `DATA_FIELDS`, `ARRAY_RULES`, `IDENTITY_KEYS`, `cache_key` and `sampling_hash` are unchanged.
 
 ### 7.1 `cpg/ccg/schemas/answer-v1.schema.json`
@@ -459,14 +538,16 @@ The file and its `$id` `urn:ccg:answer-v1` stay the same, because 1.1 is a minor
 
 | Where | Edit |
 |---|---|
-| root `answerSchemaVersion` | `const: "1.0"` becomes `enum: ["1.0", "1.1"]` |
+| root `answerSchemaVersion` | `const: "1.0"` becomes `enum: ["1.0", "1.1", "1.2"]` (**P1-45b** adds `"1.2"`) |
+| root `notices` (**P1-45b**) | optional property `{type: array, minItems: 1, items: {$ref: "#/$defs/Notice"}}`; not in `required` |
+| `$defs.Notice` (**P1-45b**, new) | `{code: {type: string, enum: ["flow-not-enumerated"]}, langs: {type: array, minItems: 1, uniqueItems: true, items: {type: string, pattern: "^[a-z][a-z0-9]*$"}}}`, both required, closed |
 | `$defs.Provenance` | add property `cacheBypass: {type: boolean, const: true}`, not required; add to its `allOf` an `if {required: [cacheBypass]} then {properties: {cacheHit: {const: false}}}` |
 | `$defs.Bound` | add properties `launch: {$ref: "#/$defs/Launch"}`, `port: {type: integer, minimum: 1, maximum: 65535}`, `portOrigin: {type: string, enum: [explicit, env-default, compose, pack-default]}`, `packId: {type: string, pattern: "^[a-z][a-z0-9-]{0,39}$"}`. Remove `keyPath` from `required`. Add `oneOf: [{required: [keyPath]}, {required: [launch]}]`. Add `allOf`: `if {required: [port]} then {required: [portOrigin]}`; `if {required: [portOrigin]} then {required: [port]}`; `if {properties: {portOrigin: {const: pack-default}}, required: [portOrigin]} then {required: [packId]} else {not: {required: [packId]}}` |
 | `Hop.kind` enum | add `Unit` |
 | `Hop.edgeType` enum | add `TO_UNIT` (22 names); none removed |
 | `Hop.state` enum | add `site` (§3.6) |
 | `$defs.UnitSubject` (new) | `{type: {const: "unit"}, unitId: {pattern: 32-hex}}`, both required, closed; added to `Item.subject`'s `oneOf` |
-| root `description` | cite both documents and rules V1–V19 |
+| root `description` | cite both documents and rules V1–V20; `answerSchemaVersion` "1.0", "1.1" or "1.2" |
 
 ### 7.2 `cpg/ccg/answer.py`
 
@@ -476,13 +557,15 @@ The file and its `$id` `urn:ccg:answer-v1` stay the same, because 1.1 is a minor
 | V3, V4, order | `KIND_FIELDS["Unit"]` has no fields. A `Unit` hop needs `repo`/`unit` but not `path`/`line`. `SUBJECT_ID["unit"] = "unitId"`. `_item_key` uses the subject unit's `rootPath` and 0 for a `unit` subject |
 | V9 | A `Unit` hop's `staleness.units` entry has `buildStatus` `not-mapped` |
 | V12 | `_check_f4` screens `Bound.keyPath` only when present, and screens `Bound.launch.{mountPath, service, envVar}` |
-| `facts_bytes` | For `"1.1"`, also drops `staleness.units[].builtAt` and `failedAt` (§4.3); `"1.0"` is unchanged |
-| **V17** (new) | **Version labels.** A `"1.0"` document carries no `provenance.cacheBypass`, no `Bound` without `keyPath`, no `Bound.{launch, port, portOrigin, packId}`, no `BOUND_BY ->` `ConfigEntry` hop, no hop in state `site`, and no `Unit` hop or `unit` subject. A resolved `"1.1"` document has `depthBound.bound` ≥ 2 |
-| **V18** (new, 1.1) | §5 (a)–(e), with `FUNCTION_ENTRY` and `FLOW_ROWS` as module constants keyed by direction |
+| `facts_bytes` | For `"1.1"` and `"1.2"` (**P1-45b**), also drops `staleness.units[].builtAt` and `failedAt` (§4.3); `"1.0"` is unchanged. `notices` stays |
+| **V17** (new) | **Version labels.** A `"1.0"` document carries no `provenance.cacheBypass`, no `Bound` without `keyPath`, no `Bound.{launch, port, portOrigin, packId}`, no `BOUND_BY ->` `ConfigEntry` hop, no hop in state `site`, and no `Unit` hop or `unit` subject. A resolved `"1.1"` or `"1.2"` document has `depthBound.bound` ≥ 2 (**P1-45b**). A `"1.0"` or `"1.1"` document carries no `notices` (**P1-45b**). The 1.1-or-later tests (here, V18, V19, `facts_bytes`, the `_check_hops` flag) use one helper over `ANSWER_SCHEMA_VERSIONS`, not `== "1.1"` |
+| **V18** (new, 1.1) | §5 (a)–(g), with `FUNCTION_ENTRY` and `FLOW_ROWS` as module constants keyed by direction; **P1-23d** adds `("HAS_CALL", "->")` to `FLOW_ROWS["impact"]`, a `CALLEE_ROWS` constant (`HAS_CALL ->` into a `CallSite`, `CALLS ->`/`CALLS_NAME ->` into a `Symbol`) for the callee run, and clauses (b)–(d) in a run, (f), (g). The run's rows apply to `"1.2"` only; (a)–(e) as before apply to `"1.1"` and `"1.2"`, with `FLOW_ROWS` unchanged for `"1.1"` |
 | **V19** (new, 1.1) | No hop has `edgeType` in `PROHIBITED_EDGE_TYPES = frozenset({"DEFINED_BY", "LAUNCHES", "DEPENDS_ON", "FROM_DEP"})` |
-| public names | add `ANSWER_SCHEMA_VERSIONS = ("1.0", "1.1")`, `PROHIBITED_EDGE_TYPES`, `FUNCTION_ENTRY`, `FLOW_ROWS`; the `validate` docstring lists V1–V13 and V15–V19 |
+| **V20** (new, 1.2; **P1-45b**) | §5.1 (a)–(c): `notices` only on a resolved `"1.2"` document, one `Notice` per `code`, and every `<lang>` of a `flow-unavailable:<lang>` reason is in the `langs` of a `flow-not-enumerated` notice |
+| ordering (**P1-45b**) | `ARRAY_RULES` gains `"notices": "code"` and `"Notice.langs": "code point"`; `canonicalize` sorts both |
+| public names | add `ANSWER_SCHEMA_VERSIONS = ("1.0", "1.1", "1.2")` (**P1-45b**), `PROHIBITED_EDGE_TYPES`, `FUNCTION_ENTRY`, `FLOW_ROWS`, `CALLEE_ROWS` (**P1-23d**); the `validate` docstring lists V1–V13 and V15–V20 |
 
-V17–V19 report their own rule ids and run over `items` and every `groups[].members`.
+V17–V20 report their own rule ids and run over `items` and every `groups[].members`.
 
 ## 8. For P1-45 (`tdd-engineer`): test order
 
@@ -531,7 +614,7 @@ Every other existing test stays as it is, including:
   - The subject is `{type: unit, unitId: U9}`, at distance 1, with `staleness.units` `[U1, U9]`.
 
 **Order, red to green.** Each case names its test, and the P1-45 behaviour it covers is in brackets.
-1. `test_bases_validate` and `test_answer_schema_versions`: `B-1.1` validates. `"1.2"` is rejected (`schema`).
+1. `test_bases_validate` and `test_answer_schema_versions`: `B-1.1` validates. `"1.3"` is rejected (`schema`).
    The golden file round-trips byte for byte [5].
 2. `test_cache_bypass` [1]:
    - accepted: on `B-prov-1.1`;
@@ -608,6 +691,43 @@ only these tests say which source. A further test covers the N1 candidate rule (
 an argument row (`CALLS_NAME ->`, `HAS_PARAM ->`, `HAS_PARAM <-`) stays in `items` as `possible`/`resolution-unverified`
 in the impact column and folds in the depends-on column, with a control for an own-arrival candidate.
 
+### 8.1 For P1-45b and P1-23d (`tdd-engineer`): added tests
+
+All in `cpg/tests/test_answer.py` unless named; each rejection test first asserts its base validates. **Order: P1-45b, then P1-23d** (§9, R-8).
+
+**P1-45b (the notice, §5.1).** Bases: `B-1.2` (`B-1.1` relabelled `"1.2"`); `B-notice` (`B-flow`, relabelled, plus `notices [{code: flow-not-enumerated, langs: [python]}]`).
+- accepted: `"1.2"` accepted, `"1.3"` rejected (`schema`); `B-1.2` without `notices`; `B-notice`; the 1.0 golden and every 1.1 base unchanged;
+- rejected (`schema`): `notices: []`; `langs: []`; a duplicate lang; a code other than `flow-not-enumerated`; an extra key on `Notice`; a `lang` with an upper-case letter;
+- rejected (`V17`): `B-notice` relabelled `"1.1"`; `"1.0"`;
+- rejected (`V20`): `B-flow` as `"1.2"` without `notices` (coverage); `notices` langs `[javascript]` where a hop carries `flow-unavailable:python`; two notices with one code; `notices` on an
+  ambiguous answer; `B-1.2` (no labelled hop) **with** `notices` accepted (the converse is valid);
+- `facts_bytes`: equal with and without a changed `builtAt` on `B-1.2`, and different with and without `notices`; `dumps` sorts `langs` `[python, javascript]` to `[javascript, python]`;
+- the `ARRAY_RULES` coverage probe, `unclassified_strings` and `derived_data_fields == DATA_FIELDS` pass with their sets extended by `notices`/`Notice.langs`/`Notice.code` only;
+- the 1.1-or-later helper: a mutant that tests `== "1.1"` in V18, V19, `facts_bytes` or `_check_hops` is killed by a `"1.2"` base (item C of `B-flow`, the `builtAt` case, a V19 type, a wiring chain);
+- the docstrings and messages of `ccg/answer.py` that say "1.1" for "1.1 or later" are reworded (its module docstring, `facts_bytes`, `_check_labels`, `_check_flow_rows`, V19's check);
+- mutants to kill: V20 (c) dropped; V20 (a)'s status clause dropped; V17's 1.1-no-`notices` clause dropped.
+`build_answer` still emits `"1.1"` here and every existing engine test is green unchanged.
+
+**P1-23d (V18's callee run, §5, `"1.2"` only).** Base `B-both`: a `"1.2"` impact document (with `notices [python]`) in python unit `U1`: `SA` → … → `HAS_CALL ←` `fb` (`function`) → `HAS_CALL →` site `s1`
+(`end`, `possible`/`flow-unavailable:python`) → `CALLS →` callee `fg` (`end`, same label; item, distance 2) → `HAS_CALL →` site `s2` → `CALLS_NAME →` callee `fh` (`possible`/own
+`name-match`; item, distance 3 on `bound` 3). Build every chain from fresh hop dicts.
+- accepted: `B-both`; a `CALLS ←` exit still accepted (§5's other three rows);
+- **rejected (V18 (e)): `B-both` relabelled `"1.1"`** (the assertion that no `"1.1"` document admits a V-both chain);
+- rejected (b): `s1`'s hop `confirmed`; `fg`'s hop `confirmed`;
+- rejected (c): `flow-unavailable:python` on the `CALLS_NAME →` hop; on a `CALLS →` hop that follows no `HAS_CALL →` of a run;
+- rejected (d): `fg`'s reason `flow-unavailable:javascript`;
+- rejected (f): a hop after `fg` other than `HAS_CALL →`; a hop after `s1` other than `CALLS →`/`CALLS_NAME →`;
+- rejected (g): the run on a depends-on document; an item of the run with a `config` subject;
+- rejected (V10): `fh` at distance 3 on `bound` 2;
+- mutants to kill: the run clause dropped from (b); `("HAS_CALL","->")` dropped from the `"1.2"` exit rows (then `B-both` fails (e)); (f) dropped; the run's rows applied to `"1.1"`.
+Engine tests (`test_engine_flow.py`): `bfs` holds the V-both constant and `SHIPPED_ROWS`; `algorithm_version(definition(SHIPPED_ROWS))` is `"1.2"` and equals `ALGORITHM_VERSIONS["1.2"]`; the as-built record is still `"1.1"` (the `5cf0…` literal);
+`candidate_table("V-both") == SHIPPED_ROWS`; `walk(table=None)` and the builder are **unchanged** (still the caller-only table, label `"1.1"`): P1-39d flips them.
+
+**P1-39d (the flip).** One commit changes `walk(table=None)`/`definition()` to `SHIPPED_ROWS`, `build_answer`'s label to `"1.2"` and adds `notices`. The assertions that move are named: `test_engine_answer.py::test_a_direct_caller_builds_a_valid_resolved_1_1_answer_whose_chain_is_the_walks`
+(label, renamed) and `::test_the_recipe_names_the_shipped_definition_the_guards_and_every_query_the_build_ran` (algorithm `"1.2"`; its query-name set gains `units` if the read is new); in `test_engine_answer_v18.py`, the shipped-population label assertion
+(`doc["answerSchemaVersion"] == "1.1"`) and `test_a_candidate_table_document_carries_the_unpublished_version_and_the_shipped_one_1_1` (the shipped table is now V-both, so the explicit as-built table is a candidate with `CANDIDATE_VERSION`), with the population's
+shipped table inverted (`table=None` is V-both, as-built passes `bfs.ROWS`). The snapshot-row `"1.1"` pins (`engine_answer_helpers.py`'s `(SNAP, 0, EMPTY, "1.1", "1.0")`, `test_engine_staleness.py`, `test_engine_answer.py`'s snapshot rows) are the graph-model version, not answer labels, and stay.
+
 ## 9. Risks and open questions
 
 **Risks.**
@@ -616,11 +736,17 @@ in the impact column and folds in the depends-on column, with a control for an o
   unchanged `snapshotId`.
 - **R-2 Validator–engine drift** (v1 §10 item 6) grows with V18, which re-derives §5's labels from the rows. The
   shared fixtures are `B-flow` and P1-23's engine tests.
-- **R-3 "P1 ships `1.1`"** holds only if the definition built by P1-22 and P1-23 is final when P1-39 first emits
-  an answer (§1.2). Either way, the value must be in the `ac5-gate-1` pre-registration before the core freeze
-  (index §7).
+- **R-3 "P1 ships `1.2`"** holds only if the V-both definition of P1-23d is final when the `ac5-gate-1` pre-registration is written; the value (and the
+  schema label `"1.2"`) must be in that record before the core freeze (index §7).
 - **R-4 EP §12.3's record template writes `"version": "<semver>"`**, but answers emit `MAJOR.MINOR`. The record
-  must carry `"1.1"` exactly. This is wording for EP's owner (`data-scientist`).
+  must carry `"1.2"` exactly. This is wording for EP's owner (`data-scientist`).
+- **R-6 The notice is conservative by language.** It names every flag-false language the walk visited, not only those where a flow impact exists, so every P1 answer
+  that reaches code carries it (all flags are expected false). That is the stated omission, not noise; a flag-true language leaves it.
+- **R-7 Tests pinning `"1.1"`.** Only the answer-label and algorithm-version assertions move, in P1-39d (§8.1 names them). `"1.1"` as the snapshot row's graph-model version (`engine_answer_helpers.py`, `test_engine_staleness.py`, the snapshot rows of `test_engine_answer.py`) is a different version space and stays.
+- **R-8 No commit emits or accepts a `"1.1"` V-both document.** P1-45b lands the label, helper and V20 while the builder still emits `"1.1"` with the caller-only table; P1-23d adds the table constant, the `"1.2"` pin and the `"1.2"`-only callee rows without changing the default walk or the builder; P1-39d flips table, label and `notices` in one commit.
+
+**Open question Q-1 (stakeholder, non-blocking).** Should `ccg ask --fail-on any` fail on a notice? Recommendation: no. The exit code keeps meaning "items of that status exist"; the
+notice is in the JSON and the text. A CI gate that needs the omission is a later, explicit option.
 
 - **R-5 EP §5.2.1 lacks a `TO_UNIT` replay row** (§3.5). A `unit` item never matches gold, so it is never an
   H1–H4 candidate that HA-1 replays, and no score changes. The row is still owed by `data-scientist`, so that the
@@ -628,11 +754,10 @@ in the impact column and folds in the depends-on column, with a control for an o
 
 ## Ready to implement
 
-Implement §7 of this document, test-first per §8 (P1-45, `tdd-engineer`). The work touches `cpg/ccg/answer.py`,
-`cpg/ccg/schemas/answer-v1.schema.json` and `cpg/tests/test_answer.py`. It does not touch `reasons.yaml` or the
-golden.
+Implement §7 of this document, test-first per §8 (P1-45, `tdd-engineer`; delivered), then §8.1 in this order: P1-45b (label, helper, `notices`, V20), P1-23d (the V-both table constant, the `"1.2"` pin, V18's `"1.2"`-only callee run),
+then P1-39d (the engine flip: default table, label, `notices`) and P1-24b (renderers) in parallel (`docs/plans/connected-code-graph-p1-answers.md`). P1-45b and P1-23d both edit `cpg/ccg/answer.py` and `cpg/tests/test_answer.py`, so they are serialised. None touches `reasons.yaml` or the golden.
 
-What P1-45 implements:
+What P1-45 implemented:
 - schema 1.1, accepting `"1.0"` too;
 - `provenance.cacheBypass: true`, which requires `cacheHit: false`;
 - `Bound` with exactly one of `keyPath` and `launch`, and port evidence;
@@ -646,6 +771,7 @@ What P1-45 implements:
 The engine rules are for:
 - P1-22: §1.2's version table, §4.2's counting, the cost tie-break, explicit flags in fixtures;
 - P1-23: §5, §3.3's wiring row, §3.5's `TO_UNIT` row;
-- P1-25 and P1-26: §2's input.
+- P1-45b: §5.1's schema and V20; P1-23d: §5's callee run and §1.2's `1.2` entry; P1-39d: the default-table flip, §5.1's trigger and the `"1.2"` label; P1-24b: §5.1's wording and placement;
+- P1-25 and P1-26: §2's input and §5.1's pass-through.
 
-Nothing blocks P1-45.
+Nothing blocks P1-45b.

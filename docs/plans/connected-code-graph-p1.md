@@ -253,7 +253,7 @@ reach is a recall-superset of flow reach within a unit, and that the rule is rev
 not one. P1-39 measures, on the **development** flow items (`cpg/eval/dev/ac5-flow.jsonl`, never the held-out),
 the share of flow items that call-level reach alone lists; `-p1-ml.md` §3.5 rules on it. `-p1-ml.md` §3.5 fixes the rule: P1-39 measures four walks (as-built, V-flow, V-both, V-union), and the walk
 with the lowest dev burden among those with the maximum share ships; "safe" is claimed only at n/n. That is a design
-decision (FR-8 requires an impact that cannot be proven to be listed `possible`), not a stakeholder question. In
+decision (FR-8 requires an impact that cannot be proven to be listed `possible`); the measured outcome (V-both, no walk at n/n) went to the stakeholder, who accepted it with the answer-level notice (2026-11-19). In
 every walk only the flow-dependent hops are `possible` (`-answer-spec2.md` §5).
 
 **AC consequences.**
@@ -268,14 +268,13 @@ every walk only the flow-dependent hops are `possible` (`-answer-spec2.md` §5).
   With a false flag the fixture therefore asserts only that the callers of the function holding the changed
   condition are listed `possible`, and the **control half of AC-25 is reported not closed until a flag is true**
   (the guarded-code item is asserted in the true form by P1-34's re-run, if ever entered). AC-25 with FR-8 decides
-  the reading (`-p1-ml.md` §3.5): if the walk P1-39 ships lists the guarded point `possible` (V-flow or V-union), the
-  control half closes on P1-42's fixture; otherwise it is reported not closed.
+  the reading (`-p1-ml.md` §3.5): P1-39's walk is V-both, which does not list the guarded point, so the control half is reported
+  not closed and FR-8 is not met for flag-false flow (stakeholder decision 2026-11-19); every such answer carries the flow notice (`-answer-spec2.md` §5.1).
   **The fixture rows' P1 form (flags false; the manifests hold the flag-true form).** P1-41 asserts these, a flag-true
   re-run the manifest form: DF-1 `confirmed`/`resolved-call` (a direct caller of the anchor symbol, entered by `HAS_CALL ←` into `function`);
   DF-2 and DF-3 `possible`/`flow-unavailable:python` (spec2 §5's `B-flow` items B and C: the labelled `CALLS ←` and
   `TO ←` rows leave the `function`-state `apply_discount` and `create_order`); DF-4 unchanged (`CALLS_NAME`, own
-  `name-match`); CD-1, CD-2, CD-3 not asserted, the control half reported not closed,
-  or `possible`/`flow-unavailable:python` if P1-39's walk lists them; and the caller of the function holding the
+  `name-match`); CD-1, CD-2, CD-3 not asserted, the control half reported not closed; and the caller of the function holding the
   changed condition, `core/flow.py::finalize` at distance 1, `possible`/`flow-unavailable:python` (carried by CD-2's
   P1 form, no new row). RV-1: `connect` (d2) and RV-2: `load_rate` (d2) `possible`/`flow-unavailable:python`, every
   other dependency as the manifest; RV-3: `base_price` (d3) `possible`/`flow-unavailable:python`, the other two
@@ -359,8 +358,12 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-23 | Flow fallback, distance and grouping, reverse question, answer builder | `tdd-engineer` | ans | 22, 18 | `analyst` |
 | P1-39 | Staleness, stamp and the superset measurement on dev flow items | `tdd-engineer` | ans | 23, 20 | `analyst`; `data-scientist` on the measurement |
 | P1-24 | Renderers: grouped text and Markdown report, F-3 fencing, F-4 token screen | `coder` | ans | 45 | `analyst` |
-| P1-25 | `ccg` MCP server, CLI, `raw_query`, pin-and-replay | `coder` | ans | 23, 39, 24, 19, 20, 02 | `analyst` |
-| P1-26 | Plain-language front: parsers, interpreter, resolver, cache, ambiguity, summary | `coder` | ans | 29, 39, 24, 25, 45, `-ml` | `analyst`; `data-scientist` |
+| P1-23d | The V-both table constant, `algorithm.version` `1.2` pin, V18's `"1.2"`-only callee run | `tdd-engineer` | ans | 23, 39, 45b | `analyst` |
+| P1-45b | Answer schema `1.2`: `notices`, V20, the 1.1-or-later helper (first) | `tdd-engineer` | ans | 45 | `analyst` |
+| P1-39d | The engine flip (V-both default, label `1.2`) and the flow notice | `tdd-engineer` | ans | 45b, 23d | `analyst` |
+| P1-24b | Renderers show the flow notice | `coder` | ans | 24, 45b | `analyst` |
+| P1-25 | `ccg` MCP server, CLI, `raw_query`, pin-and-replay | `coder` | ans | 23, 39, 24, 24b, 19, 20, 02, 39d | `analyst` |
+| P1-26 | Plain-language front: parsers, interpreter, resolver, cache, ambiguity, summary | `coder` | ans | 29, 39, 24, 24b, 25, 45, `-ml` | `analyst`; `data-scientist` |
 | P1-27 | `teco` v1 seam and `cpg-analysis` skill update | `cobb` | ans | 25 | `analyst` |
 | **W4: egress and gates** | | | | | |
 | P1-29 | Broker core: policy `R0`, `R1`, `R3`–`R7`, `R99`; runs; structured calls; audit | `devops` | gat | 28, 03 | `analyst`; `security-expert` advisory |
@@ -368,8 +371,8 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-40 | AC-8 part 1 run: full refresh plus queries of a mixed fixture system | `devops` | gat | 31, 20, 25, 26 | `analyst` |
 | P1-32 | Eval tooling verbs, then the AC-5 gate harness (two dispatches) | `qa-engineer` | gat | 25, 20 (harness half) | `analyst`; `data-scientist` |
 | P1-33 | P1 test plan `docs/test-plans/connected-code-graph-p1.md` | `qa-engineer` | gat | 00 | `analyst` |
-| P1-41 | Fixture gate, part 1: the 92 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14 | `analyst` |
-| P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25) | `qa-engineer` | gat | 41, 26 | `analyst` |
+| P1-41 | Fixture gate, part 1: the 92 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d | `analyst` |
+| P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25) | `qa-engineer` | gat | 41, 26, 39d, 24b | `analyst` |
 | P1-34 | Flow re-measurement (§5): re-point `s28_run.py`, entry check, fresh draw only if entered, decision record | `data-scientist` + `qa-engineer` | gat | 09, `-ml` | `analyst` |
 | P1-35 | AC-24 smoke harness and run | `qa-engineer` | gat | 26, 29, `-ml` | `data-scientist` |
 | P1-47 | Runtime-oracle capture on an isolated instance | `qa-engineer` | gat | 48, 02, `-ml` | `analyst` |
@@ -503,7 +506,7 @@ no live spec; the feature's close (after P2) owes a whole-component spec, checke
 - **`docs/HISTORY.md`**: one entry per delivered wave and a P1 close entry citing the AC-closure table
   (P1-38), the Q1 decision, the flow-gate outcome, the spike dispositions, and the reports.
   **`docs/BACKLOG.md`** C-1001: rewritten in place to P3 onward, plus the new items this phase creates: the
-  TS/JS flow remedy (`switch`-case cond synthesis), AC-25's control half if P1-39's walk leaves it open, the deferred git-fetch path (trigger: a manifest first naming an https `remote`; design inputs in `-egress-spec3.md`), and deletion of `cpg/spikes/vertical-slice/` with its dispositions (re-point or vendor `spikes/store/{bfs,synth,lock_replay}.py` and `store/tests/test_store_spikes.py`, re-point `frontend-fitness/s28_run.py`).
+  TS/JS flow remedy (`switch`-case cond synthesis), AC-25's control half (reported not closed: V-both ships, `-answer-spec2.md` §5), the deferred git-fetch path (trigger: a manifest first naming an https `remote`; design inputs in `-egress-spec3.md`), and deletion of `cpg/spikes/vertical-slice/` with its dispositions (re-point or vendor `spikes/store/{bfs,synth,lock_replay}.py` and `store/tests/test_store_spikes.py`, re-point `frontend-fitness/s28_run.py`).
 - **Archive flips at P1 close** (by owner): this index and its four sub-plans (`architect`), the `-p1-ml.md` and
   `-p1-graph.md` notes (`data-scientist`, `graph-dba`), the P1 test plan and report (`qa-engineer`). Specs the
   successors supersede flip to `superseded` (`-egress-spec.md`, `-egress-spec2.md`) or gain `Extended by:`
