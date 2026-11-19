@@ -1,6 +1,6 @@
 # Live specs — Feature Requirements
 
-> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-19
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-19
 
 ## Intent
 
@@ -168,3 +168,4 @@ _None._
 - 2026-10-30 — Ready for design? → confirmed by stakeholder; `analyst` Pass 3 approve with
   suggestions (`docs/reviews/live-specs.md`).
 - 2026-11-19 — Feature delivered and closed (`falkor-chat/docs/HISTORY.md`, analyst Pass 19 approve with suggestions) → Status flipped to archived.
+- 2026-11-19 — Overturns the 2026-11-19 archive entry: coordination row L6 (model-bench live spec) is still queued, riding on the typed-decision-models close → Status back to Ready for design; the family archives when L6 is delivered and gated.
