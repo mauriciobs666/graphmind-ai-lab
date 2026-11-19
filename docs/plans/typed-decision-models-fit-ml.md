@@ -201,7 +201,23 @@ An item decided wrongly at every setting (predicate `p = 1.0` against a *no* lab
 `1/n_class` wherever it sits, but rung 4 is a maximiser, so §Q2.2's ladder always returns a setting and
 never raises. U6f.7 carries no fallback; it prints per true-answer class the *unfixable* count: items (after `--exclude-item`, with an `ok` decision call) decided wrongly at every setting, i.e. predicate `p == 1.0` with label *no*, choice `confidence == 1.0` with a `choice` other than the label, beside the §4 agreement ceiling.
 
-## 6. Risks and open points
+## 6. Selection and report figures (U6f.8b)
+
+- **AUC.** Predicate: score `p`, target the label. Choice: score `confidence`, target "the choice equals the label"
+  (§Q2.5's reliability ranking). An AUC undefined (no `ok` call, or one target class absent) is 0.5, so the
+  text leaves like a constant score; the report flags it `aucUndefined` so 0.5 is not read as measured.
+  `TextScore.auc` is a property of the text, identical in both candidates' records.
+- **Rank order** `(rung, None as 5, agreementUnmet, target, key, not control, file order)`: `target` puts
+  `mcnemar-nonreject` after `D_c<=0` within a rung (guard rung 3 can mix them with incomparable keys); new-ability `T` targets tie on it and the key decides.
+- **Leavers.** `leftSelection="decision-failure"` is the guard's only (§4); new abilities stay fail-closed with no leaver.
+- **Over-limit `(k, n)`:** `k` over-limit decision calls, `n` all of the text's decision calls, failed included.
+- **`max(probabilities)` AUC** (choice, exploratory, gating nothing): a call with no entry is dropped from its pairs
+  and counted in `maxProbDropped`; `None` when a class is absent.
+- **Split-half** (§Q2.4): the ladder fitted on one half, the fitted policy scored on both, both directions; the shift
+  is held-out minus fit-half in `s` and each `D_c` (guard) or class agreement (new abilities). Print each
+  half's per-cell (class) `n`; a cell absent from a half is reported absent, never as 0.
+
+## 7. Risks and open points
 
 - Observed `p` values as thresholds put a boundary on an item; a replicate's numerical drift can flip it.
   Both families share this and it is kept; a midpoint between adjacent distinct `p` would be an amendment

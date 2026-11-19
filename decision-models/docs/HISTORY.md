@@ -2,6 +2,16 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-19 — typed-decision-models U6f.8b — selection, split-half and the fit CLI
+
+**What:** plan4 `docs/plans/typed-decision-models4.md` v1.15 §3.11, §4.4/§5 row U6f.8b; fit note `docs/plans/typed-decision-models-fit-ml.md` §3, §6; gates `docs/reviews/typed-decision-models.md` Pass 54–55. `decisionmodels/fit.py` and `python -m decisionmodels.fit`:
+- Records `TextScore` (with `aucUndefined`), `Selection`, `SelectedText`, `HalfShift` (per-half `n`; `shift` is `None` for a cell or class absent from a half), `FitAnalysis`; `analyze_fit` (pure, over the collector's shared calls; one `LadderResult` per candidate and text), `eligibility`, `best_text`, `run_ladder`, `policy_values`, `split_half_shifts` (both directions, all calibration ids), `run_fit`, `main`. `ladder.index_calls` is public.
+- Selection per fit note §3 and §6 (a `D_c<=0` before `mcnemar-nonreject` term inside a rung; guard-only decision-failure leaver; undefined AUC is 0.5 and leaves; `maxProbAuc` exploratory, a missing-entry item dropped and counted).
+- CLI: refuses, writing nothing, on a bad URL, a non-positive timeout, a bad or missing input, or a residency failure; an analysis error after live calls surfaces as an error. A dry run: it prints the selections and emits nothing until U6f.9b. Flags: `--role`, `--dataset-version`, `--decision-model`, `--handoff-model`, `--lmstudio-url`, `--decision-timeout-seconds` (all required, no default, timeout positive and finite), `--data-dir` (default `decision-models/data`), `--fits-dir` (default `<data-dir>/<role>/<version>/fits`). No `--exclude-item` (U6f.8c).
+- Open for U6f.9b: print `aucUndefined`, `maxProbDropped`, each half's `n`; handle `None` shifts; an analysis failure loses every call until something is persisted (Pass 55 P55-m2b).
+
+**Verified:** `tests/test_fit.py`, `tests/test_fit_cli.py`; the delegate's 43 mutants and the gate's ~86 own, none surviving after the pins; my own (AUC threshold) killed; full suite re-run by the coordinator, ruff clean.
+
 ## 2026-11-19 — typed-decision-models U6f.8a — the call collector
 
 **What:** plan4 `docs/plans/typed-decision-models4.md` v1.13 §3.11, §4.4/§5 row U6f.8a; fit note `docs/plans/typed-decision-models-fit-ml.md` §4 (incl. "The exclusion must fire"); gates `docs/reviews/typed-decision-models.md` Pass 52–53. `decisionmodels/fitcalls.py`:

@@ -79,7 +79,7 @@ def _collect(
 ) -> tuple[dict[str, _Item], list[ScoredCall], list[ScoredCall]]:
     if set(labels) != set(cells):
         raise ValueError("guard_ladder: labels and cells must name the same items")
-    hand, dec = _index_calls(calls, labels, text_id, "guard_ladder")
+    hand, dec = index_calls(calls, labels, text_id, "guard_ladder")
     items: dict[str, _Item] = {}
     for item_id, label in labels.items():
         h, d = hand[item_id], dec[item_id]
@@ -320,7 +320,7 @@ class _NaSetting:
     right: tuple[int, ...]  # per class
 
 
-def _index_calls(
+def index_calls(
     calls: Iterable[ScoredCall], labels: Mapping[str, object], text_id: str, who: str
 ) -> tuple[dict[str, ScoredCall], dict[str, ScoredCall]]:
     hand: dict[str, ScoredCall] = {}
@@ -461,7 +461,7 @@ def _new_ability_ladder(
     if family not in FAMILIES:
         raise ValueError(f"{who}: family must be one of {FAMILIES}, got {family!r}")
     calls = list(calls)
-    hand, dec = _index_calls(calls, labels, text_id, who)
+    hand, dec = index_calls(calls, labels, text_id, who)
     if not labels:
         raise ValueError(f"{who}: no calibration items")
     build_item = _predicate_item if kind == "predicate" else _choice_item
