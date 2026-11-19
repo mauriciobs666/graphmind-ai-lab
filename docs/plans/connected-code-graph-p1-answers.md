@@ -262,14 +262,13 @@ Stakeholder decision 2026-11-19 (`-answer-spec2.md` §5): V-both ships. **Needs:
   optional `--fail-on possible|any` exit codes), `cpg/clients/common.py` (system resolution, identity, the `ccg_raw_<s>` connection),
   `cpg/tests/test_clients.py`, `cpg/tests/test_pin_replay.py`, `cpg/tests/test_no_network.py`; a repo-root `.mcp.json` entry is a **proposal** in
   the step's report (the wiring file is `teco`'s/`cobb`'s to change, P1-27).
-- **Behaviours:** (1) `ask(request)` takes the structured request (use case `impact` or `depends-on`, anchor,
-  scope; no depth bound, `-answer-spec2.md` §4.1) or a plain-language question, plus the boolean `cacheBypass`
+- **Behaviours:** (1) `ask(request)` takes the structured request `{useCase, anchor}` (use case `impact` or `depends-on`; no depth bound, `-answer-spec2.md` §4.1; **`scope` is not a P1 input**: the engine takes none, so a request carrying it is the typed `not-built` error, never ignored, and the answer's `request` carries no `scope`) or a plain-language question, plus the boolean `cacheBypass`
   (default `false`; the CLI flag `--cache-bypass`; no effect on a structured request; `-answer-spec2.md` §2), and
   returns the canonical answer; **other use cases return a typed "not built in this
-  phase" error**, never an empty answer; (2) `resolve(anchor)` returns candidates with ids (code location,
+  phase" error**, never an empty answer; **a structured ask whose anchor is ambiguous or unresolved is a typed error** (`anchor-ambiguous`/`anchor-unresolved`) carrying `resolve`'s candidate shape, and no structured path builds a canonical `ambiguous` or `unresolved` document: those statuses describe the reading of a *question*, so **P1-26 owns them** (plain-language path, `options` with `rank`); a structured ask names its anchor, and a wrong one is the caller's error; (2) `resolve(anchor)` returns candidates with ids (code location,
   contract point); (3) `refresh(system, scope)` calls P1-20; (4) `raw_query(cypher)` runs `GRAPH.RO_QUERY` with
   the `ccg_raw_<system>` credential only; a write, `GRAPH.QUERY` and `GRAPH.PROFILE` are refused by the database
-  and the stamp is unchanged (AC-21); a configured time limit is `TIMEOUT_MAX`; (5) the asker is the launching OS
+  and the stamp is unchanged (AC-21); a time limit is sent on every call, its default is the pinned `TIMEOUT_MAX`, and the server refuses a larger one (the client never reads the instance value); a time limit bounds wall time, not memory (a documented P1 limit: below); (5) the asker is the launching OS
   user; access control is P4 (FR-24), so `raw_query` is available to the local user in P1 and the report says so;
   (6) **AC-16 pin-and-replay** (`-eval-protocol-ml.md` §10.6): the structured request submitted through MCP, the
   CLI and the engine gives identical `facts_bytes`; a raw-recipe re-run of `recipe.queries` reproduces the item set
@@ -281,10 +280,11 @@ Stakeholder decision 2026-11-19 (`-answer-spec2.md` §5): V-both ships. **Needs:
   client module that opens `raw_query`'s `ccg_raw_<s>` connection; `-egress-spec3.md` §10.1), including `import urllib.request as u` inside a function,
   `__import__("socket")`, `importlib.import_module`, `subprocess` of `curl`/`wget`, and an import of `ccg.broker`
   outside `ccg/refresh.py`, `ccg/front/interpret.py` and `ccg/front/summary.py` (`ccg.broker.client` only; the
-  clients themselves open no broker run); each is a named mutant the test must kill;
+  clients themselves open no broker run); each is a named mutant the test must kill; **the boundary is also a run-time one** (`-egress-spec3.md` §2.1, "import no broker module"): importing `clients.common` and running `ask`, `resolve` or `raw` loads no `ccg.broker*` module, so `Client.refresh` imports `ccg.refresh` inside the method (and `DEFAULT_MANIFEST` comes from where `ccg.refresh` takes it); a test asserts `sys.modules` holds none after those calls (`subprocess` and `socket` are not asserted: the lazy `falkordb` import brings `socket`); this fix belongs to the open P1-25a round;
   (8) it calls `validate` first and renders only a valid document; a test passes an invalid answer and asserts
-  nothing is rendered; (9) **the flow notice is never dropped** (Needs P1-24b for the text path) (`-answer-spec2.md` §5.1): the MCP `ask` and the CLI return the canonical document unchanged, so `notices` is in the JSON; a text-mode
+  nothing is rendered; (8b) **`--fail-on` and unresolved documents:** with `--fail-on` given, an `ambiguous` or `unresolved` document exits **3** (neither 0 nor the tripped code 1), so a gate never reads "could not understand or locate" as success; without `--fail-on` the document is delivered with exit 0; a test with a document double covers it until P1-26 can produce one; (9) **the flow notice is never dropped** (Needs P1-24b for the text path) (`-answer-spec2.md` §5.1): the MCP `ask` and the CLI return the canonical document unchanged, so `notices` is in the JSON; a text-mode
   output is `ccg.render.render_text`; a test asserts a document with `notices` comes back from MCP and CLI with the field intact, and that `--fail-on` exit codes are unchanged by it (§9, Q-1).
+- **Raw access and memory (stakeholder decision 2026-11-19, a documented P1 limit):** a raw query inside its time limit can exhaust the FalkorDB instance's memory (`raw --cypher 'UNWIND range(1,100000000) AS x RETURN count(x)' --timeout-ms 200` OOM-killed a throwaway at a 2 GB cap). On the shared, no-persistence `ccg-falkordb` that drops every loaded snapshot until the next `refresh`. P1 accepts it: one local user, `refresh` rebuilds, and per-user limits belong to P4 (FR-24). The database is the enforcer, so there is no client-side query filter. The P1 exit report states the limit (P1-38).
 - **Gate:** `analyst`; AC-16, AC-21 evidence is P1-42's.
 
 ## P1-26 · plain-language front — `coder`
@@ -296,11 +296,11 @@ Blocked on `-p1-ml.md` question 3 (model, prompt, grammar, sampling, smoke proto
   `engine/anchors.py`), `interpret.py` (one-shot schema-constrained extraction of the use case and anchor spans),
   `cache.py` (key `ccg.answer.cache_key(normalized_question, snapshot_id, model_fingerprint, prompt_hash, …)`),
   `summary.py` (optional aggregate-only summary), `prompts/*.txt`, `grammar/*.json` (**never `.md`**, index D5),
-  `cpg/tests/test_front_*.py`.
+  `cpg/tests/test_front_*.py`, and `cpg/clients/common.py` plus `cpg/clients/cli/main.py` (the default `front` wiring: `Client` and the CLI factory import `ccg.front` lazily, so `--question` and the MCP `ask` stop being `not-built`).
 - **Behaviours:** (1) deterministic parsers run first; a question they fully resolve makes no model call; (2) for
   free prose, one model call through the broker's structured path (`component: answer.interpret`,
   `purpose: model-call`) with a grammar-constrained JSON reply validated against the canonical `Request` schema;
-  (3) ambiguity is answered with the possible readings as `options` with `rank`, never a guess, and never more
+  (3) ambiguity is answered with the possible readings as `options` with `rank`, never a guess, and **P1-26 builds the canonical `ambiguous` and `unresolved` documents** (`-answer-spec.md` §4; the structured path of P1-25 returns typed errors instead); a question naming a repository scope is the typed `not-built` (scope is not a P1 input); and never more
   than the pre-registered cap; (3b) **draft and resolver** as `-p1-ml.md` §4.2 fixes them (span-group `InterpretDraft`, `direction: null` expanded into both
   directions as `options`, the verbatim-substring guard, the per-group join rule), with its **named resolver tests** on dev
   questions: QW-30, QW-27, QW-13, QW-7, QW-47, and negatives QW-3 and QW-11; (4) the interpretation provenance (`endpoint`, model fingerprint, quantization for

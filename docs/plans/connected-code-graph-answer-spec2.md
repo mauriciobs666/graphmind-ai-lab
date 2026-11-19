@@ -746,7 +746,7 @@ shipped table inverted (`table=None` is V-both, as-built passes `bfs.ROWS`). The
 - **R-8 No commit emits or accepts a `"1.1"` V-both document.** P1-45b lands the label, helper and V20 while the builder still emits `"1.1"` with the caller-only table; P1-23d adds the table constant, the `"1.2"` pin and the `"1.2"`-only callee rows without changing the default walk or the builder; P1-39d flips table, label and `notices` in one commit.
 
 **Open question Q-1 (stakeholder, non-blocking).** Should `ccg ask --fail-on any` fail on a notice? Recommendation: no. The exit code keeps meaning "items of that status exist"; the
-notice is in the JSON and the text. A CI gate that needs the omission is a later, explicit option.
+notice is in the JSON and the text. A CI gate that needs the omission is a later, explicit option. (`--fail-on` on an `ambiguous` or `unresolved` document is not this question: it exits 3, P1-25 (8b).)
 
 - **R-5 EP §5.2.1 lacks a `TO_UNIT` replay row** (§3.5). A `unit` item never matches gold, so it is never an
   H1–H4 candidate that HA-1 replays, and no score changes. The row is still owed by `data-scientist`, so that the

@@ -292,6 +292,7 @@ Root-cause and fix on dev; every item of a missed item's cluster moves to dev; r
   AC-11 (impact); AC-16 closed (impact, four clients); AC-17 (code location, contract point); AC-18 (impact
   answers); AC-21 closed; AC-24 smoke; AC-25 closed for its data-flow half, **not closed for its control half** (the shipped V-both fallback, `-answer-spec2.md` §5) — with the closing step, evidence file, and "reported not
   closed, because" for any that did not come out (the `flow` stratum, AC-25's confirmed form, the vacuous AC-8 rows).
+- **`raw_query` memory limit:** before the exit report, `graph-dba` verifies which FalkorDB memory controls exist (read-only look); the report states that a raw query can exhaust instance memory and drop the no-persistence snapshot, a documented P1 limit (stakeholder decision 2026-11-19; per-user limits are P4, FR-24).
 - **`analyst` implementation review** of the whole phase diff: `docs/reviews/connected-code-graph-p1-impl.md`,
   including the growth-stops check; no close on "needs changes".
 - **Spike dispositions (index D7):** `cpg/spikes/vertical-slice/` is not deleted. `git grep -n vertical-slice` (tracked, excluding the directory and `docs/`) is run; each hit is re-pointed (`s28_run.py`, in P1-34), recorded as historical (`contact.json`, `store/results/*`, `.sc` header comments) or listed in the BACKLOG item with its disposition (`spikes/store/{bfs,synth,lock_replay}.py`, `store/tests/test_store_spikes.py`). `cpg/README.md` marks the directory frozen.

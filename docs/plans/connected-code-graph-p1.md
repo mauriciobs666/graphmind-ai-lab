@@ -379,7 +379,7 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-36 | Noise sampling and runtime-oracle tooling, the measurement of the ratified thresholds | `data-scientist` | gat | 32, 47, `-ml` | `analyst` |
 | P1-37 | AC-5 first gate run (HTTP, MCP, scripts, wiring screened, flow per §5) | `qa-engineer` | gat | 32, 42, 34, 36, 47, pre-registration record (rule below) | `analyst`; `data-scientist` |
 | P1-43 | AC-5 re-gate (contingent on a miss): its own brief, two isolated key writers | `qa-engineer` | gat | 37 | `analyst`; `data-scientist` |
-| P1-38 | Phase exit: AC-closure table, `analyst` impl review, spike dispositions, inputs for the close docs | `teco` | gat | all built steps | `analyst` |
+| P1-38 | Phase exit: AC-closure table, `analyst` impl review, spike dispositions, inputs for the close docs; `graph-dba` first verifies which FalkorDB memory controls exist, and the report states the `raw_query` memory limit | `teco` | gat | all built steps | `analyst` |
 
 **Critical path** (longest chain): 01 → 03 → 04 → 05 → 07 → 11 → 17 → 18 → 19 → 20 → 25 → 41 → 42 → 37 → 38
 (P1-17 also needs 46 and 14; 19 needs 02 and 48; 20 also needs 44, which runs beside 19). Schedulable first: 00, 01,
