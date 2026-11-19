@@ -1,0 +1,56 @@
+{
+  "candidateId": "message-type-classifier-v2-handoff-f3",
+  "decisionModel": "laya@bf16",
+  "decisionTimeoutSeconds": 360.0,
+  "fit": {
+    "outcome": "fit-infeasible: agreement",
+    "qualityTarget": "max-min-agreement"
+  },
+  "fitManifest": {
+    "file": "message-type-classifier-v2-f3.fit.txt",
+    "purposes": [
+      "question-tuning",
+      "cutoff"
+    ],
+    "sha256": "62dee0723466cd4d4b3497a92649d114bcf6bc999ac99734426e156a87766380",
+    "size": 300
+  },
+  "handoffModel": "qwen/qwen3-4b-2507",
+  "policy": {
+    "kind": "choice-confidence",
+    "minConfidence": 0.9301111807840325
+  },
+  "provenance": {
+    "builtBy": "decision-models",
+    "datasetVersion": "v2",
+    "sourceSha": "0e336e3664c23e08795fc537d56d5afc3cc6ab9de29029751a569224b666b1f0"
+  },
+  "question": {
+    "choices": [
+      {
+        "instructions": "",
+        "value": "order"
+      },
+      {
+        "instructions": "",
+        "value": "question"
+      },
+      {
+        "instructions": "",
+        "value": "complaint"
+      },
+      {
+        "instructions": "",
+        "value": "escalation"
+      },
+      {
+        "instructions": "",
+        "value": "other"
+      }
+    ],
+    "instructions": "What type of message is the MESSAGE?",
+    "name": "type",
+    "type": "choice"
+  },
+  "role": "message-type-classifier"
+}

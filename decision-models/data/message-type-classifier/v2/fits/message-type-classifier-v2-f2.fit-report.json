@@ -1,0 +1,3330 @@
+{
+  "calls": {
+    "decision": {
+      "callKind": "decision",
+      "dispositionItemIds": [],
+      "halfBudgetCount": 0,
+      "k": 0,
+      "maxSeconds": 3.177694458994665,
+      "medianSeconds": 0.029066626499115955,
+      "n": 1500,
+      "parseFailures": 0,
+      "wilsonUpper95": 0.0025545243594804127
+    },
+    "handoff": {
+      "callKind": "handoff",
+      "dispositionItemIds": [],
+      "halfBudgetCount": 0,
+      "k": 0,
+      "maxSeconds": 0.5495262909971643,
+      "medianSeconds": 0.36030559199571144,
+      "n": 300,
+      "parseFailures": 0,
+      "wilsonUpper95": 0.012643429997735661
+    }
+  },
+  "callsFile": "calls-20261119T215329Z-4a92c7febfbe4d349c154c3c547d0a36.json",
+  "candidates": {
+    "decision-only": {
+      "candidateId": "message-type-classifier-v2-only-f2",
+      "chosen": {
+        "noEligibleText": false,
+        "outcome": "fit-infeasible: agreement",
+        "qualityTarget": "max-min-agreement",
+        "rung": 4,
+        "textId": "m-precedence"
+      },
+      "texts": [
+        {
+          "auc": 0.7095409453413732,
+          "aucUndefined": false,
+          "control": true,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "complaint": {
+                  "decimal": 0.2,
+                  "fraction": "1/5"
+                },
+                "escalation": {
+                  "decimal": 0.016666666666666666,
+                  "fraction": "1/60"
+                },
+                "order": {
+                  "decimal": 0.9833333333333333,
+                  "fraction": "59/60"
+                },
+                "other": {
+                  "decimal": 0.03333333333333333,
+                  "fraction": "1/30"
+                },
+                "question": {
+                  "decimal": 0.5333333333333333,
+                  "fraction": "8/15"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.016666666666666666,
+                "fraction": "1/60"
+              },
+              "nClass": {
+                "complaint": 60,
+                "escalation": 60,
+                "order": 60,
+                "other": 60,
+                "question": 60
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s350": {
+                "decimal": 0.8517702052596383,
+                "fraction": "3245756392356/3810600995801"
+              },
+              "tLH_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "tL_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "td_ms": {
+                "decimal": 35.120187510037795,
+                "fraction": "150840056785/4294967296"
+              },
+              "unfixableByClass": {
+                "complaint": 0,
+                "escalation": 0,
+                "order": 0,
+                "other": 0,
+                "question": 0
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              {
+                "decimal": -0.016666666666666666,
+                "fraction": "-1/60"
+              },
+              {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "c": 0.0,
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": 0.7095409453413732,
+          "maxProbDropped": 0,
+          "overLimit": {
+            "k": 0,
+            "n": 300
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "c": 0.0,
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.1935483870967742,
+                    "fraction": "6/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.038461538461538464,
+                    "fraction": "1/26"
+                  },
+                  "order": {
+                    "decimal": 0.967741935483871,
+                    "fraction": "30/31"
+                  },
+                  "other": {
+                    "decimal": 0.03125,
+                    "fraction": "1/32"
+                  },
+                  "question": {
+                    "decimal": 0.4666666666666667,
+                    "fraction": "7/15"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.20689655172413793,
+                    "fraction": "6/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 1.0,
+                    "fraction": "1/1"
+                  },
+                  "other": {
+                    "decimal": 0.03571428571428571,
+                    "fraction": "1/28"
+                  },
+                  "question": {
+                    "decimal": 0.6,
+                    "fraction": "3/5"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.013348164627363738,
+                    "fraction": "12/899"
+                  },
+                  "escalation": {
+                    "decimal": -0.038461538461538464,
+                    "fraction": "-1/26"
+                  },
+                  "order": {
+                    "decimal": 0.03225806451612903,
+                    "fraction": "1/31"
+                  },
+                  "other": {
+                    "decimal": 0.004464285714285714,
+                    "fraction": "1/224"
+                  },
+                  "question": {
+                    "decimal": 0.13333333333333333,
+                    "fraction": "2/15"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "c": 0.0,
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.20689655172413793,
+                    "fraction": "6/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 1.0,
+                    "fraction": "1/1"
+                  },
+                  "other": {
+                    "decimal": 0.03571428571428571,
+                    "fraction": "1/28"
+                  },
+                  "question": {
+                    "decimal": 0.6,
+                    "fraction": "3/5"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.1935483870967742,
+                    "fraction": "6/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.038461538461538464,
+                    "fraction": "1/26"
+                  },
+                  "order": {
+                    "decimal": 0.967741935483871,
+                    "fraction": "30/31"
+                  },
+                  "other": {
+                    "decimal": 0.03125,
+                    "fraction": "1/32"
+                  },
+                  "question": {
+                    "decimal": 0.4666666666666667,
+                    "fraction": "7/15"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": -0.013348164627363738,
+                    "fraction": "-12/899"
+                  },
+                  "escalation": {
+                    "decimal": 0.038461538461538464,
+                    "fraction": "1/26"
+                  },
+                  "order": {
+                    "decimal": -0.03225806451612903,
+                    "fraction": "-1/31"
+                  },
+                  "other": {
+                    "decimal": -0.004464285714285714,
+                    "fraction": "-1/224"
+                  },
+                  "question": {
+                    "decimal": -0.13333333333333333,
+                    "fraction": "-2/15"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "m-control"
+        },
+        {
+          "auc": 0.6859563543003852,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "complaint": {
+                  "decimal": 0.16666666666666666,
+                  "fraction": "1/6"
+                },
+                "escalation": {
+                  "decimal": 0.016666666666666666,
+                  "fraction": "1/60"
+                },
+                "order": {
+                  "decimal": 0.9833333333333333,
+                  "fraction": "59/60"
+                },
+                "other": {
+                  "decimal": 0.016666666666666666,
+                  "fraction": "1/60"
+                },
+                "question": {
+                  "decimal": 0.4,
+                  "fraction": "2/5"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.016666666666666666,
+                "fraction": "1/60"
+              },
+              "nClass": {
+                "complaint": 60,
+                "escalation": 60,
+                "order": 60,
+                "other": 60,
+                "question": 60
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s350": {
+                "decimal": 0.8695689763072335,
+                "fraction": "3313580407034/3810600995801"
+              },
+              "tLH_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "tL_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "td_ms": {
+                "decimal": 28.54039209642603,
+                "fraction": "735480304015/25769803776"
+              },
+              "unfixableByClass": {
+                "complaint": 0,
+                "escalation": 0,
+                "order": 0,
+                "other": 0,
+                "question": 0
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              {
+                "decimal": -0.016666666666666666,
+                "fraction": "-1/60"
+              },
+              {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "c": 0.0,
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": 0.6859563543003852,
+          "maxProbDropped": 0,
+          "overLimit": {
+            "k": 0,
+            "n": 300
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "c": 0.0,
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.16129032258064516,
+                    "fraction": "5/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.038461538461538464,
+                    "fraction": "1/26"
+                  },
+                  "order": {
+                    "decimal": 0.967741935483871,
+                    "fraction": "30/31"
+                  },
+                  "other": {
+                    "decimal": 0.03125,
+                    "fraction": "1/32"
+                  },
+                  "question": {
+                    "decimal": 0.4,
+                    "fraction": "2/5"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.1724137931034483,
+                    "fraction": "5/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 1.0,
+                    "fraction": "1/1"
+                  },
+                  "other": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "question": {
+                    "decimal": 0.4,
+                    "fraction": "2/5"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.011123470522803115,
+                    "fraction": "10/899"
+                  },
+                  "escalation": {
+                    "decimal": -0.038461538461538464,
+                    "fraction": "-1/26"
+                  },
+                  "order": {
+                    "decimal": 0.03225806451612903,
+                    "fraction": "1/31"
+                  },
+                  "other": {
+                    "decimal": -0.03125,
+                    "fraction": "-1/32"
+                  },
+                  "question": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "c": 0.0,
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.1724137931034483,
+                    "fraction": "5/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 1.0,
+                    "fraction": "1/1"
+                  },
+                  "other": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "question": {
+                    "decimal": 0.4,
+                    "fraction": "2/5"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.16129032258064516,
+                    "fraction": "5/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.038461538461538464,
+                    "fraction": "1/26"
+                  },
+                  "order": {
+                    "decimal": 0.967741935483871,
+                    "fraction": "30/31"
+                  },
+                  "other": {
+                    "decimal": 0.03125,
+                    "fraction": "1/32"
+                  },
+                  "question": {
+                    "decimal": 0.4,
+                    "fraction": "2/5"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": -0.011123470522803115,
+                    "fraction": "-10/899"
+                  },
+                  "escalation": {
+                    "decimal": 0.038461538461538464,
+                    "fraction": "1/26"
+                  },
+                  "order": {
+                    "decimal": -0.03225806451612903,
+                    "fraction": "-1/31"
+                  },
+                  "other": {
+                    "decimal": 0.03125,
+                    "fraction": "1/32"
+                  },
+                  "question": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "m-definitions"
+        },
+        {
+          "auc": 0.6028054298642533,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "complaint": {
+                  "decimal": 0.45,
+                  "fraction": "9/20"
+                },
+                "escalation": {
+                  "decimal": 0.03333333333333333,
+                  "fraction": "1/30"
+                },
+                "order": {
+                  "decimal": 0.9333333333333333,
+                  "fraction": "14/15"
+                },
+                "other": {
+                  "decimal": 0.15,
+                  "fraction": "3/20"
+                },
+                "question": {
+                  "decimal": 0.6,
+                  "fraction": "3/5"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.03333333333333333,
+                "fraction": "1/30"
+              },
+              "nClass": {
+                "complaint": 60,
+                "escalation": 60,
+                "order": 60,
+                "other": 60,
+                "question": 60
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s350": {
+                "decimal": 0.8410946966868892,
+                "fraction": "3205076288758/3810600995801"
+              },
+              "tLH_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "tL_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "td_ms": {
+                "decimal": 39.066676970299646,
+                "fraction": "1006740599705/25769803776"
+              },
+              "unfixableByClass": {
+                "complaint": 0,
+                "escalation": 0,
+                "order": 0,
+                "other": 0,
+                "question": 0
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              {
+                "decimal": -0.03333333333333333,
+                "fraction": "-1/30"
+              },
+              {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "c": 0.0,
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": 0.6028054298642533,
+          "maxProbDropped": 0,
+          "overLimit": {
+            "k": 0,
+            "n": 300
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "c": 0.0,
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.4838709677419355,
+                    "fraction": "15/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.07692307692307693,
+                    "fraction": "1/13"
+                  },
+                  "order": {
+                    "decimal": 0.967741935483871,
+                    "fraction": "30/31"
+                  },
+                  "other": {
+                    "decimal": 0.15625,
+                    "fraction": "5/32"
+                  },
+                  "question": {
+                    "decimal": 0.5666666666666667,
+                    "fraction": "17/30"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.41379310344827586,
+                    "fraction": "12/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 0.896551724137931,
+                    "fraction": "26/29"
+                  },
+                  "other": {
+                    "decimal": 0.14285714285714285,
+                    "fraction": "1/7"
+                  },
+                  "question": {
+                    "decimal": 0.6333333333333333,
+                    "fraction": "19/30"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": -0.07007786429365963,
+                    "fraction": "-63/899"
+                  },
+                  "escalation": {
+                    "decimal": -0.07692307692307693,
+                    "fraction": "-1/13"
+                  },
+                  "order": {
+                    "decimal": -0.07119021134593993,
+                    "fraction": "-64/899"
+                  },
+                  "other": {
+                    "decimal": -0.013392857142857142,
+                    "fraction": "-3/224"
+                  },
+                  "question": {
+                    "decimal": 0.06666666666666667,
+                    "fraction": "1/15"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "c": 0.0,
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.41379310344827586,
+                    "fraction": "12/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 0.896551724137931,
+                    "fraction": "26/29"
+                  },
+                  "other": {
+                    "decimal": 0.14285714285714285,
+                    "fraction": "1/7"
+                  },
+                  "question": {
+                    "decimal": 0.6333333333333333,
+                    "fraction": "19/30"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.4838709677419355,
+                    "fraction": "15/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.07692307692307693,
+                    "fraction": "1/13"
+                  },
+                  "order": {
+                    "decimal": 0.967741935483871,
+                    "fraction": "30/31"
+                  },
+                  "other": {
+                    "decimal": 0.15625,
+                    "fraction": "5/32"
+                  },
+                  "question": {
+                    "decimal": 0.5666666666666667,
+                    "fraction": "17/30"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.07007786429365963,
+                    "fraction": "63/899"
+                  },
+                  "escalation": {
+                    "decimal": 0.07692307692307693,
+                    "fraction": "1/13"
+                  },
+                  "order": {
+                    "decimal": 0.07119021134593993,
+                    "fraction": "64/899"
+                  },
+                  "other": {
+                    "decimal": 0.013392857142857142,
+                    "fraction": "3/224"
+                  },
+                  "question": {
+                    "decimal": -0.06666666666666667,
+                    "fraction": "-1/15"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "m-precedence"
+        },
+        {
+          "auc": 0.6407520564042303,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "complaint": {
+                  "decimal": 0.2833333333333333,
+                  "fraction": "17/60"
+                },
+                "escalation": {
+                  "decimal": 0.016666666666666666,
+                  "fraction": "1/60"
+                },
+                "order": {
+                  "decimal": 0.9666666666666667,
+                  "fraction": "29/30"
+                },
+                "other": {
+                  "decimal": 0.16666666666666666,
+                  "fraction": "1/6"
+                },
+                "question": {
+                  "decimal": 0.48333333333333334,
+                  "fraction": "29/60"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.016666666666666666,
+                "fraction": "1/60"
+              },
+              "nClass": {
+                "complaint": 60,
+                "escalation": 60,
+                "order": 60,
+                "other": 60,
+                "question": 60
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s350": {
+                "decimal": 0.8624235711118315,
+                "fraction": "3286352118881/3810600995801"
+              },
+              "tLH_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "tL_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "td_ms": {
+                "decimal": 31.18188370319937,
+                "fraction": "1607102048795/51539607552"
+              },
+              "unfixableByClass": {
+                "complaint": 0,
+                "escalation": 0,
+                "order": 0,
+                "other": 0,
+                "question": 0
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              {
+                "decimal": -0.016666666666666666,
+                "fraction": "-1/60"
+              },
+              {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "c": 0.0,
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": 0.6407520564042303,
+          "maxProbDropped": 0,
+          "overLimit": {
+            "k": 0,
+            "n": 300
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "c": 0.0,
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.2903225806451613,
+                    "fraction": "9/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.038461538461538464,
+                    "fraction": "1/26"
+                  },
+                  "order": {
+                    "decimal": 1.0,
+                    "fraction": "1/1"
+                  },
+                  "other": {
+                    "decimal": 0.1875,
+                    "fraction": "3/16"
+                  },
+                  "question": {
+                    "decimal": 0.43333333333333335,
+                    "fraction": "13/30"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.27586206896551724,
+                    "fraction": "8/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.14285714285714285,
+                    "fraction": "1/7"
+                  },
+                  "question": {
+                    "decimal": 0.5333333333333333,
+                    "fraction": "8/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": -0.014460511679644048,
+                    "fraction": "-13/899"
+                  },
+                  "escalation": {
+                    "decimal": -0.038461538461538464,
+                    "fraction": "-1/26"
+                  },
+                  "order": {
+                    "decimal": -0.06896551724137931,
+                    "fraction": "-2/29"
+                  },
+                  "other": {
+                    "decimal": -0.044642857142857144,
+                    "fraction": "-5/112"
+                  },
+                  "question": {
+                    "decimal": 0.1,
+                    "fraction": "1/10"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "c": 0.0,
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.27586206896551724,
+                    "fraction": "8/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.14285714285714285,
+                    "fraction": "1/7"
+                  },
+                  "question": {
+                    "decimal": 0.5333333333333333,
+                    "fraction": "8/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.2903225806451613,
+                    "fraction": "9/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.038461538461538464,
+                    "fraction": "1/26"
+                  },
+                  "order": {
+                    "decimal": 1.0,
+                    "fraction": "1/1"
+                  },
+                  "other": {
+                    "decimal": 0.1875,
+                    "fraction": "3/16"
+                  },
+                  "question": {
+                    "decimal": 0.43333333333333335,
+                    "fraction": "13/30"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.014460511679644048,
+                    "fraction": "13/899"
+                  },
+                  "escalation": {
+                    "decimal": 0.038461538461538464,
+                    "fraction": "1/26"
+                  },
+                  "order": {
+                    "decimal": 0.06896551724137931,
+                    "fraction": "2/29"
+                  },
+                  "other": {
+                    "decimal": 0.044642857142857144,
+                    "fraction": "5/112"
+                  },
+                  "question": {
+                    "decimal": -0.1,
+                    "fraction": "-1/10"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "m-severity"
+        },
+        {
+          "auc": 0.524838593974175,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "complaint": {
+                  "decimal": 0.35,
+                  "fraction": "7/20"
+                },
+                "escalation": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "order": {
+                  "decimal": 0.9,
+                  "fraction": "9/10"
+                },
+                "other": {
+                  "decimal": 0.48333333333333334,
+                  "fraction": "29/60"
+                },
+                "question": {
+                  "decimal": 0.5333333333333333,
+                  "fraction": "8/15"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "nClass": {
+                "complaint": 60,
+                "escalation": 60,
+                "order": 60,
+                "other": 60,
+                "question": 60
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s350": {
+                "decimal": 0.861203948550293,
+                "fraction": "6563409247867/7621201991602"
+              },
+              "tLH_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "tL_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "td_ms": {
+                "decimal": 31.63275005320126,
+                "fraction": "3260679047065/103079215104"
+              },
+              "unfixableByClass": {
+                "complaint": 0,
+                "escalation": 0,
+                "order": 0,
+                "other": 0,
+                "question": 0
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "c": 0.0,
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": 0.524838593974175,
+          "maxProbDropped": 0,
+          "overLimit": {
+            "k": 0,
+            "n": 300
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "c": 0.0,
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.3870967741935484,
+                    "fraction": "12/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.40625,
+                    "fraction": "13/32"
+                  },
+                  "question": {
+                    "decimal": 0.4666666666666667,
+                    "fraction": "7/15"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.3103448275862069,
+                    "fraction": "9/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 0.8620689655172413,
+                    "fraction": "25/29"
+                  },
+                  "other": {
+                    "decimal": 0.5714285714285714,
+                    "fraction": "4/7"
+                  },
+                  "question": {
+                    "decimal": 0.6,
+                    "fraction": "3/5"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": -0.07675194660734148,
+                    "fraction": "-69/899"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": -0.07341490545050056,
+                    "fraction": "-66/899"
+                  },
+                  "other": {
+                    "decimal": 0.16517857142857142,
+                    "fraction": "37/224"
+                  },
+                  "question": {
+                    "decimal": 0.13333333333333333,
+                    "fraction": "2/15"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "c": 0.0,
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.3103448275862069,
+                    "fraction": "9/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 0.8620689655172413,
+                    "fraction": "25/29"
+                  },
+                  "other": {
+                    "decimal": 0.5714285714285714,
+                    "fraction": "4/7"
+                  },
+                  "question": {
+                    "decimal": 0.6,
+                    "fraction": "3/5"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.3870967741935484,
+                    "fraction": "12/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.40625,
+                    "fraction": "13/32"
+                  },
+                  "question": {
+                    "decimal": 0.4666666666666667,
+                    "fraction": "7/15"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.07675194660734148,
+                    "fraction": "69/899"
+                  },
+                  "escalation": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  },
+                  "order": {
+                    "decimal": 0.07341490545050056,
+                    "fraction": "66/899"
+                  },
+                  "other": {
+                    "decimal": -0.16517857142857142,
+                    "fraction": "-37/224"
+                  },
+                  "question": {
+                    "decimal": -0.13333333333333333,
+                    "fraction": "-2/15"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "m-context"
+        }
+      ]
+    },
+    "handoff": {
+      "candidateId": "message-type-classifier-v2-handoff-f2",
+      "chosen": {
+        "noEligibleText": false,
+        "outcome": "fit-infeasible: agreement",
+        "qualityTarget": "max-min-agreement",
+        "rung": 4,
+        "textId": "m-precedence"
+      },
+      "texts": [
+        {
+          "auc": 0.7095409453413732,
+          "aucUndefined": false,
+          "control": true,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "complaint": {
+                  "decimal": 0.9333333333333333,
+                  "fraction": "14/15"
+                },
+                "escalation": {
+                  "decimal": 0.9666666666666667,
+                  "fraction": "29/30"
+                },
+                "order": {
+                  "decimal": 0.9333333333333333,
+                  "fraction": "14/15"
+                },
+                "other": {
+                  "decimal": 0.9,
+                  "fraction": "9/10"
+                },
+                "question": {
+                  "decimal": 0.7333333333333333,
+                  "fraction": "11/15"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.7333333333333333,
+                "fraction": "11/15"
+              },
+              "nClass": {
+                "complaint": 60,
+                "escalation": 60,
+                "order": 60,
+                "other": 60,
+                "question": 60
+              },
+              "s": {
+                "decimal": 0.8966666666666666,
+                "fraction": "269/300"
+              },
+              "s350": {
+                "decimal": 0.8488245805863932,
+                "fraction": "145518078257294/171434807126775"
+              },
+              "tLH_ms": {
+                "decimal": 370.9598186617474,
+                "fraction": "857174035633875/2310692405248"
+              },
+              "tL_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "td_ms": {
+                "decimal": 35.120187510037795,
+                "fraction": "150840056785/4294967296"
+              },
+              "unfixableByClass": {
+                "complaint": 0,
+                "escalation": 0,
+                "order": 0,
+                "other": 0,
+                "question": 0
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": -0.7333333333333333,
+                "fraction": "-11/15"
+              },
+              {
+                "decimal": 0.8966666666666666,
+                "fraction": "269/300"
+              }
+            ],
+            "latencyUnmet": true,
+            "policy": {
+              "c": 0.9505791322645579,
+              "s": {
+                "decimal": 0.8966666666666666,
+                "fraction": "269/300"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": 0.7095409453413732,
+          "maxProbDropped": 0,
+          "overLimit": {
+            "k": 0,
+            "n": 300
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "c": 0.9505791322645579,
+                "s": {
+                  "decimal": 0.8733333333333333,
+                  "fraction": "131/150"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.9615384615384616,
+                    "fraction": "25/26"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.875,
+                    "fraction": "7/8"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.8733333333333333,
+                  "fraction": "131/150"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.9705882352941176,
+                    "fraction": "33/34"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.9285714285714286,
+                    "fraction": "13/14"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.92,
+                  "fraction": "23/25"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": -0.004449388209121246,
+                    "fraction": "-4/899"
+                  },
+                  "escalation": {
+                    "decimal": 0.00904977375565611,
+                    "fraction": "2/221"
+                  },
+                  "order": {
+                    "decimal": -0.004449388209121246,
+                    "fraction": "-4/899"
+                  },
+                  "other": {
+                    "decimal": 0.05357142857142857,
+                    "fraction": "3/56"
+                  },
+                  "question": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  }
+                },
+                "s": {
+                  "decimal": 0.04666666666666667,
+                  "fraction": "7/150"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "c": 0.9256053650855622,
+                "s": {
+                  "decimal": 0.8733333333333333,
+                  "fraction": "131/150"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.896551724137931,
+                    "fraction": "26/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.9705882352941176,
+                    "fraction": "33/34"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.8928571428571429,
+                    "fraction": "25/28"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.8733333333333333,
+                  "fraction": "131/150"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.9230769230769231,
+                    "fraction": "12/13"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.875,
+                    "fraction": "7/8"
+                  },
+                  "question": {
+                    "decimal": 0.7,
+                    "fraction": "7/10"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.8133333333333334,
+                  "fraction": "61/75"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.0389321468298109,
+                    "fraction": "35/899"
+                  },
+                  "escalation": {
+                    "decimal": -0.04751131221719457,
+                    "fraction": "-21/442"
+                  },
+                  "order": {
+                    "decimal": 0.004449388209121246,
+                    "fraction": "4/899"
+                  },
+                  "other": {
+                    "decimal": -0.017857142857142856,
+                    "fraction": "-1/56"
+                  },
+                  "question": {
+                    "decimal": -0.03333333333333333,
+                    "fraction": "-1/30"
+                  }
+                },
+                "s": {
+                  "decimal": -0.06,
+                  "fraction": "-3/50"
+                }
+              }
+            }
+          ],
+          "textId": "m-control"
+        },
+        {
+          "auc": 0.6859563543003852,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "complaint": {
+                  "decimal": 0.9166666666666666,
+                  "fraction": "11/12"
+                },
+                "escalation": {
+                  "decimal": 0.9666666666666667,
+                  "fraction": "29/30"
+                },
+                "order": {
+                  "decimal": 0.9333333333333333,
+                  "fraction": "14/15"
+                },
+                "other": {
+                  "decimal": 0.9166666666666666,
+                  "fraction": "11/12"
+                },
+                "question": {
+                  "decimal": 0.7333333333333333,
+                  "fraction": "11/15"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.7333333333333333,
+                "fraction": "11/15"
+              },
+              "nClass": {
+                "complaint": 60,
+                "escalation": 60,
+                "order": 60,
+                "other": 60,
+                "question": 60
+              },
+              "s": {
+                "decimal": 0.93,
+                "fraction": "93/100"
+              },
+              "s350": {
+                "decimal": 0.8680279492270176,
+                "fraction": "1656790203517/1908683015325"
+              },
+              "tLH_ms": {
+                "decimal": 370.3332458244404,
+                "fraction": "3181138358875/8589934592"
+              },
+              "tL_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "td_ms": {
+                "decimal": 28.54039209642603,
+                "fraction": "735480304015/25769803776"
+              },
+              "unfixableByClass": {
+                "complaint": 0,
+                "escalation": 0,
+                "order": 0,
+                "other": 0,
+                "question": 0
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": -0.7333333333333333,
+                "fraction": "-11/15"
+              },
+              {
+                "decimal": 0.93,
+                "fraction": "93/100"
+              }
+            ],
+            "latencyUnmet": true,
+            "policy": {
+              "c": 0.949130452809947,
+              "s": {
+                "decimal": 0.93,
+                "fraction": "93/100"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": 0.6859563543003852,
+          "maxProbDropped": 0,
+          "overLimit": {
+            "k": 0,
+            "n": 300
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "c": 0.9512430195469385,
+                "s": {
+                  "decimal": 0.92,
+                  "fraction": "23/25"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.9615384615384616,
+                    "fraction": "25/26"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.90625,
+                    "fraction": "29/32"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.92,
+                  "fraction": "23/25"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.896551724137931,
+                    "fraction": "26/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.9705882352941176,
+                    "fraction": "33/34"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.9285714285714286,
+                    "fraction": "13/14"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.9466666666666667,
+                  "fraction": "71/75"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": -0.0389321468298109,
+                    "fraction": "-35/899"
+                  },
+                  "escalation": {
+                    "decimal": 0.00904977375565611,
+                    "fraction": "2/221"
+                  },
+                  "order": {
+                    "decimal": -0.004449388209121246,
+                    "fraction": "-4/899"
+                  },
+                  "other": {
+                    "decimal": 0.022321428571428572,
+                    "fraction": "5/224"
+                  },
+                  "question": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  }
+                },
+                "s": {
+                  "decimal": 0.02666666666666667,
+                  "fraction": "2/75"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "c": 0.9390155923824167,
+                "s": {
+                  "decimal": 0.9266666666666666,
+                  "fraction": "139/150"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.896551724137931,
+                    "fraction": "26/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.9705882352941176,
+                    "fraction": "33/34"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.9285714285714286,
+                    "fraction": "13/14"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.9266666666666666,
+                  "fraction": "139/150"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.9615384615384616,
+                    "fraction": "25/26"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.90625,
+                    "fraction": "29/32"
+                  },
+                  "question": {
+                    "decimal": 0.7,
+                    "fraction": "7/10"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.8933333333333333,
+                  "fraction": "67/75"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.0389321468298109,
+                    "fraction": "35/899"
+                  },
+                  "escalation": {
+                    "decimal": -0.00904977375565611,
+                    "fraction": "-2/221"
+                  },
+                  "order": {
+                    "decimal": 0.004449388209121246,
+                    "fraction": "4/899"
+                  },
+                  "other": {
+                    "decimal": -0.022321428571428572,
+                    "fraction": "-5/224"
+                  },
+                  "question": {
+                    "decimal": -0.03333333333333333,
+                    "fraction": "-1/30"
+                  }
+                },
+                "s": {
+                  "decimal": -0.03333333333333333,
+                  "fraction": "-1/30"
+                }
+              }
+            }
+          ],
+          "textId": "m-definitions"
+        },
+        {
+          "auc": 0.6028054298642533,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "complaint": {
+                  "decimal": 0.8333333333333334,
+                  "fraction": "5/6"
+                },
+                "escalation": {
+                  "decimal": 0.8833333333333333,
+                  "fraction": "53/60"
+                },
+                "order": {
+                  "decimal": 0.95,
+                  "fraction": "19/20"
+                },
+                "other": {
+                  "decimal": 0.9,
+                  "fraction": "9/10"
+                },
+                "question": {
+                  "decimal": 0.75,
+                  "fraction": "3/4"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.75,
+                "fraction": "3/4"
+              },
+              "nClass": {
+                "complaint": 60,
+                "escalation": 60,
+                "order": 60,
+                "other": 60,
+                "question": 60
+              },
+              "s": {
+                "decimal": 0.8433333333333334,
+                "fraction": "253/300"
+              },
+              "s350": {
+                "decimal": 0.8444856713137416,
+                "fraction": "405442150527887/480105423099900"
+              },
+              "tLH_ms": {
+                "decimal": 368.1925384784688,
+                "fraction": "200043926291625/543313362944"
+              },
+              "tL_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "td_ms": {
+                "decimal": 39.066676970299646,
+                "fraction": "1006740599705/25769803776"
+              },
+              "unfixableByClass": {
+                "complaint": 0,
+                "escalation": 0,
+                "order": 0,
+                "other": 0,
+                "question": 0
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": -0.75,
+                "fraction": "-3/4"
+              },
+              {
+                "decimal": 0.8433333333333334,
+                "fraction": "253/300"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "c": 0.6487571618689297,
+              "s": {
+                "decimal": 0.8433333333333334,
+                "fraction": "253/300"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": 0.6028054298642533,
+          "maxProbDropped": 0,
+          "overLimit": {
+            "k": 0,
+            "n": 300
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "c": 0.6646017326553577,
+                "s": {
+                  "decimal": 0.8533333333333334,
+                  "fraction": "64/75"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.9032258064516129,
+                    "fraction": "28/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.9230769230769231,
+                    "fraction": "12/13"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.90625,
+                    "fraction": "29/32"
+                  },
+                  "question": {
+                    "decimal": 0.7666666666666667,
+                    "fraction": "23/30"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.8533333333333334,
+                  "fraction": "64/75"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.7931034482758621,
+                    "fraction": "23/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.8823529411764706,
+                    "fraction": "15/17"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.8928571428571429,
+                    "fraction": "25/28"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.86,
+                  "fraction": "43/50"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": -0.11012235817575083,
+                    "fraction": "-99/899"
+                  },
+                  "escalation": {
+                    "decimal": -0.04072398190045249,
+                    "fraction": "-9/221"
+                  },
+                  "order": {
+                    "decimal": -0.004449388209121246,
+                    "fraction": "-4/899"
+                  },
+                  "other": {
+                    "decimal": -0.013392857142857142,
+                    "fraction": "-3/224"
+                  },
+                  "question": {
+                    "decimal": -0.03333333333333333,
+                    "fraction": "-1/30"
+                  }
+                },
+                "s": {
+                  "decimal": 0.006666666666666667,
+                  "fraction": "1/150"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "c": 0.5614456756879216,
+                "s": {
+                  "decimal": 0.7466666666666667,
+                  "fraction": "56/75"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.7586206896551724,
+                    "fraction": "22/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.7352941176470589,
+                    "fraction": "25/34"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.8571428571428571,
+                    "fraction": "6/7"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.7466666666666667,
+                  "fraction": "56/75"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.9032258064516129,
+                    "fraction": "28/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.8461538461538461,
+                    "fraction": "11/13"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.8125,
+                    "fraction": "13/16"
+                  },
+                  "question": {
+                    "decimal": 0.6666666666666666,
+                    "fraction": "2/3"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.7266666666666667,
+                  "fraction": "109/150"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.1446051167964405,
+                    "fraction": "130/899"
+                  },
+                  "escalation": {
+                    "decimal": 0.11085972850678733,
+                    "fraction": "49/442"
+                  },
+                  "order": {
+                    "decimal": 0.004449388209121246,
+                    "fraction": "4/899"
+                  },
+                  "other": {
+                    "decimal": -0.044642857142857144,
+                    "fraction": "-5/112"
+                  },
+                  "question": {
+                    "decimal": -0.06666666666666667,
+                    "fraction": "-1/15"
+                  }
+                },
+                "s": {
+                  "decimal": -0.02,
+                  "fraction": "-1/50"
+                }
+              }
+            }
+          ],
+          "textId": "m-precedence"
+        },
+        {
+          "auc": 0.6407520564042303,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "complaint": {
+                  "decimal": 0.9333333333333333,
+                  "fraction": "14/15"
+                },
+                "escalation": {
+                  "decimal": 0.95,
+                  "fraction": "19/20"
+                },
+                "order": {
+                  "decimal": 0.9333333333333333,
+                  "fraction": "14/15"
+                },
+                "other": {
+                  "decimal": 0.9333333333333333,
+                  "fraction": "14/15"
+                },
+                "question": {
+                  "decimal": 0.7333333333333333,
+                  "fraction": "11/15"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.7333333333333333,
+                "fraction": "11/15"
+              },
+              "nClass": {
+                "complaint": 60,
+                "escalation": 60,
+                "order": 60,
+                "other": 60,
+                "question": 60
+              },
+              "s": {
+                "decimal": 0.9233333333333333,
+                "fraction": "277/300"
+              },
+              "s350": {
+                "decimal": 0.8602925216901297,
+                "fraction": "910319536930037/1058151168327750"
+              },
+              "tLH_ms": {
+                "decimal": 370.5926859278643,
+                "fraction": "881792640273125/2379411881984"
+              },
+              "tL_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "td_ms": {
+                "decimal": 31.18188370319937,
+                "fraction": "1607102048795/51539607552"
+              },
+              "unfixableByClass": {
+                "complaint": 0,
+                "escalation": 0,
+                "order": 0,
+                "other": 0,
+                "question": 0
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": -0.7333333333333333,
+                "fraction": "-11/15"
+              },
+              {
+                "decimal": 0.9233333333333333,
+                "fraction": "277/300"
+              }
+            ],
+            "latencyUnmet": true,
+            "policy": {
+              "c": 0.910548326406706,
+              "s": {
+                "decimal": 0.9233333333333333,
+                "fraction": "277/300"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": 0.6407520564042303,
+          "maxProbDropped": 0,
+          "overLimit": {
+            "k": 0,
+            "n": 300
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "c": 0.919934079366331,
+                "s": {
+                  "decimal": 0.9133333333333333,
+                  "fraction": "137/150"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.9230769230769231,
+                    "fraction": "12/13"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.9375,
+                    "fraction": "15/16"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.9133333333333333,
+                  "fraction": "137/150"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.9655172413793104,
+                    "fraction": "28/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.9705882352941176,
+                    "fraction": "33/34"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.9285714285714286,
+                    "fraction": "13/14"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.9533333333333334,
+                  "fraction": "143/150"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.030033370411568408,
+                    "fraction": "27/899"
+                  },
+                  "escalation": {
+                    "decimal": 0.04751131221719457,
+                    "fraction": "21/442"
+                  },
+                  "order": {
+                    "decimal": -0.004449388209121246,
+                    "fraction": "-4/899"
+                  },
+                  "other": {
+                    "decimal": -0.008928571428571428,
+                    "fraction": "-1/112"
+                  },
+                  "question": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  }
+                },
+                "s": {
+                  "decimal": 0.04,
+                  "fraction": "1/25"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "c": 0.8667977771520621,
+                "s": {
+                  "decimal": 0.8933333333333333,
+                  "fraction": "67/75"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.896551724137931,
+                    "fraction": "26/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.9411764705882353,
+                    "fraction": "16/17"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.8928571428571429,
+                    "fraction": "25/28"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.8933333333333333,
+                  "fraction": "67/75"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.9032258064516129,
+                    "fraction": "28/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.9230769230769231,
+                    "fraction": "12/13"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.90625,
+                    "fraction": "29/32"
+                  },
+                  "question": {
+                    "decimal": 0.6666666666666666,
+                    "fraction": "2/3"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.8533333333333334,
+                  "fraction": "64/75"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.006674082313681869,
+                    "fraction": "6/899"
+                  },
+                  "escalation": {
+                    "decimal": -0.01809954751131222,
+                    "fraction": "-4/221"
+                  },
+                  "order": {
+                    "decimal": 0.004449388209121246,
+                    "fraction": "4/899"
+                  },
+                  "other": {
+                    "decimal": 0.013392857142857142,
+                    "fraction": "3/224"
+                  },
+                  "question": {
+                    "decimal": -0.06666666666666667,
+                    "fraction": "-1/15"
+                  }
+                },
+                "s": {
+                  "decimal": -0.04,
+                  "fraction": "-1/25"
+                }
+              }
+            }
+          ],
+          "textId": "m-severity"
+        },
+        {
+          "auc": 0.524838593974175,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "complaint": {
+                  "decimal": 0.85,
+                  "fraction": "17/20"
+                },
+                "escalation": {
+                  "decimal": 0.9333333333333333,
+                  "fraction": "14/15"
+                },
+                "order": {
+                  "decimal": 0.9333333333333333,
+                  "fraction": "14/15"
+                },
+                "other": {
+                  "decimal": 0.9333333333333333,
+                  "fraction": "14/15"
+                },
+                "question": {
+                  "decimal": 0.7333333333333333,
+                  "fraction": "11/15"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.7333333333333333,
+                "fraction": "11/15"
+              },
+              "nClass": {
+                "complaint": 60,
+                "escalation": 60,
+                "order": 60,
+                "other": 60,
+                "question": 60
+              },
+              "s": {
+                "decimal": 0.88,
+                "fraction": "22/25"
+              },
+              "s350": {
+                "decimal": 0.8582492517517735,
+                "fraction": "144395003453074/168243669491525"
+              },
+              "tLH_ms": {
+                "decimal": 370.94963881061244,
+                "fraction": "841218347457625/2267742732288"
+              },
+              "tL_ms": {
+                "decimal": 369.67695106684306,
+                "fraction": "19053004979005/51539607552"
+              },
+              "td_ms": {
+                "decimal": 31.63275005320126,
+                "fraction": "3260679047065/103079215104"
+              },
+              "unfixableByClass": {
+                "complaint": 0,
+                "escalation": 0,
+                "order": 0,
+                "other": 0,
+                "question": 0
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": -0.7333333333333333,
+                "fraction": "-11/15"
+              },
+              {
+                "decimal": 0.88,
+                "fraction": "22/25"
+              }
+            ],
+            "latencyUnmet": true,
+            "policy": {
+              "c": 0.8147498831573443,
+              "s": {
+                "decimal": 0.88,
+                "fraction": "22/25"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": 0.524838593974175,
+          "maxProbDropped": 0,
+          "overLimit": {
+            "k": 0,
+            "n": 300
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "c": 0.8147498831573443,
+                "s": {
+                  "decimal": 0.84,
+                  "fraction": "21/25"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.8387096774193549,
+                    "fraction": "26/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.8846153846153846,
+                    "fraction": "23/26"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.9375,
+                    "fraction": "15/16"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.84,
+                  "fraction": "21/25"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.8620689655172413,
+                    "fraction": "25/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.9705882352941176,
+                    "fraction": "33/34"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.9285714285714286,
+                    "fraction": "13/14"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.92,
+                  "fraction": "23/25"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.02335928809788654,
+                    "fraction": "21/899"
+                  },
+                  "escalation": {
+                    "decimal": 0.08597285067873303,
+                    "fraction": "19/221"
+                  },
+                  "order": {
+                    "decimal": -0.004449388209121246,
+                    "fraction": "-4/899"
+                  },
+                  "other": {
+                    "decimal": -0.008928571428571428,
+                    "fraction": "-1/112"
+                  },
+                  "question": {
+                    "decimal": 0.0,
+                    "fraction": "0/1"
+                  }
+                },
+                "s": {
+                  "decimal": 0.08,
+                  "fraction": "2/25"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "c": 0.6240309957391192,
+                "s": {
+                  "decimal": 0.7533333333333333,
+                  "fraction": "113/150"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.7586206896551724,
+                    "fraction": "22/29"
+                  },
+                  "escalation": {
+                    "decimal": 0.7352941176470589,
+                    "fraction": "25/34"
+                  },
+                  "order": {
+                    "decimal": 0.9310344827586207,
+                    "fraction": "27/29"
+                  },
+                  "other": {
+                    "decimal": 0.8928571428571429,
+                    "fraction": "25/28"
+                  },
+                  "question": {
+                    "decimal": 0.7333333333333333,
+                    "fraction": "11/15"
+                  }
+                },
+                "n": {
+                  "complaint": 29,
+                  "escalation": 34,
+                  "order": 29,
+                  "other": 28,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.7533333333333333,
+                  "fraction": "113/150"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": 0.7419354838709677,
+                    "fraction": "23/31"
+                  },
+                  "escalation": {
+                    "decimal": 0.6153846153846154,
+                    "fraction": "8/13"
+                  },
+                  "order": {
+                    "decimal": 0.9354838709677419,
+                    "fraction": "29/31"
+                  },
+                  "other": {
+                    "decimal": 0.875,
+                    "fraction": "7/8"
+                  },
+                  "question": {
+                    "decimal": 0.6,
+                    "fraction": "3/5"
+                  }
+                },
+                "n": {
+                  "complaint": 31,
+                  "escalation": 26,
+                  "order": 31,
+                  "other": 32,
+                  "question": 30
+                },
+                "s": {
+                  "decimal": 0.6666666666666666,
+                  "fraction": "2/3"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "complaint": {
+                    "decimal": -0.01668520578420467,
+                    "fraction": "-15/899"
+                  },
+                  "escalation": {
+                    "decimal": -0.11990950226244344,
+                    "fraction": "-53/442"
+                  },
+                  "order": {
+                    "decimal": 0.004449388209121246,
+                    "fraction": "4/899"
+                  },
+                  "other": {
+                    "decimal": -0.017857142857142856,
+                    "fraction": "-1/56"
+                  },
+                  "question": {
+                    "decimal": -0.13333333333333333,
+                    "fraction": "-2/15"
+                  }
+                },
+                "s": {
+                  "decimal": -0.08666666666666667,
+                  "fraction": "-13/150"
+                }
+              }
+            }
+          ],
+          "textId": "m-context"
+        }
+      ]
+    }
+  },
+  "datasetVersion": "v2",
+  "decisionModel": "laya",
+  "decisionTimeoutSeconds": 180.0,
+  "dispositions": {
+    "byClass": [
+      {
+        "ceiling": {
+          "decimal": 1.0,
+          "fraction": "1/1"
+        },
+        "k": 0,
+        "kWrong": 0,
+        "label": "complaint",
+        "nClass": 60
+      },
+      {
+        "ceiling": {
+          "decimal": 1.0,
+          "fraction": "1/1"
+        },
+        "k": 0,
+        "kWrong": 0,
+        "label": "escalation",
+        "nClass": 60
+      },
+      {
+        "ceiling": {
+          "decimal": 1.0,
+          "fraction": "1/1"
+        },
+        "k": 0,
+        "kWrong": 0,
+        "label": "order",
+        "nClass": 60
+      },
+      {
+        "ceiling": {
+          "decimal": 1.0,
+          "fraction": "1/1"
+        },
+        "k": 0,
+        "kWrong": 0,
+        "label": "other",
+        "nClass": 60
+      },
+      {
+        "ceiling": {
+          "decimal": 1.0,
+          "fraction": "1/1"
+        },
+        "k": 0,
+        "kWrong": 0,
+        "label": "question",
+        "nClass": 60
+      }
+    ],
+    "cellCounts": null,
+    "items": []
+  },
+  "fitOrdinal": 2,
+  "handoffModel": "google/gemma-3-4b",
+  "handoffSha256": "7c0d089af2bdfc4f262b89344a4b054022807c61585f012acf049e226341d7b7",
+  "questionsSha256": "51a38140bbd293ff2f136f91911ea1bede8156abb17b6e76c9977d4fe342b673",
+  "residency": {
+    "end": [
+      {
+        "id": "laya",
+        "state": "loaded"
+      },
+      {
+        "id": "google/gemma-3-4b",
+        "state": "loaded"
+      }
+    ],
+    "start": [
+      {
+        "id": "laya",
+        "state": "loaded"
+      },
+      {
+        "id": "google/gemma-3-4b",
+        "state": "loaded"
+      }
+    ]
+  },
+  "role": "message-type-classifier",
+  "schema": "decision-models.fit-report/1"
+}
