@@ -77,6 +77,10 @@ _ANCHORS = {
     "cp_keys": "MATCH (cp:ContractPoint) WHERE cp.kind = $kind RETURN cp.cpId, cp.keyNorm",
     "snapshot": "MATCH (s:Snapshot) RETURN s.snapshotId, s.verdictLogOffset, s.verdictLogHash, s.graphModelVersion, s.bundleSchemaVersion",
     "units": "UNWIND $ids AS i MATCH (u:Unit {unitId: i}) RETURN u.unitId, u.repoId, u.rootPath, u.language, u.buildStatus, u.builtCommit, u.builtAt, u.failedAt, u.failReason, u.flowAvailable",
+    # path-suffix reads (a partial path; ``-p1-graph.md`` §5): label scans by design, a fallback after the exact reads; ``$sep`` is always "/", so the match is at a
+    # segment boundary; LIMIT is OPTIONS_MAX + 1, so a full reply means "more than OPTIONS_MAX"
+    "file_by_suffix": f"MATCH (f:File) WHERE f.repoId IN $repos AND ($sep + f.path) ENDS WITH $suffix RETURN f.repoId, f.path, f.fileId, f.unitId ORDER BY f.repoId, f.path LIMIT {config.OPTIONS_MAX + 1}",
+    "skipped_by_suffix": f"MATCH (s:SkippedFile) WHERE s.repoId IN $repos AND ($sep + s.path) ENDS WITH $suffix RETURN s.repoId, s.path, s.unitId, s.reason ORDER BY s.repoId, s.path LIMIT {config.OPTIONS_MAX + 1}",
 }
 
 _IMPACT = {
@@ -196,6 +200,8 @@ def _check_params(name: str, text: str, params: Mapping[str, Any] | None) -> dic
         raise ReaderError(f"query {name!r}: parameters are {sorted(wanted)}")
     for key, value in params.items():
         if key == "ids":
+            ok = isinstance(value, (list, tuple)) and all(isinstance(v, str) for v in value)
+        elif key == "repos":
             ok = isinstance(value, (list, tuple)) and all(isinstance(v, str) for v in value)
         elif key == "pairs":
             ok = isinstance(value, (list, tuple)) and all(

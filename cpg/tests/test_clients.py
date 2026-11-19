@@ -1055,3 +1055,29 @@ def test_an_auth_failure_is_recognised_through_a_subclass_of_the_drivers_class()
             call()
         assert PLANTED not in str(info.value)
     assert common._is_auth_failure(TokenExpired()) and not common._is_auth_failure(ConnectionError())
+
+
+# ------------------------------------------------------------------------------------------------------------------ P1-25b review F6 (d)
+
+@pytest.mark.parametrize("system", ["", {}, 0, [], False])
+def test_a_falsy_wrong_typed_system_is_a_bad_request_never_the_default_system(system):
+    """F6 (d): ``system: ""``, ``{}``, ``0`` named a system badly; they never fall back to ``CCG_SYSTEM`` or the default manifest's."""
+    with pytest.raises(BadRequest, match="system"):
+        common.resolve_system(system, {"CCG_SYSTEM": "shop"})
+    with pytest.raises(BadRequest):
+        Client(system, host="127.0.0.1", port=16399, env={"CCG_SYSTEM": "shop"})
+    assert common.resolve_system(None, {"CCG_SYSTEM": "shop"}) == "shop"
+
+
+@pytest.mark.parametrize("system", ["", {}, 0])
+def test_a_falsy_system_argument_to_an_mcp_tool_is_the_typed_bad_request(system):
+    write_credentials()
+    is_error, text, _ = mcp_call("raw_query", {"cypher": "RETURN 1", "system": system},
+                                 factory=lambda s: Client(s, host="127.0.0.1", port=16399, raw_connect=lambda *a, **k: FakeDB()))
+    assert is_error and json.loads(text)["error"]["code"] == "bad-request", text
+
+
+def test_an_empty_system_flag_on_the_cli_is_a_bad_request():
+    out, err = io.StringIO(), io.StringIO()
+    assert cli.main(["--system", "", "raw", "--cypher", "RETURN 1"], stdout=out, stderr=err) == 2
+    assert out.getvalue() == "" and json.loads(err.getvalue())["error"]["code"] == "bad-request"

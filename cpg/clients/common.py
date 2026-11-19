@@ -11,8 +11,11 @@ The CLI (``clients/cli/main.py``) and the MCP server (``clients/mcp/server.py``)
   An anchor that does not resolve to exactly one candidate is a typed ``anchor-ambiguous``/``anchor-unresolved`` error carrying the candidates (``resolve`` lists them);
   the answer's own ambiguous/unresolved documents belong to the plain-language front (P1-26).
 * **Plain-language question.** :meth:`Client.ask` takes ``question=`` and hands it to the ``front`` seam, ``front(question, reader=..., cache_bypass=...) -> canonical answer``.
-  The default seam is ``None``, so a question returns the typed ``not-built`` error. The front is injected: ``Client.__init__`` only stores ``front=``, and the CLI's default factory passes none, so P1-26 must also edit this module (or the CLI factory) to wire its front in. ``cache_bypass`` reaches the
-  front and has no effect on a structured request, nothing records it there (spec2 §2).
+  ``front=`` injects one; by default the client builds ``ccg.front.Front`` (imported lazily, P1-26) over the default manifest's repoIds (:func:`system_repos`), whose builder
+  opens a fresh engine reader. A front's ``precheck(question)``, when it has one, runs before any reader opens. The front's ``NotBuiltAsk`` (a diff, a stack trace,
+  an unbuilt use case, a scope, two anchors, free prose while the interpreter is not built) is the typed ``not-built`` error with the front's ``detail`` (the request
+  echoed). The front builds the ``ambiguous`` and ``unresolved`` documents (``options`` with ``rank``). ``cache_bypass`` reaches the front and has no effect on a
+  structured request, nothing records it there (spec2 §2).
 * **Validate first, render only a valid document** (8): :meth:`Client.ask` validates what the builder or the front returned before it leaves, and :func:`render_answer` validates
   before it calls a renderer.
 * **The flow notice is never dropped** (9): the canonical document is returned unchanged, so ``notices`` is in it; the text and Markdown forms are ``ccg.render.render_text`` and
@@ -125,6 +128,8 @@ class RefreshFailed(ClientError):
 def resolve_system(explicit: str | None = None, env: Mapping[str, str] | None = None) -> str:
     """The system the client works on: the explicit name, else ``CCG_SYSTEM``, else the default manifest's ``system``. Always a name ``check_system_name`` accepted."""
     env = os.environ if env is None else env
+    if explicit is not None and (not isinstance(explicit, str) or not explicit):     # "", {}, 0 are a caller's mistake, never "use the default"
+        raise BadRequest("system is a non-empty string")
     name = explicit or env.get("CCG_SYSTEM")
     if not name:
         try:
@@ -135,6 +140,15 @@ def resolve_system(explicit: str | None = None, env: Mapping[str, str] | None = 
         return sysname.check_system_name(name)
     except sysname.SystemNameError as exc:
         raise BadRequest(f"invalid system name ({exc})"[:200]) from None
+
+
+def system_repos(system: str) -> tuple[str, ...]:
+    """The repoIds of ``system`` from the default manifest (the one ``ccg.refresh`` builds from), or ``()`` when that manifest is unusable or names another system."""
+    try:
+        manifest = load_manifest(DEFAULT_MANIFEST)
+    except (ManifestError, OSError):
+        return ()
+    return tuple(r.repo_id for r in manifest.repos) if manifest.system == system else ()
 
 
 def endpoint(env: Mapping[str, str] | None = None) -> tuple[str, int]:
@@ -356,10 +370,7 @@ class Client:
         if question is not None:
             if not isinstance(question, str) or not question.strip():
                 raise BadRequest("a question is a non-empty string")
-            if self._front is None:
-                raise NotBuilt("the plain-language front is not built yet (P1-26); send a structured request",
-                               detail={"surface": "plain-language-question"})
-            doc = self._front(question, reader=self._reader(), cache_bypass=cache_bypass)
+            doc = self._ask_front(question, cache_bypass)
         else:
             use_case, spec = parse_request(request)
             try:
@@ -374,6 +385,27 @@ class Client:
         except answer.AnswerError as exc:
             raise StoreError(f"the answer does not validate ({str(exc)[:80]})") from None
         return doc
+
+    def _default_front(self):
+        """``ccg.front.Front`` over the system's repoIds, building over a fresh engine reader per answer (``recipe.queries`` lists the walk's reads only, AC-16).
+        Imported here, not at module level: a client that is never asked a question loads no front module."""
+        from ccg import front as front_mod
+        return front_mod.Front(system_repos(self.system), lambda anchor, direction: self._builder(self._reader(), anchor, question=direction))
+
+    def _ask_front(self, question: str, cache_bypass: bool) -> dict:
+        from ccg.front import NotBuiltAsk
+        front = self._front if self._front is not None else self._default_front()
+        try:
+            precheck = getattr(front, "precheck", None)
+            if precheck is not None:
+                precheck(question)                              # a question this build cannot answer is refused before any reader opens
+            return front(question, reader=self._reader(), cache_bypass=cache_bypass)
+        except NotBuiltAsk as exc:
+            raise NotBuilt(str(exc)[:300], detail=exc.detail) from None
+        except ReaderError as exc:
+            raise StoreError(str(exc)) from None
+        except answer.AnswerError as exc:
+            raise StoreError(f"the answer does not validate ({str(exc)[:80]})") from None
 
     # (3)
     def refresh(self, scope: Sequence[str] | None = None) -> dict[str, Any]:

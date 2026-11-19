@@ -21,6 +21,11 @@ for every imported name (``a`` for ``*``), so ``from ccg import broker`` is ``cc
     ``pip``, ``python`` ...) or ``sys.executable``;
   - every string, one word or many, inside a process-launching call (:data:`LAUNCHERS`: ``subprocess.*``, ``os.system``/``popen``/``exec*``/``spawn*``);
   - a bare tool name assigned to a variable (``TOOL = "curl"``), and a tool name concatenated from string literals (``"cu" + "rl"``).
+  - a launcher bound to another name (``run = os.system``, a default ``go=subprocess.run``, ``from subprocess import run as go``): rule ``launcher-alias``. The reviewed-prose
+    exemption below holds only while ``ManifestError`` is one class definition in ``ccg/manifest.py`` and bound nowhere else.
+  **Not flagged (known limits, the static limit again):** a launcher passed as an argument (``map(os.system, cmds)``), held in a dict or list that is not an assignment
+  value of the checked shape (``{"go": os.system}`` inside a call), wrapped by ``functools.partial``, fetched by ``getattr(os, "system")``, or reached through a module
+  alias (``m = os; m.system(c)``, ``import os as m``): a call by the alias is judged by its call name only.
 
   **Not caught (the static limit):** a name assembled at run time from non-literal pieces (``"".join(parts)``, a value read from a file or the environment), and a tool
   word kept as data in a list that is not argv-shaped and never reaches a launcher call in the same expression. A tool name as data (a word list, a set of names) is
@@ -69,8 +74,11 @@ INTERPRETERS = ("python", "python3", "sys.executable", "node", "perl", "ruby", "
 #: first elements that make a list an argv: the program runs what follows
 WRAPPERS = ("sh", "bash", "dash", "zsh", "env", "timeout", "nohup", "sudo", "xargs", "nice", "stdbuf", "setsid", "git", "pip", "pip3", "uv", "npm", "npx", "pnpm",
             "yarn", "python", "python3", "docker", "podman", "node")
-#: (module, exact string) pairs reviewed as prose, not commands: the same words in any other string, or in a launch or argv, still fail
-COMMAND_PROSE = {("ccg/manifest.py", "git fetch is not enabled in P1: a repository must not name a `remote`")}     # a ManifestError message
+#: (module, exception class, exact string) reviewed as prose, not commands: exempt only as the first argument of ``raise <class>(...)`` in that module; the same words
+#: assigned to a variable, in any other string, or in a launch or argv, still fail
+COMMAND_PROSE = {("ccg/manifest.py", "ManifestError", "git fetch is not enabled in P1: a repository must not name a `remote`")}
+#: modules whose launchers must be called by their own name, never bound to another (``launcher-alias``)
+LAUNCHER_MODULES = ("os", "subprocess", "pty", "asyncio")
 #: call names that start a process (``subprocess``, ``os``, ``pty``, ``asyncio``)
 LAUNCHERS = ("run", "Popen", "call", "check_call", "check_output", "getoutput", "getstatusoutput", "system", "popen", "execv", "execve", "execvp", "execvpe",
              "execl", "execle", "execlp", "execlpe", "spawnv", "spawnve", "spawnvp", "spawnvpe", "spawnl", "spawnle", "spawnlp", "spawnlpe", "posix_spawn",
@@ -169,10 +177,10 @@ def _element_words(node: ast.AST) -> list[str]:
     return _words(text) if text is not None else []
 
 
-def _command_violations(rel: str, node: ast.AST, docstrings: set[int]) -> list[Violation]:
+def _command_violations(rel: str, node: ast.AST, exempt: set[int]) -> list[Violation]:
     found: list[tuple[int, str]] = []
     text = _str(node)
-    if text is not None and id(node) not in docstrings and not isinstance(node, ast.BinOp) and len(text.split()) > 1 and (rel, text) not in COMMAND_PROSE:
+    if text is not None and id(node) not in exempt and not isinstance(node, ast.BinOp) and len(text.split()) > 1:
         found += [(node.lineno, h) for h in _hits(_words(text))]                           # a shell line: every word
     elif isinstance(node, ast.BinOp) and text is not None:
         found += [(node.lineno, h) for h in _hits(_words(text))]                           # a concatenated literal: "cu" + "rl"
@@ -196,6 +204,55 @@ def _docstrings(tree: ast.AST) -> set[int]:
     return {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant) and isinstance(n.value.value, str)}
 
 
+def _binds(tree: ast.AST, name: str) -> tuple[int, int]:
+    """``(class definitions, every other binding)`` of ``name`` in the module: an assignment or other store, an import (``as`` included), a function definition."""
+    classes = others = 0
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ClassDef) and n.name == name:
+            classes += 1
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name:
+            others += 1
+        elif isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, (ast.Store, ast.Del)):
+            others += 1
+        elif isinstance(n, ast.alias) and (n.asname or n.name.partition(".")[0]) == name:
+            others += 1
+        elif isinstance(n, ast.arg) and n.arg == name:
+            others += 1
+    return classes, others
+
+
+def _reviewed_prose(rel: str, tree: ast.AST) -> set[int]:
+    """The string nodes :data:`COMMAND_PROSE` exempts: the first argument of ``raise <class>("<text>")`` in the named module, with that exact text, where ``<class>`` is a
+    class defined once in that module and bound nowhere else (an alias such as ``ManifestError = os.system`` would run the text)."""
+    out = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Raise) and isinstance(n.exc, ast.Call) and isinstance(n.exc.func, ast.Name) and n.exc.args:
+            arg = n.exc.args[0]
+            if (rel, n.exc.func.id, _str(arg)) in COMMAND_PROSE and _binds(tree, n.exc.func.id) == (1, 0):
+                out.add(id(arg))
+    return out
+
+
+def _launcher_aliases(rel: str, tree: ast.AST) -> list[Violation]:
+    """A launcher bound to another name instead of called (``run = os.system``, a default ``run=subprocess.run``, ``from subprocess import run as go``): the call by
+    the new name is judged by its name, so the alias would hide it. A bare reference in an annotation or an ``except`` clause is not a binding and is not flagged."""
+    out = []
+    for n in ast.walk(tree):
+        values: list[ast.AST] = []
+        if isinstance(n, (ast.Assign, ast.AnnAssign, ast.NamedExpr)) and n.value is not None:
+            values = [n.value]
+        elif isinstance(n, ast.arguments):
+            values = [d for d in (*n.defaults, *n.kw_defaults) if d is not None]
+        elif isinstance(n, ast.ImportFrom) and n.module in LAUNCHER_MODULES:
+            out += [Violation(rel, n.lineno, "launcher-alias", f"{n.module}.{a.name} as {a.asname}") for a in n.names if a.asname and a.name in LAUNCHERS]
+        for v in values:
+            for e in (v.elts if isinstance(v, (ast.Tuple, ast.List)) else [v]):
+                dotted = _dotted(e) if isinstance(e, ast.Attribute) else None
+                if dotted and dotted.partition(".")[0] in LAUNCHER_MODULES and dotted.rpartition(".")[2] in LAUNCHERS:
+                    out.append(Violation(rel, e.lineno, "launcher-alias", dotted))
+    return out
+
+
 def _dotted(node: ast.AST) -> str | None:
     parts = []
     while isinstance(node, ast.Attribute):
@@ -209,7 +266,7 @@ def _dotted(node: ast.AST) -> str | None:
 def scan_source(rel: str, source: str) -> list[Violation]:
     """The violations of one module, ``rel`` its path relative to ``cpg/`` (POSIX)."""
     tree = ast.parse(source, filename=rel)
-    docs = _docstrings(tree)
+    exempt = _docstrings(tree) | _reviewed_prose(rel, tree)
     inner = {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Attribute)}           # only the outermost attribute chain is judged as a dotted name
     out: list[Violation] = []
     for node in ast.walk(tree):
@@ -228,7 +285,8 @@ def scan_source(rel: str, source: str) -> list[Violation]:
             out.append(Violation(rel, node.lineno, "dynamic-import", _str(node)))
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in EVAL_CALLS:
             out.append(Violation(rel, node.lineno, "dynamic-eval", node.func.id))
-        out.extend(_command_violations(rel, node, docs))
+        out.extend(_command_violations(rel, node, exempt))
+    out.extend(_launcher_aliases(rel, tree))
     return out
 
 
@@ -401,9 +459,36 @@ COMMAND_MUTANTS = [(label, target, plant, "network-tool-command") for label, tar
     ("git fetch in manifest.py, not the reviewed message", "ccg/manifest.py", "\nimport subprocess\nsubprocess.run(['git', 'fetch'])\n"),
     ("the reviewed message's words as a shell line elsewhere", "ccg/answer.py", "\n_C = 'git fetch is not enabled in P1: a repository must not name a `remote`'\n"),
     ("another git fetch line in manifest.py", "ccg/manifest.py", "\n_C = 'git fetch origin'\n"),
+    # P1-25b review F7: the two scanner arms no other row pins, and the exemption held to its raise node
+    ("a shell line concatenated from literals, kept in a variable", "ccg/units.py", "\n_M = 'cu' + 'rl -s http://x'\n"),
+    ("a wrapper-led argv kept in a variable, launched later", "ccg/units.py", "\nimport subprocess\nCMD = ['git', 'clone']\nsubprocess.run(CMD)\n"),
+    ("the reviewed message assigned in manifest.py and passed to os.system", "ccg/manifest.py",
+     "\nimport os\nCMD = 'git fetch is not enabled in P1: a repository must not name a `remote`'\nos.system(CMD)\n"),
+    ("the reviewed message raised as another exception in manifest.py", "ccg/manifest.py",
+     "\ndef _m():\n    raise ValueError('git fetch is not enabled in P1: a repository must not name a `remote`')\n"),
+    ("the reviewed raise in another module", "ccg/answer.py",
+     "\nclass ManifestError(Exception):\n    pass\n\n\ndef _m():\n    raise ManifestError('git fetch is not enabled in P1: a repository must not name a `remote`')\n"),
+    # P1-26 review m3: the exemption trusts the class name, so a rebinding of that name voids it
+    ("ManifestError rebound to os.system beside the reviewed raise", "ccg/manifest.py",
+     "\nimport os\nManifestError = os.system\n\n\ndef _m():\n    raise ManifestError('git fetch is not enabled in P1: a repository must not name a `remote`')\n"),
+    ("ManifestError imported as os.system beside the reviewed raise", "ccg/manifest.py",
+     "\nfrom os import system as ManifestError\n\n\ndef _m():\n    raise ManifestError('git fetch is not enabled in P1: a repository must not name a `remote`')\n"),
+    ("ManifestError redefined as a function beside the reviewed raise", "ccg/manifest.py",
+     "\ndef ManifestError(c):\n    return c\n\n\ndef _m():\n    raise ManifestError('git fetch is not enabled in P1: a repository must not name a `remote`')\n"),
 ]]
 
-MUTANTS = MUTANTS + FAMILY_MUTANTS + BROKER_MUTANTS + DYNAMIC_MUTANTS + COMMAND_MUTANTS
+#: a launcher bound to another name is judged by the new name, so the binding itself is the violation
+ALIAS_MUTANTS = [(label, target, plant, "launcher-alias") for label, target, plant in [
+    ("a launcher assigned to a name", "ccg/units.py", "\nimport os\nrun_it = os.system\n"),
+    ("a subprocess launcher assigned to a name", "ccg/units.py", "\nimport subprocess\nGO = subprocess.run\n"),
+    ("a launcher assigned in a tuple", "ccg/units.py", "\nimport os\nA, B = os.system, os.popen\n"),
+    ("a launcher as an annotated assignment", "ccg/units.py", "\nimport subprocess\nGO: object = subprocess.Popen\n"),
+    ("a launcher as a default argument", "ccg/units.py", "\nimport subprocess\n\n\ndef _f(go=subprocess.run):\n    return go\n"),
+    ("a launcher imported under another name", "ccg/units.py", "\nfrom subprocess import run as go\n"),
+    ("a launcher bound by a walrus", "ccg/units.py", "\nimport os\nif (go := os.system):\n    pass\n"),
+]]
+
+MUTANTS = MUTANTS + FAMILY_MUTANTS + BROKER_MUTANTS + DYNAMIC_MUTANTS + COMMAND_MUTANTS + ALIAS_MUTANTS
 
 
 def _copy_scope(dst: Path) -> None:
@@ -454,7 +539,7 @@ def test_the_future_front_passes_unchanged_with_its_granted_broker_imports(tmp_p
     _copy_scope(tmp_path)
     front = tmp_path / "ccg" / "front"
     front.mkdir(exist_ok=True)
-    files = {"__init__.py": "", "interpret.py": "from ccg.broker.client import BrokerClient\n", "summary.py": "from ccg.broker import client\nimport ccg.broker.client\n",
+    files = {"__init__.py": "", "draft.py": "from dataclasses import dataclass\n", "interpret.py": "from ccg.broker.client import BrokerClient\n", "summary.py": "from ccg.broker import client\nimport ccg.broker.client\n",
              "parsers.py": "import re\nfrom urllib.parse import urlsplit\n", "resolve.py": "from ccg.engine import anchors\n",
              "cache.py": "from ccg.answer import cache_key\n"}
     for fname, text in files.items():
@@ -483,3 +568,18 @@ def test_the_allow_lists_are_exactly_the_specs():
     assert STORE_CLIENTS == ("ccg/store/", "ccg/engine/reader.py", "clients/common.py")
     assert BROKER_CLIENTS == ("ccg/refresh.py", "ccg/front/interpret.py", "ccg/front/summary.py")
     assert EXCLUDED == ("ccg/broker",) and SCOPE == ("ccg", "extractors", "clients")
+
+
+def test_the_reviewed_prose_exemption_needs_manifest_error_to_be_a_class_defined_once_and_bound_nowhere_else():
+    raise_ = f"\n\ndef _m():\n    raise ManifestError({next(iter(COMMAND_PROSE))[2]!r})\n"
+    assert scan_source("ccg/manifest.py", "class ManifestError(ValueError):\n    pass\n" + raise_) == []
+    for label, head in [("imported, not defined", "from ccg.other import ManifestError\n"), ("not defined at all", ""), ("defined twice", "class ManifestError(ValueError):\n    pass\n"
+                                                                                                                      "class ManifestError(ValueError):\n    pass\n"),
+                        ("rebound by assignment", "class ManifestError(ValueError):\n    pass\nManifestError = print\n")]:
+        assert [v.rule for v in scan_source("ccg/manifest.py", head + raise_)] == ["network-tool-command"], label
+
+
+def test_a_launcher_named_in_an_annotation_or_an_except_clause_or_called_by_its_own_name_is_not_an_alias():
+    src = ("import subprocess\nimport os\n\n\ndef _f(p: subprocess.Popen) -> None:\n    try:\n        os.system(_c())\n    except subprocess.TimeoutExpired:\n        pass\n"
+           "    p2: subprocess.Popen | None = None\n    from subprocess import run\n    run(['ls'])\n")
+    assert [v for v in scan_source("ccg/units.py", src) if v.rule == "launcher-alias"] == []

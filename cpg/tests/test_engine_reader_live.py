@@ -91,7 +91,7 @@ def _params(text):
     out = {}
     for p in sorted(set(re.findall(r"\$([a-z]+)", text))):
         out[p] = {"ids": ["s_f"], "pairs": [["l1", "c_fetch1"]], "repo": "repo-a", "path": "app/a.py", "qname": "app.Outer", "name": "run",
-                  "key": "GET /shop/api/health", "kind": "http"}[p]
+                  "key": "GET /shop/api/health", "kind": "http", "repos": ["repo-a"], "sep": "/", "suffix": "/a.py"}[p]
     return out
 
 
@@ -127,10 +127,13 @@ def test_explain_of_every_text_seeks_an_index_never_scans_a_label_except_the_two
     for name, text in EXPECTED.items():
         plan = str(world.engine_db.select_graph(LIVE).explain(text, _params(text)))
         scans[name] = ("Node By Index Scan" in plan, "Label Scan" in plan, plan)
-    by_design = {"cp_keys", "snapshot"}
+    by_design = {"cp_keys", "snapshot", "file_by_suffix", "skipped_by_suffix"}
     for name, (index, label, plan) in scans.items():
         if name in by_design:
-            assert label, name
+            if name == "skipped_by_suffix":      # observed: with the v1 DDL's SkippedFile.repoId index the planner seeks the repoId IN list (a filter on path follows); no path seek
+                assert "Node By Index Scan" in plan and "Label Scan" not in plan, name
+            else:
+                assert label, name
         else:
             assert index and not label, (name, plan)
     control = str(world.engine_db.select_graph(LIVE).explain("MATCH (s:Symbol) WHERE toLower(s.qname) = $q RETURN s.symbolId", {"q": "x"}))

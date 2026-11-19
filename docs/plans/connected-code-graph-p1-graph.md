@@ -1,8 +1,8 @@
 # Connected code graph: graph model 1.1 for P1 (N-GRAPH)
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** C-1001 (P1) · **Version:** 3 · **Extends:** `docs/plans/connected-code-graph-p0-graph.md` · **Reviews:** `docs/reviews/connected-code-graph-p1-graph.md`
+> **Status:** active · **Owner:** `graph-dba` · **Tracks:** C-1001 (P1) · **Version:** 4 · **Extends:** `docs/plans/connected-code-graph-p0-graph.md` · **Reviews:** `docs/reviews/connected-code-graph-p1-graph.md`
 
-Revision 2026-11-10: revised in place after review Pass 3 and the applied plan fixes.
+Revision 2026-11-19: §5 gains the path-suffix reads (`file_by_suffix`, `skipped_by_suffix`); §8 P1-21 gains their tests.
 
 This note states **only the change against** graph model v1 (`docs/plans/connected-code-graph-p0-graph.md`, "v1"),
 which itself extends `docs/plans/connected-code-graph-graph.md` (the "graph note"). Anything not named here is as v1
@@ -193,6 +193,43 @@ engine, never caller text; `<idProp>` is `callSiteId` for `CallSite` and `pointI
 | `cp_keys` | `MATCH (cp:ContractPoint) WHERE cp.kind = $kind RETURN cp.cpId, cp.keyNorm` — **label scan by design**: the client-side prefix/template match needs every key of the kind (graph note §3.4), and `ContractPoint` is small (61 in the slice) |
 | `snapshot` | `MATCH (s:Snapshot) RETURN s.snapshotId, s.verdictLogOffset, s.verdictLogHash, s.graphModelVersion, s.bundleSchemaVersion` — label scan of one node |
 | `units` | `UNWIND $ids AS i MATCH (u:Unit {unitId: i}) RETURN u.unitId, u.repoId, u.rootPath, u.language, u.buildStatus, u.builtCommit, u.builtAt, u.failedAt, u.failReason, u.flowAvailable` |
+
+**Path-suffix reads (partial path, `-p1-ml.md` §4.2: QW-27 asks `falkorchat/api.py`, the stored path is
+`falkor-chat/server/falkorchat/api.py`).** Two reads, one per label, the same shape; a fallback that runs only when the
+exact reads above found nothing in any scoped repo (a path equal to a repo-relative `File.path` is exact and wins):
+
+| Name | Text |
+|---|---|
+| `file_by_suffix` | `MATCH (f:File) WHERE f.repoId IN $repos AND ($sep + f.path) ENDS WITH $suffix RETURN f.repoId, f.path, f.fileId, f.unitId ORDER BY f.repoId, f.path LIMIT 21` |
+| `skipped_by_suffix` | `MATCH (s:SkippedFile) WHERE s.repoId IN $repos AND ($sep + s.path) ENDS WITH $suffix RETURN s.repoId, s.path, s.unitId, s.reason ORDER BY s.repoId, s.path LIMIT 21` |
+
+- **Parameters.** `$repos`: the system's repoIds (a list of strings, one chunk, never halved: a system has a handful).
+  `$sep`: always the one character `/` (a parameter, not a literal, so `ALLOWED_LITERALS` stays the D8 defaults).
+  `$suffix`: `/` followed by the asked path with a leading `./` removed; the engine refuses an empty asked path, one
+  with NUL, or one over 4,096 UTF-8 bytes (the indexed-string bound) before any call. No text is built from input.
+- **Boundary in the query.** `($sep + f.path) ENDS WITH $suffix` is true for `path == asked` (a repo-root file) and for
+  `path` ending in `/` + asked, never for `xapi.py` against `api.py` (verified; no `OR`, which the lint forbids).
+  The match is case-sensitive and byte-exact, as the stored path is.
+- **Bound.** `LIMIT 21` is `config.OPTIONS_MAX + 1` (a test pins the equality); `ORDER BY repoId, path` makes the cut
+  deterministic. Fewer than 21 rows is the whole match set; 21 means "more than `OPTIONS_MAX`", so the caller reports
+  ambiguous with the list truncated, never a pick. Each read is capped on its own; the caller merges.
+- **Return columns.** `file_by_suffix`: `repoId, path, fileId, unitId`. `skipped_by_suffix`: `repoId, path, unitId,
+  reason` (`test` or `frontend-ignore`).
+- **Caller rule (the resolver).** One `File` hit: the file's `symbols_of_file` read (by that row's `repoId`, `path`).
+  `File` hits only in one repo or in several: more than one hit is `ambiguous` (`several-symbols`/`no-anchor`) with
+  every hit as an option, never a pick, so bare `api.py` over several files or repos lists them. No `File` hit and
+  one or more `SkippedFile` hits: the lookup answers "not mapped" with that row's `reason` (FR-7a), not "not-found".
+  Both labels hit: the `File` hits are the options, the skipped rows are reported as lookups. No row from either:
+  `not-found`.
+- **Plan.** Label scan of `File` (or `SkippedFile`) with a `Filter`; the `repoId` and suffix predicates cannot use the
+  `path` index (the same as `cp_keys`; `ENDS WITH` is not an index range, quirks file). Measured on a throwaway
+  `v4.18.11` instance with 50,005 `File` and 50,001 `SkippedFile` nodes in two repos, indexed as v1 §1.6:
+  12.8-16.5 ms per read, flat in the suffix and in the number of hits, against 0.17 ms for the exact `file_by_path`.
+  Not measured: a million-file system, or a loaded concurrent engine; the cost is linear in `File` count and a fallback
+  only, so a slow-path ceiling is `QUERY_TIMEOUT_MS`. **Rejected: a basename-equality read plus a suffix filter in
+  code.** It needs a new indexed `File.name` (a model delta, a loader, DDL and assembler change, one more index per
+  `File`) to turn 13 ms into 0.28 ms (measured: `Node By Index Scan`, 21 rows); not worth a graph-model bump for a
+  fallback that runs after three index misses. Revisit only if a system's `File` count makes the scan miss the timeout.
 
 **Owner join (C3 item 1).**
 
@@ -399,7 +436,8 @@ Neither regex holds the length, so the script checks it separately.
   `CCG_REQUIRE_LIVE=1 pytest -m live tests/test_loader_live.py` from `cpg/` against a throwaway and asserts `0 skipped` in
   the summary (without the switch a missing instance skips and exits 0).
 - **P1-21 (reader).** (a) Each text of §5 is the one in the code, character for character. (b) `GRAPH.EXPLAIN` of every
-  expansion and anchor text contains `Node By Index Scan` and no `Label Scan`, except `cp_keys` and `snapshot`;
+  expansion and anchor text contains `Node By Index Scan` and no `Label Scan`, except `cp_keys`, `snapshot`,
+  `file_by_suffix` and `skipped_by_suffix` (these two must show `Node By Label Scan`);
   **positive control:** `MATCH (s:Symbol) WHERE toLower(s.qname) = $q RETURN s.symbolId` must show `Node By Label
   Scan` (verified). The harness supplies parameter values: a `{path: $path}` text explained without them returns
   `Missing parameters`. (c) `name_in`/`name_out` on a resolved site with two same-name candidates return only the
@@ -408,6 +446,15 @@ Neither regex holds the length, so the script checks it separately.
   A's chain when the link has a second site with its own chain (verified), and its entry columns map onto valid
   `Bound` objects for a mixed chain. (f) `bound_of_link` over a link whose entry binds two sites returns it once per
   edge in `(entryId, siteId, ord)` order, and the engine's pick is the lowest `(siteId, ord)` row with a `keyPath`.
+  (g) **Suffix reads, live on a throwaway** with `File` rows `server/falkorchat/api.py` in `repo1` and `repo2`,
+  `api.py` (repo root) and `server/xapi.py` in `repo1`, and a `SkippedFile` `tests/api.py` in `repo1`: `suffix
+  /falkorchat/api.py` returns exactly the two `server/falkorchat/api.py` rows, ordered by `(repoId, path)`; `/api.py`
+  returns the root `api.py` and both deep rows and not `xapi.py` (mutant: dropping `$sep` makes `xapi.py` match);
+  `skipped_by_suffix` with `/api.py` returns the one skipped row with its `reason`; a suffix with no match returns
+  nothing; `$repos = ['repo2']` returns no `repo1` row; 22 planted `File` rows ending `/z.py` return 21 (the cap + 1),
+  the lowest by `(repoId, path)`; a suffix such as `/a' OR 1=1 //` is a plain non-matching string (no injection).
+  The two texts hold no `OR` and no literal, and `config.OPTIONS_MAX + 1 == 21`. A resolver test (fake reader) pins
+  the caller rule: bare `api.py` over several hits is `ambiguous`, a skipped-only hit is "not mapped" with its reason.
 
 ## 9. Agreements other documents owe
 

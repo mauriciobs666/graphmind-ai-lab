@@ -30,6 +30,8 @@ EXPECTED: dict[str, str] = {
     "cp_keys": "MATCH (cp:ContractPoint) WHERE cp.kind = $kind RETURN cp.cpId, cp.keyNorm",
     "snapshot": "MATCH (s:Snapshot) RETURN s.snapshotId, s.verdictLogOffset, s.verdictLogHash, s.graphModelVersion, s.bundleSchemaVersion",
     "units": "UNWIND $ids AS i MATCH (u:Unit {unitId: i}) RETURN u.unitId, u.repoId, u.rootPath, u.language, u.buildStatus, u.builtCommit, u.builtAt, u.failedAt, u.failReason, u.flowAvailable",
+    "file_by_suffix": "MATCH (f:File) WHERE f.repoId IN $repos AND ($sep + f.path) ENDS WITH $suffix RETURN f.repoId, f.path, f.fileId, f.unitId ORDER BY f.repoId, f.path LIMIT 21",
+    "skipped_by_suffix": "MATCH (s:SkippedFile) WHERE s.repoId IN $repos AND ($sep + s.path) ENDS WITH $suffix RETURN s.repoId, s.path, s.unitId, s.reason ORDER BY s.repoId, s.path LIMIT 21",
     # expansions, impact
     "calls_in": "UNWIND $ids AS i MATCH (c:CallSite)-[e:CALLS]->(s:Symbol {symbolId: i}) RETURN i, c.callSiteId, c.repoId, c.unitId, c.path, c.line, c.calleeName, coalesce(e.status, 'confirmed'), coalesce(e.reason, 'resolved-call')",
     "name_in": "UNWIND $ids AS i MATCH (c:CallSite)-[:CALLS_NAME]->(:Name)-[:RESOLVES_TO]->(s:Symbol {symbolId: i}) OPTIONAL MATCH (c)-[r:CALLS]->(s) WITH i, c, s, r WHERE r IS NULL OPTIONAL MATCH (c)-[d:DISMISSED]->(s) WITH i, c, d WHERE d IS NULL OPTIONAL MATCH (c)-[x:CALLS]->() RETURN i, c.callSiteId, c.repoId, c.unitId, c.path, c.line, c.calleeName, count(x)",
@@ -78,7 +80,7 @@ PARAMS_OF = {"anchor": {"repo", "path", "qname", "name", "key", "kind"}}
 def _params_for(text: str) -> dict:
     out: dict = {}
     for p in sorted(set(re.findall(r"\$([a-z]+)", text))):
-        out[p] = ["x"] if p == "ids" else [["a", "b"]] if p == "pairs" else "x"
+        out[p] = ["x"] if p in ("ids", "repos") else [["a", "b"]] if p == "pairs" else "/" if p == "sep" else "x"
     return out
 
 
@@ -97,6 +99,29 @@ def test_config_values_are_the_plans():
     assert (config.DEFAULT_DEPTH_BOUND, config.LEVEL_GUARD, config.CHUNK, config.RESULTSET_SIZE) == (2, 64, 1000, 10000)
     assert 0 < config.QUERY_TIMEOUT_MS <= 10_000                 # the pinned instance's TIMEOUT_MAX: a larger value is refused by the server
     assert config.OPTIONS_MAX >= 2
+
+
+def test_the_suffix_reads_are_capped_at_options_max_plus_one_and_hold_no_or_and_no_literal():
+    assert config.OPTIONS_MAX + 1 == 21
+    for name in ("file_by_suffix", "skipped_by_suffix"):
+        text = reader.QUERIES[name]
+        assert text.endswith(f"LIMIT {config.OPTIONS_MAX + 1}") and "'" not in text and not re.search(r"\bOR\b", text)
+        assert "($sep + " in text and "ENDS WITH $suffix" in text
+
+
+def test_the_suffix_reads_take_the_repos_as_one_unchunked_list_of_strings_and_are_never_halved():
+    db = FakeDb()
+    r = CypherReader(db, "shop")
+    r.read("file_by_suffix", {"repos": ["a", "b"], "sep": "/", "suffix": "/x.py"})
+    assert [c[3] for c in db.ro_calls()] == [{"repos": ["a", "b"], "sep": "/", "suffix": "/x.py"}]
+    for bad in ("a", ["a", 1], [["a"]], None, 5):
+        with pytest.raises(ReaderError, match="wrong shape"):
+            r.read("skipped_by_suffix", {"repos": bad, "sep": "/", "suffix": "/x.py"})
+    with pytest.raises(ReaderError, match="parameters are"):
+        r.read("file_by_suffix", {"repos": ["a"], "suffix": "/x.py"})
+    full = FakeDb({reader.QUERIES["file_by_suffix"]: lambda p: [["r", f"p{i}", "f", "u"] for i in range(config.RESULTSET_SIZE)]})
+    with pytest.raises(ResultTooLarge):
+        CypherReader(full, "shop").read("file_by_suffix", {"repos": ["r"], "sep": "/", "suffix": "/z.py"})
 
 
 # ------------------------------------------------------------------------------------- the read-only lint

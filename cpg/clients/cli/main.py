@@ -59,7 +59,8 @@ def _parser() -> argparse.ArgumentParser:
     ask = sub.add_parser("ask", help="answer a structured request or a plain-language question")
     src = ask.add_mutually_exclusive_group(required=True)
     src.add_argument("--request", help="structured request as JSON ('-': stdin)")
-    src.add_argument("--question", help="plain-language question (not built yet: P1-26)")
+    src.add_argument("--question", help="plain-language question; until the interpreter is built, name the anchor (path:line, path::symbol, 'VERB /route', A.b), "
+                                        "optionally with 'impact' or 'depends-on'")
     ask.add_argument("--cache-bypass", action="store_true", help="plain-language ask: neither read nor write the interpretation cache (no effect on a structured request)")
     ask.add_argument("--format", choices=common.FORMATS, default="json")
     ask.add_argument("--fail-on", choices=FAIL_ON, help="exit 1 when the answer lists a possible item / any item")
