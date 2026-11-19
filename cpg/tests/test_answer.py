@@ -102,7 +102,7 @@ def mk_doc(anchors: list[dict], items=(), groups=(), units=(), **interp) -> dict
         "recipe": {"algorithm": {"id": "bfs-v1", "version": "1.0"},
                    "queries": [{"name": "to_in", "cypher": "MATCH (n) RETURN n"}, {"name": "calls_in", "cypher": "MATCH (m) RETURN m"}],
                    "guards": {"visitedSeedsAnchor": True, "levelGuard": 64}},
-        "stamp": dict(STAMP), "staleness": {"units": list(units)}, "items": list(items), "groups": list(groups),
+        "stamp": dict(STAMP), "staleness": {"units": copy.deepcopy(list(units))}, "items": list(items), "groups": list(groups),
         "depthBound": {"unexplored": 0},
     }
 
