@@ -487,9 +487,11 @@ and on a difference `data-scientist` recomputes them with the same `ceil` rule.
 failure means no held-out run.
 
 **Held-out run (once).**
-- Each item runs 5 times with `cacheBypass` (EP §10.4).
-- **Repeat 1 is the scored draw.** A user meets one fresh interpretation per snapshot, which is then
-  cached.
+- Each item runs 5 times. **Repeat 1 runs without the bypass, on an interpretation cache asserted
+  empty at the start of the run, and is the scored draw:** the one fresh interpretation a user meets
+  for that snapshot, which is then cached. It must carry `cacheHit` false.
+- **Repeats 2–5 run with `cacheBypass`** (neither read nor write), because repeat 1 has filled the
+  cache. Each must carry `cacheHit` false and `provenance.cacheBypass`.
 - Repeats 2–5 give the flip rate (k/30) and the per-draw understood rate, reported only.
 
 **`cacheHit == true` on repeat 1.** It scores the item "not understood" and **stops the run** as a C5
@@ -517,9 +519,14 @@ only those repeats.
 - the unbuilt-readings rule: a draft whose use case or any `readings` use case is unbuilt is refused
   whole (typed not-built, request echoed), never answered for its built half. The harness scores a
   not-built outcome "not understood" on a built-use-case item; dev gold has no unbuilt use case (0/14);
-- the sampler: the request body's parameters (and `samplingHash`), plus the observed effective
-  sampler configuration of the loaded model (`repeat_penalty`, `top_k`, `min_p`, preset), recorded
-  before the dev run and re-observed before the held-out run; a difference is a harness error;
+- the sampler: the request body's parameters, each sent explicitly at its neutral value (and
+  `samplingHash`). LM Studio has no documented read of its effective sampler, so the record carries
+  `sampler.effective: null` with a stated reason, the live probe that shows the endpoint honours the
+  pinned `repeat_penalty`, and a canary digest (a fixed set of made-up `fx-*` questions, replies
+  recorded at dev time and re-run before the held-out run, byte-equal or a harness error). `min_p` and
+  the other truncating samplers cannot change a `temperature` 0 argmax;
+- the scorer's identity: a hash of the harness file, and the exact unusable-reply observable (the
+  interpreter's own `draft is None` event, not an answer-shape guess);
 - `resolverRules`: the rules of §4.2 "Resolver rules as built" (option order and `OPTIONS_MAX`, CAP
   scope, `/`-bounded suffix join, the unfound-name ask and its name-bearing kinds, the `ambiguous`
   vs `unresolved` boundary, the literal parser direction tokens, no `provenance` on parser answers),
