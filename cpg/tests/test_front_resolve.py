@@ -345,6 +345,14 @@ def test_an_unbuilt_use_case_is_not_built_with_the_request_echoed_and_reads_noth
     assert store.calls == []
 
 
+def test_a_built_use_case_with_an_unbuilt_reading_is_not_built_and_reads_nothing():
+    store = dev_store()
+    with pytest.raises(NotBuiltAsk, match="'code-review'") as e:
+        resolve_draft(store, draft([("Runner", "symbol")], readings=[Reading("code-review", None)]), "review Runner and who uses it", (REPO,))
+    assert e.value.detail["request"]["readings"] == [{"useCase": "code-review", "direction": None}] and e.value.detail["built"] == ["impact"]
+    assert store.calls == []
+
+
 def test_two_groups_that_each_resolve_are_not_built_one_anchor_per_ask():
     with pytest.raises(NotBuiltAsk, match="one anchor"):
         resolve_draft(dev_store(), draft([("authorize_write", "symbol")], [("check_demo_readiness", "symbol")]), "authorize_write and check_demo_readiness", (REPO,))

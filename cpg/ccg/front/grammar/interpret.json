@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InterpretDraft",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["useCase", "direction", "anchors", "scope", "readings"],
+  "properties": {
+    "useCase": {"enum": ["impact", "root-cause", "code-review", "test-coverage", "security"]},
+    "direction": {"enum": ["impact", "depends-on", null]},
+    "anchors": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["spans"],
+        "properties": {
+          "spans": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["text", "kindHint"],
+              "properties": {
+                "text": {"type": "string", "minLength": 1, "maxLength": 300},
+                "kindHint": {"enum": ["symbol", "file", "line", "route", "tool", "server", "other"]}
+              }
+            }
+          }
+        }
+      }
+    },
+    "scope": {"type": ["string", "null"], "maxLength": 300},
+    "readings": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["useCase", "direction"],
+        "properties": {
+          "useCase": {"enum": ["impact", "root-cause", "code-review", "test-coverage", "security"]},
+          "direction": {"enum": ["impact", "depends-on", null]}
+        }
+      }
+    }
+  }
+}

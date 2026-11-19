@@ -13,8 +13,8 @@ The CLI (``clients/cli/main.py``) and the MCP server (``clients/mcp/server.py``)
 * **Plain-language question.** :meth:`Client.ask` takes ``question=`` and hands it to the ``front`` seam, ``front(question, reader=..., cache_bypass=...) -> canonical answer``.
   ``front=`` injects one; by default the client builds ``ccg.front.Front`` (imported lazily, P1-26) over the default manifest's repoIds (:func:`system_repos`), whose builder
   opens a fresh engine reader. A front's ``precheck(question)``, when it has one, runs before any reader opens. The front's ``NotBuiltAsk`` (a diff, a stack trace,
-  an unbuilt use case, a scope, two anchors, free prose while the interpreter is not built) is the typed ``not-built`` error with the front's ``detail`` (the request
-  echoed). The front builds the ``ambiguous`` and ``unresolved`` documents (``options`` with ``rank``). ``cache_bypass`` reaches the front and has no effect on a
+  an unbuilt use case, a scope, two anchors) is the typed ``not-built`` error with the front's ``detail`` (the request
+  echoed); free prose goes to the interpreter through the egress broker, and a model that cannot be reached (no broker, a latched one, a refusal) is the typed ``model-unavailable``. The front builds the ``ambiguous`` and ``unresolved`` documents (``options`` with ``rank``). ``cache_bypass`` reaches the front and has no effect on a
   structured request, nothing records it there (spec2 §2).
 * **Validate first, render only a valid document** (8): :meth:`Client.ask` validates what the builder or the front returned before it leaves, and :func:`render_answer` validates
   before it calls a renderer.
@@ -35,6 +35,7 @@ import dataclasses
 import json
 import os
 import pwd
+import threading
 from pathlib import Path
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
@@ -107,6 +108,11 @@ class StoreAuthError(ClientError):
 
 class NoCredentials(ClientError):
     code = "no-credentials"
+
+
+class ModelUnavailable(ClientError):
+    """The model behind the plain-language front could not be called: no broker, a latched broker, an egress refusal, an unusable endpoint. There is no direct fallback."""
+    code = "model-unavailable"
 
 
 class RawRefused(ClientError):
@@ -334,6 +340,8 @@ class Client:
         self._raw_connect = raw_connect or _open_raw
         self._builder = builder or build_answer
         self._front = front
+        self._default = None
+        self._default_lock = threading.Lock()
 
     def _engine_reader(self, system: str, host: str, port: int):
         return CypherReader.for_system(system, host, port)
@@ -390,11 +398,20 @@ class Client:
         """``ccg.front.Front`` over the system's repoIds, building over a fresh engine reader per answer (``recipe.queries`` lists the walk's reads only, AC-16).
         Imported here, not at module level: a client that is never asked a question loads no front module."""
         from ccg import front as front_mod
-        return front_mod.Front(system_repos(self.system), lambda anchor, direction: self._builder(self._reader(), anchor, question=direction))
+        repos = system_repos(self.system)
+
+        def model():
+            from ccg.front import interpret                       # the broker client loads here, at the first free-prose question
+            return interpret.Interpreter(), interpret.run_factory(self.system, repos)
+        return front_mod.Front(repos, lambda anchor, direction: self._builder(self._reader(), anchor, question=direction), model_loader=model)
 
     def _ask_front(self, question: str, cache_bypass: bool) -> dict:
-        from ccg.front import NotBuiltAsk
-        front = self._front if self._front is not None else self._default_front()
+        from ccg.front import ModelError, NotBuiltAsk
+        if self._front is None:
+            with self._default_lock:                              # two concurrent first questions build one front
+                if self._default is None:
+                    self._default = self._default_front()         # kept: its interpretation cache lives as long as the client
+        front = self._front if self._front is not None else self._default
         try:
             precheck = getattr(front, "precheck", None)
             if precheck is not None:
@@ -402,6 +419,8 @@ class Client:
             return front(question, reader=self._reader(), cache_bypass=cache_bypass)
         except NotBuiltAsk as exc:
             raise NotBuilt(str(exc)[:300], detail=exc.detail) from None
+        except ModelError as exc:
+            raise ModelUnavailable(str(exc)[:300], detail=exc.detail) from None
         except ReaderError as exc:
             raise StoreError(str(exc)) from None
         except answer.AnswerError as exc:

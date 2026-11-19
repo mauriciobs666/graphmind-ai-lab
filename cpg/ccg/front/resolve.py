@@ -22,7 +22,7 @@ no other read, no model): ``resolved`` (one anchor and one direction), ``ambiguo
   file, which name nothing to find) is not dropped when another group resolves: the answer is ``ambiguous``
   (``unknown-name`` / ``no-anchor``) over the resolved readings plus the did-you-mean list, because the answer schema has no field for an unfound name (``lookups`` are
   paths, ``notices`` are the flow notice; an ``ambiguous`` answer carries no ``lookups``). A group that failed only its path lookup still rides as ``lookups`` on the resolved answer.
-* **Not built** (:class:`NotBuiltAsk`): a scope, an unbuilt use case (the request echoed), or two groups that each resolve (one anchor per ask in P1).
+* **Not built** (:class:`NotBuiltAsk`): a scope, an unbuilt use case as the draft's own or in its ``readings`` (the request echoed), or two groups that each resolve (one anchor per ask in P1).
 
 The answer's ``unresolved`` status needs a failed path (``lookups`` is required, ``-answer-spec.md`` §3); a group that names no usable file and no candidate is therefore
 ``ambiguous`` with ``no-anchor`` (or ``unknown-name`` for a symbol, contract or tool not found), with ``options`` ``[]`` or a did-you-mean list.
@@ -376,13 +376,14 @@ def options(candidates: Sequence[Any], dirs: Sequence[str]) -> tuple[dict, ...]:
 
 
 def refuse_unbuilt(draft: Draft, question: str) -> tuple[str, ...]:
-    """Raise :class:`NotBuiltAsk` for a scope or an unbuilt use case (no read needed to know); else the directions asked for."""
+    """Raise :class:`NotBuiltAsk` for a scope or an unbuilt use case, as the draft's own or as one of its ``readings`` (no read needed to know; a question that also
+    names an unbuilt use case is refused whole, never answered for its built half alone); else the directions asked for."""
     if draft.scope is not None and draft.scope in question:
         raise NotBuiltAsk("a repository scope is not built in this phase; ask about the whole system", detail={"request": echo(draft)})
-    dirs = directions(draft)
-    if not dirs:
-        raise NotBuiltAsk(f"the use case {draft.use_case!r} is not built in this phase", detail={"request": echo(draft), "built": [BUILT_USE_CASE]})
-    return dirs
+    unbuilt = [u for u in dict.fromkeys([draft.use_case, *(r.use_case for r in draft.readings)]) if u != BUILT_USE_CASE]
+    if unbuilt:                                         # never answer the built half and drop the rest: the answer schema has no place to say what was left out
+        raise NotBuiltAsk(f"the use case {', '.join(repr(u) for u in unbuilt)} is not built in this phase", detail={"request": echo(draft), "built": [BUILT_USE_CASE]})
+    return directions(draft)
 
 
 def _names_something(spans: Sequence[Span]) -> bool:

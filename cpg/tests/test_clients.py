@@ -192,12 +192,12 @@ def test_cache_bypass_has_no_effect_on_a_structured_request_and_is_not_recorded(
 
 # ------------------------------------------------------------------------------------------------------------------ (1) ask, plain language: the seam
 
-def test_a_question_without_a_front_is_a_typed_not_built_error_and_reads_nothing():
+def test_a_question_the_front_cannot_build_is_a_typed_not_built_error_and_reads_nothing():
     calls = []
     c = Client(SYSTEM, host="h", port=16399, reader_factory=lambda *a: calls.append(a))
     with pytest.raises(NotBuilt) as e:
-        c.ask(question="who calls A?")
-    assert e.value.detail["surface"] == "plain-language-question" and calls == []
+        c.ask(question="security m.py:5")
+    assert "useCase" in e.value.detail["request"] and calls == []
     for blank in ("", "   "):
         with pytest.raises(BadRequest):
             c.ask(question=blank)
@@ -360,7 +360,7 @@ def test_the_cli_passes_the_question_and_the_bypass_flag_and_a_structured_reques
 
 def test_the_cli_reports_typed_errors_on_stderr_with_exit_2_and_nothing_on_stdout():
     g, _, reader = world(flow=True)
-    for argv, code_name in ((["ask", "--question", "x"], "not-built"),
+    for argv, code_name in ((["ask", "--question", "security m.py:5"], "not-built"),
                             (["ask", "--request", json.dumps({**req(g), "useCase": "rca"})], "not-built"),
                             (["ask", "--request", "not json"], "bad-request"),
                             (["ask", "--request", json.dumps(req(g, "m.py::NoSuch"))], "anchor-unresolved")):
@@ -940,7 +940,7 @@ def test_mcp_typed_errors_are_tool_errors_carrying_the_clis_payload_and_nothing_
     g, _, reader = world(flow=True)
     cases = [("ask", {"request": {**req(g), "scope": ["r"]}}, ["ask", "--request", json.dumps({**req(g), "scope": ["r"]})], "not-built"),
              ("ask", {"request": req(g, use_case="vuln")}, ["ask", "--request", json.dumps(req(g, use_case="vuln"))], "not-built"),
-             ("ask", {"question": "who calls A?"}, ["ask", "--question", "who calls A?"], "not-built"),
+             ("ask", {"question": "security m.py:5"}, ["ask", "--question", "security m.py:5"], "not-built"),
              ("ask", {"request": req(g), "question": "q"}, None, "bad-request"),
              ("resolve", {"anchor": {"kind": "nope"}}, ["resolve", "--anchor", '{"kind": "nope"}'], "bad-request")]
     for name, args, argv, code in cases:
@@ -995,7 +995,7 @@ def test_the_stdio_server_starts_serves_the_tools_and_answers_typed_errors_end_t
             async with ClientSession(read, write) as s:
                 await s.initialize()
                 names = sorted(t.name for t in (await s.list_tools()).tools)
-                q = await s.call_tool("ask", {"question": "who calls A?"})
+                q = await s.call_tool("ask", {"question": "security m.py:5"})
                 raw = await s.call_tool("raw_query", {"cypher": "RETURN 1"})
                 return names, q, raw
 

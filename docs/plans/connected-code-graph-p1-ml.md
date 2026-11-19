@@ -405,7 +405,7 @@ and the built `Request` is validated against the canonical one.
     "precisa de", "chama o quê".
   - The examples deliberately share no phrase with any dev AC-24 question (checked against
     `cpg/eval/dev/ac24.jsonl`), so the dev entry check is not tuned on its own items.
-  - Neutral wording such as "relations" or "relações" states none.
+  - Neutral wording such as "an overview of" or "o panorama de" states none. (Not "relations"/"relações": that is the wording of dev item QW-47.)
   - The resolver expands `null` into **both** directions as `options` (an ambiguous answer). The
     model never picks one silently, which EP §10.4 would score as a failure;
 - `anchors`: 1–3 **span groups** `{spans: [{text, kindHint}]}` (1–3 spans each), where `kindHint`
@@ -473,7 +473,7 @@ that the enforcement is grammar-level for GGUF. If it is not, a schema-invalid r
 Dev questions are kept for scoring, and held-out questions are used nowhere.
 
 **Sampling.** `temperature` 0, `top_p` 1, `max_tokens` 384, `seed` 0 where honoured. Only a logged
-transport retry is allowed. `samplingHash` is the sha256 of the canonical JSON of these parameters.
+transport retry is allowed. `samplingHash` is `ccg.answer.sampling_hash` (32 hex, the answer schema's pin) over the temperature in milli-units and `max_tokens`, `seed`, `top_p_milli`.
 
 **Provenance.** The fingerprint is read from `/api/v0/models` at call time:
 `id|publisher|arch|quantization|loaded_context_length`.
@@ -511,6 +511,15 @@ only those repeats.
 - `interpreter` from the final dev run's provenance;
 - `devExtras` from that run;
 - `cacheBypass` = the input name answer-spec2 §2 fixes;
+- the prompt's direction cues, frozen with `promptHash`: neutral "an overview of" / "o panorama de";
+  `depends-on` as what the anchor relies on, requires, is built on, or "itself calls or uses" (a
+  passive "what calls X" is `impact`);
+- the unbuilt-readings rule: a draft whose use case or any `readings` use case is unbuilt is refused
+  whole (typed not-built, request echoed), never answered for its built half. The harness scores a
+  not-built outcome "not understood" on a built-use-case item; dev gold has no unbuilt use case (0/14);
+- the sampler: the request body's parameters (and `samplingHash`), plus the observed effective
+  sampler configuration of the loaded model (`repeat_penalty`, `top_k`, `min_p`, preset), recorded
+  before the dev run and re-observed before the held-out run; a difference is a harness error;
 - `resolverRules`: the rules of §4.2 "Resolver rules as built" (option order and `OPTIONS_MAX`, CAP
   scope, `/`-bounded suffix join, the unfound-name ask and its name-bearing kinds, the `ambiguous`
   vs `unresolved` boundary, the literal parser direction tokens, no `provenance` on parser answers),

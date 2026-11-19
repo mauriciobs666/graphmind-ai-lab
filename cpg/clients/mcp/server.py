@@ -6,7 +6,7 @@ Configuration is the environment the client reads (``clients/common.py``): ``CCG
 (default ``127.0.0.1:6390``; 6379 is refused), and the credentials directory of ``ccg.store.acl``. A tool's optional ``system`` argument overrides ``CCG_SYSTEM`` for that call,
 as the CLI's ``--system`` does. A configuration the client refuses stops the server at start, exit 2, with the typed error on stderr.
 
-Each tool is a thin wrapper over :class:`clients.common.Client` (``docs/plans/connected-code-graph-p1-answers.md`` P1-25 (1)-(9)); no rule is re-implemented here:
+Each tool is a thin wrapper over :class:`clients.common.Client` (one per system, kept for the server's life: the interpretation cache of the plain-language front lives in it) (``docs/plans/connected-code-graph-p1-answers.md`` P1-25 (1)-(9)); no rule is re-implemented here:
 
 * ``ask`` returns the canonical answer bytes (``ccg.answer.dumps``) as its one text content, validated first (``render_answer``), so ``notices`` is in it (``-answer-spec2.md`` §5.1).
 * ``resolve``, ``refresh`` and ``raw_query`` return :func:`clients.common.dump_json` of the client's result: the bytes the CLI prints, without its newline.
@@ -20,6 +20,7 @@ Each tool is a thin wrapper over :class:`clients.common.Client` (``docs/plans/co
 from __future__ import annotations
 
 import sys
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -36,6 +37,31 @@ INSTRUCTIONS = ("Connected code graph (P1): impact and depends-on answers over t
                 "ccg_raw_<system> role. Results are canonical JSON; errors are {\"error\": {code, message}}.")
 
 ClientFactory = Callable[[str | None], Client]
+#: the most systems whose client the server keeps (a tool's ``system`` argument is caller-chosen); past it the least recently used goes. The interpretation cache each client holds is
+#: bounded on its own (``ccg.front.cache.MAX_ENTRIES``).
+MAX_CLIENTS = 8
+
+
+class _Clients:
+    """One client per system for the life of the server, so the plain-language front's in-memory interpretation cache survives between calls (a client per call would
+    never hit it). Nothing else of a client is call state: each ``ask`` opens its own reader and model run. A factory that raises memoizes nothing."""
+
+    def __init__(self, factory: ClientFactory, limit: int = MAX_CLIENTS):
+        self._factory, self._limit = factory, limit
+        self._lock = threading.Lock()
+        self._clients: dict[str | None, Client] = {}
+
+    def __call__(self, system: Any) -> Client:
+        if not (system is None or isinstance(system, str)):
+            return self._factory(system)                        # the client refuses it (bad-request); an unhashable value is never a key
+        with self._lock:
+            client = self._clients.pop(system, None)           # popped and re-inserted: a hit is the newest, so the least recently used goes first
+            if client is None:
+                client = self._factory(system)
+            self._clients[system] = client
+            while len(self._clients) > self._limit:
+                del self._clients[next(iter(self._clients))]
+            return client
 
 
 def _ok(text: str) -> CallToolResult:
@@ -59,8 +85,10 @@ def _call(produce: Callable[[], str]) -> CallToolResult:
 
 
 def build_server(client_factory: ClientFactory = Client) -> FastMCP:
-    """The FastMCP server whose four tools call ``client_factory(system)`` (default: ``Client``, configured from the environment) once per call."""
+    """The FastMCP server whose four tools use ``client_factory(system)`` (default: ``Client``, configured from the environment), built once per system and kept
+    (:class:`_Clients`)."""
     server = FastMCP(NAME, instructions=INSTRUCTIONS)
+    client_factory = _Clients(client_factory)
 
     @server.tool()
     def ask(request: Any = None, question: Any = None, cacheBypass: Any = False, system: Any = None) -> CallToolResult:  # noqa: N803 - the answer spec's field name

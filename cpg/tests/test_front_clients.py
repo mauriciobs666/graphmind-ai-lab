@@ -69,7 +69,7 @@ def test_a_question_naming_a_file_of_a_system_with_no_known_repos_is_not_built()
     assert e.value.detail == {"surface": "file-without-repos"}
 
 
-@pytest.mark.parametrize("q,surface", [("who calls A?", "plain-language-question"), ("diff --git a/m.py b/m.py\n@@ -1 +1 @@", "diff"),
+@pytest.mark.parametrize("q,surface", [("diff --git a/m.py b/m.py\n@@ -1 +1 @@", "diff"),
                                        ("  File \"m.py\", line 5, in A", "stack-trace")])
 def test_what_the_front_cannot_answer_is_the_typed_not_built_error_and_opens_no_reader(g, q, surface):
     opened = []
@@ -120,9 +120,10 @@ def test_cli_fail_on_exits_3_on_the_fronts_ambiguous_and_unresolved_documents_an
         assert code == 0 and json.loads(out)["interpretation"]["status"] == status, q
 
 
-def test_cli_free_prose_is_not_built_exit_2_nothing_on_stdout(g):
+def test_cli_free_prose_without_a_broker_is_model_unavailable_exit_2_nothing_on_stdout(g, monkeypatch, tmp_path):
+    monkeypatch.setenv("CCG_BROKER_SOCKET", str(tmp_path / "none.sock"))
     code, out, err = run_cli(["ask", "--question", "who calls A?"], client(g))
-    assert code == 2 and out == "" and json.loads(err)["error"]["code"] == "not-built"
+    assert code == 2 and out == "" and json.loads(err)["error"]["code"] == "model-unavailable"
 
 
 def test_cli_text_format_renders_an_ambiguous_document(g):
@@ -160,3 +161,129 @@ def test_no_markdown_file_under_the_front():
     """D5: prompts and grammars are ``.txt``/``.json``, never ``.md`` (P1-26 behaviour (8))."""
     front = CPG / "ccg" / "front"
     assert front.is_dir() and not [p for p in front.rglob("*") if p.suffix.lower() == ".md"]
+
+
+# ------------------------------------------------------------------------------------------------------------------ the MCP server keeps one client per system (its cache)
+
+PROSE = "if I touch m.py::A who gets hit"
+
+
+class McpWorld:
+    """A served ``ccg`` MCP server whose factory builds a default-front ``Client`` over a broker double; ``built`` counts the clients the server asked for."""
+
+    def __init__(self, g, monkeypatch):
+        from front_model_helpers import FakeBroker, draft_reply
+        from ccg.front import interpret as I
+        from clients.mcp import server as S
+        self.g, self.broker, self.built, self.snapshot = g, FakeBroker([draft_reply()]), [], None
+        real = I.run_factory
+        monkeypatch.setattr(I, "run_factory", lambda system, repos, broker=None: real(system, repos, self.broker))
+        self.server = S.build_server(self._make)
+
+    def _make(self, system):
+        self.built.append(system)
+        return Client(SYSTEM, host="127.0.0.1", port=16399, reader_factory=lambda s, h, p: FrontReader(self.g, self.snapshot))
+
+    def ask(self, question=PROSE, **args):
+        import asyncio
+        res = asyncio.run(self.server.call_tool("ask", {"question": question, **args}))
+        (content,) = res.content
+        assert not res.isError, content.text
+        return json.loads(content.text)["interpretation"]
+
+
+def test_two_mcp_asks_of_the_same_free_prose_hit_the_cache_on_the_second_through_one_client(g, monkeypatch):
+    w = McpWorld(g, monkeypatch)
+    first, second = w.ask()["provenance"], w.ask()["provenance"]
+    assert (first["cacheHit"], second["cacheHit"]) == (False, True)
+    assert len(w.broker.completions) == 1 and w.built == [None]                     # one client served both calls
+    assert len(w.broker.opens) == len(w.broker.closes) == 2                         # but each ask had its own model run, closed
+
+
+def test_an_mcp_cache_bypass_ask_does_not_read_or_write_the_cache(g, monkeypatch):
+    w = McpWorld(g, monkeypatch)
+    w.ask()
+    bypassed = w.ask(cacheBypass=True)["provenance"]
+    assert (bypassed["cacheHit"], bypassed["cacheBypass"]) == (False, True) and len(w.broker.completions) == 2
+    assert w.ask()["provenance"]["cacheHit"] is True and len(w.broker.completions) == 2
+
+
+def test_a_snapshot_change_empties_the_mcp_servers_cache(g, monkeypatch):
+    w = McpWorld(g, monkeypatch)
+    w.ask()
+    w.snapshot = [("6" * 32, 0, answer.EMPTY_VERDICT_LOG_HASH, "1.1", "1.0")]
+    assert w.ask()["provenance"]["cacheHit"] is False and len(w.broker.completions) == 2
+    w.snapshot = None
+    assert w.ask()["provenance"]["cacheHit"] is False and len(w.broker.completions) == 3
+
+
+def test_the_mcp_server_keeps_one_client_per_system_and_bounds_how_many(g, monkeypatch):
+    from clients.mcp import server as S
+    made = []
+    clients = S._Clients(lambda system: made.append(system) or object())
+    assert clients(None) is clients(None) and clients("a") is clients("a") and made == [None, "a"]
+    for i in range(S.MAX_CLIENTS - 2):
+        clients(f"s{i}")
+    kept = clients(None)                                                            # a hit makes None the newest, so it outlives the older "a"
+    for i in range(S.MAX_CLIENTS - 2, S.MAX_CLIENTS + 1):
+        clients(f"s{i}")
+    assert clients(None) is kept and made.count(None) == 1
+    assert S.MAX_CLIENTS == 8 and len(clients._clients) == 8 and "a" not in clients._clients and "s0" not in clients._clients and "s8" in clients._clients
+    bad = S._Clients(lambda system: (_ for _ in ()).throw(common.BadRequest("no")))
+    for _ in range(2):
+        with pytest.raises(common.BadRequest):
+            bad("x")
+    assert bad._clients == {}                                                       # a factory that raises memoizes nothing
+    assert S._Clients(lambda s: s)({}) == {}                                        # an unhashable system goes to the factory, never into the key map
+
+
+def test_concurrent_mcp_asks_on_the_shared_client_each_get_their_own_run_and_answer(g, monkeypatch):
+    import threading
+    w = McpWorld(g, monkeypatch)
+    from clients.mcp import server as S
+    shared = S._Clients(w._make)(None)
+    results, errors = [], []
+
+    def ask(i):
+        try:
+            results.append(shared.ask(question=f"{PROSE} {i}", cache_bypass=True)["interpretation"]["status"])
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+    threads = [threading.Thread(target=ask, args=(i,)) for i in range(8)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert not errors and results == ["resolved"] * 8
+    assert len(w.broker.opens) == len(w.broker.closes) == 8 and len(w.broker.completions) == 8
+
+
+def test_the_mcp_server_still_loads_no_broker_module_until_free_prose():
+    code = """
+import sys
+sys.path[:0] = [%r, %r]
+import clients.mcp.server as S
+assert not [m for m in sys.modules if m.startswith(('ccg.broker', 'ccg.front'))], 'import'
+S.build_server()
+assert not [m for m in sys.modules if m.startswith(('ccg.broker', 'ccg.front'))], 'build'
+print('ok')
+""" % (str(CPG), str(CPG / "tests"))
+    r = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, cwd=str(CPG), env={"PATH": os.environ["PATH"], "CCG_CREDENTIALS_DIR": "/nonexistent"})
+    assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr[-600:]
+
+
+def test_two_concurrent_first_questions_build_one_default_front(g, monkeypatch):
+    import threading
+    import time
+    c = client(g)
+    built = []
+    real = Client._default_front
+
+    def slow(self):
+        built.append(1)
+        time.sleep(0.05)                                                            # widens the window in which a second thread would also see no front
+        return real(self)
+    monkeypatch.setattr(Client, "_default_front", slow)
+    out = []
+    threads = [threading.Thread(target=lambda: out.append(c.ask(question="impact m.py:5")["interpretation"]["status"])) for _ in range(6)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert out == ["resolved"] * 6 and len(built) == 1

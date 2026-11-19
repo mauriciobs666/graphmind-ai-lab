@@ -541,13 +541,29 @@ def test_the_future_front_passes_unchanged_with_its_granted_broker_imports(tmp_p
     front.mkdir(exist_ok=True)
     files = {"__init__.py": "", "draft.py": "from dataclasses import dataclass\n", "interpret.py": "from ccg.broker.client import BrokerClient\n", "summary.py": "from ccg.broker import client\nimport ccg.broker.client\n",
              "parsers.py": "import re\nfrom urllib.parse import urlsplit\n", "resolve.py": "from ccg.engine import anchors\n",
-             "cache.py": "from ccg.answer import cache_key\n"}
+             "cache.py": "from ccg.answer import cache_key\n", "errors.py": "class ModelError(Exception):\n    pass\n"}
     for fname, text in files.items():
         (front / fname).write_text(text, encoding="utf-8")
     assert {m for m in modules(tmp_path) if m.startswith("ccg/front/")} == {f"ccg/front/{f}" for f in files}
     assert scan_tree(tmp_path) == []
     (front / "cache.py").write_text("from ccg.broker.client import BrokerClient\n", encoding="utf-8")
     assert {(v.path, v.rule) for v in scan_tree(tmp_path)} == {("ccg/front/cache.py", "broker-import")}
+
+
+FRONT_MODULES = {"__init__", "cache", "draft", "errors", "interpret", "parsers", "resolve", "summary"}
+
+
+def test_the_real_front_is_the_pinned_module_set_and_only_interpret_and_summary_may_name_the_broker_client():
+    """``ccg/front`` as shipped (P1-26): the walk reaches each module, the tree is clean, and the data files the interpreter reads are ``.txt`` and ``.json`` (D5)."""
+    assert {m for m in modules(CPG) if m.startswith("ccg/front/")} == {f"ccg/front/{n}.py" for n in FRONT_MODULES}
+    assert scan_tree(CPG) == []
+    for name in FRONT_MODULES - {"interpret", "summary"}:
+        planted = (CPG / "ccg" / "front" / f"{name}.py").read_text(encoding="utf-8") + "\nfrom ccg.broker.client import BrokerClient\n"
+        assert [v.rule for v in scan_source(f"ccg/front/{name}.py", planted)] == ["broker-import"], name
+    for name in ("interpret", "summary"):
+        planted = (CPG / "ccg" / "front" / f"{name}.py").read_text(encoding="utf-8") + "\nimport asyncio\n"
+        assert any(v.rule for v in scan_source(f"ccg/front/{name}.py", planted)), name
+    assert sorted(p.name for p in (CPG / "ccg" / "front").rglob("*") if p.is_file() and p.suffix not in (".py", ".pyc")) == ["interpret.json", "interpret.txt", "summary.txt"]
 
 
 #: the families the P1-25b review named (F2), pinned as literals: the generated mutant table follows NETWORK/DYNAMIC_MODULES, so a family dropped from those

@@ -10,7 +10,7 @@ egress:
     - id: lmstudio
       kind: model
       endpoint: http://127.0.0.1:1234
-      paths: [/v1/chat/completions]
+      paths: [/api/v0/models, /v1/chat/completions]
       note: LM Studio on the Windows host, through WSL mirrored networking
   outbound: []
   hosted: []

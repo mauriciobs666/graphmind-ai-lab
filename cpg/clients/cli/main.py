@@ -61,7 +61,7 @@ def _parser() -> argparse.ArgumentParser:
     src.add_argument("--request", help="structured request as JSON ('-': stdin)")
     src.add_argument("--question", help="plain-language question; until the interpreter is built, name the anchor (path:line, path::symbol, 'VERB /route', A.b), "
                                         "optionally with 'impact' or 'depends-on'")
-    ask.add_argument("--cache-bypass", action="store_true", help="plain-language ask: neither read nor write the interpretation cache (no effect on a structured request)")
+    ask.add_argument("--cache-bypass", action="store_true", help="plain-language ask: neither read nor write the interpretation cache (no effect on a structured request; the cache is in memory, so a one-process CLI ask never hits it, only the MCP server's long-lived process does)")
     ask.add_argument("--format", choices=common.FORMATS, default="json")
     ask.add_argument("--fail-on", choices=FAIL_ON, help="exit 1 when the answer lists a possible item / any item")
     res = sub.add_parser("resolve", help="list the candidates of an anchor, with their ids")
