@@ -399,7 +399,8 @@ and the built `Request` is validated against the canonical one.
 - `useCase`: the built `impact`, plus every unbuilt use-case name;
 - `direction`: `impact`, `depends-on`, or **`null` when the question states no direction**.
   - A direction is stated by any wording that implies it. **The cues below are examples, not a
-    closed list.** For impact: "ripple effect", "consumers of", "what would fail", "o que é
+    closed list.** The deterministic parser claims only the literal tokens `impact` and
+    `depends-on` (`depends on` is left to the interpreter). For impact: "ripple effect", "consumers of", "what would fail", "o que é
     afetado", "consumidores de". For depends-on: "relies on", "requires", "built on top of",
     "precisa de", "chama o quê".
   - The examples deliberately share no phrase with any dev AC-24 question (checked against
@@ -414,7 +415,10 @@ and the built `Request` is validated against the canonical one.
 - `readings`: 0–3 alternative `{useCase, direction}`, used when the question names two use cases.
 
 **Fabrication guard.** Every `text` must be a verbatim substring of the question. A non-substring
-span is dropped. A group left empty makes the answer `unresolved`.
+span is dropped. A group left empty, or no anchor named, with no failed path is `ambiguous`
+(`no-anchor`, or `unknown-name` when did-you-mean candidates exist), because the answer schema has
+no field for an unfound name. `unresolved` is reserved for a failed named path (with its `lookups`)
+or a file held only as skipped.
 
 **Resolver join rule, per group.** A group is resolved to a unique anchor, or to `options`:
 - `symbol` + `file`: a qualified-name match, where the file matches as a **path suffix**, so
@@ -425,6 +429,26 @@ span is dropped. A group left empty makes the answer `unresolved`.
   name matches the span;
 - `route`: `keyNorm` (EP2 §1.1);
 - several candidates left: `options`.
+
+**Resolver rules as built (`cpg/ccg/front/resolve.py`, `cpg/ccg/engine/reader.py`):**
+- **Option order.** Candidate-major: for each candidate, `impact` before `depends-on`, ranked 1.. in
+  that order. Complete readings are uncapped, except that whole candidates beyond `OPTIONS_MAX` = 20
+  are dropped (never cut mid-candidate).
+- **Cap.** CAP = 5 applies to did-you-mean lists only, ordered by edit distance to the last dotted
+  segment of the name, then qname.
+- **Path-suffix join.** Only after every exact read misses, a `/`-bounded suffix read (recipe
+  query, so AC-16 replay holds) is tried; this covers `file`+`line` as well as `symbol`+`file`. Several
+  hits are `ambiguous` (`no-anchor`; `options` may hold the single reading) and never a pick. A path
+  held as a skipped file never falls back to the suffix read.
+- **Unfound name beside a resolving group.** A name-bearing group (a span of kind `symbol`, `route`,
+  `tool` or `line`) that finds nothing, beside a group that resolves, makes the answer `ambiguous`
+  (`unknown-name` if it has did-you-mean candidates, else `no-anchor`), with the did-you-mean
+  candidates added to the options. A group made only of `other`/`server` spans, or a plain file with no
+  anchor form, is ignored, so a harmless extra group does not turn a resolved item into an ask. A
+  failed file path rides as `lookups`, not as an ask.
+- **Provenance.** A parser-resolved answer carries no `provenance` (no model call); only an
+  interpreter-read answer carries the fingerprint. The P1-35 harness reads absent provenance as "no
+  model call", and `--cache-bypass` is a no-op on such an answer.
 
 **Named resolver tests** (dev questions): QW-30 (symbol + file), QW-27 (partial `file:line`), QW-13
 (tool + server), QW-7 (file + symbol in reverse order), QW-47 (`direction: null` → both directions
@@ -475,12 +499,22 @@ only those repeats.
 **Cap (C7).**
 - `capFloor` 5 and `capRule` `max(capFloor, |goldOptions_i|)`, as in EP §10.4. The dev ambiguous
   items have `|goldOptions|` 3 and 2.
-- The resolver's did-you-mean list is capped at 5 by construction: edit distance, then qname.
+- CAP = 5 applies to did-you-mean lists only (§4.2); complete readings are not capped by it.
+- The unfound-name ask (§4.2) stays in the pre-registered scoring: it is gold-blind and only moves
+  a question toward asking, so it can lower the pass rate and cannot flatter it. Its over-asks are
+  reported as their own k/24 rate, and did-you-mean extras that push `|options|` past `CAP_i` are
+  reported separately.
+- Parser-resolved items have no `provenance` and no model call: they are tallied as such, are not
+  counted as interpreter draws, and have no flip rate.
 
 **Record `ccg-prereg-ac24-v1`** (EP §12.3 schema):
 - `interpreter` from the final dev run's provenance;
 - `devExtras` from that run;
-- `cacheBypass` = the input name answer-spec2 §2 fixes.
+- `cacheBypass` = the input name answer-spec2 §2 fixes;
+- `resolverRules`: the rules of §4.2 "Resolver rules as built" (option order and `OPTIONS_MAX`, CAP
+  scope, `/`-bounded suffix join, the unfound-name ask and its name-bearing kinds, the `ambiguous`
+  vs `unresolved` boundary, the literal parser direction tokens, no `provenance` on parser answers),
+  written from that section at P1-35.
 
 It is committed after the last prompt change and before the held-out run. The run's outputs live
 under the custodian root (§6.4).

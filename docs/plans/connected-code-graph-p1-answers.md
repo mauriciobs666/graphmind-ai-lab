@@ -290,7 +290,7 @@ Stakeholder decision 2026-11-19 (`-answer-spec2.md` §5): V-both ships. **Needs:
 ## P1-26 · plain-language front — `coder`
 
 Blocked on `-p1-ml.md` question 3 (model, prompt, grammar, sampling, smoke protocol, `CAP`), on the broker core
-(P1-29), on P1-24b (the summary calls `flow_notice_lines`), on P1-25 (the `ccg/front` modules sit under its import-boundary test) and on P1-45 (`cacheBypass` in provenance). Two dispatches (parsers+resolver first, interpreter+cache+summary second).
+(P1-29), on P1-24b (the summary calls `flow_notice_lines`), on P1-25 (the `ccg/front` modules sit under its import-boundary test) and on P1-45 (`cacheBypass` in provenance). Dispatch 1 (parsers, resolver, draft types, path-suffix reads) is committed (`13e56cbc`); dispatch 2 is the interpreter, cache, summary, prompts and grammar.
 - **Files:** `cpg/ccg/front/parsers.py` (deterministic: stack traces are P5, so P1 parses routes, `file:line`,
   `path::symbol`, qnames, and diffs only as far as "not built"), `resolve.py` (deterministic resolver over
   `engine/anchors.py`), `interpret.py` (one-shot schema-constrained extraction of the use case and anchor spans),
@@ -300,9 +300,8 @@ Blocked on `-p1-ml.md` question 3 (model, prompt, grammar, sampling, smoke proto
 - **Behaviours:** (1) deterministic parsers run first; a question they fully resolve makes no model call; (2) for
   free prose, one model call through the broker's structured path (`component: answer.interpret`,
   `purpose: model-call`) with a grammar-constrained JSON reply validated against the canonical `Request` schema;
-  (3) ambiguity is answered with the possible readings as `options` with `rank`, never a guess, and **P1-26 builds the canonical `ambiguous` and `unresolved` documents** (`-answer-spec.md` §4; the structured path of P1-25 returns typed errors instead); a question naming a repository scope is the typed `not-built` (scope is not a P1 input); and never more
-  than the pre-registered cap; (3b) **draft and resolver** as `-p1-ml.md` §4.2 fixes them (span-group `InterpretDraft`, `direction: null` expanded into both
-  directions as `options`, the verbatim-substring guard, the per-group join rule), with its **named resolver tests** on dev
+  (3) ambiguity is answered with the possible readings as `options` with `rank`, never a guess, and **P1-26 builds the canonical `ambiguous` and `unresolved` documents** (`-answer-spec.md` §4; the structured path of P1-25 returns typed errors instead); a question naming a repository scope is the typed `not-built` (scope is not a P1 input); the pre-registered cap (`CAP` = 5) applies to the did-you-mean lists only, while a complete reading (several-symbols, two-use-cases) is uncapped, bounded only by the engine's `OPTIONS_MAX` = 20 whole candidates (`-answer-spec2.md` §3, "every reading"); (3b) **draft and resolver** as `-p1-ml.md` §4.2 fixes them (span-group `InterpretDraft`, `direction: null` expanded into both
+  directions as `options`, the verbatim-substring guard, the per-group join rule; the resolver resolves a partial path such as `falkorchat/api.py:603` through the engine reader's `file_by_suffix`/`skipped_by_suffix`, `-p1-graph.md` §5, after an exact repo-relative miss), with its **named resolver tests** on dev
   questions: QW-30, QW-27, QW-13, QW-7, QW-47, and negatives QW-3 and QW-11; (4) the interpretation provenance (`endpoint`, model fingerprint, quantization for
   local, prompt/grammar/sampling hashes, `cacheHit`) is in the answer; a cache entry lives exactly as long as its
   snapshot, and the `cacheBypass` input (`-answer-spec2.md` §2) makes the ask neither read nor write the cache, calls the

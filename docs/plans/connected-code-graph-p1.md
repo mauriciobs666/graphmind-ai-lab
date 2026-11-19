@@ -372,14 +372,14 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-32 | Eval tooling verbs, then the AC-5 gate harness (two dispatches) | `qa-engineer` | gat | 25, 20 (harness half) | `analyst`; `data-scientist` |
 | P1-33 | P1 test plan `docs/test-plans/connected-code-graph-p1.md` | `qa-engineer` | gat | 00 | `analyst` |
 | P1-41 | Fixture gate, part 1: the 92 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d | `analyst` |
-| P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25) | `qa-engineer` | gat | 41, 26, 39d, 24b | `analyst` |
+| P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25); AC-16 is not read closed from P1-25's narrow raw-recipe test, P1-42 adds the other shapes | `qa-engineer` | gat | 41, 26, 39d, 24b | `analyst` |
 | P1-34 | Flow re-measurement (§5): re-point `s28_run.py`, entry check, fresh draw only if entered, decision record | `data-scientist` + `qa-engineer` | gat | 09, `-ml` | `analyst` |
 | P1-35 | AC-24 smoke harness and run | `qa-engineer` | gat | 26, 29, `-ml` | `data-scientist` |
 | P1-47 | Runtime-oracle capture on an isolated instance | `qa-engineer` | gat | 48, 02, `-ml` | `analyst` |
 | P1-36 | Noise sampling and runtime-oracle tooling, the measurement of the ratified thresholds | `data-scientist` | gat | 32, 47, `-ml` | `analyst` |
 | P1-37 | AC-5 first gate run (HTTP, MCP, scripts, wiring screened, flow per §5) | `qa-engineer` | gat | 32, 42, 34, 36, 47, pre-registration record (rule below) | `analyst`; `data-scientist` |
 | P1-43 | AC-5 re-gate (contingent on a miss): its own brief, two isolated key writers | `qa-engineer` | gat | 37 | `analyst`; `data-scientist` |
-| P1-38 | Phase exit: AC-closure table, `analyst` impl review, spike dispositions, inputs for the close docs; `graph-dba` first verifies which FalkorDB memory controls exist, and the report states the `raw_query` memory limit | `teco` | gat | all built steps | `analyst` |
+| P1-38 | Phase exit: AC-closure table, `analyst` impl review, spike dispositions, inputs for the close docs; `graph-dba` first verifies which FalkorDB memory controls exist, and the report states the `raw_query` memory limit (accepted P1 limit: a raw query can OOM-kill FalkorDB within its time limit; per-user limits are P4) and the narrow coverage of AC-16's raw-recipe leg (`cpg/tests/test_pin_replay.py`: flag-true impact, CALLS/CALLS_NAME/HAS_CALL, one world and pin; other shapes fail, not skip) | `teco` | gat | all built steps | `analyst` |
 
 **Critical path** (longest chain): 01 → 03 → 04 → 05 → 07 → 11 → 17 → 18 → 19 → 20 → 25 → 41 → 42 → 37 → 38
 (P1-17 also needs 46 and 14; 19 needs 02 and 48; 20 also needs 44, which runs beside 19). Schedulable first: 00, 01,
