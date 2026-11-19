@@ -2,6 +2,15 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-19 — typed-decision-models U6f.6, U6f.7 — the ladders (guard, predicate, choice)
+
+**What:** plan4 `docs/plans/typed-decision-models4.md` v1.11–v1.12 §3.11, §4.4/§5 rows U6f.6/U6f.7; notes `docs/plans/typed-decision-models-ml.md` §Q2.1–§Q2.2 and `docs/plans/typed-decision-models-fit-ml.md` §1–§5; gates `docs/reviews/typed-decision-models.md` Passes 47 and 50 (approve with suggestions; plan Passes 48–49).
+- **U6f.6:** `decisionmodels/ladder.py` `guard_ladder` over `ScoredCall`s (hand-off and decision-only families, fallback `t`). When rung 4 is missing (an item at `p == 1.0` with label *no* is decided wrongly in every band) the hand-off family reports `rung=None`, `fit-infeasible: latency` or `agreement` with target `mcnemar-nonreject` and the `(max D, max m, s)` minimiser; it never raises. `barValues["stuckCount"]`. `fitstats.py`: `mcnemar_worse_p_exact` is the one home of the tail; ceilings and `mean_handoff_ms` return exact `Fraction`s; `LadderResult` allows `rung=None` on the hand-off family only with `mcnemar-nonreject`. `tests/test_ladder_guard.py` (62 tests), `tests/test_fitstats.py` (66).
+- **U6f.7:** `predicate_ladder`, `choice_ladder` (note §Q2.2; `qualityTarget` `T=0.94`…`T=0.90` or `max-min-agreement`, a subset of model-bench's closed set, asserted by `ast`; fail-closed "no"/"no label"); total, with `barValues["unfixableByClass"]` per true-answer class over `ok` decisions only. `tests/test_ladder_new_ability.py` (69 tests).
+- **Rulings:** rung 3 tries `D_c<=0` then McNemar; the decision-only family never reports rung 4; a failed decision is concordant (guard) or fail-closed (new abilities) and its time enters `t̄_d`; only the hand-off call's time enters `t̄_{L|H}`; a `rung=None` text ranks below every rung 1–4 (fit note §3).
+
+**Verified:** delegates' mutant tables (guard 78, 4 equivalent; new abilities 60, all killed after the fix round); the gate's ~90 own mutants; full suite re-run by the coordinator, ruff clean.
+
 ## 2026-11-19 — typed-decision-models U6f.3b, U6f.4b — hand-off instruction files, question loader
 
 **What:** plan4 `docs/plans/typed-decision-models4.md` §3.11, §4.4/§5 rows U6f.3b/4b; gate `docs/reviews/typed-decision-models.md` Pass 47 (approve for both).
