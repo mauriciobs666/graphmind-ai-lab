@@ -53,14 +53,14 @@ def item_row(role: str, n: int, item_id: str) -> dict[str, Any]:
     if role == "guard-judge":
         return {
             "itemId": item_id,
-            "condition": f"condition {n}",
+            "condition": f"canary-condition-{n}",
             "understanding": {},
             "turns": [],
             "path": "turns" if n % 4 < 2 else "understanding",
             "expected": label,
         }
     if role == "join-in-judge":
-        message = {"role": "user", "displayName": "Ana", "text": f"message {n}"}
+        message = {"role": "user", "displayName": "Ana", "text": f"canary-message-{n}"}
         return {
             "itemId": item_id,
             "agentName": "Bot",
@@ -68,7 +68,12 @@ def item_row(role: str, n: int, item_id: str) -> dict[str, Any]:
             "newMessage": message,
             "expected": label,
         }
-    return {"itemId": item_id, "text": f"message {n}", "priorTurn": None, "expected": label}
+    return {
+        "itemId": item_id,
+        "text": f"canary-message-{n}",
+        "priorTurn": None,
+        "expected": label,
+    }
 
 
 def write_data(root: Path, role: str, version: str = VERSION) -> Path:
@@ -272,7 +277,7 @@ def test_a_model_not_resident_at_start_refuses_with_no_calls_and_no_files(
     assert not fits_dir(data, "guard-judge").exists()
 
 
-def test_a_model_gone_at_the_end_refuses_after_the_calls_and_writes_nothing(
+def test_a_model_gone_at_the_end_refuses_after_the_calls_leaving_only_the_calls_file(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     data = write_data(tmp_path, "guard-judge")
@@ -281,7 +286,9 @@ def test_a_model_gone_at_the_end_refuses_after_the_calls_and_writes_nothing(
     assert main(argv(tmp_path, data, "guard-judge"), client=client) == 1
     assert "not resident at end" in capsys.readouterr().err
     assert client.chat_calls == len(ITEM_IDS)
-    assert not fits_dir(data, "guard-judge").exists()
+    (written,) = fits_dir(data, "guard-judge").iterdir()
+    assert written.name.startswith("calls-")
+    assert json.loads(written.read_text())["endResidency"] == "refused"
 
 
 def test_a_failed_call_aborts_with_the_one_abort_record_and_nothing_else(
@@ -325,7 +332,16 @@ def test_a_fit_makes_each_call_once_and_selects_per_candidate(
     )  # one per (item, text), shared by both candidates
     assert client.reads == 2  # start and end residency
     assert "handoff: text" in out and "decision-only: text" in out
-    assert not fits_dir(data, role).exists()  # emission is U6f.9b's
+    names = sorted(p.name for p in fits_dir(data, role).iterdir())
+    stem = f"{role}-{VERSION}"
+    assert [n for n in names if not n.startswith("calls-")] == [
+        f"{stem}-f1.fit-report.json",
+        f"{stem}-f1.fit.txt",
+        f"{stem}-handoff-f1.json",
+        f"{stem}-only-f1.json",
+    ]
+    assert len([n for n in names if n.startswith("calls-")]) == 1
+    assert out.count("wrote ") == 4
 
 
 @pytest.mark.parametrize("role", ["guard-judge", "join-in-judge", "message-type-classifier"])

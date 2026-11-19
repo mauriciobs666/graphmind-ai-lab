@@ -2,14 +2,16 @@
 (`docs/plans/typed-decision-models4.md` §3.11, §4.4 U6f.8b, §5 row U6f.8b;
 `docs/plans/typed-decision-models-fit-ml.md` §3; method note §Q2.3-§Q2.5).
 
-The pure half. `analyze_fit` reads the collector's shared calls (`fitcalls.collect_calls`) and, for
-each family (`handoff`, `decision-only`: the two candidates) and each question text, runs that
-role's ladder (`guard_ladder`, `predicate_ladder`, `choice_ladder`), then selects one text per
-candidate. It makes no call; both candidates read the same `CollectedCalls`. Its result holds one
-`TextScore` per (candidate, text) and one `SelectedText` per candidate, which U6f.9a/9b consume.
+`analyze_fit` is the pure half; `run_fit` makes the calls and writes the calls file, and `main`
+emits (`emit.py`, `report.py`). `analyze_fit` reads the collector's shared calls
+(`fitcalls.collect_calls`) and, for each family (`handoff`, `decision-only`: the two candidates)
+and each question text, runs that role's ladder (`guard_ladder`, `predicate_ladder`,
+`choice_ladder`), then selects one text per candidate. It makes no call; both candidates read the
+same `CollectedCalls`. Its result holds one `TextScore` per (candidate, text) and one
+`SelectedText` per candidate, which `outcome.py` and `emit.py` consume.
 
 `candidate` is the family name (`handoff` or `decision-only`), equal to `LadderResult.family`;
-U6f.9b maps it to the candidate ids of §3.11.
+`emit.py` maps it to the candidate ids of §3.11.
 
 Per text, the ranking diagnostic of note §Q2.3: `auc` is the ROC-AUC, over the items with an `ok`
 decision call, of the score against a binary target: a predicate's `p` against the label, a choice's
@@ -47,12 +49,14 @@ import math
 import sys
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 from decisionmodels import render
+from decisionmodels.emit import EmitRefused, emit, write_calls_file
 from decisionmodels.exclusion import (
     DispositionReport,
     ExclusionFlag,
@@ -76,6 +80,7 @@ from decisionmodels.fitcalls import (
     summarize_calls,
 )
 from decisionmodels.fitstats import FAMILIES, LadderResult, ScoredCall, roc_auc, split_half
+from decisionmodels.hashing import input_hash
 from decisionmodels.ladder import (
     TARGET_NONREJECT,
     choice_ladder,
@@ -83,7 +88,7 @@ from decisionmodels.ladder import (
     index_calls,
     predicate_ladder,
 )
-from decisionmodels.lmstudio import LMStudio, ResidentModel
+from decisionmodels.lmstudio import LMStudio, LMStudioError, ResidentModel
 from decisionmodels.points import ROLES
 from decisionmodels.questions import FIT_DIR, Question, load_questions
 
@@ -511,6 +516,10 @@ class Calibration:
     items: tuple[CalibrationItem, ...]
     labels: Mapping[str, Any]
     cells: Mapping[str, str] | None
+    #: `input_hash` of every calibration item loaded (the manifest's entries, U6f.9b)
+    inputHashes: tuple[str, ...] = ()  # noqa: N815
+    #: sha256 of the dataset's `items.jsonl` (the candidates' `provenance.sourceSha`)
+    itemsSha256: str = ""  # noqa: N815
 
 
 def guard_cell(item: Mapping[str, Any]) -> str:
@@ -526,7 +535,8 @@ def load_calibration(role: str, version: str, data_dir: Path = DATA_DIR) -> Cali
     root = data_dir / role / version
     ids = json.loads((root / "splits.json").read_text(encoding="utf-8"))["calibration"]
     rows = {}
-    for line in (root / "items.jsonl").read_text(encoding="utf-8").splitlines():
+    items_bytes = (root / "items.jsonl").read_bytes()
+    for line in items_bytes.decode("utf-8").splitlines():
         if line.strip():
             row = json.loads(line)
             rows[row["itemId"]] = row
@@ -537,7 +547,8 @@ def load_calibration(role: str, version: str, data_dir: Path = DATA_DIR) -> Cali
     items = tuple(CalibrationItem(i, render_item(rows[i]), render_item(rows[i])) for i in ids)
     labels = {i: rows[i]["expected"] for i in ids}
     cells = {i: guard_cell(rows[i]) for i in ids} if role == GUARD else None
-    return Calibration(items, labels, cells)
+    hashes = tuple(input_hash(rows[i], role) for i in ids)
+    return Calibration(items, labels, cells, hashes, hashlib.sha256(items_bytes).hexdigest())
 
 
 # --- the run and its CLI ---
@@ -560,6 +571,10 @@ class FitRun:
     summaries: Mapping[str, CallSummary] = field(default_factory=dict)
     #: the listed dispositions with their effects, per-class figures (U6f.9b prints them)
     dispositions: DispositionReport = DispositionReport((), (), None)
+    #: the calls file written before the analysis (U6f.9b)
+    callsFile: Path | None = None  # noqa: N815
+    inputHashes: tuple[str, ...] = ()  # noqa: N815
+    sourceSha: str = ""  # noqa: N815
 
 
 def validate_url(url: str) -> str:
@@ -589,6 +604,7 @@ def run_fit(
     fit_dir: Path = FIT_DIR,
     exclusions: Sequence[ExclusionFlag] = (),
     reason: str | None = None,
+    now: Callable[[], datetime] | None = None,
 ) -> FitRun:
     """Record check, residency start check, the shared calls once, residency end check, the
     dispositions' effects (`exclusion.apply_dispositions`), the analysis. The call summaries are
@@ -640,8 +656,26 @@ def run_fit(
         residency_start=start,
         fits_dir=fits_dir,
         dispositions=dispositions,
+        now=now,
     )
-    end = check_end(client, inputs)
+    try:
+        end = check_end(client, inputs)
+    except ResidencyRefused as exc:  # the calls are recoverable: label why, then refuse
+        unreadable = isinstance(exc.__cause__, (LMStudioError, TimeoutError))
+        try:
+            write_calls_file(
+                fits_dir,
+                inputs=inputs,
+                collected=collected,
+                end_residency="unreadable" if unreadable else "refused",
+                now=now,
+            )
+        except OSError as write_error:  # never mask the refusal
+            exc.add_note(f"the calls file could not be written: {write_error}")
+        raise
+    calls_file = write_calls_file(
+        fits_dir, inputs=inputs, collected=collected, end_residency="ok", now=now
+    )
     applied = apply_dispositions(
         role,
         collected,
@@ -658,7 +692,24 @@ def run_fit(
         decision_timeout_seconds=inputs.decisionTimeoutSeconds,
         parse_failures=collected.parseFailures,
     )
-    return FitRun(inputs, tuple(texts), start, end, collected, analysis, summaries, applied.report)
+    return FitRun(
+        inputs,
+        tuple(texts),
+        start,
+        end,
+        collected,
+        analysis,
+        summaries,
+        applied.report,
+        calls_file,
+        calibration.inputHashes,
+        calibration.itemsSha256,
+    )
+
+
+def _with_notes(exc: BaseException) -> str:
+    """`str(exc)` and its notes (`ResidencyRefused` carries the calls-file write error as one)."""
+    return "\n".join([str(exc), *getattr(exc, "__notes__", ())])
 
 
 def _exclude_item(value: str) -> ExclusionFlag:
@@ -711,13 +762,19 @@ def _summary_lines(run: FitRun) -> list[str]:
     for effect in run.dispositions.effects:
         d = effect.disposition
         lines.append(f"excluded {d.callKind} call of {d.itemId} ({effect.effect}): {d.reason}")
+    for fig in run.dispositions.byClass:
+        lines.append(
+            f"class {fig.label!r}: k={fig.k} kWrong={fig.kWrong} n_class={fig.nClass} "
+            f"ceiling={fig.ceiling}"
+        )
     return lines
 
 
 def main(argv: Sequence[str] | None = None, *, client: Any = None) -> int:
-    """Run a fit and print the selections. Emission is U6f.9b's. Exit 0, or 1 on a refusal (no file
-    written) or an abort (one abort record). `client` is injected by tests; the default is
-    `LMStudio(--lmstudio-url)`."""
+    """Run a fit, write the calls file, the two candidates, the manifest and the report
+    (`emit.emit`, all or nothing) and print the selections, dispositions and written paths. Exit 0,
+    or 1 on a refusal (the calls file may remain) or an abort (one abort record). `client` is
+    injected by tests; the default is `LMStudio(--lmstudio-url)`."""
     parser = _parser()
     args = parser.parse_args(argv)
     if args.reason is not None and len(args.reason) > 1:
@@ -740,13 +797,21 @@ def main(argv: Sequence[str] | None = None, *, client: Any = None) -> int:
             exclusions=args.exclude_item,
             reason=reason,
         )
-    except (FitRefused, ResidencyRefused, ExclusionRefused, ExclusionDidNotFire) as exc:
-        print(f"refused: {exc}", file=sys.stderr)
+    except (FitRefused, ResidencyRefused, ExclusionRefused, ExclusionDidNotFire, OSError) as exc:
+        print(f"refused: {_with_notes(exc)}", file=sys.stderr)
         return 1
     except FitAborted as exc:
         print(f"aborted: {exc}", file=sys.stderr)
         return 1
     print("\n".join(_summary_lines(run)))
+    try:
+        _, written = emit(
+            run, fits_dir, input_hashes=run.inputHashes, source_sha=run.sourceSha, report=True
+        )
+    except (EmitRefused, ValueError, OSError) as exc:  # an unemittable ladder, or a write failure
+        print(f"refused: {exc}", file=sys.stderr)
+        return 1
+    print("\n".join(f"wrote {p}" for p in written))
     return 0
 
 
