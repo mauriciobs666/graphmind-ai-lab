@@ -45,8 +45,8 @@ CPG: considered, not relevant — no graph is loaded for `cpg/` (the loaded grap
   `salesperson/` until then (steps P1-02, P1-06; sequencing in the sub-plans).
 - **The compute host is small** (6 GB; `-p0-ml.md` §7). Python extract + normalize cost 4.1–4.2× the Joern
   run in the slice (`docs/test-reports/connected-code-graph-p0-slice-report.md` §7 Q2). P1-20 measures a full refresh.
-- **Fixture rows gated at P1:** 92 of 133 (`docs/test-plans/connected-code-graph-fixtures.md` §6, "By earliest
-  gate"), read from that document; P1-41 asserts them.
+- **Fixture rows gated at P1:** 89 of 134 (`docs/test-plans/connected-code-graph-fixtures.md` §6, "By earliest
+  gate"; the census in `cpg/tests/test_fixtures.py` is the count of record), read from that document; P1-41 asserts them. The four `B1F` rows are not among them (P1-41, `-p1-gates.md`).
 - **System scope equals census scope.** The proving system's manifest (P1-03) excludes `cpg/`, `deprecated/`,
   `docs/**/connected-code-graph*`, `docs/BACKLOG.md` and the content-check files that
   `cpg/eval/eval-manifest.yaml` lists, because the held-out keys were written under that scope
@@ -82,7 +82,7 @@ on the stakeholder: Q1 is decided (§6).
 |---|---|---|
 | D1 | **`header.history` `unavailable` stays illegal in P1** (a shallow clone or missing history is a build error), as in `-bundle-spec3.md` §2.2. | No P1 consumer needs it (RCA window and `lastChanged*` for FR-12/FR-14 are P3/P5); widening later is additive. |
 | D2 | **`flowAvailable` is data, not code:** `cpg/ccg/registry/flow-availability.yaml`, one row per language (`python`, `javascript`, …) with the value and the measurement it comes from. The assembler writes `Unit.flowAvailable` from it. A row flips only by an accepted re-measurement record (§5). | The flag is "decided per language from P0's measurements" (`-bundle-spec3.md` §2.2); a registry file keeps the decision reviewable and diffable, and gives `coreTreeHash` something to cover. |
-| D3 | **The shipped default depth bound is 2** (`DEFAULT_DEPTH_BOUND = 2`, one constant in `cpg/ccg/engine/config.py`), recorded in every pre-registration (`defaultDepthBound`) and in `depthBound.unexplored` counting. | EP Q1: a smaller bound fails `flow`'s distance-2 items by construction (`-eval-protocol-ml.md` §3.6). |
+| D3 | **The shipped default depth bound is 2** (`DEFAULT_DEPTH_BOUND = 2`, one constant in `cpg/ccg/engine/config.py`), recorded in every pre-registration (`defaultDepthBound`) and in `depthBound.unexplored` counting. | EP Q1: a smaller bound fails `flow`'s distance-2 items by construction (`-eval-protocol-ml.md` §3.6). Planted fixture rows sit at distance <= 2 (§5). |
 | D4 | **`bindParts` (F-7) is built in P1** as an additive optional field via `-bundle-spec5.md` (P1-13, P1-14), not deferred. | It removes the capability-URL residual the plan accepted "for P1" (`-bundle-spec3.md` §1.7.6) and lifts multi-segment base URLs (`/api/v1`) that cannot bind with clear parts. The cost is one schema delta; the HMAC machinery already lands in P1-07. |
 | D5 | **Interpreter prompts and grammars are never `.md` under `cpg/`.** They live in `cpg/ccg/front/prompts/*.txt` and `grammar/*.json`; a test asserts no `.md` file there. | `coreTreeHash` excludes `**/*.md`; a prompt change must change it (`-eval-protocol-ml.md` §12.3, the M5 condition). Satisfied by construction. |
 | D6 | **MCP server = the `mcp` Python SDK, stdio, FastMCP style**, as `cypher-mcp/` and `mcp-monitor/` already do; tools `ask`, `resolve`, `refresh`, `raw_query`. | Repo convention; the launch surface stays one command. |
@@ -261,26 +261,38 @@ every walk only the flow-dependent hops are `possible` (`-answer-spec2.md` §5).
   Otherwise **reported not closed, flow-unavailable**; the held-out flow items stay unexposed and P1-37 runs flow
   diagnostics on dev items only. If gated, flow recall is reported with and without the 15 invalid KA-flow lines.
 - **AC-25 (closes at P1, proposal §4).** The planted fixtures assert what a symbol-level, call-level walk can list.
-  The **data-flow effect** (a changed return value used two calls away) is the callers' chain: listed `possible`,
-  `flow-unavailable`. The **control-dependency effect** (a changed condition guarding other code) is a
+  The **data-flow effect** (a changed return value used two calls away) is the callers' chain: the direct caller
+  `confirmed`, a caller beyond it `possible`/`flow-unavailable`. The **control-dependency effect** (a changed condition guarding other code) is a
   `CONTROLLED_BY` reach from the condition to the guarded points inside the same function; a symbol-level,
   call-level walk lists no such item (a callee is a depends-on item, not an impact item, in the caller direction).
   With a false flag the fixture therefore asserts only that the callers of the function holding the changed
-  condition are listed `possible`, and the **control half of AC-25 is reported not closed until a flag is true**
+  condition are listed (below), and the **control half of AC-25 is reported not closed until a flag is true**
   (the guarded-code item is asserted in the true form by P1-34's re-run, if ever entered). AC-25 with FR-8 decides
   the reading (`-p1-ml.md` §3.5): P1-39's walk is V-both, which does not list the guarded point, so the control half is reported
   not closed and FR-8 is not met for flag-false flow (stakeholder decision 2026-11-19); every such answer carries the flow notice (`-answer-spec2.md` §5.1).
   **The fixture rows' P1 form (flags false; the manifests hold the flag-true form).** P1-41 asserts these, a flag-true
-  re-run the manifest form: DF-1 `confirmed`/`resolved-call` (a direct caller of the anchor symbol, entered by `HAS_CALL ←` into `function`);
-  DF-2 and DF-3 `possible`/`flow-unavailable:python` (spec2 §5's `B-flow` items B and C: the labelled `CALLS ←` and
-  `TO ←` rows leave the `function`-state `apply_discount` and `create_order`); DF-4 unchanged (`CALLS_NAME`, own
-  `name-match`); CD-1, CD-2, CD-3 not asserted, the control half reported not closed; and the caller of the function holding the
-  changed condition, `core/flow.py::finalize` at distance 1, `possible`/`flow-unavailable:python` (carried by CD-2's
-  P1 form, no new row). RV-1: `connect` (d2) and RV-2: `load_rate` (d2) `possible`/`flow-unavailable:python`, every
-  other dependency as the manifest; RV-3: `base_price` (d3) `possible`/`flow-unavailable:python`, the other two
-  `confirmed`. The forward A25-3 pairs (DF-2/DF-4) are `possible` beside `possible` at P1, so the RV pairs carry the
-  confirmed-before-possible check. CD-4 follows CD-1..3 if the walk does not reach it. The RV and CD-2 forms are derived from `-answer-spec2.md` §5's closed row table; a divergence at the
-  first P1-41 run returns to `architect`, not to the manifest.
+  re-run the manifest form. Each is the answer of the shipped V-both walk (`"1.2"`) at the default bound 2 (D3), derived by hand from the fixture source
+  and the walk rules (`docs/test-reports/connected-code-graph-p1-41-rederivation-report.md`), assuming the frontend resolves what the manifests plant; a
+  row red because the frontend left a planted call unresolved is an extraction defect, not a plan divergence. **Placement rule:** the bound is a walk property, not
+  a flag one, so a planted row sits at distance <= 2 in every form; an effect beyond it is not planted. `-answer-spec2.md` §4.1 states "no P1 consumer needs" a larger or
+  per-request bound, and AC-25's own example is distance 2. A bound of 3 would be a new `algorithm.version` (the bound is in `definition()`), a re-pinned
+  fingerprint, new goldens (`B-1.1`), a re-run of P1-39's pre-registered measurement (taken at 2, stakeholder-accepted) and of the AC-5/AC-16 records: rejected for a fixture's sake.
+  - **Symbol anchors.** A `file:line` or symbol ask resolves to a `Symbol`; a direct caller of it is `confirmed`/`resolved-call` (`HAS_CALL ←` into `function`, no labelled hop). Callers beyond
+    it leave `function` through a labelled row, `possible`/`flow-unavailable:python`; a `CALLS_NAME` hop keeps `name-match`. V-both adds the **callee run**: a `function`-state caller's callees, one per call depth.
+  - **`CF-DF` = `base_price`:** DF-1 `apply_discount` d1 `confirmed`/`resolved-call`; DF-2 `create_order` d2 `possible`/`flow-unavailable:python`; DF-4 `accept_quote` d2
+    `possible`/`name-match`. No callee-run item. The answer states `depthBound.bound` 2 and `unexplored` >= 1 (the cut `VIA ←`/callee edges at distance 3).
+  - **DF-3 is asked of `CF-DF3` = `apply_discount`** (the base_price-anchored effect would be at d3: `TO ←` into LNK-36 costs 0, `VIA ←` to the consumer 1, on `create_order` at d2). Items: `create_order` d1 `confirmed`/`resolved-call`;
+    `accept_quote` d1 `possible`/`name-match`; the consumer function `web:app/src/ui/OrderTotal.tsx::OrderTotal.place` (the owner of the `fetch` site; a nested function is its own `Symbol`) d2 `possible`/`flow-unavailable:python`;
+    LNK-11's other consumer of `POST /api/v1/orders`, `job:job/run_report.py::requeue`, d2 `possible`/`flow-unavailable:python` (an extra the planted list omitted; if the linker's `VIA` site is the wrapper's, the item is that
+    function: confirmed at the first run); the callee-run item `base_price` d2 `possible`/`flow-unavailable:python`. This keeps the cross-repository forward row and the `TO ←`/`VIA ←` rows asserted at P1 with no fixture source change.
+  - **`CF-CD` = `eligible`:** CD-2 carries the caller `finalize` d1 `confirmed`/`resolved-call` and the one callee-run item `notify` d2 `possible`/`flow-unavailable:python` (a callee of `finalize`, not control-dependency evidence;
+    the control half stays "reported not closed"). CD-1 (`audit` is inside the anchor), CD-3 and CD-4 (callees of `notify`, d3 at flag false) are not asserted and not listed; their planted d2 is the flag-true form, not derived against this walk.
+  - **Depends-on (call-based; no callee run, V18 (g)):** RV-1 the planted four with `connect` d2 `possible`/`flow-unavailable:python`, plus the extra `OrderCache.get` d2 (`load_rate`'s `_RATES.get(...)` name-matched; the chain's first possible hop is
+    the labelled one); RV-2 the planted four with `load_rate` d2 `possible`/`flow-unavailable:python`, plus the extra `audit` d1 `confirmed`/`resolved-call` (a call with an unused result, which the data-dependency model omits);
+    RV-3's subject is `OrderTotal.place`: `create_order` d1 `confirmed`, `apply_discount` d2 `confirmed`, extras `Repo.save`/`SqlRepo.save`/`MemRepo.save` d2 `possible`/`name-match`; `base_price` (d3) is not planted.
+  - `notices` `flow-not-enumerated`: `langs` the languages of the flag-false units hosting a visited code node (`python` for `CF-DF`, `CF-CD`, RV-1, RV-2; `javascript` and `python` for RV-3 and `CF-DF3`).
+  The forward A25-3 pairs (DF-2/DF-4) are `possible` beside `possible` at P1; `CF-DF3`'s `create_order`/`accept_quote` and the RV pairs carry the confirmed-before-possible check. The forms are derived from `-answer-spec2.md` §5's closed row table; a
+  divergence at the first P1-41 run returns to `architect`, not to the manifest.
 - **Data and control as separate flags** are not introduced: java's control pairs read 164/169 = 0.970 against
   0.507 for data, but the flag is per language by rule and python's control reads 0.661.
 
@@ -371,7 +383,7 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-40 | AC-8 part 1 run: full refresh plus queries of a mixed fixture system | `devops` | gat | 31, 20, 25, 26 | `analyst` |
 | P1-32 | Eval tooling verbs, then the AC-5 gate harness (two dispatches) | `qa-engineer` | gat | 25, 20 (harness half) | `analyst`; `data-scientist` |
 | P1-33 | P1 test plan `docs/test-plans/connected-code-graph-p1.md` | `qa-engineer` | gat | 00 | `analyst` |
-| P1-41 | Fixture gate, part 1: the 92 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d | `analyst` |
+| P1-41 | Fixture gate, part 1: the 89 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d | `analyst` |
 | P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25); AC-16 is not read closed from P1-25's narrow raw-recipe test, P1-42 adds the other shapes | `qa-engineer` | gat | 41, 26, 39d, 24b | `analyst` |
 | P1-34 | Flow re-measurement (§5): re-point `s28_run.py`, entry check, fresh draw only if entered, decision record | `data-scientist` + `qa-engineer` | gat | 09, `-ml` | `analyst` |
 | P1-35 | AC-24 smoke harness and run | `qa-engineer` | gat | 26, 29, `-ml` | `data-scientist` |
@@ -411,7 +423,7 @@ The method is the proposal's §5 and the ML notes'; this section records only wh
 - **Altitudes** (proposal §5.1). Unit: each extractor ships fixture sources plus the expected bundle (golden per
   frontend, where a Joern upgrade is caught); each pack is table-driven; the projection has golden `DATA` and
   `CONTROLLED_BY` sets for small methods. Contract: bundle, graph and canonical-answer schemas validate in CI; the
-  engine's output passes `ccg.answer` validation (V1–V16). Integration: the fixture system's 92 P1 rows (P1-41) and
+  engine's output passes `ccg.answer` validation (V1–V16). Integration: the fixture system's 89 P1 rows (P1-41) and
   the proving repo's own anchors on `cpg/eval/dev/`.
 - **Equivalence before improvement.** A ported module (P1-04, P1-05, P1-16–P1-18, P1-21, P1-22) first reproduces
   the slice's output on the slice corpus, then changes behaviour in a separate, later dispatch. The stored slice

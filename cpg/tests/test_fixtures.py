@@ -2252,7 +2252,7 @@ def test_tp006_planted_failing_inputs_a_comments_only_unit_and_a_unit_with_no_so
 
 
 def p1_form_plan_rows():
-    text = PLAN_TEXT.split("**P1 form (flow flag false")[1].split("Consequence for A25-3")[0]
+    text = PLAN_TEXT.split("**P1 form (flow flag false")[1].split("Every resolved answer over flag-false code")[0]
     out = {}
     for ln in text.splitlines():
         cells = [c.strip() for c in ln.strip().strip("|").split("|")]
@@ -2275,7 +2275,7 @@ def _leaf_forms(form):
     if "status" in form or "st" in form:
         out.append((form.get("status") or form["st"], form["reason"], _qn(form.get("locator") or form["loc"]),
                     form.get("distance", form.get("dist"))))
-    for d in form.get("dependencies", []) + form.get("deps", []):
+    for d in form.get("dependencies", []) + form.get("deps", []) + form.get("extras", []) + form.get("calleeRun", []):
         out.append((d.get("status") or d["st"], d["reason"], _qn(d.get("locator") or d["loc"]), d.get("distance", d.get("dist"))))
     if "caller" in form:
         c = form["caller"]
@@ -2299,6 +2299,10 @@ def p1_form_violations(manifests):
         f = forms[0]
         if f.get("asserted") is False and "not asserted" not in cell:
             bad.append(f"{rid}: manifest says not asserted, plan says {cell!r}")
+        if f.get("listed") is False and "not listed" not in cell:
+            bad.append(f"{rid}: manifest says not listed, plan says {cell!r}")
+        if f.get("listed") == "none" and "none listed" not in cell:
+            bad.append(f"{rid}: manifest says none listed, plan says {cell!r}")
         for st, reason, loc, dist in _leaf_forms(f):
             if f"`{st}` / `{reason}`" not in cell:
                 bad.append(f"{rid}: p1Form {st}/{reason} not in plan cell {cell!r}")
@@ -2306,13 +2310,35 @@ def p1_form_violations(manifests):
                 bad.append(f"{rid}: p1Form locator {loc} not in plan cell {cell!r}")
             if f"`{loc}` (d{dist})" not in cell:
                 bad.append(f"{rid}: p1Form distance {dist} for {loc} not in plan cell {cell!r}")
-    for rid in set(plan) - set(seen) - {"DF-4", "CD-4"}:
+    for rid in set(plan) - set(seen):
         bad.append(f"{rid}: in the plan's P1-form table, no p1Form in any manifest")
+    notices = p1_notice_plan_langs()
+    for rid, forms in seen.items():
+        ask = "CF-DF" if rid.startswith("DF") else "CF-CD" if rid.startswith("CD") else rid
+        want = notices.get(ask)
+        for f in forms:
+            got = [(n["code"], sorted(n["langs"])) for n in f.get("notices", [])]
+            if want is None or got != [("flow-not-enumerated", want)]:
+                bad.append(f"{rid}: p1Form notices {got} differ from the plan's notices table ({want})")
     return bad
 
 
+def p1_notice_plan_langs():
+    """{ask: sorted langs} from the plan's notices table: `CF-DF` and `CF-CD` are keyed by their ask, an RV row by its id."""
+    text = PLAN_TEXT.split("| Ask (rows) | `notices` `langs` |")[1].split("Consequence for A25-3")[0]
+    out = {}
+    for ln in text.splitlines():
+        cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+        if ln.startswith("|") and len(cells) == 2:
+            langs = sorted(re.findall(r"`([a-z]+)`", cells[1]))
+            for ask in re.findall(r"`(CF-DF|CF-CD)`", cells[0]) + re.findall(r"\b(RV-\d)\b", cells[0]):
+                out[ask] = langs
+    return out
+
+
 def test_p1_form_equals_the_plan_table_and_covers_every_flow_dependent_row(manifests):
-    assert set(p1_form_plan_rows()) >= {"DF-1", "DF-2", "DF-3", "CD-1", "CD-2", "CD-3", "RV-1", "RV-2", "RV-3"}
+    assert set(p1_form_plan_rows()) >= {"DF-1", "DF-2", "DF-3", "DF-4", "CD-1", "CD-2", "CD-3", "CD-4", "RV-1", "RV-2", "RV-3"}
+    assert p1_notice_plan_langs() == {"CF-DF": ["python"], "CF-CD": ["python"], "RV-1": ["python"], "RV-2": ["python"], "RV-3": ["javascript"]}
     assert p1_form_violations(manifests) == []
     held = M.holders(manifests)
     for rid in ("DF-1", "DF-2", "CD-1", "CD-2", "CD-3"):             # the flag-true form stays in place for the re-run
@@ -2325,23 +2351,20 @@ def test_p1_form_planted_failing_inputs(manifests):
     row_by_id(bad["fx-svc"], "DF-2")["p1Form"]["status"] = "confirmed"            # the form index 5 forbids under a false flag
     assert any(x.startswith("DF-2") for x in p1_form_violations(bad))
     bad = copy.deepcopy(manifests)
-    row_by_id(bad["fx-web"], "RV-3")["p1Form"]["deps"][0]["st"] = "confirmed"     # one holder of RV-3 only
+    row_by_id(bad["fx-web"], "RV-3")["p1Form"]["deps"].append({"loc": "svc:api/orders.py::create_order", "dist": 1, "st": "confirmed", "reason": "resolved-call"})   # one holder of RV-3 only
     v = p1_form_violations(bad)
     assert any("RV-3" in x and "disagree" in x for x in v), v
     bad = copy.deepcopy(manifests)
     del row_by_id(bad["fx-svc"], "RV-1")["p1Form"]
     assert any(x.startswith("RV-1") for x in p1_form_violations(bad))
-    # DF-3 is no longer exempt: its P1 form is possible/flow-unavailable:python (spec2 5, B-flow item C)
+    # DF-3 is not listed at the P1 bound (d3 > 2): a manifest that lists it again is red
     bad = copy.deepcopy(manifests)
-    row_by_id(bad["fx-web"], "DF-3")["p1Form"]["st"] = "confirmed"
-    assert any(x.startswith("DF-3") for x in p1_form_violations(bad))
+    row_by_id(bad["fx-web"], "DF-3")["p1Form"].update({"st": "possible", "reason": "flow-unavailable:python", "loc": "web:app/src/ui/OrderTotal.tsx::OrderTotal", "dist": 3})
+    assert any(x.startswith("DF-3") and "locator" in x for x in p1_form_violations(bad))
     bad = copy.deepcopy(manifests)
     del row_by_id(bad["fx-web"], "DF-3")["p1Form"]
     assert any(x.startswith("DF-3") and "no p1Form" in x for x in p1_form_violations(bad))
     # N3: the locator and the distance are compared, not only status and reason
-    bad = copy.deepcopy(manifests)
-    row_by_id(bad["fx-web"], "DF-3")["p1Form"]["loc"] = "web:app/src/ui/Reports.tsx::Reports"
-    assert any(x.startswith("DF-3") and "locator" in x for x in p1_form_violations(bad))
     bad = copy.deepcopy(manifests)
     row_by_id(bad["fx-svc"], "DF-2")["p1Form"]["locator"]["qname"] = "api/orders.py::accept_quote"
     assert any(x.startswith("DF-2") and "locator" in x for x in p1_form_violations(bad))
@@ -2351,6 +2374,19 @@ def test_p1_form_planted_failing_inputs(manifests):
     bad = copy.deepcopy(manifests)
     row_by_id(bad["fx-svc"], "CD-2")["p1Form"]["caller"]["distance"] = 2
     assert any(x.startswith("CD-2") and "distance" in x for x in p1_form_violations(bad))
+    # the V-both callee run, the extras and the notices are compared too
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-svc"], "CD-2")["p1Form"]["calleeRun"][0]["distance"] = 3
+    assert any(x.startswith("CD-2") and "distance" in x for x in p1_form_violations(bad))
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-svc"], "RV-2")["p1Form"]["extras"][0]["status"] = "possible"
+    assert any(x.startswith("RV-2") for x in p1_form_violations(bad))
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-svc"], "DF-1")["p1Form"]["notices"][0]["langs"] = ["javascript"]
+    assert any(x.startswith("DF-1") and "notices" in x for x in p1_form_violations(bad))
+    bad = copy.deepcopy(manifests)
+    del row_by_id(bad["fx-svc"], "RV-1")["p1Form"]["notices"]
+    assert any(x.startswith("RV-1") and "notices" in x for x in p1_form_violations(bad))
 
 
 # ======================================================================================== AC6-PM rows vs the Markdown extractor

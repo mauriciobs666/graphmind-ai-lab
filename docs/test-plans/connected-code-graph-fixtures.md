@@ -1,6 +1,8 @@
 # Connected code graph — fixture system test plan (S35)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.7 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.8 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
+
+*2026-11-19 (v1.8): the P1 form (§5.5) re-derived for the shipped V-both walk at depth bound 2 and a symbol anchor (DF-3 and RV-3 changed, DF-4 and CD-2 to CD-4 stated, extras and callee-run items added, `notices` per ask); counts unchanged (134 rows, P1 93).*
 
 *2026-11-11 (v1.7): Q-ENV deferred to P2, so LNK-13 and LNK-15 expect `key-match` at P1 (their Compose bindings are P2 notes) and AB-4 waits for P2 on LNK-15; LNK-45 (P1-11b `bash -c exec` server `fx-svc-exec`, prompt mention `.claude/agents/exec.md`) added; census 134 rows, positives 122, P1 93; fx-svc SHAs repinned.*
 
@@ -313,27 +315,38 @@ two answers (one planted function, two dependency entries).
 
 **P1 form (flow flag false for both languages; index `docs/plans/connected-code-graph-p1.md` §5).** The tables above are the
 flag-true form. Each manifest row below also carries a `p1Form` field; the P1 gate (P1-41) asserts it, and a flag-true
-re-run asserts the form above. The P1 walk is V-both (answer algorithm and schema label `"1.2"`,
-`docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` §2): its callee runs add `possible`/`flow-unavailable:<lang>`
-callee items, so the `p1Form` expected items of DF-1 to DF-4 and CD-1 to CD-4 (and any other impact-column row whose walk reaches a flag-false function with
-callees) are re-derived at P1-41, not in this plan. Each resolved P1 answer over flag-false code also carries `notices` `flow-not-enumerated`
-(`docs/plans/connected-code-graph-answer-spec2.md` §5.1). A row not listed here has one form. Under a false flag only the flow-dependent hops are
-`possible`/`flow-unavailable:python`; a resolved direct call stays `confirmed` (`-answer-spec2.md` §5).
+re-run asserts the form above. The P1 form is the answer of the shipped V-both walk (answer algorithm and schema label `"1.2"`,
+`docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` §2) at the default depth bound 2, derived by hand from the fixture
+source and the walk rules (`docs/test-reports/connected-code-graph-p1-41-rederivation-report.md`), assuming the frontend resolves what the
+manifests plant. The ask is a symbol anchor: `svc:core/flow.py::base_price` for `CF-DF`, `svc:core/rules.py::eligible` for `CF-CD` (a
+`file:line` or symbol ask resolves to a `Symbol`, never to a `Cond`), and the subject of each `RV` row (depends-on). Each row lists the items the answer
+holds; under a false flag only the flow-dependent hops are `possible`/`flow-unavailable:python`, a resolved direct call stays `confirmed`,
+a `CALLS_NAME` hop keeps `name-match` (`-answer-spec2.md` §5). Three kinds of item beyond the planted ones: a **callee run** item (`calleeRun`,
+V-both: callees of a `function`-state caller, spec2 §5), an **extra** (`extras`: a call-level dependency the call-based depends-on walk lists
+that the data-dependency model does not plant), and **not listed** (`listed: false`, `none`): the item lies beyond the bound (an inc-1 row from distance 2 is cut,
+`-answer-spec2.md` §4.1), so no P1 answer holds it, in either form. A row's P1 form is exact: the answer holds the listed items and no other.
 
 | Row | P1 form (status / reason) | Note |
 |---|---|---|
 | DF-1 | `svc:core/flow.py::apply_discount` (d1) `confirmed` / `resolved-call` | a direct caller of the changed symbol, no labelled hop |
 | DF-2 | `svc:api/orders.py::create_order` (d2) `possible` / `flow-unavailable:python` | two calls away through a flow-dependent hop (`-answer-spec2.md` §5 `B-flow` item B) |
-| DF-3 | `web:app/src/ui/OrderTotal.tsx::OrderTotal` (d3) `possible` / `flow-unavailable:python` | the `TO ←` row into LNK-36 leaves the `function`-state `create_order` (`B-flow` item C) |
-| CD-1, CD-3 | not asserted | the control half is "reported not closed": V-both does not list the guarded point in the general case (`docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` §2.3) |
-| CD-2 | not asserted; carries the caller `svc:core/flow.py::finalize` (d1) `possible` / `flow-unavailable:python` (group fx-svc / core / 1) | the caller of the function holding the changed condition |
-| RV-1 | `svc:db/orders.py::connect` (d2) `possible` / `flow-unavailable:python`; others as above | |
-| RV-2 | `svc:db/orders.py::load_rate` (d2) `possible` / `flow-unavailable:python`; others as above | |
-| RV-3 | `svc:core/flow.py::base_price` (d3) `possible` / `flow-unavailable:python`; others as above | |
-| DF-4, CD-4 | unchanged | `possible`/`name-match` (a `CALLS_NAME ←` row keeps its own reason and may not carry `flow-unavailable`) |
+| DF-3 | not listed (d3 is beyond the bound 2) | the `TO ←` row into LNK-36 leaves `create_order` at d2, the `VIA ←` row to the consumer is inc 1; the consumer function is `OrderTotal.place` (nested function, own `Symbol`) |
+| DF-4 | `svc:api/orders.py::accept_quote` (d2) `possible` / `name-match` | a `CALLS_NAME ←` row keeps its own reason and may not carry `flow-unavailable` |
+| CD-1, CD-3, CD-4 | not asserted, not listed | the control half is "reported not closed" (`docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` §2.3); `audit` is inside the anchor, `publish_created` and `publish_alert` are callees of `notify`, at d3 |
+| CD-2 | not asserted; carries the caller `svc:core/flow.py::finalize` (d1) `confirmed` / `resolved-call` and the callee run item `svc:core/flow.py::notify` (d2) `possible` / `flow-unavailable:python` | the answer to a `Symbol` anchor: `finalize` is a direct caller (confirmed, as DF-1); `notify` is a callee of `finalize` (V-both), listed at d2, not at the planted d1, and not as control-dependency evidence |
+| RV-1 | `svc:db/orders.py::connect` (d2) `possible` / `flow-unavailable:python`; extra `svc:state/cache.py::OrderCache.get` (d2) `possible` / `flow-unavailable:python`; others as above | the extra is `load_rate`'s `_RATES.get(...)` name-matched (the depends-on walk is call-based) |
+| RV-2 | `svc:db/orders.py::load_rate` (d2) `possible` / `flow-unavailable:python`; extra `svc:core/rules.py::audit` (d1) `confirmed` / `resolved-call`; others as above | `audit(o)` is a call with an unused result: a data-dependency model omits it, the call-based walk lists it |
+| RV-3 | none listed | the subject `OrderTotal` owns only `useState`; the `fetch` site belongs to `OrderTotal.place`, so no `Link` is reached (a subject of `OrderTotal.place` is a fixture decision, see the report) |
 
-Consequence for A25-3: in a P1 run no forward group holds both statuses (api/2 `[DF-2, DF-4]` both `possible`; core/1 `[DF-1]`; ui/3 `[DF-3]` now `possible`; bus/2 `[CD-3, CD-4]`; core/1 `[CD-1, CD-2]`), so every forward pair is vacuous; the reverse list carries the check: RV-1's group fx-svc / core / 1 holds `is_member` `confirmed` and `find_hook` `possible`/`name-match` (RV-2: `tier_of` and `find_hook`). The CD-4/CD-3 pair is
-not asserted.
+Every resolved answer over flag-false code carries `notices` `flow-not-enumerated` (`-answer-spec2.md` §5.1), `langs` the languages of the flag-false
+units hosting a visited code node: the `p1Form.notices` of each row, below.
+
+| Ask (rows) | `notices` `langs` |
+|---|---|
+| `CF-DF` (DF-1 to DF-4), `CF-CD` (CD-1 to CD-4), RV-1, RV-2 | `python` |
+| RV-3 | `javascript` |
+
+Consequence for A25-3: in a P1 run no forward group holds both statuses (api/2 `[DF-2, DF-4]` both `possible`; core/1 `[DF-1]`; core/1 `[CD-2 caller]` `confirmed`; core/2 `[CD-2 callee]` `possible`), so every forward pair is vacuous; the reverse list carries the check: RV-1's group fx-svc / core / 1 holds `is_member` `confirmed` and `find_hook` `possible`/`name-match` (RV-2: `tier_of` and `audit` `confirmed`, `find_hook` `possible`).
 
 ### 5.6 Mis-resolved call (`MR-*`, P3-1)
 

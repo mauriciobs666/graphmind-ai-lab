@@ -1478,6 +1478,10 @@ rows:
       path: core/flow.py
       qname: core/flow.py::apply_discount
     distance: 1
+    notices:
+    - code: flow-not-enumerated
+      langs:
+      - python
   serves:
   - A25-1..3
   - A25-4 via RV-1
@@ -1507,6 +1511,10 @@ rows:
       path: api/orders.py
       qname: api/orders.py::create_order
     distance: 2
+    notices:
+    - code: flow-not-enumerated
+      langs:
+      - python
   serves:
   - A25-1..3
   distance: 2
@@ -1527,6 +1535,18 @@ rows:
   status: possible
   reason: name-match
   gate: P1
+  p1Form:
+    status: possible
+    reason: name-match
+    locator:
+      repoId: fx-svc
+      path: api/orders.py
+      qname: api/orders.py::accept_quote
+    distance: 2
+    notices:
+    - code: flow-not-enumerated
+      langs:
+      - python
   serves:
   - A25-1..3
   - A25-3 pair with DF-2
@@ -1550,6 +1570,11 @@ rows:
   gate: P1
   p1Form:
     asserted: false
+    listed: false
+    notices:
+    - code: flow-not-enumerated
+      langs:
+      - python
   serves:
   - A25-1..3
   - A25-4 via RV-2
@@ -1580,8 +1605,21 @@ rows:
         qname: core/flow.py::finalize
       distance: 1
       group: fx-svc / core / 1
+      status: confirmed
+      reason: resolved-call
+    calleeRun:
+    - locator:
+        repoId: fx-svc
+        path: core/flow.py
+        qname: core/flow.py::notify
+      distance: 2
+      group: fx-svc / core / 2
       status: possible
       reason: flow-unavailable:python
+    notices:
+    - code: flow-not-enumerated
+      langs:
+      - python
   serves:
   - A25-1..3
   distance: 1
@@ -1604,6 +1642,11 @@ rows:
   gate: P1
   p1Form:
     asserted: false
+    listed: false
+    notices:
+    - code: flow-not-enumerated
+      langs:
+      - python
   serves:
   - A25-1..3
   distance: 2
@@ -1624,6 +1667,13 @@ rows:
   status: possible
   reason: name-match
   gate: P1
+  p1Form:
+    asserted: false
+    listed: false
+    notices:
+    - code: flow-not-enumerated
+      langs:
+      - python
   serves:
   - A25-1..3
   - A25-3 pair with CD-3
@@ -1653,6 +1703,19 @@ rows:
       group: fx-svc / db / 2
       status: possible
       reason: flow-unavailable:python
+    extras:
+    - locator:
+        repoId: fx-svc
+        path: state/cache.py
+        qname: state/cache.py::OrderCache.get
+      distance: 2
+      group: fx-svc / state / 2
+      status: possible
+      reason: flow-unavailable:python
+    notices:
+    - code: flow-not-enumerated
+      langs:
+      - python
   serves:
   - A25-4
   - A25-1..3 on each of the 4
@@ -1705,6 +1768,19 @@ rows:
       group: fx-svc / db / 2
       status: possible
       reason: flow-unavailable:python
+    extras:
+    - locator:
+        repoId: fx-svc
+        path: core/rules.py
+        qname: core/rules.py::audit
+      distance: 1
+      group: fx-svc / core / 1
+      status: confirmed
+      reason: resolved-call
+    notices:
+    - code: flow-not-enumerated
+      langs:
+      - python
   serves:
   - A25-4
   - A25-1..3 on each of the 4
@@ -1748,15 +1824,12 @@ rows:
   item: reverse question for the subject; the list is known and complete, no other dependency may be confirmed
   gate: P1
   p1Form:
-    dependencies:
-    - locator:
-        repoId: fx-svc
-        path: core/flow.py
-        qname: core/flow.py::base_price
-      distance: 3
-      group: fx-svc / core / 3
-      status: possible
-      reason: flow-unavailable:python
+    listed: none
+    dependencies: []
+    notices:
+    - code: flow-not-enumerated
+      langs:
+      - javascript
   serves:
   - A25-4
   - A25-1..3 on each of the 3
