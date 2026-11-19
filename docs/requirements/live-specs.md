@@ -1,6 +1,6 @@
 # Live specs — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-30
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-19
 
 ## Intent
 
@@ -167,3 +167,4 @@ _None._
   feature? → yes; refines entry 18 (FR-2).
 - 2026-10-30 — Ready for design? → confirmed by stakeholder; `analyst` Pass 3 approve with
   suggestions (`docs/reviews/live-specs.md`).
+- 2026-11-19 — Feature delivered and closed (`falkor-chat/docs/HISTORY.md`, analyst Pass 19 approve with suggestions) → Status flipped to archived.
