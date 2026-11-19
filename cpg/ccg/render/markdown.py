@@ -30,6 +30,7 @@ def render_markdown(doc: dict) -> str:
         out += ["## Code views used", ""] + [f"- {line}" for line in c.staleness_lines(doc)] + [""]
     if doc["interpretation"]["status"] == "resolved":
         out += ["## Summary", "", c.counts_line(doc["items"], doc["groups"]), ""]
+        out += [f"> {line}\n" for line in c.flow_notice_lines(doc)]
         note = c.reach_note(doc)
         if note:
             out += [note, ""]

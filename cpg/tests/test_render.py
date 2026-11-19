@@ -24,7 +24,7 @@ from ccg.render import common as render_common
 import ccg.render as render_pkg
 
 from test_answer import (U1, b_amb, b_config, b_data, b_flow, b_group, b_launch, b_possible, b_rich, b_stale, b_unit, b_unres,
-                         b_mixed, b_wire, b_chain, b_dep_11, b_prov_11, golden, hop, mk_unit, sym_hop, site_hop, to_11, H, REPO, SA)
+                         b_mixed, b_wire, b_chain, b_dep_11, b_notice, b_both, b_12, to_12, NOTICE, b_prov_11, golden, hop, mk_unit, sym_hop, site_hop, to_11, H, REPO, SA)
 
 HERE = Path(__file__).parent
 GOLDEN_DIR = HERE / "golden" / "render"
@@ -755,3 +755,169 @@ def test_qname_and_callee_name_are_fenced_but_not_masked():
     d["items"][0]["subject"]["qname"] = f"m.py::{LONG_SEGMENT}"
     out = render_text(d)
     assert fence_data(LONG_SEGMENT) in out and fence_data(f"m.py::{LONG_SEGMENT}") in out
+
+
+# --- the flow notice (P1-24b; answer spec2 §5.1) -----------------------------------------------------------------
+
+def notice_dep() -> dict:
+    """A ``"1.2"`` depends-on document with a python notice (valid: a notice with no labelled hop is the allowed converse)."""
+    d = to_12(b_dep_11())
+    d["notices"] = [copy.deepcopy(NOTICE)]
+    return d
+
+
+def notice_empty() -> dict:
+    """A resolved ``"1.2"`` document that lists nothing and still carries a notice."""
+    d = b_12()
+    d["items"], d["groups"] = [], []
+    d["staleness"]["units"] = []
+    d["notices"] = [{"code": "flow-not-enumerated", "langs": ["javascript", "python"]}]
+    return d
+
+
+NOTICE_DOCS = {"impact": b_notice, "depends-on": notice_dep, "both": b_both, "empty": notice_empty}
+NOTICE_BUILDERS = pytest.mark.parametrize("build", NOTICE_DOCS.values(), ids=NOTICE_DOCS.keys())
+RENDERED_NOTICE = {"text": lambda d: render_common.flow_notice_lines(d), "markdown": lambda d: [f"> {x}" for x in render_common.flow_notice_lines(d)]}
+
+
+def test_the_notice_fixtures_are_valid_documents_of_the_right_direction():
+    for build in NOTICE_DOCS.values():
+        validate(build())
+    assert b_notice()["interpretation"]["request"]["direction"] == "impact"
+    assert notice_dep()["interpretation"]["request"]["direction"] == "depends-on"
+
+
+@NOTICE_BUILDERS
+def test_the_notice_comes_directly_after_the_counts_line_and_before_the_reach_note_and_any_item(build):
+    doc = build()
+    doc["depthBound"] = {"bound": 2, "unexplored": 3}
+    lines = render_common.flow_notice_lines(doc)
+    assert len(lines) == 1
+    counts = render_common.counts_line(doc["items"], doc["groups"])
+    text = render_text(doc).split("\n")
+    i = text.index(counts)
+    assert text[i + 1] == "" and text[i + 2] == lines[0]
+    assert text[i + 3] == render_common.reach_note(doc)
+    md = render_markdown(doc).split("\n")
+    i = md.index(counts)
+    assert md[i + 1] == "" and md[i + 2] == f"> {lines[0]}" and md[i + 3] == "" and md[i + 4] == render_common.reach_note(doc)
+    assert md.index("## Summary") < i
+    for out in (render_text(doc), render_markdown(doc)):
+        for item in doc["items"]:
+            subject = render_common.subject_text(item, render_common.units_of(doc))
+            assert out.index(lines[0]) < out.index(subject)
+        for group in doc["groups"]:
+            assert out.index(lines[0]) < out.index("Folded group")
+
+
+@BOTH
+def test_a_zero_item_answer_still_shows_the_notice(render):
+    doc = notice_empty()
+    assert render_common.flow_notice_lines(doc)[0] in render(doc)
+    assert "0 items listed" in render(doc)
+
+
+@BOTH
+def test_an_unresolved_or_noticeless_document_shows_no_notice(render):
+    for build in (b_12, b_flow, golden, b_amb, b_unres):
+        doc = build()
+        assert render_common.flow_notice_lines(doc) == []
+        assert "may be missing from this list" not in render(doc)
+
+
+def test_the_notice_is_the_only_difference_from_the_same_document_without_it():
+    doc = b_notice()
+    (line,) = render_common.flow_notice_lines(doc)
+    bare = copy.deepcopy(doc)
+    del bare["notices"]
+    assert render_text(doc).replace(f"\n{line}\n", "", 1) == render_text(bare)
+    assert render_markdown(doc).replace(f"> {line}\n\n", "", 1) == render_markdown(bare)
+
+
+@NOTICE_BUILDERS
+def test_the_notice_names_every_language_and_states_what_may_be_missing_and_what_was_followed(build):
+    doc = build()
+    langs = doc["notices"][0]["langs"]
+    (line,) = render_common.flow_notice_lines(doc)
+    for lang in langs:
+        assert lang in line
+    assert f"Flow-dependent effects in {' and '.join(langs)} may be missing from this list" in line
+    assert "did not follow data, return-value, argument or control-flow edges" in line
+    assert "followed call, link and wiring edges" in line
+    assert "not evidence that no such effect exists" in line
+
+
+def test_every_language_of_a_two_language_notice_is_named_in_both_renderings():
+    doc = notice_empty()
+    for out in (render_text(doc), render_markdown(doc)):
+        assert out.count("javascript and python") == 2
+    assert "javascript, python" not in out
+
+
+@NOTICE_BUILDERS
+def test_the_notice_text_carries_no_banned_word_no_absence_word_and_no_digit_outside_a_language_name(build):
+    doc = build()
+    for lang in ("python", "javascript", "c11", "typescript"):   # the substituted names, including one with digits
+        doc["notices"][0]["langs"] = [lang]
+        (line,) = render_common.flow_notice_lines(doc)
+        assert not render_common.FLOW_NOTICE_BANNED.search(line), line
+        assert not re.search(r"\d", line.replace(lang, ""))
+    assert not re.search(r"\d", render_common.FLOW_NOTICE_TEXT.replace("{langs}", ""))
+
+
+def test_the_ban_matching_is_case_insensitive_whole_word_so_incomplete_and_unsafe_pass():
+    ban = render_common.FLOW_NOTICE_BANNED
+    for bad in ("Safe", "COMPLETE", "exhaustive", "Full", "guarantee", "Guaranteed", "No Impact", "all impacts", "None", "nothing"):
+        assert ban.search(f"x {bad}."), bad
+    for ok in ("incomplete", "unsafe", "carefully", "fullness", "completed"):
+        assert not ban.search(f"x {ok}."), ok
+
+
+def test_languages_are_joined_as_a_readable_list_in_both_places_they_appear():
+    def line(langs):
+        return render_common.flow_notice_lines({"notices": [{"code": "flow-not-enumerated", "langs": langs}]})[0]
+    assert line(["a"]).startswith("Flow-dependent effects in a may be") and "In a the walk" in line(["a"])
+    assert "effects in a and b may" in line(["a", "b"]) and "In a and b the walk" in line(["a", "b"])
+    assert "effects in a, b and c may" in line(["a", "b", "c"]) and "In a, b and c the walk" in line(["a", "b", "c"])
+
+
+def test_a_language_name_with_braces_is_printed_as_text_and_never_read_as_a_format_field():
+    # reachable: the function takes any dict, and the pattern that keeps braces out is the validator's, not relied on here
+    for name in ("a{b}", "{langs}", "{0}", "x}{"):
+        (line,) = render_common.flow_notice_lines({"notices": [{"code": "flow-not-enumerated", "langs": [name, "py"]}]})
+        assert line == render_common.FLOW_NOTICE_TEXT.replace("{langs}", f"{name} and py")
+        assert line.count(name) == 2
+
+
+def test_the_notice_reads_the_same_for_both_columns():
+    impact, dep = b_notice(), notice_dep()
+    assert render_common.flow_notice_lines(impact) == render_common.flow_notice_lines(dep)
+    assert render_common.flow_notice_lines(impact)[0] in render_text(dep)
+    assert render_common.flow_notice_lines(dep)[0] in render_markdown(impact)
+
+
+def test_the_markdown_notice_is_a_blockquote_under_the_summary_heading():
+    md = render_markdown(b_notice())
+    summary = md[md.index("## Summary"):]
+    assert "\n> Flow-dependent effects in python may be missing from this list." in summary
+
+
+def test_the_notice_golden_renders_to_the_committed_text_and_markdown():
+    # A regression pin of the current output, not the wording check: the wording is pinned by the literal-phrase,
+    # ban-list and digit tests above.
+    doc = b_notice()
+    validate(doc)
+    assert render_text(doc) == (GOLDEN_DIR / "answer-notice.txt").read_text(encoding="utf-8")
+    assert render_markdown(doc) == (GOLDEN_DIR / "answer-notice.md").read_text(encoding="utf-8")
+
+
+def test_summary_input_adds_one_codes_only_notice_line_after_validating():
+    out = summary_input(b_notice())
+    assert "notice flow-not-enumerated: python\n" in out
+    assert "missing" not in out and "Flow-dependent" not in out
+    assert "notice flow-not-enumerated: javascript, python\n" in summary_input(notice_empty())
+    assert "notice " not in summary_input(b_12())
+    bad = b_notice()
+    bad["notices"][0]["langs"] = ["python", "python"]
+    with pytest.raises(AnswerError):
+        summary_input(bad)

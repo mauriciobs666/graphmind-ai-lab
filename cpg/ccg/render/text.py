@@ -30,6 +30,8 @@ def render_text(doc: dict) -> str:
         out += ["", "Code views used:"] + [f"{_IND}{line}" for line in c.staleness_lines(doc)]
     if doc["interpretation"]["status"] == "resolved":
         out += ["", c.counts_line(doc["items"], doc["groups"])]
+        notice = c.flow_notice_lines(doc)
+        out += [""] + notice if notice else []
         note = c.reach_note(doc)
         if note:
             out.append(note)

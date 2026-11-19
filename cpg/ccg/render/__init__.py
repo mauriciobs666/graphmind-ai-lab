@@ -2,8 +2,9 @@
 
 ``render_text(doc)`` is the grouped plain-text answer and ``render_markdown(doc)`` the saved impact report; both are
 deterministic templates, and both open with ``answer.FENCE_SENTENCE``. ``summary_input(doc)`` is the only text a
-plain-language summary prompt may be built from: counts and engine-minted codes, never a data field. It validates
-its input and raises ``AnswerError`` on a document that fails, so a hostile minted string cannot reach the model.
+plain-language summary prompt may be built from: counts and engine-minted codes, never a data field. It validates its input and raises ``AnswerError`` on a document that fails, so a hostile minted
+string cannot reach the model. A document with ``notices`` shows the flow notice (``common.flow_notice_lines``,
+spec2 §5.1) directly after the counts line in both renderers.
 """
 from __future__ import annotations
 
@@ -45,6 +46,7 @@ def summary_input(doc: dict) -> str:
     for u in doc["staleness"]["units"]:
         states[u["buildStatus"]] = states.get(u["buildStatus"], 0) + 1
     lines += [f"units {s}: {n}" for s, n in sorted(states.items())]
+    lines += [f"notice {n['code']}: {', '.join(n['langs'])}" for n in doc.get("notices", [])]
     note = c.reach_note(doc)
     if note:
         lines.append(note)

@@ -17,6 +17,7 @@ The one exception is ``ccg.render.summary_input``, the model-bound output, which
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 
 from ccg.answer import fence_data, mask_identifier
@@ -44,6 +45,17 @@ GROUP_TITLE = {
 }
 PORT_ORIGIN = {"explicit": "stated explicitly", "env-default": "from an environment default", "compose": "from Compose"}
 LAUNCH_ORDER = ("argv0", "service", "protocol", "port", "envVar", "mountPath")
+#: The flow notice (answer spec2 §5.1): one fixed template for both columns, ``{langs}`` the notice's languages. It says
+#: the list may be partial (never that nothing was listed) and what the walk followed; it carries no figure and no digit.
+FLOW_NOTICE_TEXT = (
+    "Flow-dependent effects in {langs} may be missing from this list. "
+    "In {langs} the walk did not follow data, return-value, argument or control-flow edges; "
+    "it followed call, link and wiring edges. "
+    "An item's absence here is not evidence that no such effect exists."
+)
+#: Words the notice never uses (spec2 §5.1), matched case-insensitively as whole words; ``incomplete`` and ``unsafe`` pass.
+FLOW_NOTICE_BANNED = re.compile(
+    r"\b(?:safe|complete|exhaustive|full|guarantee|guaranteed|no impact|all impacts|none|nothing)\b", re.IGNORECASE)
 DIRECTION_TITLE = {"impact": "What is affected by", "depends-on": "What depends on the answer to"}
 
 
@@ -184,6 +196,21 @@ def reach_note(doc: dict) -> str | None:
     if db["unexplored"] > 0:
         return f"Reach stopped at distance {db['bound']} with {db['unexplored']} unexplored edges."
     return None
+
+
+def flow_notice_lines(doc: dict) -> list[str]:
+    """The flow notice as plain lines, one per ``notices`` entry, or ``[]`` for a document without ``notices`` (§5.1).
+
+    Deterministic text filled only with the minted ``langs``; the renderers place it directly after ``counts_line`` and
+    the plain-language summary (P1-26) is followed by exactly these lines, never by a model's restatement.
+    """
+    # ``replace``, not ``format``: a name is substituted as plain text and never read as a format field.
+    return [FLOW_NOTICE_TEXT.replace("{langs}", _lang_list(n["langs"])) for n in doc.get("notices", [])]
+
+
+def _lang_list(langs: list[str]) -> str:
+    """``a``, ``a and b``, ``a, b and c``: the notice's languages as a readable list."""
+    return langs[0] if len(langs) == 1 else f"{', '.join(langs[:-1])} and {langs[-1]}"
 
 
 def counts_line(items: list[dict], groups: list[dict]) -> str:
