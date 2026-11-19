@@ -1,0 +1,99 @@
+{"case": "bool true, clean rationale: advance", "reply": "{\"decision\": true, \"rationale\": \"The user gave the service and the time window.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "bool false: suspend", "reply": "{\"decision\": false, \"rationale\": \"The time window is missing.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "string \"true\": not an advance", "reply": "{\"decision\": \"true\", \"rationale\": \"The user gave the service.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "string \"false\": not an advance", "reply": "{\"decision\": \"false\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "integer 1: not an advance", "reply": "{\"decision\": 1, \"rationale\": \"ok\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "null decision: not an advance", "reply": "{\"decision\": null}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "whole-reply object with no decision key: parsed, not an advance", "reply": "{\"rationale\": \"no decision key\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "bool true, no rationale: advance", "reply": "{\"decision\": true}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "bool true, non-string rationale read as empty: advance", "reply": "{\"decision\": true, \"rationale\": 42}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "contradiction: 'not enough' at the start", "reply": "{\"decision\": true, \"rationale\": \"Not enough information was given.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "contradiction: 'still missing'", "reply": "{\"decision\": true, \"rationale\": \"The order id is still missing.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "contradiction: 'cannot '", "reply": "{\"decision\": true, \"rationale\": \"The agent cannot confirm the date.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "contradiction: upper-case cue is lowered first", "reply": "{\"decision\": true, \"rationale\": \"Details are UNCLEAR.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "contradiction: cue with decision false stays a suspend", "reply": "{\"decision\": false, \"rationale\": \"Not enough information.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "negation: 'no ' before 'more info' affirms", "reply": "{\"decision\": true, \"rationale\": \"No more info is needed.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "negation: 'nothing ' before 'unclear' affirms", "reply": "{\"decision\": true, \"rationale\": \"Nothing unclear remains.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "negation: \"n't \" before 'unclear' affirms", "reply": "{\"decision\": true, \"rationale\": \"The request isn't unclear.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "negation: 'never ' before 'insufficient' affirms", "reply": "{\"decision\": true, \"rationale\": \"The detail was never insufficient.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "negation window: a negator starting exactly 12 chars before the cue is inside the window", "reply": "{\"decision\": true, \"rationale\": \"It is not so very unclear.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "negation window: negator 13 chars before the cue is outside the 12-char window", "reply": "{\"decision\": true, \"rationale\": \"It is not entirely unclear.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "negation clause boundary: ';' stops a negator in the earlier clause", "reply": "{\"decision\": true, \"rationale\": \"The user did not say; more info is needed.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "negation clause boundary: ',' stops a negator in the earlier clause", "reply": "{\"decision\": true, \"rationale\": \"Not so, unclear though.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "negation clause boundary: '.' stops a negator in the earlier sentence", "reply": "{\"decision\": true, \"rationale\": \"Not so. Unclear though.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "negation: a later un-negated repeat of a negated cue contradicts", "reply": "{\"decision\": true, \"rationale\": \"No more info needed, but more info would help.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "fenced json bool true: advance", "reply": "```json\n{\"decision\": true, \"rationale\": \"ok\"}\n```", "expected": {"advance": true, "parseFailure": false}}
+{"case": "prose then own-line object: advance", "reply": "Thinking it over.\n{\"decision\": true, \"rationale\": \"The user confirmed.\"}\n", "expected": {"advance": true, "parseFailure": false}}
+{"case": "own-line rule: trailing prose on the closing line is quoted, not asserted", "reply": "Hmm.\n{\"decision\": true} is what I would say, but no.\n", "expected": {"advance": false, "parseFailure": true}}
+{"case": "own-line rule: require_key skips a keyless own-line object, the verdict advances", "reply": "Example:\n{\"note\": 1}\n{\"decision\": true}\n", "expected": {"advance": true, "parseFailure": false}}
+{"case": "duplicate keys: the last value wins (advance)", "reply": "{\"decision\": false, \"decision\": true}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "duplicate keys: the last value wins (suspend)", "reply": "{\"decision\": true, \"decision\": false}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "malformed: not json at all", "reply": "not json at all", "expected": {"advance": false, "parseFailure": true}}
+{"case": "malformed: verdict quoted mid-sentence", "reply": "I would answer {\"decision\": true} but they did not.", "expected": {"advance": false, "parseFailure": true}}
+{"case": "malformed: two own-line verdicts disagree", "reply": "a\n{\"decision\": true}\n{\"decision\": false}\n", "expected": {"advance": false, "parseFailure": true}}
+{"case": "malformed: truncated object", "reply": "{\"decision\": true, \"rationale\": \"cut", "expected": {"advance": false, "parseFailure": true}}
+{"case": "malformed: top-level array", "reply": "[{\"decision\": true}]", "expected": {"advance": false, "parseFailure": true}}
+{"case": "malformed: empty reply", "reply": "", "expected": {"advance": false, "parseFailure": true}}
+{"case": "malformed: whitespace-only reply", "reply": "  \n ", "expected": {"advance": false, "parseFailure": true}}
+{"case": "malformed: non-string content (null)", "reply": null, "expected": {"advance": false, "parseFailure": true}}
+{"case": "probe: cue 'not enough' un-negated contradicts", "reply": "{\"decision\": true, \"rationale\": \"Status: not enough for now.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "probe: negator 'no ' before cue 'not enough' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: no not enough for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'not ' before cue 'not enough' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: not not enough for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'nothing ' before cue 'not enough' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: nothing not enough for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'never ' before cue 'not enough' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: never not enough for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator \"n't \" before cue 'not enough' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: n't not enough for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: cue 'insufficient' un-negated contradicts", "reply": "{\"decision\": true, \"rationale\": \"Status: insufficient for now.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "probe: negator 'no ' before cue 'insufficient' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: no insufficient for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'not ' before cue 'insufficient' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: not insufficient for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'nothing ' before cue 'insufficient' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: nothing insufficient for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'never ' before cue 'insufficient' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: never insufficient for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator \"n't \" before cue 'insufficient' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: n't insufficient for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: cue 'still missing' un-negated contradicts", "reply": "{\"decision\": true, \"rationale\": \"Status: still missing for now.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "probe: negator 'no ' before cue 'still missing' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: no still missing for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'not ' before cue 'still missing' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: not still missing for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'nothing ' before cue 'still missing' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: nothing still missing for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'never ' before cue 'still missing' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: never still missing for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator \"n't \" before cue 'still missing' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: n't still missing for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: cue 'still need' un-negated contradicts", "reply": "{\"decision\": true, \"rationale\": \"Status: still need for now.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "probe: negator 'no ' before cue 'still need' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: no still need for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'not ' before cue 'still need' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: not still need for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'nothing ' before cue 'still need' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: nothing still need for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'never ' before cue 'still need' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: never still need for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator \"n't \" before cue 'still need' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: n't still need for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: cue 'cannot ' un-negated contradicts", "reply": "{\"decision\": true, \"rationale\": \"Status: cannot for now.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "probe: 'cannot' without the cue's trailing space is not cue 'cannot '", "reply": "{\"decision\": true, \"rationale\": \"Status: cannot.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'no ' before cue 'cannot ' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: no cannot for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'not ' before cue 'cannot ' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: not cannot for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'nothing ' before cue 'cannot ' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: nothing cannot for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'never ' before cue 'cannot ' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: never cannot for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator \"n't \" before cue 'cannot ' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: n't cannot for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: cue 'unable' un-negated contradicts", "reply": "{\"decision\": true, \"rationale\": \"Status: unable for now.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "probe: negator 'no ' before cue 'unable' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: no unable for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'not ' before cue 'unable' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: not unable for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'nothing ' before cue 'unable' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: nothing unable for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'never ' before cue 'unable' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: never unable for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator \"n't \" before cue 'unable' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: n't unable for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: cue 'unclear' un-negated contradicts", "reply": "{\"decision\": true, \"rationale\": \"Status: unclear for now.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "probe: negator 'no ' before cue 'unclear' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: no unclear for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'not ' before cue 'unclear' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: not unclear for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'nothing ' before cue 'unclear' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: nothing unclear for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'never ' before cue 'unclear' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: never unclear for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator \"n't \" before cue 'unclear' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: n't unclear for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: cue 'not yet' un-negated contradicts", "reply": "{\"decision\": true, \"rationale\": \"Status: not yet for now.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "probe: negator 'no ' before cue 'not yet' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: no not yet for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'not ' before cue 'not yet' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: not not yet for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'nothing ' before cue 'not yet' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: nothing not yet for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'never ' before cue 'not yet' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: never not yet for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator \"n't \" before cue 'not yet' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: n't not yet for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: cue 'more info' un-negated contradicts", "reply": "{\"decision\": true, \"rationale\": \"Status: more info for now.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "probe: negator 'no ' before cue 'more info' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: no more info for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'not ' before cue 'more info' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: not more info for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'nothing ' before cue 'more info' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: nothing more info for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'never ' before cue 'more info' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: never more info for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator \"n't \" before cue 'more info' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: n't more info for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: cue 'need more' un-negated contradicts", "reply": "{\"decision\": true, \"rationale\": \"Status: need more for now.\"}", "expected": {"advance": false, "parseFailure": false}}
+{"case": "probe: negator 'no ' before cue 'need more' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: no need more for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'not ' before cue 'need more' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: not need more for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'nothing ' before cue 'need more' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: nothing need more for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator 'never ' before cue 'need more' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: never need more for now.\"}", "expected": {"advance": true, "parseFailure": false}}
+{"case": "probe: negator \"n't \" before cue 'need more' affirms", "reply": "{\"decision\": true, \"rationale\": \"Status: n't need more for now.\"}", "expected": {"advance": true, "parseFailure": false}}

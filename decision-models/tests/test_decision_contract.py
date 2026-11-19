@@ -4,7 +4,7 @@ v1.3 §3.2, §3.2.2, §3.5).
 
 model-bench owns the canonical golden vectors (`model-bench/tests/fixtures/decision-contract/`).
 This suite asserts `decisionmodels.render` and `decisionmodels.hashing` against **byte-copies** of
-eight of them under `tests/fixtures/decision-contract/`:
+twelve of them under `tests/fixtures/decision-contract/`:
 
 * `render-guard.jsonl` — `render_guard_input(condition, understanding, recentTurns)`; expected
   strings produced by falkor-chat's real `_render_judge_user`;
@@ -18,6 +18,9 @@ eight of them under `tests/fixtures/decision-contract/`:
   (here only the byte-identity);
 * `apply-policy.jsonl` — v1.3 §3.3's `apply_policy` rows, asserted in `tests/test_policy.py`
   (here only the byte-identity);
+* `handoff-parse-*.jsonl` (U6f.3a, asserted in `tests/test_handoff_parse.py`) and
+  `fit-manifest.jsonl` (U6f.4a, asserted in `tests/test_manifest.py`) — here only the
+  byte-identity;
 * `dataset-shape.jsonl` — plan6 §3.7's dataset contract vector (`generation.json`, items and
   `splits.json`, one line per role; `docs/plans/typed-decision-models6.md`, U6.6), which
   `finalize`'s output is checked against (U5.10). Here only its items are checked against this
@@ -55,6 +58,10 @@ _VECTOR_FILES = (
     "dataset-shape.jsonl",
     "over-limit.jsonl",
     "apply-policy.jsonl",
+    "handoff-parse-guard.jsonl",
+    "handoff-parse-message-type.jsonl",
+    "handoff-parse-join-in.jsonl",
+    "fit-manifest.jsonl",
 )
 
 

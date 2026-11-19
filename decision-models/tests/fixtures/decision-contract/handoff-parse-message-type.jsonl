@@ -1,0 +1,26 @@
+{"case": "label 'order': in the answer space", "reply": "{\"type\": \"order\"}", "expected": {"type": "order", "parseFailure": false}}
+{"case": "label 'question': in the answer space", "reply": "{\"type\": \"question\"}", "expected": {"type": "question", "parseFailure": false}}
+{"case": "label 'complaint': in the answer space", "reply": "{\"type\": \"complaint\"}", "expected": {"type": "complaint", "parseFailure": false}}
+{"case": "label 'escalation': in the answer space", "reply": "{\"type\": \"escalation\"}", "expected": {"type": "escalation", "parseFailure": false}}
+{"case": "label 'other': in the answer space", "reply": "{\"type\": \"other\"}", "expected": {"type": "other", "parseFailure": false}}
+{"case": "out of the answer space: no label", "reply": "{\"type\": \"small talk\"}", "expected": {"type": null, "parseFailure": false}}
+{"case": "out of the answer space: a near-miss spelling", "reply": "{\"type\": \"orders\"}", "expected": {"type": null, "parseFailure": false}}
+{"case": "case differs: no label", "reply": "{\"type\": \"Order\"}", "expected": {"type": null, "parseFailure": false}}
+{"case": "padded with whitespace: no label", "reply": "{\"type\": \" order\"}", "expected": {"type": null, "parseFailure": false}}
+{"case": "non-string type: no label", "reply": "{\"type\": 1}", "expected": {"type": null, "parseFailure": false}}
+{"case": "null type: no label", "reply": "{\"type\": null}", "expected": {"type": null, "parseFailure": false}}
+{"case": "list type: no label", "reply": "{\"type\": [\"order\"]}", "expected": {"type": null, "parseFailure": false}}
+{"case": "whole-reply object with no type key: parsed, no label", "reply": "{\"label\": \"order\"}", "expected": {"type": null, "parseFailure": false}}
+{"case": "extra keys are ignored", "reply": "{\"type\": \"other\", \"why\": \"a greeting\"}", "expected": {"type": "other", "parseFailure": false}}
+{"case": "fenced json: label", "reply": "```json\n{\"type\": \"complaint\"}\n```", "expected": {"type": "complaint", "parseFailure": false}}
+{"case": "prose then own-line object: label", "reply": "It is a grievance.\n{\"type\": \"complaint\"}\n", "expected": {"type": "complaint", "parseFailure": false}}
+{"case": "own-line rule: trailing prose on the closing line is quoted, not asserted", "reply": "Hmm.\n{\"type\": \"order\"} maybe, or not.\n", "expected": {"type": null, "parseFailure": true}}
+{"case": "own-line rule: require_key skips a keyless own-line object", "reply": "Example:\n{\"note\": 1}\n{\"type\": \"escalation\"}\n", "expected": {"type": "escalation", "parseFailure": false}}
+{"case": "duplicate keys: the last value wins", "reply": "{\"type\": \"order\", \"type\": \"question\"}", "expected": {"type": "question", "parseFailure": false}}
+{"case": "malformed: two own-line labels disagree", "reply": "a\n{\"type\": \"order\"}\n{\"type\": \"question\"}\n", "expected": {"type": null, "parseFailure": true}}
+{"case": "malformed: label quoted mid-sentence", "reply": "I would say {\"type\": \"order\"} here.", "expected": {"type": null, "parseFailure": true}}
+{"case": "malformed: not json at all", "reply": "order", "expected": {"type": null, "parseFailure": true}}
+{"case": "malformed: truncated object", "reply": "{\"type\": \"ord", "expected": {"type": null, "parseFailure": true}}
+{"case": "malformed: top-level array", "reply": "[{\"type\": \"order\"}]", "expected": {"type": null, "parseFailure": true}}
+{"case": "malformed: empty reply", "reply": "", "expected": {"type": null, "parseFailure": true}}
+{"case": "malformed: non-string content (null)", "reply": null, "expected": {"type": null, "parseFailure": true}}

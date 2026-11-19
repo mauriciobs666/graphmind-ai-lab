@@ -2,6 +2,16 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-18 — typed-decision-models U6f.3a, U6f.4a, U6f.5 — hand-off parse, fit manifest, fit statistics
+
+**What:** plan4 `docs/plans/typed-decision-models4.md` §3.11, §4.4 and §5 rows U6f.3a/4a/5; one combined gate, `docs/reviews/typed-decision-models.md` Passes 45–46 (approve).
+- **U6f.3a:** `decisionmodels/handoff.py` (own-line JSON parse, guard verdict and negation rules, join-in and message-type parses; stdlib only) and `tests/test_handoff_parse.py` asserting all 147 rows of the three `handoff-parse-*.jsonl` byte-copies plus 9 edge tests; 156 tests in that file. `parse_guard_handoff` equals the bench's decision-point `answer_from_chat`.
+- **U6f.4a:** `decisionmodels/manifest.py` (`render_manifest`/`parse_manifest`/`declare_manifest`/`verify_manifest`, `ManifestRefused(rule)`; reader order sha256 → format → count; `size` is the entry count; a bool `size` is refused, stricter than the bench) and `tests/test_manifest.py` (34 tests) over all 11 `fit-manifest.jsonl` rows plus 63/65/trailing-`x`/empty wrong-shape lines on writer and reader.
+- **U6f.5:** `decisionmodels/fitstats.py` and `tests/test_fitstats.py` (58 tests, hand-computed literals). `split_half` (sorted ids, alternating) is the unit's choice: the plan and notes give no partition. `ScoredCall` ties `textId` to `callKind`; `LadderResult` refuses a hand-off `rung=None` and a bool or float `rung`; `qualityTarget` is validated at assembly (U6f.9a/9b). Ceilings return floats for now; U6f.6 moves them to exact `Fraction`.
+- The four vector copies are registered in `tests/test_decision_contract.py` (twelve in all).
+
+**Verified:** delegates' mutant tables (21, 15, 27 killed; the survivors found by the coordinator and the gate were killed by the fix round); full suite re-run by the coordinator, ruff clean.
+
 ## 2026-11-12 — typed-decision-models U6f.1c — the closed failure kind on `lmstudio.py`
 
 **What:** plan4 §3.11 `failureKind` / §4.4 U6f.1c. `LMStudioCallFailed` takes a required keyword `kind` (`http`, `connection`, `malformed`), set at every raise site of `_send`, `_parse`, `residency`, `decide` and `chat`; its constructor refuses an unknown kind and `http` without a `status` (or a `status` without `http`). `LMStudioCallTimeout.kind` is `timeout`; `failure_kind(exc)` reads the kind from either exception (a `TypeError` for anything else). The `status=None` docstring text of the module and of `LMStudioCallFailed` is replaced by the kind.
