@@ -1,0 +1,2295 @@
+{
+  "calls": {
+    "decision": {
+      "callKind": "decision",
+      "dispositionItemIds": [],
+      "halfBudgetCount": 0,
+      "k": 0,
+      "maxSeconds": 0.031257423004717566,
+      "medianSeconds": 0.021530059500946663,
+      "n": 1000,
+      "parseFailures": 0,
+      "wilsonUpper95": 0.003826898586390522
+    },
+    "handoff": {
+      "callKind": "handoff",
+      "dispositionItemIds": [],
+      "halfBudgetCount": 0,
+      "k": 0,
+      "maxSeconds": 0.6127272980011185,
+      "medianSeconds": 0.12564141449911403,
+      "n": 200,
+      "parseFailures": 0,
+      "wilsonUpper95": 0.018846005918320894
+    }
+  },
+  "callsFile": "calls-20261119T175506Z-d750706f320549af82d0dd63b76f9d1a.json",
+  "candidates": {
+    "decision-only": {
+      "candidateId": "join-in-judge-v2-only-f1",
+      "chosen": {
+        "noEligibleText": false,
+        "outcome": "fit-infeasible: agreement",
+        "qualityTarget": "max-min-agreement",
+        "rung": 4,
+        "textId": "j-continuity"
+      },
+      "texts": [
+        {
+          "auc": 0.5984,
+          "aucUndefined": false,
+          "control": true,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "false": {
+                  "decimal": 0.58,
+                  "fraction": "29/50"
+                },
+                "true": {
+                  "decimal": 0.6,
+                  "fraction": "3/5"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.58,
+                "fraction": "29/50"
+              },
+              "nClass": {
+                "false": 100,
+                "true": 100
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s350": {
+                "decimal": 2.5874794490177733,
+                "fraction": "9115135380483/3522785614372"
+              },
+              "tLH_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "tL_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "td_ms": {
+                "decimal": 18.393306620309886,
+                "fraction": "2527956812785/137438953472"
+              },
+              "unfixableByClass": {
+                "false": 0,
+                "true": 0
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              {
+                "decimal": -0.58,
+                "fraction": "-29/50"
+              },
+              {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "t": 0.5351485942462144
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 200
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.5351485942462144
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.6111111111111112,
+                    "fraction": "11/18"
+                  },
+                  "true": {
+                    "decimal": 0.6304347826086957,
+                    "fraction": "29/46"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.5434782608695652,
+                    "fraction": "25/46"
+                  },
+                  "true": {
+                    "decimal": 0.5740740740740741,
+                    "fraction": "31/54"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.06763285024154589,
+                    "fraction": "-14/207"
+                  },
+                  "true": {
+                    "decimal": -0.05636070853462158,
+                    "fraction": "-35/621"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.5722141654862503
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.5652173913043478,
+                    "fraction": "13/23"
+                  },
+                  "true": {
+                    "decimal": 0.5555555555555556,
+                    "fraction": "5/9"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.6296296296296297,
+                    "fraction": "17/27"
+                  },
+                  "true": {
+                    "decimal": 0.5652173913043478,
+                    "fraction": "13/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.0644122383252818,
+                    "fraction": "40/621"
+                  },
+                  "true": {
+                    "decimal": 0.00966183574879227,
+                    "fraction": "2/207"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "j-control"
+        },
+        {
+          "auc": 0.618,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "false": {
+                  "decimal": 0.57,
+                  "fraction": "57/100"
+                },
+                "true": {
+                  "decimal": 0.59,
+                  "fraction": "59/100"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.57,
+                "fraction": "57/100"
+              },
+              "nClass": {
+                "false": 100,
+                "true": 100
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s350": {
+                "decimal": 2.5361131399225605,
+                "fraction": "8934182885739/3522785614372"
+              },
+              "tLH_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "tL_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "td_ms": {
+                "decimal": 24.976320030000352,
+                "fraction": "3432719286505/137438953472"
+              },
+              "unfixableByClass": {
+                "false": 0,
+                "true": 0
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              {
+                "decimal": -0.57,
+                "fraction": "-57/100"
+              },
+              {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "t": 0.3337976411678397
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 200
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.32053195236788584
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.6111111111111112,
+                    "fraction": "11/18"
+                  },
+                  "true": {
+                    "decimal": 0.6521739130434783,
+                    "fraction": "15/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.45652173913043476,
+                    "fraction": "21/46"
+                  },
+                  "true": {
+                    "decimal": 0.6111111111111112,
+                    "fraction": "11/18"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.15458937198067632,
+                    "fraction": "-32/207"
+                  },
+                  "true": {
+                    "decimal": -0.04106280193236715,
+                    "fraction": "-17/414"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.3416965495117105
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.5,
+                    "fraction": "1/2"
+                  },
+                  "true": {
+                    "decimal": 0.5370370370370371,
+                    "fraction": "29/54"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.6666666666666666,
+                    "fraction": "2/3"
+                  },
+                  "true": {
+                    "decimal": 0.5869565217391305,
+                    "fraction": "27/46"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.16666666666666666,
+                    "fraction": "1/6"
+                  },
+                  "true": {
+                    "decimal": 0.0499194847020934,
+                    "fraction": "31/621"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "j-rubric"
+        },
+        {
+          "auc": 0.6754,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "false": {
+                  "decimal": 0.62,
+                  "fraction": "31/50"
+                },
+                "true": {
+                  "decimal": 0.63,
+                  "fraction": "63/100"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.62,
+                "fraction": "31/50"
+              },
+              "nClass": {
+                "false": 100,
+                "true": 100
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s350": {
+                "decimal": 2.565861175448896,
+                "fraction": "9038978837347/3522785614372"
+              },
+              "tLH_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "tL_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "td_ms": {
+                "decimal": 21.163865519811225,
+                "fraction": "2908739528465/137438953472"
+              },
+              "unfixableByClass": {
+                "false": 0,
+                "true": 0
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              {
+                "decimal": -0.62,
+                "fraction": "-31/50"
+              },
+              {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "t": 0.5472623306260508
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 200
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.5759114051467841
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.6666666666666666,
+                    "fraction": "2/3"
+                  },
+                  "true": {
+                    "decimal": 0.6521739130434783,
+                    "fraction": "15/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.717391304347826,
+                    "fraction": "33/46"
+                  },
+                  "true": {
+                    "decimal": 0.5925925925925926,
+                    "fraction": "16/27"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.050724637681159424,
+                    "fraction": "7/138"
+                  },
+                  "true": {
+                    "decimal": -0.05958132045088567,
+                    "fraction": "-37/621"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.5373578593264018
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.6521739130434783,
+                    "fraction": "15/23"
+                  },
+                  "true": {
+                    "decimal": 0.6481481481481481,
+                    "fraction": "35/54"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.5740740740740741,
+                    "fraction": "31/54"
+                  },
+                  "true": {
+                    "decimal": 0.6521739130434783,
+                    "fraction": "15/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.07809983896940419,
+                    "fraction": "-97/1242"
+                  },
+                  "true": {
+                    "decimal": 0.004025764895330112,
+                    "fraction": "5/1242"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "j-addressee"
+        },
+        {
+          "auc": 0.7035,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "false": {
+                  "decimal": 0.66,
+                  "fraction": "33/50"
+                },
+                "true": {
+                  "decimal": 0.66,
+                  "fraction": "33/50"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.66,
+                "fraction": "33/50"
+              },
+              "nClass": {
+                "false": 100,
+                "true": 100
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s350": {
+                "decimal": 2.550800460806328,
+                "fraction": "4492961584231/1761392807186"
+              },
+              "tLH_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "tL_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "td_ms": {
+                "decimal": 23.094019509808277,
+                "fraction": "1587008936445/68719476736"
+              },
+              "unfixableByClass": {
+                "false": 0,
+                "true": 0
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              {
+                "decimal": -0.66,
+                "fraction": "-33/50"
+              },
+              {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "t": 0.4801789259707883
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 200
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.48440009143287094
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.7037037037037037,
+                    "fraction": "19/27"
+                  },
+                  "true": {
+                    "decimal": 0.6956521739130435,
+                    "fraction": "16/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.6304347826086957,
+                    "fraction": "29/46"
+                  },
+                  "true": {
+                    "decimal": 0.5925925925925926,
+                    "fraction": "16/27"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.07326892109500806,
+                    "fraction": "-91/1242"
+                  },
+                  "true": {
+                    "decimal": -0.10305958132045089,
+                    "fraction": "-64/621"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.48129864252517407
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.6304347826086957,
+                    "fraction": "29/46"
+                  },
+                  "true": {
+                    "decimal": 0.6296296296296297,
+                    "fraction": "17/27"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.7037037037037037,
+                    "fraction": "19/27"
+                  },
+                  "true": {
+                    "decimal": 0.6956521739130435,
+                    "fraction": "16/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.07326892109500806,
+                    "fraction": "91/1242"
+                  },
+                  "true": {
+                    "decimal": 0.06602254428341385,
+                    "fraction": "41/621"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "j-continuity"
+        },
+        {
+          "auc": 0.6607,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "false": {
+                  "decimal": 0.61,
+                  "fraction": "61/100"
+                },
+                "true": {
+                  "decimal": 0.61,
+                  "fraction": "61/100"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.61,
+                "fraction": "61/100"
+              },
+              "nClass": {
+                "false": 100,
+                "true": 100
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s350": {
+                "decimal": 2.5505245932698433,
+                "fraction": "8984951346273/3522785614372"
+              },
+              "tLH_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "tL_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "td_ms": {
+                "decimal": 23.12937419508671,
+                "fraction": "3178876983835/137438953472"
+              },
+              "unfixableByClass": {
+                "false": 0,
+                "true": 0
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              {
+                "decimal": -0.61,
+                "fraction": "-61/100"
+              },
+              {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "t": 0.46423060187497356
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 200
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.4811536821952235
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.6481481481481481,
+                    "fraction": "35/54"
+                  },
+                  "true": {
+                    "decimal": 0.6304347826086957,
+                    "fraction": "29/46"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.6304347826086957,
+                    "fraction": "29/46"
+                  },
+                  "true": {
+                    "decimal": 0.5555555555555556,
+                    "fraction": "5/9"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.017713365539452495,
+                    "fraction": "-11/621"
+                  },
+                  "true": {
+                    "decimal": -0.0748792270531401,
+                    "fraction": "-31/414"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.4593781714791633
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.6086956521739131,
+                    "fraction": "14/23"
+                  },
+                  "true": {
+                    "decimal": 0.6111111111111112,
+                    "fraction": "11/18"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.5740740740740741,
+                    "fraction": "31/54"
+                  },
+                  "true": {
+                    "decimal": 0.6521739130434783,
+                    "fraction": "15/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.03462157809983897,
+                    "fraction": "-43/1242"
+                  },
+                  "true": {
+                    "decimal": 0.04106280193236715,
+                    "fraction": "17/414"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "j-room"
+        }
+      ]
+    },
+    "handoff": {
+      "candidateId": "join-in-judge-v2-handoff-f1",
+      "chosen": {
+        "noEligibleText": false,
+        "outcome": "fit-infeasible: agreement",
+        "qualityTarget": "max-min-agreement",
+        "rung": 4,
+        "textId": "j-room"
+      },
+      "texts": [
+        {
+          "auc": 0.5984,
+          "aucUndefined": false,
+          "control": true,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "false": {
+                  "decimal": 0.85,
+                  "fraction": "17/20"
+                },
+                "true": {
+                  "decimal": 0.85,
+                  "fraction": "17/20"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.85,
+                "fraction": "17/20"
+              },
+              "nClass": {
+                "false": 100,
+                "true": 100
+              },
+              "s": {
+                "decimal": 0.855,
+                "fraction": "171/200"
+              },
+              "s350": {
+                "decimal": 2.57554140903746,
+                "fraction": "1558688150062593/605188541948200"
+              },
+              "tLH_ms": {
+                "decimal": 128.75222747966583,
+                "fraction": "378242838717625/2937757630464"
+              },
+              "tL_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "td_ms": {
+                "decimal": 18.393306620309886,
+                "fraction": "2527956812785/137438953472"
+              },
+              "unfixableByClass": {
+                "false": 0,
+                "true": 0
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": -0.85,
+                "fraction": "-17/20"
+              },
+              {
+                "decimal": 0.855,
+                "fraction": "171/200"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "h": 0.9007124142045616,
+              "l": 0.23709586686657969,
+              "s": {
+                "decimal": 0.855,
+                "fraction": "171/200"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 200
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "h": 1.0,
+                "l": 0.23709586686657969,
+                "s": {
+                  "decimal": 0.84,
+                  "fraction": "21/25"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8333333333333334,
+                    "fraction": "5/6"
+                  },
+                  "true": {
+                    "decimal": 0.8260869565217391,
+                    "fraction": "19/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.84,
+                  "fraction": "21/25"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8913043478260869,
+                    "fraction": "41/46"
+                  },
+                  "true": {
+                    "decimal": 0.8703703703703703,
+                    "fraction": "47/54"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.92,
+                  "fraction": "23/25"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.057971014492753624,
+                    "fraction": "4/69"
+                  },
+                  "true": {
+                    "decimal": 0.04428341384863124,
+                    "fraction": "55/1242"
+                  }
+                },
+                "s": {
+                  "decimal": 0.08,
+                  "fraction": "2/25"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "h": 1.0,
+                "l": 0.12169689674080889,
+                "s": {
+                  "decimal": 0.98,
+                  "fraction": "49/50"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8913043478260869,
+                    "fraction": "41/46"
+                  },
+                  "true": {
+                    "decimal": 0.9074074074074074,
+                    "fraction": "49/54"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.98,
+                  "fraction": "49/50"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.7962962962962963,
+                    "fraction": "43/54"
+                  },
+                  "true": {
+                    "decimal": 0.8478260869565217,
+                    "fraction": "39/46"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.98,
+                  "fraction": "49/50"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.09500805152979067,
+                    "fraction": "-59/621"
+                  },
+                  "true": {
+                    "decimal": -0.05958132045088567,
+                    "fraction": "-37/621"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "j-control"
+        },
+        {
+          "auc": 0.618,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "false": {
+                  "decimal": 0.85,
+                  "fraction": "17/20"
+                },
+                "true": {
+                  "decimal": 0.85,
+                  "fraction": "17/20"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.85,
+                "fraction": "17/20"
+              },
+              "nClass": {
+                "false": 100,
+                "true": 100
+              },
+              "s": {
+                "decimal": 0.885,
+                "fraction": "177/200"
+              },
+              "s350": {
+                "decimal": 2.5836176153004784,
+                "fraction": "175705596752867/68007585841000"
+              },
+              "tLH_ms": {
+                "decimal": 125.80177424289582,
+                "fraction": "127514223451875/1013612281856"
+              },
+              "tL_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "td_ms": {
+                "decimal": 24.976320030000352,
+                "fraction": "3432719286505/137438953472"
+              },
+              "unfixableByClass": {
+                "false": 0,
+                "true": 0
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": -0.85,
+                "fraction": "-17/20"
+              },
+              {
+                "decimal": 0.885,
+                "fraction": "177/200"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "h": 0.7672922421792833,
+              "l": 0.1857216034885889,
+              "s": {
+                "decimal": 0.885,
+                "fraction": "177/200"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 200
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "h": 0.6309032602759419,
+                "l": 0.22046624295134665,
+                "s": {
+                  "decimal": 0.75,
+                  "fraction": "3/4"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8333333333333334,
+                    "fraction": "5/6"
+                  },
+                  "true": {
+                    "decimal": 0.8260869565217391,
+                    "fraction": "19/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.75,
+                  "fraction": "3/4"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8913043478260869,
+                    "fraction": "41/46"
+                  },
+                  "true": {
+                    "decimal": 0.8148148148148148,
+                    "fraction": "22/27"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.79,
+                  "fraction": "79/100"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.057971014492753624,
+                    "fraction": "4/69"
+                  },
+                  "true": {
+                    "decimal": -0.011272141706924315,
+                    "fraction": "-7/621"
+                  }
+                },
+                "s": {
+                  "decimal": 0.04,
+                  "fraction": "1/25"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "h": 0.7672922421792833,
+                "l": 0.1413591570443851,
+                "s": {
+                  "decimal": 0.94,
+                  "fraction": "47/50"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8913043478260869,
+                    "fraction": "41/46"
+                  },
+                  "true": {
+                    "decimal": 0.9074074074074074,
+                    "fraction": "49/54"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.94,
+                  "fraction": "47/50"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.7962962962962963,
+                    "fraction": "43/54"
+                  },
+                  "true": {
+                    "decimal": 0.8695652173913043,
+                    "fraction": "20/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.94,
+                  "fraction": "47/50"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.09500805152979067,
+                    "fraction": "-59/621"
+                  },
+                  "true": {
+                    "decimal": -0.03784219001610306,
+                    "fraction": "-47/1242"
+                  }
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "j-rubric"
+        },
+        {
+          "auc": 0.6754,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "false": {
+                  "decimal": 0.85,
+                  "fraction": "17/20"
+                },
+                "true": {
+                  "decimal": 0.85,
+                  "fraction": "17/20"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.85,
+                "fraction": "17/20"
+              },
+              "nClass": {
+                "false": 100,
+                "true": 100
+              },
+              "s": {
+                "decimal": 0.845,
+                "fraction": "169/200"
+              },
+              "s350": {
+                "decimal": 2.554724524120987,
+                "fraction": "1527587423511643/597946044314600"
+              },
+              "tLH_ms": {
+                "decimal": 128.71686609472408,
+                "fraction": "373716277696625/2903397892096"
+              },
+              "tL_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "td_ms": {
+                "decimal": 21.163865519811225,
+                "fraction": "2908739528465/137438953472"
+              },
+              "unfixableByClass": {
+                "false": 0,
+                "true": 0
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": -0.85,
+                "fraction": "-17/20"
+              },
+              {
+                "decimal": 0.845,
+                "fraction": "169/200"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "h": 0.7857863546773372,
+              "l": 0.30738433198826465,
+              "s": {
+                "decimal": 0.845,
+                "fraction": "169/200"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 200
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "h": 0.76482391720107,
+                "l": 0.30994330613704163,
+                "s": {
+                  "decimal": 0.81,
+                  "fraction": "81/100"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8148148148148148,
+                    "fraction": "22/27"
+                  },
+                  "true": {
+                    "decimal": 0.8260869565217391,
+                    "fraction": "19/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.81,
+                  "fraction": "81/100"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8478260869565217,
+                    "fraction": "39/46"
+                  },
+                  "true": {
+                    "decimal": 0.8333333333333334,
+                    "fraction": "5/6"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.79,
+                  "fraction": "79/100"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.033011272141706925,
+                    "fraction": "41/1242"
+                  },
+                  "true": {
+                    "decimal": 0.007246376811594203,
+                    "fraction": "1/138"
+                  }
+                },
+                "s": {
+                  "decimal": -0.02,
+                  "fraction": "-1/50"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "h": 0.788490162978792,
+                "l": 0.25140036263119614,
+                "s": {
+                  "decimal": 0.9,
+                  "fraction": "9/10"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8913043478260869,
+                    "fraction": "41/46"
+                  },
+                  "true": {
+                    "decimal": 0.9074074074074074,
+                    "fraction": "49/54"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.9,
+                  "fraction": "9/10"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8148148148148148,
+                    "fraction": "22/27"
+                  },
+                  "true": {
+                    "decimal": 0.8478260869565217,
+                    "fraction": "39/46"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.91,
+                  "fraction": "91/100"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.07648953301127215,
+                    "fraction": "-95/1242"
+                  },
+                  "true": {
+                    "decimal": -0.05958132045088567,
+                    "fraction": "-37/621"
+                  }
+                },
+                "s": {
+                  "decimal": 0.01,
+                  "fraction": "1/100"
+                }
+              }
+            }
+          ],
+          "textId": "j-addressee"
+        },
+        {
+          "auc": 0.7035,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "false": {
+                  "decimal": 0.86,
+                  "fraction": "43/50"
+                },
+                "true": {
+                  "decimal": 0.86,
+                  "fraction": "43/50"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.86,
+                "fraction": "43/50"
+              },
+              "nClass": {
+                "false": 100,
+                "true": 100
+              },
+              "s": {
+                "decimal": 0.87,
+                "fraction": "87/100"
+              },
+              "s350": {
+                "decimal": 2.5990972975670754,
+                "fraction": "390887657828097/150393622506550"
+              },
+              "tLH_ms": {
+                "decimal": 125.77673825300694,
+                "fraction": "375984056266375/2989297238016"
+              },
+              "tL_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "td_ms": {
+                "decimal": 23.094019509808277,
+                "fraction": "1587008936445/68719476736"
+              },
+              "unfixableByClass": {
+                "false": 0,
+                "true": 0
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": -0.86,
+                "fraction": "-43/50"
+              },
+              {
+                "decimal": 0.87,
+                "fraction": "87/100"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "h": 0.7261381707791551,
+              "l": 0.26700647745460204,
+              "s": {
+                "decimal": 0.87,
+                "fraction": "87/100"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 200
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "h": 0.6352366508019973,
+                "l": 0.29898244836614907,
+                "s": {
+                  "decimal": 0.71,
+                  "fraction": "71/100"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8333333333333334,
+                    "fraction": "5/6"
+                  },
+                  "true": {
+                    "decimal": 0.8478260869565217,
+                    "fraction": "39/46"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.71,
+                  "fraction": "71/100"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8478260869565217,
+                    "fraction": "39/46"
+                  },
+                  "true": {
+                    "decimal": 0.8333333333333334,
+                    "fraction": "5/6"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.74,
+                  "fraction": "37/50"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.014492753623188406,
+                    "fraction": "1/69"
+                  },
+                  "true": {
+                    "decimal": -0.014492753623188406,
+                    "fraction": "-1/69"
+                  }
+                },
+                "s": {
+                  "decimal": 0.03,
+                  "fraction": "3/100"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "h": 0.7361302963135072,
+                "l": 0.20911992202108692,
+                "s": {
+                  "decimal": 0.9,
+                  "fraction": "9/10"
+                }
+              },
+              "fittedRung": 1,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.9130434782608695,
+                    "fraction": "21/23"
+                  },
+                  "true": {
+                    "decimal": 0.9074074074074074,
+                    "fraction": "49/54"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.9,
+                  "fraction": "9/10"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.7962962962962963,
+                    "fraction": "43/54"
+                  },
+                  "true": {
+                    "decimal": 0.8695652173913043,
+                    "fraction": "20/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.91,
+                  "fraction": "91/100"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.11674718196457327,
+                    "fraction": "-145/1242"
+                  },
+                  "true": {
+                    "decimal": -0.03784219001610306,
+                    "fraction": "-47/1242"
+                  }
+                },
+                "s": {
+                  "decimal": 0.01,
+                  "fraction": "1/100"
+                }
+              }
+            }
+          ],
+          "textId": "j-continuity"
+        },
+        {
+          "auc": 0.6607,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "agreement": {
+                "false": {
+                  "decimal": 0.86,
+                  "fraction": "43/50"
+                },
+                "true": {
+                  "decimal": 0.86,
+                  "fraction": "43/50"
+                }
+              },
+              "minAgreement": {
+                "decimal": 0.86,
+                "fraction": "43/50"
+              },
+              "nClass": {
+                "false": 100,
+                "true": 100
+              },
+              "s": {
+                "decimal": 0.825,
+                "fraction": "33/40"
+              },
+              "s350": {
+                "decimal": 2.599126645702979,
+                "fraction": "32944821603001/12675342949320"
+              },
+              "tLH_ms": {
+                "decimal": 125.76171551521507,
+                "fraction": "23766268029975/188978561024"
+              },
+              "tL_ms": {
+                "decimal": 128.15819407012896,
+                "fraction": "4403482017965/34359738368"
+              },
+              "td_ms": {
+                "decimal": 23.12937419508671,
+                "fraction": "3178876983835/137438953472"
+              },
+              "unfixableByClass": {
+                "false": 0,
+                "true": 0
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": -0.86,
+                "fraction": "-43/50"
+              },
+              {
+                "decimal": 0.825,
+                "fraction": "33/40"
+              }
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "h": 0.7430691792482803,
+              "l": 0.22823574951596218,
+              "s": {
+                "decimal": 0.825,
+                "fraction": "33/40"
+              }
+            },
+            "qualityTarget": "max-min-agreement",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 200
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "h": 0.6537974885643344,
+                "l": 0.30921491535139395,
+                "s": {
+                  "decimal": 0.58,
+                  "fraction": "29/50"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8148148148148148,
+                    "fraction": "22/27"
+                  },
+                  "true": {
+                    "decimal": 0.8260869565217391,
+                    "fraction": "19/23"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.58,
+                  "fraction": "29/50"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8043478260869565,
+                    "fraction": "37/46"
+                  },
+                  "true": {
+                    "decimal": 0.7407407407407407,
+                    "fraction": "20/27"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.62,
+                  "fraction": "31/50"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.010466988727858293,
+                    "fraction": "-13/1242"
+                  },
+                  "true": {
+                    "decimal": -0.0853462157809984,
+                    "fraction": "-53/621"
+                  }
+                },
+                "s": {
+                  "decimal": 0.04,
+                  "fraction": "1/25"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "h": 0.7521413904004467,
+                "l": 0.207104694361074,
+                "s": {
+                  "decimal": 0.89,
+                  "fraction": "89/100"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8913043478260869,
+                    "fraction": "41/46"
+                  },
+                  "true": {
+                    "decimal": 0.9074074074074074,
+                    "fraction": "49/54"
+                  }
+                },
+                "n": {
+                  "false": 46,
+                  "true": 54
+                },
+                "s": {
+                  "decimal": 0.89,
+                  "fraction": "89/100"
+                }
+              },
+              "onScored": {
+                "agreement": {
+                  "false": {
+                    "decimal": 0.8148148148148148,
+                    "fraction": "22/27"
+                  },
+                  "true": {
+                    "decimal": 0.8478260869565217,
+                    "fraction": "39/46"
+                  }
+                },
+                "n": {
+                  "false": 54,
+                  "true": 46
+                },
+                "s": {
+                  "decimal": 0.85,
+                  "fraction": "17/20"
+                }
+              },
+              "shift": {
+                "agreement": {
+                  "false": {
+                    "decimal": -0.07648953301127215,
+                    "fraction": "-95/1242"
+                  },
+                  "true": {
+                    "decimal": -0.05958132045088567,
+                    "fraction": "-37/621"
+                  }
+                },
+                "s": {
+                  "decimal": -0.04,
+                  "fraction": "-1/25"
+                }
+              }
+            }
+          ],
+          "textId": "j-room"
+        }
+      ]
+    }
+  },
+  "datasetVersion": "v2",
+  "decisionModel": "laya",
+  "decisionTimeoutSeconds": 180.0,
+  "dispositions": {
+    "byClass": [
+      {
+        "ceiling": {
+          "decimal": 1.0,
+          "fraction": "1/1"
+        },
+        "k": 0,
+        "kWrong": 0,
+        "label": false,
+        "nClass": 100
+      },
+      {
+        "ceiling": {
+          "decimal": 1.0,
+          "fraction": "1/1"
+        },
+        "k": 0,
+        "kWrong": 0,
+        "label": true,
+        "nClass": 100
+      }
+    ],
+    "cellCounts": null,
+    "items": []
+  },
+  "fitOrdinal": 1,
+  "handoffModel": "qwen/qwen3-4b-2507",
+  "handoffSha256": "efd9ac112bb1ea7ea64d3487d17a8f5bfda45e6d24d63fb0800981b5504e0b5b",
+  "questionsSha256": "50d4600585fa2de2cb1167c44be891ce5dca1b4768ef44c8f34573c68b390112",
+  "residency": {
+    "end": [
+      {
+        "id": "qwen/qwen3-4b-2507",
+        "state": "loaded"
+      },
+      {
+        "id": "laya",
+        "state": "loaded"
+      }
+    ],
+    "start": [
+      {
+        "id": "qwen/qwen3-4b-2507",
+        "state": "loaded"
+      },
+      {
+        "id": "laya",
+        "state": "loaded"
+      }
+    ]
+  },
+  "role": "join-in-judge",
+  "schema": "decision-models.fit-report/1"
+}

@@ -1,0 +1,2184 @@
+{
+  "calls": {
+    "decision": {
+      "callKind": "decision",
+      "dispositionItemIds": [],
+      "halfBudgetCount": 0,
+      "k": 0,
+      "maxSeconds": 15.671148127999913,
+      "medianSeconds": 0.022487662496132543,
+      "n": 2000,
+      "parseFailures": 0,
+      "wilsonUpper95": 0.0019171176005129348
+    },
+    "handoff": {
+      "callKind": "handoff",
+      "dispositionItemIds": [],
+      "halfBudgetCount": 0,
+      "k": 0,
+      "maxSeconds": 1.270635579006921,
+      "medianSeconds": 0.6565447684988612,
+      "n": 400,
+      "parseFailures": 0,
+      "wilsonUpper95": 0.009512640599680667
+    }
+  },
+  "callsFile": "calls-20261119T174816Z-986167826f16461ebd1f4c294ea477d3.json",
+  "candidates": {
+    "decision-only": {
+      "candidateId": "guard-judge-v1-only-f1",
+      "chosen": {
+        "noEligibleText": false,
+        "outcome": "fit-infeasible: agreement",
+        "qualityTarget": "mcnemar-nonreject",
+        "rung": null,
+        "textId": "g-control"
+      },
+      "texts": [
+        {
+          "auc": 0.64445,
+          "aucUndefined": false,
+          "control": true,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "D_c": {
+                "falseAdvanceRateByTurns": 3,
+                "falseAdvanceRateByUnderstanding": 48,
+                "falseSuspendRateByTurns": 47,
+                "falseSuspendRateByUnderstanding": 11
+              },
+              "m_c": {
+                "falseAdvanceRateByTurns": 31,
+                "falseAdvanceRateByUnderstanding": 54,
+                "falseSuspendRateByTurns": 47,
+                "falseSuspendRateByUnderstanding": 19
+              },
+              "p_worse": {
+                "falseAdvanceRateByTurns": {
+                  "decimal": 0.360050065908581,
+                  "fraction": "773201629/2147483648"
+                },
+                "falseAdvanceRateByUnderstanding": {
+                  "decimal": 1.4593881658697683e-12,
+                  "fraction": "13145/9007199254740992"
+                },
+                "falseSuspendRateByTurns": {
+                  "decimal": 7.105427357601002e-15,
+                  "fraction": "1/140737488355328"
+                },
+                "falseSuspendRateByUnderstanding": {
+                  "decimal": 0.00960540771484375,
+                  "fraction": "1259/131072"
+                }
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s2": {
+                "decimal": 0.4698689453087348,
+                "fraction": "34749338793475/73955385092842"
+              },
+              "stuckCount": 0,
+              "tLH_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "tL_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "td_ms": {
+                "decimal": 20.266759319802077,
+                "fraction": "5570884382365/274877906944"
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              48,
+              54
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "t": 0.43479761457006594
+            },
+            "qualityTarget": "mcnemar-nonreject",
+            "rung": null
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 400
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.3452596314424333
+              },
+              "fittedRung": null,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 27,
+                  "falseSuspendRateByTurns": 28,
+                  "falseSuspendRateByUnderstanding": 6
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 9,
+                  "falseAdvanceRateByUnderstanding": 28,
+                  "falseSuspendRateByTurns": 12,
+                  "falseSuspendRateByUnderstanding": 1
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 9,
+                  "falseAdvanceRateByUnderstanding": 1,
+                  "falseSuspendRateByTurns": -16,
+                  "falseSuspendRateByUnderstanding": -5
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.42893400508674234
+              },
+              "fittedRung": null,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 7,
+                  "falseAdvanceRateByUnderstanding": 24,
+                  "falseSuspendRateByTurns": 15,
+                  "falseSuspendRateByUnderstanding": 3
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": -4,
+                  "falseAdvanceRateByUnderstanding": 25,
+                  "falseSuspendRateByTurns": 32,
+                  "falseSuspendRateByUnderstanding": 7
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": -11,
+                  "falseAdvanceRateByUnderstanding": 1,
+                  "falseSuspendRateByTurns": 17,
+                  "falseSuspendRateByUnderstanding": 4
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "g-control"
+        },
+        {
+          "auc": 0.61785,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "D_c": {
+                "falseAdvanceRateByTurns": 2,
+                "falseAdvanceRateByUnderstanding": 56,
+                "falseSuspendRateByTurns": 55,
+                "falseSuspendRateByUnderstanding": 12
+              },
+              "m_c": {
+                "falseAdvanceRateByTurns": 32,
+                "falseAdvanceRateByUnderstanding": 62,
+                "falseSuspendRateByTurns": 55,
+                "falseSuspendRateByUnderstanding": 18
+              },
+              "p_worse": {
+                "falseAdvanceRateByTurns": {
+                  "decimal": 0.4300250329542905,
+                  "fraction": "1846943453/4294967296"
+                },
+                "falseAdvanceRateByUnderstanding": {
+                  "decimal": 8.62461144168769e-15,
+                  "fraction": "19887/2305843009213693952"
+                },
+                "falseSuspendRateByTurns": {
+                  "decimal": 2.7755575615628914e-17,
+                  "fraction": "1/36028797018963968"
+                },
+                "falseSuspendRateByUnderstanding": {
+                  "decimal": 0.0037689208984375,
+                  "fraction": "247/65536"
+                }
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s2": {
+                "decimal": 0.4609587264871743,
+                "fraction": "34090380129265/73955385092842"
+              },
+              "stuckCount": 0,
+              "tLH_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "tL_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "td_ms": {
+                "decimal": 26.259953457665688,
+                "fraction": "3609140521445/137438953472"
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              56,
+              62
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "t": 0.5566066551630673
+            },
+            "qualityTarget": "mcnemar-nonreject",
+            "rung": null
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 400
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.4951319953655913
+              },
+              "fittedRung": null,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 29,
+                  "falseSuspendRateByTurns": 26,
+                  "falseSuspendRateByUnderstanding": 5
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 5,
+                  "falseAdvanceRateByUnderstanding": 29,
+                  "falseSuspendRateByTurns": 16,
+                  "falseSuspendRateByUnderstanding": 2
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 5,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": -10,
+                  "falseSuspendRateByUnderstanding": -3
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.5566066551630673
+              },
+              "fittedRung": null,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 4,
+                  "falseAdvanceRateByUnderstanding": 27,
+                  "falseSuspendRateByTurns": 21,
+                  "falseSuspendRateByUnderstanding": 3
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": -2,
+                  "falseAdvanceRateByUnderstanding": 29,
+                  "falseSuspendRateByTurns": 34,
+                  "falseSuspendRateByUnderstanding": 9
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": -6,
+                  "falseAdvanceRateByUnderstanding": 2,
+                  "falseSuspendRateByTurns": 13,
+                  "falseSuspendRateByUnderstanding": 6
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "g-rubric"
+        },
+        {
+          "auc": 0.603825,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "D_c": {
+                "falseAdvanceRateByTurns": -3,
+                "falseAdvanceRateByUnderstanding": 52,
+                "falseSuspendRateByTurns": 53,
+                "falseSuspendRateByUnderstanding": 22
+              },
+              "m_c": {
+                "falseAdvanceRateByTurns": 33,
+                "falseAdvanceRateByUnderstanding": 58,
+                "falseSuspendRateByTurns": 53,
+                "falseSuspendRateByUnderstanding": 28
+              },
+              "p_worse": {
+                "falseAdvanceRateByTurns": {
+                  "decimal": 0.7565748791676015,
+                  "fraction": "3249464363/4294967296"
+                },
+                "falseAdvanceRateByUnderstanding": {
+                  "decimal": 1.1299294833122531e-13,
+                  "fraction": "4071/36028797018963968"
+                },
+                "falseSuspendRateByTurns": {
+                  "decimal": 1.1102230246251565e-16,
+                  "fraction": "1/9007199254740992"
+                },
+                "falseSuspendRateByUnderstanding": {
+                  "decimal": 1.372024416923523e-05,
+                  "fraction": "3683/268435456"
+                }
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s2": {
+                "decimal": 0.46529505731273085,
+                "fraction": "3128279558669/6723216826622"
+              },
+              "stuckCount": 0,
+              "tLH_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "tL_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "td_ms": {
+                "decimal": 23.34324927744092,
+                "fraction": "6416543502655/274877906944"
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              53,
+              58
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "t": 0.6124632524049092
+            },
+            "qualityTarget": "mcnemar-nonreject",
+            "rung": null
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 400
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.5576086974111154
+              },
+              "fittedRung": null,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 1,
+                  "falseAdvanceRateByUnderstanding": 27,
+                  "falseSuspendRateByTurns": 28,
+                  "falseSuspendRateByUnderstanding": 12
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 5,
+                  "falseAdvanceRateByUnderstanding": 28,
+                  "falseSuspendRateByTurns": 21,
+                  "falseSuspendRateByUnderstanding": 9
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 4,
+                  "falseAdvanceRateByUnderstanding": 1,
+                  "falseSuspendRateByTurns": -7,
+                  "falseSuspendRateByUnderstanding": -3
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.6575372564052419
+              },
+              "fittedRung": null,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 25,
+                  "falseSuspendRateByTurns": 25,
+                  "falseSuspendRateByUnderstanding": 12
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": -7,
+                  "falseAdvanceRateByUnderstanding": 23,
+                  "falseSuspendRateByTurns": 34,
+                  "falseSuspendRateByUnderstanding": 14
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": -7,
+                  "falseAdvanceRateByUnderstanding": -2,
+                  "falseSuspendRateByTurns": 9,
+                  "falseSuspendRateByUnderstanding": 2
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "g-source"
+        },
+        {
+          "auc": 0.626025,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "D_c": {
+                "falseAdvanceRateByTurns": 3,
+                "falseAdvanceRateByUnderstanding": 53,
+                "falseSuspendRateByTurns": 51,
+                "falseSuspendRateByUnderstanding": 16
+              },
+              "m_c": {
+                "falseAdvanceRateByTurns": 33,
+                "falseAdvanceRateByUnderstanding": 59,
+                "falseSuspendRateByTurns": 51,
+                "falseSuspendRateByUnderstanding": 22
+              },
+              "p_worse": {
+                "falseAdvanceRateByTurns": {
+                  "decimal": 0.3641662404406816,
+                  "fraction": "1564082093/4294967296"
+                },
+                "falseAdvanceRateByUnderstanding": {
+                  "decimal": 5.946632075648495e-14,
+                  "fraction": "4285/72057594037927936"
+                },
+                "falseSuspendRateByTurns": {
+                  "decimal": 4.440892098500626e-16,
+                  "fraction": "1/2251799813685248"
+                },
+                "falseSuspendRateByUnderstanding": {
+                  "decimal": 0.0004277229309082031,
+                  "fraction": "897/2097152"
+                }
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s2": {
+                "decimal": 0.33601604748079666,
+                "fraction": "24850196188817/73955385092842"
+              },
+              "stuckCount": 0,
+              "tLH_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "tL_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "td_ms": {
+                "decimal": 110.29893683011323,
+                "fraction": "15159370447005/137438953472"
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              53,
+              59
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "t": 0.5070479612440772
+            },
+            "qualityTarget": "mcnemar-nonreject",
+            "rung": null
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 400
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.4694598138346498
+              },
+              "fittedRung": null,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 28,
+                  "falseSuspendRateByTurns": 29,
+                  "falseSuspendRateByUnderstanding": 7
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 9,
+                  "falseAdvanceRateByUnderstanding": 29,
+                  "falseSuspendRateByTurns": 15,
+                  "falseSuspendRateByUnderstanding": 5
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 9,
+                  "falseAdvanceRateByUnderstanding": 1,
+                  "falseSuspendRateByTurns": -14,
+                  "falseSuspendRateByUnderstanding": -2
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.5593936525109362
+              },
+              "fittedRung": null,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 1,
+                  "falseAdvanceRateByUnderstanding": 24,
+                  "falseSuspendRateByTurns": 24,
+                  "falseSuspendRateByUnderstanding": 7
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": -5,
+                  "falseAdvanceRateByUnderstanding": 25,
+                  "falseSuspendRateByTurns": 36,
+                  "falseSuspendRateByUnderstanding": 11
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": -6,
+                  "falseAdvanceRateByUnderstanding": 1,
+                  "falseSuspendRateByTurns": 12,
+                  "falseSuspendRateByUnderstanding": 4
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "g-completeness"
+        },
+        {
+          "auc": 0.604475,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": true,
+            "barValues": {
+              "D_c": {
+                "falseAdvanceRateByTurns": 0,
+                "falseAdvanceRateByUnderstanding": 55,
+                "falseSuspendRateByTurns": 53,
+                "falseSuspendRateByUnderstanding": 24
+              },
+              "m_c": {
+                "falseAdvanceRateByTurns": 30,
+                "falseAdvanceRateByUnderstanding": 61,
+                "falseSuspendRateByTurns": 53,
+                "falseSuspendRateByUnderstanding": 30
+              },
+              "p_worse": {
+                "falseAdvanceRateByTurns": {
+                  "decimal": 0.572232224047184,
+                  "fraction": "76803709/134217728"
+                },
+                "falseAdvanceRateByUnderstanding": {
+                  "decimal": 1.6428698679238352e-14,
+                  "fraction": "18941/1152921504606846976"
+                },
+                "falseSuspendRateByTurns": {
+                  "decimal": 1.1102230246251565e-16,
+                  "fraction": "1/9007199254740992"
+                },
+                "falseSuspendRateByUnderstanding": {
+                  "decimal": 4.215165972709656e-06,
+                  "fraction": "2263/536870912"
+                }
+              },
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "s2": {
+                "decimal": 0.46511985138548523,
+                "fraction": "34398117723539/73955385092842"
+              },
+              "stuckCount": 0,
+              "tLH_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "tL_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "td_ms": {
+                "decimal": 23.461096342380188,
+                "fraction": "6448937057205/274877906944"
+              }
+            },
+            "family": "decision-only",
+            "key": [
+              55,
+              61
+            ],
+            "latencyUnmet": false,
+            "policy": {
+              "s": {
+                "decimal": 0.0,
+                "fraction": "0/1"
+              },
+              "t": 0.5313486026919293
+            },
+            "qualityTarget": "mcnemar-nonreject",
+            "rung": null
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 400
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.5115885845505362
+              },
+              "fittedRung": null,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": -3,
+                  "falseAdvanceRateByUnderstanding": 29,
+                  "falseSuspendRateByTurns": 30,
+                  "falseSuspendRateByUnderstanding": 14
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 3,
+                  "falseAdvanceRateByUnderstanding": 28,
+                  "falseSuspendRateByTurns": 20,
+                  "falseSuspendRateByUnderstanding": 9
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 6,
+                  "falseAdvanceRateByUnderstanding": -1,
+                  "falseSuspendRateByTurns": -10,
+                  "falseSuspendRateByUnderstanding": -5
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                },
+                "t": 0.6129013283686767
+              },
+              "fittedRung": null,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 1,
+                  "falseAdvanceRateByUnderstanding": 25,
+                  "falseSuspendRateByTurns": 24,
+                  "falseSuspendRateByUnderstanding": 10
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": -7,
+                  "falseAdvanceRateByUnderstanding": 27,
+                  "falseSuspendRateByTurns": 37,
+                  "falseSuspendRateByUnderstanding": 17
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": -8,
+                  "falseAdvanceRateByUnderstanding": 2,
+                  "falseSuspendRateByTurns": 13,
+                  "falseSuspendRateByUnderstanding": 7
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "g-wording"
+        }
+      ]
+    },
+    "handoff": {
+      "candidateId": "guard-judge-v1-handoff-f1",
+      "chosen": {
+        "noEligibleText": false,
+        "outcome": "fit-infeasible: latency",
+        "qualityTarget": "D_c<=0",
+        "rung": 4,
+        "textId": "g-control"
+      },
+      "texts": [
+        {
+          "auc": 0.64445,
+          "aucUndefined": false,
+          "control": true,
+          "ladder": {
+            "agreementUnmet": false,
+            "barValues": {
+              "D_c": {
+                "falseAdvanceRateByTurns": 0,
+                "falseAdvanceRateByUnderstanding": 0,
+                "falseSuspendRateByTurns": 0,
+                "falseSuspendRateByUnderstanding": 0
+              },
+              "m_c": {
+                "falseAdvanceRateByTurns": 0,
+                "falseAdvanceRateByUnderstanding": 0,
+                "falseSuspendRateByTurns": 0,
+                "falseSuspendRateByUnderstanding": 0
+              },
+              "p_worse": {
+                "falseAdvanceRateByTurns": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseAdvanceRateByUnderstanding": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseSuspendRateByTurns": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseSuspendRateByUnderstanding": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                }
+              },
+              "s": {
+                "decimal": 0.99,
+                "fraction": "99/100"
+              },
+              "s2": {
+                "decimal": 0.46916643710075284,
+                "fraction": "137607381622161/293301845017976"
+              },
+              "stuckCount": 0,
+              "tLH_ms": {
+                "decimal": 673.6274597577618,
+                "fraction": "4582841328405875/6803228196864"
+              },
+              "tL_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "td_ms": {
+                "decimal": 20.266759319802077,
+                "fraction": "5570884382365/274877906944"
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": 0.99,
+                "fraction": "99/100"
+              },
+              0,
+              {
+                "decimal": 0.9284505157022992,
+                "fraction": "133803820689562221/144115188075855872"
+              }
+            ],
+            "latencyUnmet": true,
+            "policy": {
+              "h": 0.9783463803841965,
+              "l": 0.04989586468189735,
+              "s": {
+                "decimal": 0.99,
+                "fraction": "99/100"
+              }
+            },
+            "qualityTarget": "D_c<=0",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 400
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "h": 0.9918161996158807,
+                "l": 0.04989586468189735,
+                "s": {
+                  "decimal": 0.985,
+                  "fraction": "197/200"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.985,
+                  "fraction": "197/200"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "s": {
+                  "decimal": 0.015,
+                  "fraction": "3/200"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "h": 0.9783463803841965,
+                "l": 0.062243476132958,
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 1,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.975,
+                  "fraction": "39/40"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 1,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "s": {
+                  "decimal": -0.02,
+                  "fraction": "-1/50"
+                }
+              }
+            }
+          ],
+          "textId": "g-control"
+        },
+        {
+          "auc": 0.61785,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": false,
+            "barValues": {
+              "D_c": {
+                "falseAdvanceRateByTurns": 0,
+                "falseAdvanceRateByUnderstanding": 0,
+                "falseSuspendRateByTurns": 0,
+                "falseSuspendRateByUnderstanding": 0
+              },
+              "m_c": {
+                "falseAdvanceRateByTurns": 0,
+                "falseAdvanceRateByUnderstanding": 0,
+                "falseSuspendRateByTurns": 0,
+                "falseSuspendRateByUnderstanding": 0
+              },
+              "p_worse": {
+                "falseAdvanceRateByTurns": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseAdvanceRateByUnderstanding": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseSuspendRateByTurns": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseSuspendRateByUnderstanding": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                }
+              },
+              "s": {
+                "decimal": 0.995,
+                "fraction": "199/200"
+              },
+              "s2": {
+                "decimal": 0.46060877619788454,
+                "fraction": "1356797129144747/2945660611038480"
+              },
+              "stuckCount": 0,
+              "tLH_ms": {
+                "decimal": 673.1313364222874,
+                "fraction": "4602594704747625/6837587935232"
+              },
+              "tL_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "td_ms": {
+                "decimal": 26.259953457665688,
+                "fraction": "3609140521445/137438953472"
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": 0.995,
+                "fraction": "199/200"
+              },
+              0,
+              {
+                "decimal": 0.8720053748786987,
+                "fraction": "15708652325475107/18014398509481984"
+              }
+            ],
+            "latencyUnmet": true,
+            "policy": {
+              "h": 0.9640442501787913,
+              "l": 0.09203887530009264,
+              "s": {
+                "decimal": 0.995,
+                "fraction": "199/200"
+              }
+            },
+            "qualityTarget": "D_c<=0",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 400
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "h": 1.0,
+                "l": 0.11798198110088078,
+                "s": {
+                  "decimal": 0.985,
+                  "fraction": "197/200"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.985,
+                  "fraction": "197/200"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 1
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 1
+                },
+                "s": {
+                  "decimal": 0.01,
+                  "fraction": "1/100"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "h": 0.9640442501787913,
+                "l": 0.09203887530009264,
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "g-rubric"
+        },
+        {
+          "auc": 0.603825,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": false,
+            "barValues": {
+              "D_c": {
+                "falseAdvanceRateByTurns": 0,
+                "falseAdvanceRateByUnderstanding": 0,
+                "falseSuspendRateByTurns": 0,
+                "falseSuspendRateByUnderstanding": 0
+              },
+              "m_c": {
+                "falseAdvanceRateByTurns": 0,
+                "falseAdvanceRateByUnderstanding": 0,
+                "falseSuspendRateByTurns": 0,
+                "falseSuspendRateByUnderstanding": 0
+              },
+              "p_worse": {
+                "falseAdvanceRateByTurns": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseAdvanceRateByUnderstanding": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseSuspendRateByTurns": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseSuspendRateByUnderstanding": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                }
+              },
+              "s": {
+                "decimal": 0.995,
+                "fraction": "199/200"
+              },
+              "s2": {
+                "decimal": 0.46560626682795747,
+                "fraction": "6847803953926441/14707284763537600"
+              },
+              "stuckCount": 0,
+              "tLH_ms": {
+                "decimal": 672.1707321559377,
+                "fraction": "1149006622151375/1709396983808"
+              },
+              "tL_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "td_ms": {
+                "decimal": 23.34324927744092,
+                "fraction": "6416543502655/274877906944"
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": 0.995,
+                "fraction": "199/200"
+              },
+              0,
+              {
+                "decimal": 0.9502950694239118,
+                "fraction": "136951952657585569/144115188075855872"
+              }
+            ],
+            "latencyUnmet": true,
+            "policy": {
+              "h": 0.9924326452826179,
+              "l": 0.042137575858706026,
+              "s": {
+                "decimal": 0.995,
+                "fraction": "199/200"
+              }
+            },
+            "qualityTarget": "D_c<=0",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 400
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "h": 0.9999814810948197,
+                "l": 0.042137575858706026,
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "s": {
+                  "decimal": 0.005,
+                  "fraction": "1/200"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "h": 0.9924326452826179,
+                "l": 0.10242018203366328,
+                "s": {
+                  "decimal": 0.985,
+                  "fraction": "197/200"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.985,
+                  "fraction": "197/200"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 3
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.955,
+                  "fraction": "191/200"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 3
+                },
+                "s": {
+                  "decimal": -0.03,
+                  "fraction": "-3/100"
+                }
+              }
+            }
+          ],
+          "textId": "g-source"
+        },
+        {
+          "auc": 0.626025,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": false,
+            "barValues": {
+              "D_c": {
+                "falseAdvanceRateByTurns": 0,
+                "falseAdvanceRateByUnderstanding": 0,
+                "falseSuspendRateByTurns": 0,
+                "falseSuspendRateByUnderstanding": 0
+              },
+              "m_c": {
+                "falseAdvanceRateByTurns": 0,
+                "falseAdvanceRateByUnderstanding": 0,
+                "falseSuspendRateByTurns": 0,
+                "falseSuspendRateByUnderstanding": 0
+              },
+              "p_worse": {
+                "falseAdvanceRateByTurns": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseAdvanceRateByUnderstanding": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseSuspendRateByTurns": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseSuspendRateByUnderstanding": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                }
+              },
+              "s": {
+                "decimal": 1.0,
+                "fraction": "1/1"
+              },
+              "s2": {
+                "decimal": 0.33601604748079666,
+                "fraction": "24850196188817/73955385092842"
+              },
+              "stuckCount": 0,
+              "tLH_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "tL_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "td_ms": {
+                "decimal": 110.29893683011323,
+                "fraction": "15159370447005/137438953472"
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": 1.0,
+                "fraction": "1/1"
+              },
+              0,
+              {
+                "decimal": 0.9721368030492065,
+                "fraction": "280199356413795287/288230376151711744"
+              }
+            ],
+            "latencyUnmet": true,
+            "policy": {
+              "h": 1.0,
+              "l": 0.027863196950793565,
+              "s": {
+                "decimal": 1.0,
+                "fraction": "1/1"
+              }
+            },
+            "qualityTarget": "D_c<=0",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 400
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "h": 1.0,
+                "l": 0.062369727402046105,
+                "s": {
+                  "decimal": 0.99,
+                  "fraction": "99/100"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.99,
+                  "fraction": "99/100"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 1
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.99,
+                  "fraction": "99/100"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 1
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "h": 1.0,
+                "l": 0.027863196950793565,
+                "s": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "s": {
+                  "decimal": 0.0,
+                  "fraction": "0/1"
+                }
+              }
+            }
+          ],
+          "textId": "g-completeness"
+        },
+        {
+          "auc": 0.604475,
+          "aucUndefined": false,
+          "control": false,
+          "ladder": {
+            "agreementUnmet": false,
+            "barValues": {
+              "D_c": {
+                "falseAdvanceRateByTurns": 0,
+                "falseAdvanceRateByUnderstanding": 0,
+                "falseSuspendRateByTurns": 0,
+                "falseSuspendRateByUnderstanding": 0
+              },
+              "m_c": {
+                "falseAdvanceRateByTurns": 0,
+                "falseAdvanceRateByUnderstanding": 0,
+                "falseSuspendRateByTurns": 0,
+                "falseSuspendRateByUnderstanding": 0
+              },
+              "p_worse": {
+                "falseAdvanceRateByTurns": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseAdvanceRateByUnderstanding": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseSuspendRateByTurns": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                },
+                "falseSuspendRateByUnderstanding": {
+                  "decimal": 1.0,
+                  "fraction": "1/1"
+                }
+              },
+              "s": {
+                "decimal": 1.0,
+                "fraction": "1/1"
+              },
+              "s2": {
+                "decimal": 0.46511985138548523,
+                "fraction": "34398117723539/73955385092842"
+              },
+              "stuckCount": 0,
+              "tLH_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "tL_ms": {
+                "decimal": 672.620309095164,
+                "fraction": "184888462732105/274877906944"
+              },
+              "td_ms": {
+                "decimal": 23.461096342380188,
+                "fraction": "6448937057205/274877906944"
+              }
+            },
+            "family": "handoff",
+            "key": [
+              {
+                "decimal": 1.0,
+                "fraction": "1/1"
+              },
+              0,
+              {
+                "decimal": 0.999770470628703,
+                "fraction": "18442510004139836085/18446744073709551616"
+              }
+            ],
+            "latencyUnmet": true,
+            "policy": {
+              "h": 1.0,
+              "l": 0.00022952937129701718,
+              "s": {
+                "decimal": 1.0,
+                "fraction": "1/1"
+              }
+            },
+            "qualityTarget": "D_c<=0",
+            "rung": 4
+          },
+          "leftSelection": null,
+          "maxProbAuc": null,
+          "maxProbDropped": null,
+          "overLimit": {
+            "k": 0,
+            "n": 400
+          },
+          "splitHalf": [
+            {
+              "direction": "first->second",
+              "fittedPolicy": {
+                "h": 0.9668229299746043,
+                "l": 0.00022952937129701718,
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 1,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.98,
+                  "fraction": "49/50"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 1,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "s": {
+                  "decimal": -0.015,
+                  "fraction": "-3/200"
+                }
+              }
+            },
+            {
+              "direction": "second->first",
+              "fittedPolicy": {
+                "h": 1.0,
+                "l": 0.050391877598946366,
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "fittedRung": 4,
+              "onFit": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 0
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 53,
+                  "falseAdvanceRateByUnderstanding": 51,
+                  "falseSuspendRateByTurns": 44,
+                  "falseSuspendRateByUnderstanding": 52
+                },
+                "s": {
+                  "decimal": 0.995,
+                  "fraction": "199/200"
+                }
+              },
+              "onScored": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 1
+                },
+                "n": {
+                  "falseAdvanceRateByTurns": 47,
+                  "falseAdvanceRateByUnderstanding": 49,
+                  "falseSuspendRateByTurns": 56,
+                  "falseSuspendRateByUnderstanding": 48
+                },
+                "s": {
+                  "decimal": 0.99,
+                  "fraction": "99/100"
+                }
+              },
+              "shift": {
+                "D_c": {
+                  "falseAdvanceRateByTurns": 0,
+                  "falseAdvanceRateByUnderstanding": 0,
+                  "falseSuspendRateByTurns": 0,
+                  "falseSuspendRateByUnderstanding": 1
+                },
+                "s": {
+                  "decimal": -0.005,
+                  "fraction": "-1/200"
+                }
+              }
+            }
+          ],
+          "textId": "g-wording"
+        }
+      ]
+    }
+  },
+  "datasetVersion": "v1",
+  "decisionModel": "laya",
+  "decisionTimeoutSeconds": 180.0,
+  "dispositions": {
+    "byClass": [],
+    "cellCounts": {
+      "falseAdvanceRateByTurns": 100,
+      "falseAdvanceRateByUnderstanding": 100,
+      "falseSuspendRateByTurns": 100,
+      "falseSuspendRateByUnderstanding": 100
+    },
+    "items": []
+  },
+  "fitOrdinal": 1,
+  "handoffModel": "qwen/qwen3-4b-2507",
+  "handoffSha256": "bda75cb70e8d769bbfcf0f0a6981fa1f7197f007797f29474c9833006b7ddb72",
+  "questionsSha256": "2255845dd289328ef73b185e5eda77e40c88af7a155b888d734a46ba81d54f17",
+  "residency": {
+    "end": [
+      {
+        "id": "qwen/qwen3-4b-2507",
+        "state": "loaded"
+      },
+      {
+        "id": "laya",
+        "state": "loaded"
+      }
+    ],
+    "start": [
+      {
+        "id": "qwen/qwen3-4b-2507",
+        "state": "loaded"
+      },
+      {
+        "id": "laya",
+        "state": "loaded"
+      }
+    ]
+  },
+  "role": "guard-judge",
+  "schema": "decision-models.fit-report/1"
+}
