@@ -8,6 +8,8 @@ of the record moves nothing). Entry points: ``python cpg/eval/superset_dev.py A|
 
 Phase A (build): refuse; build every unit of ``cpg/ccg/system.yaml`` at ``EVAL_COMMIT`` on the caller's own throwaway FalkorDB, load it, print the
 snapshot commit, unit commits, per-unit build status, graph digest, image ids; **no walk, no result file**; stop. The instance is left up (phase B reuses it).
+Phase A is **not idempotent** and refuses (before building) when the instance already holds the live graph key ``ccg_flowfb``: it needs a fresh throwaway. A committed
+``-snapshot`` line does not block it, so a lost instance can be rebuilt and then checked by phase B's digest comparison.
 Phase B (measure): refuse unless the live graph equals the committed ``-snapshot`` line; four candidate tables x four dev anchors through
 ``ccg.engine.bfs.walk(...).items()`` (never documents), each walk twice, byte-equal else void; write ``cpg/eval/results/`` only.
 
@@ -546,6 +548,7 @@ class Deps:
     build_and_load: Callable[[Ctx], dict] = field(default=lambda ctx: build_and_load(ctx))
     open_graph: Callable[[Ctx], object] = field(default=lambda ctx: LiveGraph(ctx.port))
     images: Callable[[Ctx], dict] = field(default=lambda ctx: image_ids(ctx.port))
+    live_key_exists: Callable[[Ctx], bool] = field(default=lambda ctx: live_key_exists(ctx))
     walk: Callable | None = None
     tables: Callable | None = None
     impact: object = None
@@ -616,6 +619,8 @@ def _environment(ctx: Ctx, deps: Deps, images: dict, load_before: tuple) -> dict
 
 def phase_a(ctx: Ctx, deps: Deps) -> dict:
     load_before = deps.loadavg()
+    if deps.live_key_exists(ctx):                                 # create_users resets credentials and the rename overwrites: a re-run would destroy the evidence instance
+        raise Refusal("phase A needs a fresh throwaway: the instance already holds the live graph key; tear down and recreate it")
     built = deps.build_and_load(ctx)
     graph = deps.open_graph(ctx)
     check_dev_ids(graph, ctx)
@@ -765,6 +770,14 @@ def check_bind_keys(links) -> None:
     """``refresh._run`` demotes a unit whose bind key mismatches to ``stale-kept``; a snapshot with one is not the all-fresh build the record pins: refuse."""
     if links.bind_key_mismatch:
         raise Refusal(f"the linker reports {len(links.bind_key_mismatch)} bind-key mismatch(es): refresh would have demoted those units")
+
+
+def live_key_exists(ctx: Ctx) -> bool:
+    """Whether the throwaway already holds the live graph key, asked as admin (the engine role does not exist before phase A's ``create_users``)."""
+    from ccg import sysname
+    from ccg.store import loader as L
+    admin = L.connect(HOST, ctx.port, username=None, password=(Path(ctx.env["CCG_CONFIG_DIR"]) / "falkordb-admin.pass").read_text().strip())
+    return bool(admin.connection.exists(sysname.live_key(SYSTEM)))
 
 
 def build_and_load(ctx: Ctx) -> dict:

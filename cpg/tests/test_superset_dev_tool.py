@@ -176,6 +176,12 @@ class Spy:
         self.graph = graph or FakeGraph(fx.eval_sha)
         self.images = {"toolchainImageId": "sha256:tc", "falkordbImageDigest": "sha256:fdb [x]"}
         self.dev = dev_rows()
+        self.live_key_present = False                                            # whether the instance already holds the live graph key
+        self.exists_calls = 0
+
+    def live_key_exists(self, ctx):
+        self.exists_calls += 1
+        return self.live_key_present
 
     def build_and_load(self, ctx):
         self.pipeline_calls += 1
@@ -189,7 +195,7 @@ class Spy:
 
     def deps(self):
         return sd.Deps(docker_ps=lambda: "127.0.0.1:16400->6379/tcp", build_and_load=self.build_and_load, open_graph=lambda ctx: self.graph,
-                       images=lambda ctx: self.images, walk=self.walk, tables=lambda n: n, impact="impact", loadavg=lambda: (0.1, 0.1, 0.1))
+                       images=lambda ctx: self.images, live_key_exists=self.live_key_exists, walk=self.walk, tables=lambda n: n, impact="impact", loadavg=lambda: (0.1, 0.1, 0.1))
 
 
 def env_for(tmp_path):
@@ -539,6 +545,30 @@ def test_phase_a_refuses_when_the_host_unit_was_built_at_another_commit(fx, tmp_
     assert code == 2 and "did not build fresh at EVAL_COMMIT" in err
 
 
+def test_phase_a_refuses_before_building_when_the_live_key_already_exists_on_the_instance(fx, tmp_path):
+    spy = Spy(fx)
+    spy.live_key_present = True
+    code, out, err = run(fx, spy, "A", tmp_path)
+    assert code == 2 and "needs a fresh throwaway" in err and out == "" and spy.pipeline_calls == 0 and spy.exists_calls == 1
+
+
+def test_phase_a_builds_when_the_live_key_is_absent_and_phase_b_never_asks(fx, tmp_path):
+    spy = Spy(fx)
+    commit_snapshot(fx, spy, tmp_path)
+    assert (spy.pipeline_calls, spy.exists_calls) == (1, 1)
+    spy.live_key_present = True                                                  # phase B runs on the very instance that holds the key
+    code, _, err = run(fx, spy, "B", tmp_path)
+    assert code == 0, err
+    assert spy.exists_calls == 1
+
+
+def test_a_snapshot_line_already_committed_does_not_block_a_phase_a_rebuild_on_a_fresh_instance(fx, tmp_path):
+    spy = Spy(fx)
+    commit_snapshot(fx, spy, tmp_path)
+    code, _, err = run(fx, spy, "A", tmp_path)                                  # instance lost after the pin: the rebuild is the way back to phase B
+    assert code == 0, err and spy.pipeline_calls == 2
+
+
 # ------------------------------------------------------------------------------------------------------------ G1
 
 STAGE_OK = '''def stage_unit(repo):
@@ -677,6 +707,8 @@ def test_second_level_callee_only_needs_two_callee_state_hops_in_the_best_chain(
     assert sd.second_level_callee_only([_item("symbol", "I", one)], d) is None
     assert sd.second_level_callee_only([_item("symbol", "I", wrong_dir)], d) is None
     assert sd.second_level_callee_only([_item("symbol", "I", wrong_state)], d) is None
+    no_callee = [_hop("CALLS", state=("end", "")), _hop("CALLS", state=("end", ""))]            # arrives in an end state that is not the callee state
+    assert sd.callee_hops(no_callee) == 0 and sd.second_level_callee_only([_item("symbol", "I", no_callee)], d) is None
     assert sd.second_level_callee_only([_item("symbol", "I", two)], d)["itemId"] == "it"
     assert sd.second_level_callee_only([_item("symbol", "J", two)], d) is None
 
@@ -723,6 +755,11 @@ def test_the_rule_takes_max_s_then_burden_sum_then_max_burden_then_the_fixed_ord
     c["as-built"]["pooled"]["listed"] = 28
     assert sd.rule_pick(c)["pick"] == "as-built"                                     # lowest burden among the max-s walks
     assert sd.rule_pick(_cands({n: (27, 1, 1) for n in sd.CANDIDATES}))["safeClaim"] is False
+
+
+def test_the_rule_reports_every_max_s_candidate_it_chose_among_in_the_fixed_order():
+    c = _cands({"as-built": (10, 5, 3), "V-flow": (28, 40, 20), "V-both": (28, 30, 20), "V-union": (28, 30, 10)})
+    assert sd.rule_pick(c)["among"] == ["V-both", "V-flow", "V-union"] and sd.rule_pick(c)["pick"] == "V-union"
 
 
 # ------------------------------------------------------------------------------------------------------------ measure over the real engine (in-memory graph)
@@ -961,6 +998,12 @@ def test_a_host_unit_with_flow_available_true_refuses_the_premise_is_all_false(f
     spy = Spy(fx, FakeGraph(fx.eval_sha, flow=True))
     code, _, err = run(fx, spy, "A", tmp_path)
     assert code == 2 and "flowAvailable" in err
+
+
+def test_a_host_unit_with_an_absent_flow_available_refuses_it_must_be_exactly_false(fx, tmp_path):
+    spy = Spy(fx, FakeGraph(fx.eval_sha, flow=None))
+    code, _, err = run(fx, spy, "A", tmp_path)
+    assert code == 2 and "flowAvailable None" in err
 
 
 def test_the_digest_refuses_when_an_independent_node_or_edge_count_differs_from_the_dump():
