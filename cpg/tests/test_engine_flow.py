@@ -417,11 +417,14 @@ def test_v_union_has_both_sets_of_added_rows_and_lists_at_least_what_each_lists(
     assert listed["V-flow"] > listed["as-built"] and listed["V-both"] > listed["as-built"] and listed["V-union"] > listed["V-flow"] and listed["V-union"] > listed["V-both"]
 
 
-def test_a_candidate_walk_has_no_algorithm_version_only_the_shipped_table_has():
+def test_a_candidate_walk_has_no_algorithm_version_only_the_two_published_tables_have():
+    """Re-derived (P1-23d): ``V-both`` is the shipped table now (``bfs.SHIPPED_ROWS``, version ``1.2``), so only ``V-flow`` and ``V-union`` are candidates with no version; ``as-built`` keeps ``1.1``."""
     g = callee_reach_graph()
-    for name in ("V-flow", "V-both", "V-union"):
+    for name in ("V-flow", "V-union"):
         with pytest.raises(bfs.WalkError, match="no algorithm version"):
             run(g, ("Param", "pF"), table=flow.candidate_table(name)).version()
+    assert run(g, ("Param", "pF"), table=flow.candidate_table("V-both")).version() == "1.2"
+    assert run(g, ("Param", "pF"), table=flow.candidate_table("as-built")).version() == "1.1"
 
 
 def test_every_added_row_of_a_candidate_walk_is_labelled_and_none_is_a_request_field():
@@ -585,6 +588,28 @@ def test_v_both_adds_exactly_the_call_site_and_callee_rows_every_one_labelled_an
     assert got == V_BOTH_ROWS
     assert all(r.column == "impact" and r.gate == "" and r.labelled for r in flow.candidate_table("V-both") if r.id in added_ids("V-both"))
     assert list(flow.candidate_table("V-both")[:len(bfs.ROWS)]) == list(bfs.ROWS)
+
+
+def test_bfs_holds_the_v_both_rows_and_the_shipped_table_is_the_caller_only_table_plus_them():
+    assert [(r.id, r.src, r.kinds, r.edge, r.dir, r.to, r.inc, r.where, r.item) for r in bfs.V_BOTH_ROWS] == V_BOTH_ROWS
+    assert all(r.column == "impact" and r.gate == "" and r.labelled for r in bfs.V_BOTH_ROWS)
+    assert bfs.SHIPPED_ROWS == bfs.ROWS + bfs.V_BOTH_ROWS and isinstance(bfs.SHIPPED_ROWS, tuple)
+    assert not {r.id for r in bfs.ROWS} & {r.id for r in bfs.V_BOTH_ROWS}
+
+
+def test_the_candidate_names_keep_their_meaning_and_v_both_is_the_shipped_table():
+    assert flow.candidate_table("V-both") == bfs.SHIPPED_ROWS
+    assert flow.candidate_table("as-built") == bfs.ROWS and len(flow.candidate_table("V-both")) == len(bfs.ROWS) + 4
+    assert flow.candidate_table("V-union") == bfs.ROWS + tuple(r for r in flow.candidate_table("V-flow") if r not in bfs.ROWS) + bfs.V_BOTH_ROWS
+
+
+def test_the_default_walk_and_definition_are_still_the_caller_only_table_at_1_1():
+    """P1-23d does not flip the default (P1-39d does)."""
+    assert bfs.definition() == bfs.definition(bfs.ROWS) != bfs.definition(bfs.SHIPPED_ROWS)
+    assert bfs.algorithm_version() == "1.1" and bfs.algorithm_version(bfs.definition(bfs.ROWS)) == "1.1"
+    assert bfs.algorithm_version(bfs.definition(bfs.SHIPPED_ROWS)) == "1.2"
+    g = callee_reach_graph()
+    assert run(g, ("Param", "pF")).table == bfs.ROWS and run(g, ("Param", "pF")).version() == "1.1"
 
 
 def test_the_shipped_item_rules_carry_no_v_both_arrival_and_the_shipped_rows_carry_no_item_of_their_own():

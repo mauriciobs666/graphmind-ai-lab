@@ -94,7 +94,7 @@ class Row:
     ``read`` is the reader name (or ``bound_of_link``), ``adapter`` names the code that maps its columns to steps, ``to`` one of :data:`TO_TOKENS`, ``inc`` the
     distance increment, ``where`` one of :data:`WHERE_TOKENS` or empty, ``gate`` one of :data:`ccg.engine.flow.GATES` (whose unit's flag the row needs) and ``labelled``
     whether a hop on it is ``possible``, ``flow-unavailable:<lang>`` when its own edge is confirmed (``-answer-spec2.md`` §5), and ``item`` the item kind (``symbol``) an arrival
-    by this row makes beyond the closed rules of :data:`_ITEM_RULES`: a candidate walk's table carries its own (``-p1-ml.md`` §3.5); no shipped row has one.
+    by this row makes beyond the closed rules of :data:`_ITEM_RULES`: the two callee-arrival rows of :data:`V_BOTH_ROWS` carry one (``-p1-ml.md`` §3.5); no row of :data:`ROWS` has one.
     """
     id: str
     column: str
@@ -179,8 +179,23 @@ def _build_rows() -> tuple[Row, ...]:
     return tuple(impact + depends)
 
 
-#: the shipped row table (``algorithm.version`` 1.1)
+#: the caller-only row table (published ``algorithm.version`` 1.1; the default walk until P1-39d)
 ROWS: tuple[Row, ...] = _build_rows()
+
+#: the rows V-both adds (``-answer-spec2.md`` §5's callee run, ``-p1-ml.md`` §3.5): from a function the walk reached only at call level (``function``, distance ``d``), its callees as
+#: well as its callers, to the depth bound. ``HAS_CALL ->`` (increment 0) to its call sites (state ``end``), then ``CALLS ->``/``CALLS_NAME ->`` (increment 1) to the callee, an impact item;
+#: from a callee so reached the same pair again, so a callee at call depth ``k`` has distance ``d + k``. A callee is in state kind ``end`` with the path ``callee`` (the answer's hop
+#: state stays ``end``; ``function`` is not reused), so a callee's own callers are never walked and an ordinary flag-true ``end`` function never expands callees. The callee chain is not
+#: flag-gated. Every added hop is labelled; the callee arrival's item kind is the row's own (``Row.item``).
+V_BOTH_ROWS: tuple[Row, ...] = (
+    Row("has_out:CallSite:fn:both", IMPACT, "Symbol", ("function",), "has_out:CallSite", "has_out", "HAS_CALL", "->", "end", 0, labelled=True),
+    Row("has_out:CallSite:callee:both", IMPACT, "Symbol", ("end",), "has_out:CallSite", "has_out", "HAS_CALL", "->", "end", 0, "callee-state", labelled=True),
+    Row("calls_out:both", IMPACT, "CallSite", ("end",), "calls_out", "calls_out", "CALLS", "->", "end:callee", 1, labelled=True, item="symbol"),
+    Row("name_out:both", IMPACT, "CallSite", ("end",), "name_out", "name_out", "CALLS_NAME", "->", "end:callee", 1, labelled=True, item="symbol"),
+)
+
+#: the V-both table (``algorithm.version`` 1.2): the table P1 ships from P1-39d on; until then only :func:`candidate_table` and :func:`definition` name it
+SHIPPED_ROWS: tuple[Row, ...] = ROWS + V_BOTH_ROWS
 
 
 def definition(table: Sequence[Row] | None = None, *, bound: int | None = None) -> dict[str, Any]:
@@ -196,10 +211,10 @@ def fingerprint(record: Mapping[str, Any]) -> str:
     return _ids.tuple_id(["walkDefinition", json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=True)])
 
 
-#: ``recipe.algorithm.version`` -> the pinned fingerprint of the definition that version names. P1 ships one entry. P1-22 pinned ``1.1`` first; P1-23 re-pinned it (the
+#: ``recipe.algorithm.version`` -> the pinned fingerprint of the definition that version names. ``1.1`` is ``definition(ROWS)`` (caller-only), ``1.2`` is ``definition(SHIPPED_ROWS)`` (V-both, P1-23d). P1-22 pinned ``1.1`` first; P1-23 re-pinned it (the
 #: flag gates, the ``function`` state and its labelled rows, ``flow:r``, ``Row.item``; the V-both-only item rules left the shipped record) because no answer carrying ``1.1`` has been emitted on ``main``: the
 #: builder (P1-39b, ``ccg.engine.answer_build``) is the first thing that emits it: from its first commit on ``main`` ``1.1`` is published and a change is ``1.2`` (``-answer-spec2.md`` §1.2).
-ALGORITHM_VERSIONS: dict[str, str] = {"1.1": "5cf047c14e43da44d0363707d3036080"}
+ALGORITHM_VERSIONS: dict[str, str] = {"1.1": "5cf047c14e43da44d0363707d3036080", "1.2": "39e7ab0280ea38fcba30754caa2595b0"}
 
 
 def algorithm_version(record: Mapping[str, Any] | None = None) -> str:

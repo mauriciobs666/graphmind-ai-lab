@@ -444,12 +444,12 @@ item and member hop *i* ≥ 1:
   of exits, so no unlisted continuation can yield a `confirmed` item.
 
 The callee run is a **`"1.2"` rule**: under `"1.1"`, `FLOW_ROWS["impact"]` is unchanged and a `HAS_CALL →` exit from `function` is rejected by (e), so the published label's valid set does not widen.
-A hop is **in a callee run** (impact column only) when it is a `HAS_CALL →` hop whose predecessor is in state `function` or is a callee `Symbol` hop of a run, or a
+A hop is **in a callee run** (impact column only; every run hop is in state `end`) when it is a `HAS_CALL →` hop whose predecessor is in state `function` or is a callee `Symbol` hop of a run, or a
 `CALLS →`/`CALLS_NAME →` hop whose predecessor is a `HAS_CALL →` hop of a run. (a)–(d) read "leaving a `function`-state hop" as "leaving a `function`-state hop or being in a
 callee run", and add:
 - (f) after a callee `Symbol` hop of a run the only continuation is `HAS_CALL →` (also in the run); after a `HAS_CALL →` hop of a run the only continuation is `CALLS →` or
   `CALLS_NAME →`. This closes the run's exits as (e) closes `function`'s.
-- (g) a callee run occurs only in the impact column, and every item it ends in has a `symbol` subject.
+- (g) a callee run occurs only in the impact column (a document whose `request.direction` is `depends-on` has no run hop), every hop of a run is in state `end`, and an item whose last hop is a `CALLS →`/`CALLS_NAME →` hop of a run has a `symbol` subject. (g) rejects a run hop in any other state, a run hop in a depends-on document, and such an item with a `config` or `unit` subject; V4 does not cover the last case.
 
 The answer does not carry the flag, so whether `function` occurs only in flag-false units is P1-23's test, not the
 validator's.

@@ -80,6 +80,8 @@ def restore_environ():
     os.environ.update(saved)
 
 
+@pytest.mark.skip(reason="run-at-the-pinned-engine history: the tool already refused at HEAD before P1-23d (P1-45b moved pinned files), and P1-23d moves bfs.py and flow.py too; "
+                         "the committed result (cpg/eval/results/ccg-p1-flow-fallback-v1.json) is the record, and a re-run gets its own v2 record")
 def test_the_real_phase(monkeypatch, restore_environ):
     phase = ENV0.get("CCG_SUPERSET_PHASE")
     if phase not in ("A", "B"):

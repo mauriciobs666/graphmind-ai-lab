@@ -125,12 +125,7 @@ def candidate_table(name: str):
     * ``as-built``: the shipped table (``bfs.ROWS``);
     * ``V-flow``: every precise row a flag-false unit does not follow (``DATA``, ``CONTROLLED_BY``, the ``arg(i)`` rows) gains a twin followed *only* where the shipped one is
       not (``src:false``, ``any:false`` for ``CALLS ->`` into a callee, whose twin is followed when either unit is flag-false), every hop on it labelled;
-    * ``V-both``: from a function the walk reached only at call level (``function``, distance ``d``), its callees as well as its callers, to the depth bound (``-p1-ml.md``
-      §3.5): ``HAS_CALL ->`` (increment 0) to its call sites (state ``end``), then ``CALLS ->``/``CALLS_NAME ->`` (increment 1) to the callee, an impact item; from a callee so
-      reached the same pair again, so a callee at call depth ``k`` has distance ``d + k`` and is listed iff within the bound. A callee is in state kind ``end`` with the path
-      ``callee`` (the answer's hop state stays ``end``; ``function`` is not reused), so a callee's own callers are never walked and an ordinary flag-true ``end`` function never
-      expands callees. The callee chain is not flag-gated. Every added hop is labelled; the callee arrival's item kind is the row's own (``Row.item``), so the item rules enter a
-      fingerprint only with a table that ships them;
+    * ``V-both``: the shipped table, ``bfs.SHIPPED_ROWS`` (``bfs.ROWS`` plus ``bfs.V_BOTH_ROWS``, the callee run; ``algorithm.version`` 1.2);
     * ``V-union``: both sets of added rows.
     """
     from ccg.engine import bfs   # the table is bfs's record type; bfs imports this module for the gate, so the import waits for the call
@@ -140,10 +135,5 @@ def candidate_table(name: str):
     rows = bfs.ROWS
     twin_gate = {"src:true": "src:false", "both:true": "any:false"}
     v_flow = tuple(dataclasses.replace(r, id=f"{r.id}:flow", gate=twin_gate[r.gate], labelled=True) for r in rows if r.gate in twin_gate)
-    v_both = (
-        bfs.Row("has_out:CallSite:fn:both", bfs.IMPACT, "Symbol", ("function",), "has_out:CallSite", "has_out", "HAS_CALL", "->", "end", 0, labelled=True),
-        bfs.Row("has_out:CallSite:callee:both", bfs.IMPACT, "Symbol", ("end",), "has_out:CallSite", "has_out", "HAS_CALL", "->", "end", 0, "callee-state", labelled=True),
-        bfs.Row("calls_out:both", bfs.IMPACT, "CallSite", ("end",), "calls_out", "calls_out", "CALLS", "->", "end:callee", 1, labelled=True, item="symbol"),
-        bfs.Row("name_out:both", bfs.IMPACT, "CallSite", ("end",), "name_out", "name_out", "CALLS_NAME", "->", "end:callee", 1, labelled=True, item="symbol"),
-    )
+    v_both = bfs.V_BOTH_ROWS
     return {"as-built": rows, "V-flow": rows + v_flow, "V-both": rows + v_both, "V-union": rows + v_flow + v_both}[name]

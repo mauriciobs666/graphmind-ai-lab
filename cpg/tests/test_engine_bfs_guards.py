@@ -21,6 +21,8 @@ from test_engine_bfs_rows import caller_chain, contract_graph, depends_graph, wi
 #: ``ccg.ids.tuple_id(["walkDefinition", <canonical JSON of bfs.definition()>])`` of the shipped table, pinned here as a literal: a row, a row field, a cost/fallback/
 #: unexplored identifier or ``DEFAULT_DEPTH_BOUND`` that changes makes this fail until the definition gets a new version (``-answer-spec2.md`` §1.2).
 PINNED_1_1 = "5cf047c14e43da44d0363707d3036080"
+#: ``bfs.fingerprint(bfs.definition(bfs.SHIPPED_ROWS))``: computed once from the record of the V-both table (53 rows, ``DEFAULT_DEPTH_BOUND``), then pinned as a literal (P1-23d)
+PINNED_1_2 = "39e7ab0280ea38fcba30754caa2595b0"
 
 
 # --------------------------------------------------------------------------- the level guard (a cycle that escapes the visited set raises, never loops)
@@ -321,9 +323,11 @@ def test_the_fingerprint_is_tuple_id_over_the_canonical_json_of_the_record():
 
 
 def test_the_shipped_definition_maps_to_one_version_pinned_as_a_literal():
-    assert bfs.ALGORITHM_VERSIONS == {"1.1": PINNED_1_1}
-    assert bfs.fingerprint(bfs.definition()) == PINNED_1_1
+    assert bfs.ALGORITHM_VERSIONS == {"1.1": PINNED_1_1, "1.2": PINNED_1_2}
+    assert bfs.fingerprint(bfs.definition()) == PINNED_1_1 == bfs.fingerprint(bfs.definition(bfs.ROWS))       # the default walk is still the caller-only table until P1-39d
+    assert bfs.fingerprint(bfs.definition(bfs.SHIPPED_ROWS)) == PINNED_1_2 != PINNED_1_1
     assert bfs.algorithm_version() == "1.1" and run(caller_chain(1), ("Symbol", "S0")).version() == "1.1"
+    assert bfs.algorithm_version(bfs.definition(bfs.SHIPPED_ROWS)) == "1.2" and run(caller_chain(1), ("Symbol", "S0"), table=bfs.SHIPPED_ROWS).version() == "1.2"
 
 
 def test_a_row_added_without_a_version_bump_fails_the_check():

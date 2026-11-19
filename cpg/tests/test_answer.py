@@ -3124,3 +3124,185 @@ def test_v20_coverage_sees_a_labelled_hop_of_a_group_member():
     validate(base)
     assert base["items"] == []
     rejects(base, lambda d: d.pop("notices"), "V20")
+
+
+# --- P1-23d: V18's callee run (spec2 §5, §8.1), ``"1.2"`` only ------------------------------------------------------------------
+
+_RUN_FLOW = dict(status="possible", reason="flow-unavailable:python")
+_RUN_FG, _RUN_FH = mk_sym("fg", "svc/g.py", 50), mk_sym("fh", "svc/h.py", 70)
+
+
+def _run_head() -> list[dict]:
+    return [sym_hop(SA, U1["unitId"]), site_hop("fa1", U1["unitId"], 12, "g", "value", "CALLS"), sym_hop(mk_sym("fb", line=30), U1["unitId"], "function", edge="HAS_CALL")]
+
+
+def _run_s1(**kw) -> dict:
+    return site_hop("bs1", U1["unitId"], 31, "fg", "end", "HAS_CALL", direction="->", **({**_RUN_FLOW, **kw}))
+
+
+def _run_s2(**kw) -> dict:
+    return site_hop("bs2", U1["unitId"], 51, "fh", "end", "HAS_CALL", direction="->", **({**_RUN_FLOW, **kw}))
+
+
+def _run_fg(**kw) -> dict:
+    return sym_hop(_RUN_FG, U1["unitId"], "end", edge="CALLS", direction="->", **({**_RUN_FLOW, **kw}))
+
+
+def _run_fh(**kw) -> dict:
+    return sym_hop(_RUN_FH, U1["unitId"], "end", edge="CALLS_NAME", direction="->", **({"status": "possible", "reason": "name-match", **kw}))
+
+
+def b_both() -> dict:
+    """B-both: a ``"1.2"`` impact document (with its python notice) in python unit ``U1``: ``SA`` ... ``fb`` (``function``) -> ``HAS_CALL ->`` site ``s1`` (``end``) -> ``CALLS ->``
+    callee ``fg`` (item, distance 2) -> ``HAS_CALL ->`` site ``s2`` -> ``CALLS_NAME ->`` callee ``fh`` (own ``name-match``; item, distance 3 on bound 3). Chains are built from fresh hop dicts."""
+    fb = mk_sym("fb", line=30)
+    d = to_12(mk_doc([anchor_of(SA)], [mk_item(fb, _run_head(), 1), mk_item(_RUN_FG, _run_head() + [_run_s1(), _run_fg()], 2),
+                                       mk_item(_RUN_FH, _run_head() + [_run_s1(), _run_fg(), _run_s2(), _run_fh()], 3)], units=[U1]))
+    d["depthBound"] = {"bound": 3, "unexplored": 0}
+    d["notices"] = [copy.deepcopy(NOTICE)]
+    return d
+
+
+def _item_g(d: dict) -> dict:   # chain [SA, fa1, fb, s1, fg]
+    return d["items"][1]
+
+
+def _item_h(d: dict) -> dict:   # chain [SA, fa1, fb, s1, fg, s2, fh]
+    return d["items"][2]
+
+
+def _confirm(h: dict) -> None:
+    h["status"] = "confirmed"
+    h.pop("reason", None)
+
+
+def b_both_11() -> dict:
+    d = b_both()
+    d["answerSchemaVersion"] = "1.1"
+    del d["notices"]
+    return d
+
+
+def test_v18_the_1_2_callee_run_base_validates_and_a_calls_exit_from_function_stays_accepted():
+    validate(b_both())
+    base = b_both()
+    validate(base)
+    d = copy.deepcopy(base)
+    fq = mk_sym("fq", "svc/q.py", 90)
+    d["items"][1] = mk_item(fq, _run_head() + [site_hop("fx1", U1["unitId"], 33, "q", "value", "CALLS", **_RUN_FLOW), sym_hop(fq, U1["unitId"], "function", edge="HAS_CALL")], 2)
+    d["items"].pop()                                                                                         # one of §5's other three rows, unchanged
+    validate(d)
+
+
+def test_v18_e_a_1_1_document_with_a_has_call_exit_from_function_is_rejected_by_e():
+    with pytest.raises(AnswerError, match=r"V18.*\(e\)"):
+        validate(b_both_11())
+
+
+def test_v18_e_the_relabelled_b_both_is_rejected_by_e_and_not_by_an_earlier_rule():
+    base = b_both()
+    validate(base)
+    d = copy.deepcopy(base)
+    d["answerSchemaVersion"] = "1.1"
+    del d["notices"]
+    with pytest.raises(AnswerError) as e:
+        validate(d)
+    assert "V18" in str(e.value) and "(e)" in str(e.value)
+
+
+def test_v18_b_every_hop_of_the_run_is_possible():
+    for item, idx in ((_item_g, 3), (_item_g, 4), (_item_h, 5), (_item_h, 6)):
+        rejects(b_both(), lambda d, item=item, idx=idx: _confirm(item(d)["chain"][idx]), r"V18.*\(b\)")
+
+
+def test_v18_c_flow_unavailable_is_never_on_calls_name_nor_on_a_calls_hop_outside_a_run():
+    rejects(b_both(), lambda d: _item_h(d)["chain"][6].update(reason="flow-unavailable:python"), r"V18.*\(c\)")
+    # a ``CALLS ->`` hop after ``fb`` (function): not a run hop (no ``HAS_CALL ->`` before it), not a labelled exit either
+    rejects(b_both(), lambda d: _item_g(d)["chain"].__setitem__(slice(3, None), [_run_fg()]), r"V18.*\((c|e)\)")
+    # the label on a hop that leaves no ``function`` and is in no run
+    def stray(d):
+        d["items"][0]["chain"][1].update(_RUN_FLOW)
+        d["items"][0].update(_RUN_FLOW)
+    rejects(b_both(), stray, r"V18.*\(c\)")
+
+
+def test_v18_d_the_run_label_language_is_that_of_the_departing_hop_s_unit():
+    def relabel(item, idx):
+        def mutate(d):
+            it = item(d)
+            it["chain"][idx]["reason"] = "flow-unavailable:javascript"
+            it["reason"] = it["chain"][3]["reason"]                      # V7: the item's reason is its first possible hop's
+        return mutate
+    for item, idx in ((_item_g, 3), (_item_g, 4), (_item_h, 5)):
+        rejects(b_both(), relabel(item, idx), r"V18.*\(d\)")
+
+
+def test_v18_f_the_run_has_no_exit_but_its_own_alternation():
+    other = lambda: site_hop("fz", U1["unitId"], 60, "z", "value", "CALLS", **_RUN_FLOW)       # noqa: E731
+    fq = lambda: sym_hop(mk_sym("fq", "svc/q.py", 9), U1["unitId"], "end", edge="CALLS", direction="->", **_RUN_FLOW)       # noqa: E731
+    rejects(b_both(), lambda d: _item_h(d)["chain"].insert(5, other()), r"V18.*\(f\)")                # after the callee ``fg``: not ``HAS_CALL ->``
+    rejects(b_both(), lambda d: _item_g(d)["chain"].insert(4, other()), r"V18.*\(f\)")                # after the site ``s1``: not ``CALLS ->``/``CALLS_NAME ->``
+    rejects(b_both(), lambda d: _item_h(d)["chain"].insert(5, fq()), r"V18.*\(f\)")                   # after the callee ``fg``: ``CALLS ->`` with no site between
+    rejects(b_both(), lambda d: _item_g(d)["chain"].insert(4, _run_s2()), r"V18.*\(f\)")              # after the site ``s1``: a second site
+
+
+def _b_both_depends_on(state: str) -> dict:
+    """A depends-on document with the run's shape: ``function`` entered by ``CALLS ->``, then ``HAS_CALL ->`` and ``CALLS ->`` in ``state`` (the walk's own ``value``: a ``CALLS ->`` out of
+    a call site is unlabelled; ``end`` is a callee run's state)."""
+    u = U1["unitId"]
+    fb = mk_sym("fb", line=30)
+    callee = _run_fg() if state == "end" else _run_fg(status="confirmed", reason=None)
+    callee["state"] = state
+    site = _run_s1()
+    site["state"] = state
+    chain = [sym_hop(SA, u), site_hop("dc1", u, 12, "fb", "value", "HAS_CALL", direction="->"), sym_hop(fb, u, "function", edge="CALLS", direction="->"), site, callee]
+    d = to_12(mk_doc([anchor_of(SA)], [mk_item(_RUN_FG, chain, 2)], units=[U1]))
+    d["interpretation"]["request"]["direction"] = "depends-on"
+    d["depthBound"] = {"bound": 3, "unexplored": 0}
+    d["notices"] = [copy.deepcopy(NOTICE)]
+    return d
+
+
+def test_v18_g_a_callee_run_occurs_only_in_the_impact_column():
+    validate(_b_both_depends_on("value"))                  # the depends-on walk's own function -> HAS_CALL -> -> CALLS -> shape (state value) is no run
+    with pytest.raises(AnswerError, match=r"V18.*\(g\)"):
+        validate(_b_both_depends_on("end"))                # the run's rows (state end) in a depends-on document
+
+
+def test_v18_g_an_item_a_run_ends_in_has_a_symbol_subject():
+    # V4 compares the last hop's id with the subject's id, not their types: a config subject whose entryId equals the callee's symbolId passes V4 and is V18 (g)'s to refuse
+    def config_subject_with_the_callee_id(d):
+        _item_g(d)["subject"] = {"type": "config", "entryId": _RUN_FG["symbolId"], "path": "deploy/c.yaml", "line": 3, "keyPath": "a.b"}
+    rejects(b_both(), config_subject_with_the_callee_id, r"V18.*\(g\)")
+    rejects(b_both(), lambda d: _item_g(d)["chain"].pop(), r"V4")                 # an item ending on a run site hop: V4 (the site is not the subject)
+
+
+def test_v18_f_a_calls_in_hop_after_a_run_site_is_not_the_run_s_continuation():
+    back = lambda: site_hop("fz", U1["unitId"], 60, "z", "value", "CALLS", **_RUN_FLOW)       # noqa: E731    CALLS <-
+    rejects(b_both(), lambda d: _item_g(d)["chain"].insert(4, back()), r"V18.*\(f\)")
+    rejects(b_both(), lambda d: _item_g(d)["chain"][4].update(dir="<-"), r"V18.*\(f\)")                  # the item's last hop: only the run's own rows may follow a site
+
+
+def _b_both_as_group_member() -> dict:
+    """B-both with ``fh``'s item folded into a group (V18 reads group members as it reads items)."""
+    d = b_both()
+    member = d["items"].pop()
+    d["groups"] = [{"kind": "other-possible-callees", "key": H("gboth"), "reason": "resolution-unverified", "count": 1, "members": [member]}]
+    return d
+
+
+def test_v18_reads_the_callee_run_of_a_group_member_as_it_reads_an_item():
+    validate(_b_both_as_group_member())
+    rejects(_b_both_as_group_member(), lambda d: _confirm(d["groups"][0]["members"][0]["chain"][5]), r"V18.*\(b\)")
+    rejects(_b_both_as_group_member(), lambda d: d["groups"][0]["members"][0]["chain"][6].update(reason="flow-unavailable:python"), r"V18.*\(c\)")
+
+
+def test_v10_a_run_item_beyond_the_bound_is_rejected():
+    rejects(b_both(), lambda d: d["depthBound"].update(bound=2), r"V10")
+
+
+def test_v18_a_depends_on_1_2_document_with_the_shipped_has_call_exit_is_unaffected_by_the_run():
+    d = b_dflow()
+    d["answerSchemaVersion"] = "1.2"
+    d["notices"] = [copy.deepcopy(NOTICE)]
+    validate(d)

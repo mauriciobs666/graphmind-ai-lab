@@ -10,7 +10,7 @@ Schema cannot say (derivations, anchor chaining, staleness set equality, id reco
 Public API: ``loads``/``validate`` (V1-V13, V15-V20), ``canonicalize``/``dumps`` (sort every array per §6, then validate and
 serialize), ``is_canonical``, ``facts_bytes`` (§6's boundary), ``fence_data`` (§7.2), ``mask_identifier`` (§7.3),
 ``DATA_FIELDS``, ``EMPTY_VERDICT_LOG_HASH``, ``ENGINE_REASON_CODES``, ``ANSWER_SCHEMA_VERSIONS``, ``is_1_1_or_later``, ``PROHIBITED_EDGE_TYPES``,
-``FUNCTION_ENTRY``, ``FLOW_ROWS``; plus the ``samplingHash``/``cacheKey`` helpers.
+``FUNCTION_ENTRY``, ``FLOW_ROWS``, ``CALLEE_ROWS``; plus the ``samplingHash``/``cacheKey`` helpers.
 """
 
 from __future__ import annotations
@@ -84,6 +84,8 @@ FLOW_ROWS = {
     "impact": frozenset({("CALLS", "<-"), ("CALLS_NAME", "<-"), ("TO", "<-")}),
     "depends-on": frozenset({("HAS_CALL", "->")}),
 }
+#: spec2 §5 (V18, ``"1.2"`` only): the rows of the callee run (impact column): ``HAS_CALL ->`` to a call site, then ``CALLS ->``/``CALLS_NAME ->`` to the callee.
+CALLEE_ROWS = frozenset({("HAS_CALL", "->"), ("CALLS", "->"), ("CALLS_NAME", "->")})
 _FLOW_PREFIX = "flow-unavailable:"
 ANCHOR_ID = {"symbol": "symbolId", "contract": "cpId", "config": "entryId"}
 ANCHOR_HOP_KIND = {"symbol": "Symbol", "contract": "ContractPoint", "config": "ConfigEntry"}
@@ -890,32 +892,54 @@ def _check_labels(doc: dict) -> None:  # V17
                     _fail("V17", f"{w}.bound[{j}]", "a 1.0 Bound has keyPath and none of launch, port, portOrigin, packId")
 
 
+def _run_kind(h: dict, prev: dict, prev_run: str | None) -> str | None:
+    """Spec2 §5 (``"1.2"``): ``"site"`` for a ``HAS_CALL ->`` hop (state ``end``) after a ``function``-state hop or a callee ``Symbol`` hop of a run, ``"callee"`` for a ``CALLS ->`` or
+    ``CALLS_NAME ->`` hop (state ``end``) after a site hop of a run; ``None`` for a hop in no run."""
+    row = (h.get("edgeType"), h.get("dir"))
+    if h["state"] != "end" or row not in CALLEE_ROWS:
+        return None
+    if row == ("HAS_CALL", "->"):
+        return "site" if prev["state"] == "function" or prev_run == "callee" else None
+    return "callee" if prev_run == "site" else None
+
+
 def _check_flow_rows(doc: dict) -> None:  # V18
-    """Spec2 §5 (a)-(e), 1.1 or later: where the ``function`` state is entered, which rows leave it, and what they are labelled."""
+    """Spec2 §5 (a)-(e), 1.1 or later: where the ``function`` state is entered, which rows leave it, and what they are labelled. ``"1.2"`` only adds the callee run of the impact
+    column ((b)-(d) read "leaving a ``function``-state hop or in a run", plus (f), (g)); under ``"1.1"`` a ``HAS_CALL ->`` exit from ``function`` stays rejected by (e)."""
     if not is_1_1_or_later(doc):
         return
     column = doc["interpretation"].get("request", {}).get("direction", "impact")
     entry, rows = FUNCTION_ENTRY[column], FLOW_ROWS[column]
+    runs = doc["answerSchemaVersion"] == "1.2"
     lang = {u["unitId"]: u["lang"] for u in doc["staleness"]["units"]}
     for where, it in _all_items(doc):
         chain = it["chain"]
+        run: str | None = None   # the run kind of the previous hop
         for i in range(1, len(chain)):
             h, prev = chain[i], chain[i - 1]
             w = f"{where}.chain[{i}]"
             row = (h.get("edgeType"), h.get("dir"))
+            prev_run, run = run, _run_kind(h, prev, run) if runs else None
+            if run is not None and column != "impact":
+                _fail("V18", w, "(g) a callee run occurs only in the impact column")
+            if prev_run is not None and run is None:
+                _fail("V18", w, "(f) after a callee run's hop the only continuation is the run's next row (HAS_CALL -> then CALLS ->/CALLS_NAME ->)")
             if h["state"] == "function" and (h["kind"] != "Symbol" or row not in entry):
                 _fail("V18", w, "(a) a function-state hop is a Symbol hop entered by an entry row of its column")
             leaving = prev["state"] == "function"
-            if leaving and row not in rows:
+            if leaving and row not in rows and run is None:
                 _fail("V18", w, "(e) a hop after a function-state hop arrives by a labelled row of its column")
-            if leaving and h["status"] != "possible":
-                _fail("V18", w, "(b) a labelled-row hop leaving a function-state hop is possible")
+            labelled = leaving or run is not None
+            if labelled and h["status"] != "possible":
+                _fail("V18", w, "(b) a labelled-row hop leaving a function-state hop or in a callee run is possible")
             reason = h.get("reason", "")
             if reason.startswith(_FLOW_PREFIX):
-                if not leaving or row[0] == "CALLS_NAME":
-                    _fail("V18", w, "(c) flow-unavailable rides only a labelled row (not CALLS_NAME) leaving a function-state hop")
+                if not labelled or row[0] == "CALLS_NAME":
+                    _fail("V18", w, "(c) flow-unavailable rides only a labelled row (not CALLS_NAME) leaving a function-state hop or in a callee run")
                 if reason[len(_FLOW_PREFIX):] != lang.get(prev.get("unit")):
                     _fail("V18", w, "(d) the flow-unavailable language is the language of the departing hop's unit")
+        if run is not None and it["subject"]["type"] != "symbol":   # V4 compares ids only, not types (V4 and V15 already force a run's last hop to be the callee Symbol)
+            _fail("V18", f"{where}.chain[{len(chain) - 1}]", "(g) an item a callee run ends in has a symbol subject")
 
 
 def _check_prohibited_edges(doc: dict) -> None:  # V19
