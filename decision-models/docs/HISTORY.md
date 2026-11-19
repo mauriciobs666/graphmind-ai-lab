@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-19 — typed-decision-models U6f.9a — outcome assembly
+
+**What:** plan4 `docs/plans/typed-decision-models4.md` v1.16 §3.11 "Outcome assembly", §4.4/§5 row U6f.9a; note `docs/plans/typed-decision-models-ml.md` §Q2.0 (the feasible-name line); gates `docs/reviews/typed-decision-models.md` Pass 58–59. `decisionmodels/outcome.py`: `assemble_outcome(ladder, selection, bar_kind)` returns the `(fit.outcome, qualityTarget)` pair: `fit-infeasible: ranking` iff `Selection.noEligibleText`, else `agreement` iff `agreementUnmet`, else `latency` iff `latencyUnmet`; with every requirement met, `within-margin` at rung 1 on `D_c<=0` or `T=0.94`, else `below-margin`. `bar_kind` is required (U6f.9b: guard `speed-up`, else `new-ability`) and the target is checked against that kind's set, a copy of plan2 §3.2's (FR-8 bars importing the bench's) held EQUAL to the bench's by a guarded test; `validate_quality_target` lives here because `LadderResult` carries no bar kind. Refused as ladder bugs: an unknown or cross-kind target, a `Selection` for the other family, rung 4 with no unmet bar, a speed-up rung 4 with `latencyUnmet` false, `max-min-agreement` with `agreementUnmet` false, rung 1 at `mcnemar-nonreject`, `rung=None` with no unmet bar (the gate fuzzed 6000 seeds over all three ladders and both families without tripping one).
+
+**Verified:** `tests/test_outcome.py` (70); the delegate's 27 mutants, the gate's 42; my own (`_BEST_TARGETS` T=0.94 → 0.93) killed by 3 tests; full suite re-run by the coordinator 2918 passed, 3 deselected, ruff clean.
+
 ## 2026-11-19 — typed-decision-models U6f.8c — recorded item dispositions
 
 **What:** plan4 `docs/plans/typed-decision-models4.md` v1.16 §3.11 "Recorded dispositions", §4.4/§5 row U6f.8c; fit note `docs/plans/typed-decision-models-fit-ml.md` §4; gates `docs/reviews/typed-decision-models.md` Pass 56–57. `decisionmodels/exclusion.py` and `--exclude-item <id>:<callKind>[:<textId>] --reason <text>` in `fit.py` (repeatable; `--reason` exactly once; `textId` exactly for `decision`):

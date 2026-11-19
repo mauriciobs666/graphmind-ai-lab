@@ -422,7 +422,7 @@ FR-1's test (§Q3), FR-2's 2.0, and FR-10's 0.90 and 350 ms. One rule covers all
   `T_fit = 0.94` (§Q2.2). Each ladder below relaxes it to the requirement value (FR-1's calibration
   McNemar not rejecting; FR-10's 0.90) when it cannot be met, never past it.
 - **Outcome.** The fit records the quality target used, and the rung reached as `fitOutcome`:
-  - `within-margin`;
+  - `within-margin`: rung 1 at its best target (`D_c<=0`, `T = 0.94`); every other feasible rung is `below-margin`;
   - `below-margin`: requirement values met on calibration, a margin not;
   - `fit-infeasible: <bar>`: a requirement value is unmet on calibration. When several are, the
     first in the order `ranking`, `agreement`, `latency` is named; the fit report holds every
