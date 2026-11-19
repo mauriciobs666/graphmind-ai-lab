@@ -308,7 +308,8 @@ def test_the_definition_record_holds_the_table_the_identifiers_and_the_bound():
     d = bfs.definition()
     assert d["id"] == "bfs-v1" and d["costOrder"] == "possible,distance,length,own-possible,stable-key" and d["depthBound"] == 2
     assert d["flowFallback"] == "unit-flag-gates,function-state,labelled-exit-rows" and d["unexplored"] == "distinct-stored-edges,state-at-bound,increment-1,once"
-    assert [r["id"] for r in d["rows"]] == [r.id for r in bfs.ROWS]
+    assert [r["id"] for r in d["rows"]] == [r.id for r in bfs.SHIPPED_ROWS] and len(d["rows"]) == len(bfs.ROWS) + 4         # the default record is the V-both table's
+    assert [r["id"] for r in bfs.definition(bfs.ROWS)["rows"]] == [r.id for r in bfs.ROWS]
     assert {k for r in d["rows"] for k in r} == {"id", "column", "src", "kinds", "read", "adapter", "edge", "dir", "to", "inc", "where", "gate", "labelled", "item"}     # no field no code reads
     assert d["items"]["impact"] == [["ConfigEntry", "BOUND_BY", "->", "*", "config"],
                                     ["Symbol", "HAS_CALL", "<-", "*", "symbol"], ["Symbol", "HAS_COND", "<-", "*", "symbol"], ["Symbol", "HAS_PARAM", "<-", "*", "symbol"],
@@ -324,10 +325,11 @@ def test_the_fingerprint_is_tuple_id_over_the_canonical_json_of_the_record():
 
 def test_the_shipped_definition_maps_to_one_version_pinned_as_a_literal():
     assert bfs.ALGORITHM_VERSIONS == {"1.1": PINNED_1_1, "1.2": PINNED_1_2}
-    assert bfs.fingerprint(bfs.definition()) == PINNED_1_1 == bfs.fingerprint(bfs.definition(bfs.ROWS))       # the default walk is still the caller-only table until P1-39d
-    assert bfs.fingerprint(bfs.definition(bfs.SHIPPED_ROWS)) == PINNED_1_2 != PINNED_1_1
-    assert bfs.algorithm_version() == "1.1" and run(caller_chain(1), ("Symbol", "S0")).version() == "1.1"
-    assert bfs.algorithm_version(bfs.definition(bfs.SHIPPED_ROWS)) == "1.2" and run(caller_chain(1), ("Symbol", "S0"), table=bfs.SHIPPED_ROWS).version() == "1.2"
+    assert bfs.fingerprint(bfs.definition()) == PINNED_1_2 == bfs.fingerprint(bfs.definition(bfs.SHIPPED_ROWS))       # the default walk is the V-both table (P1-39d)
+    assert bfs.fingerprint(bfs.definition(bfs.ROWS)) == PINNED_1_1 != PINNED_1_2                                     # the caller-only table keeps its published version
+    assert bfs.algorithm_version() == "1.2" and run(caller_chain(1), ("Symbol", "S0")).version() == "1.2"
+    assert run(caller_chain(1), ("Symbol", "S0")).table == bfs.SHIPPED_ROWS
+    assert bfs.algorithm_version(bfs.definition(bfs.ROWS)) == "1.1" and run(caller_chain(1), ("Symbol", "S0"), table=bfs.ROWS).version() == "1.1"
 
 
 def test_a_row_added_without_a_version_bump_fails_the_check():
@@ -360,7 +362,7 @@ def test_the_level_guard_and_the_chunk_sizes_are_not_part_of_the_definition(monk
     monkeypatch.setattr(config, "LEVEL_GUARD", 10)
     monkeypatch.setattr(config, "CHUNK", 7)
     monkeypatch.setattr(config, "RESULTSET_SIZE", 77)
-    assert bfs.algorithm_version() == "1.1"
+    assert bfs.algorithm_version() == "1.2"
 
 
 def test_a_walk_with_an_explicit_bound_other_than_the_default_names_no_version():

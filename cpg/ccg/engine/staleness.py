@@ -1,7 +1,7 @@
 """The staleness block and the stamp of an answer (C-1001 P1-39a; ``docs/plans/connected-code-graph-p1-answers.md`` P1-39 behaviours (1) and (2)).
 
 Contract: ``-answer-spec.md`` §4.2 (``stamp``), §4.3 (``staleness.units``); ``-answer-spec2.md`` §3.5 (a unit crossed by ``TO_UNIT ->`` is a ``Unit`` hop and ``not-mapped``),
-§4.3 (``builtAt``/``failedAt`` are in the answer but outside a 1.1 answer's ``facts_bytes``, which ``ccg.answer.facts_bytes`` applies); FR-7, FR-7a, AC-9, AC-9b.
+§4.3 (``builtAt``/``failedAt`` are in the answer but outside a 1.1-or-later answer's ``facts_bytes``, which ``ccg.answer.facts_bytes`` applies); FR-7, FR-7a, AC-9, AC-9b.
 
 **One staleness module.** ``ccg.staleness`` (P1-20) owns the closed ``FAIL_REASONS`` and the head comparison; this module imports the vocabulary and implements no second
 rule. The answer's ``buildStatus`` is the state *refresh recorded* on the ``Unit`` node (``fresh``, ``stale-kept`` when a rebuild failed and the prior bundle was kept,

@@ -179,7 +179,7 @@ def _build_rows() -> tuple[Row, ...]:
     return tuple(impact + depends)
 
 
-#: the caller-only row table (published ``algorithm.version`` 1.1; the default walk until P1-39d)
+#: the caller-only row table (published ``algorithm.version`` 1.1; the as-built candidate of ``flow.candidate_table``)
 ROWS: tuple[Row, ...] = _build_rows()
 
 #: the rows V-both adds (``-answer-spec2.md`` §5's callee run, ``-p1-ml.md`` §3.5): from a function the walk reached only at call level (``function``, distance ``d``), its callees as
@@ -194,13 +194,13 @@ V_BOTH_ROWS: tuple[Row, ...] = (
     Row("name_out:both", IMPACT, "CallSite", ("end",), "name_out", "name_out", "CALLS_NAME", "->", "end:callee", 1, labelled=True, item="symbol"),
 )
 
-#: the V-both table (``algorithm.version`` 1.2): the table P1 ships from P1-39d on; until then only :func:`candidate_table` and :func:`definition` name it
+#: the V-both table (``algorithm.version`` 1.2): the table P1 ships: the default of :func:`walk` and :func:`definition`
 SHIPPED_ROWS: tuple[Row, ...] = ROWS + V_BOTH_ROWS
 
 
 def definition(table: Sequence[Row] | None = None, *, bound: int | None = None) -> dict[str, Any]:
     """The walk definition record (``-answer-spec2.md`` §1.2): the table plus one identifier per part that is code, and the depth bound (index D3)."""
-    rows = ROWS if table is None else tuple(table)
+    rows = SHIPPED_ROWS if table is None else tuple(table)
     return {"id": "bfs-v1", "rows": [r.record() for r in rows], "items": {c: sorted([*k, v] for k, v in _ITEM_RULES[c].items()) for c in COLUMNS},
             "extraReads": {k: list(v) for k, v in sorted(EXTRA_READS.items())}, "costOrder": COST_ORDER, "flowFallback": FLOW_FALLBACK, "unexplored": UNEXPLORED_RULE,
             "depthBound": config.DEFAULT_DEPTH_BOUND if bound is None else bound}
@@ -675,6 +675,26 @@ class Walk:
         """The ``algorithm.version`` of the definition this walk ran, or :class:`WalkError` when no version maps to it."""
         return algorithm_version(definition(self.table, bound=self.bound))
 
+    def flow_langs(self, reader: Reader, facts: Mapping[Node, Mapping[str, Any]]) -> frozenset[str]:
+        """The ``Unit.language`` values of the flag-false units hosting a visited code node, the anchor included (``-answer-spec2.md`` §5.1).
+
+        Code nodes are ``Symbol`` and the points (:data:`_POINTS`); ``Link``, ``ConfigEntry``, ``ContractPoint`` and ``Unit`` nodes do not count. ``facts`` (required)
+        names each node's unit: the walk's own ``facts`` hold no unit for the anchor unless a gated row left it, so the caller passes the walk's facts merged with the anchor's (the builder's). Fails closed (:class:`GraphDataError`): a
+        visited code node with no unit, a unit with no ``Unit`` row, and, for a flag-false unit only, a unit with no language. Units the walk's gates already read are not read again."""
+        nodes = sorted({(k[0], k[1]) for k in self.visited if k[0] == "Symbol" or k[0] in _POINTS})
+        unit_of = {n: facts.get(n, {}).get("unit") for n in nodes}
+        units = flow.Units(reader)
+        units.info.update(self.units)
+        units.ensure(unit_of.values())
+        langs: set[str] = set()
+        for n in nodes:
+            info = units.get(unit_of[n])
+            if not info.flag:
+                if info.lang is None:
+                    raise GraphDataError("a flag-false unit hosting a visited node has no language, so the flow notice cannot name it")
+                langs.add(info.lang)
+        return frozenset(langs)
+
     def chain(self, key: Key) -> list[dict]:
         """The chain of the state's best arrival (its own predecessors, not whatever the predecessors' states hold now)."""
         return _chain(self.best[key])
@@ -883,7 +903,7 @@ def _expand(reader: Reader, by_group: Mapping[tuple[str, str], Sequence[Row]], e
 
 def walk(reader: Reader, anchor: Node, state: State | None = None, *, column: str = IMPACT, bound: int | None = None, table: Sequence[Row] | None = None,
          level_guard: int | None = None) -> Walk:
-    """Level-synchronous BFS from ``anchor`` in ``state`` over ``table`` (the shipped :data:`ROWS` by default).
+    """Level-synchronous BFS from ``anchor`` in ``state`` over ``table`` (the shipped :data:`SHIPPED_ROWS` by default).
 
     ``bound`` defaults to ``config.DEFAULT_DEPTH_BOUND`` and ``level_guard`` to ``config.LEVEL_GUARD``; a walk that needs more levels raises :class:`WalkError`
     rather than looping or truncating. A variant ``table`` is walked as given; only the shipped one has a version (:meth:`Walk.version`).
@@ -898,7 +918,7 @@ def walk(reader: Reader, anchor: Node, state: State | None = None, *, column: st
     level_guard = config.LEVEL_GUARD if level_guard is None else level_guard
     state = _default_state(anchor[0]) if state is None and isinstance(anchor, tuple) and anchor else state
     _check_request(anchor, state, column, bound, level_guard)
-    rows_table = ROWS if table is None else tuple(table)
+    rows_table = SHIPPED_ROWS if table is None else tuple(table)
     by_group = _group_rows(rows_table, column)
 
     start: Key = (anchor[0], anchor[1], state[0], state[1])

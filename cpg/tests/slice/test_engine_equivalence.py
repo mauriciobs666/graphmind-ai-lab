@@ -310,13 +310,20 @@ def test_the_real_flag_false_slice_lists_the_callers_possible_and_leaves_the_dir
     api, bu = qn["salesperson/src/api/client.ts::apiFetch"], qn["salesperson/src/api/client.ts::buildUrl"]
     index = {p["pointId"]: p["index"] for p in rows.nodes["Param"]}
     p0 = next(e["t"] for e in rows.edges[("Symbol", "HAS_PARAM", "Param")] if e["s"] == api and index[e["t"]] == 0)
-    w = bfs.walk(reader, ("Param", p0), S.path_state("p0"))
+    w = bfs.walk(reader, ("Param", p0), S.path_state("p0"), table=bfs.ROWS)         # the caller-only table (1.1): P1-39d's default is V-both, observed below
     assert (len(w.items()), len(w.visited), w.unexplored) == (19, 38, 6)
     assert Counter((i.status, i.reason, i.distance) for i in w.items()) == Counter({("confirmed", None, 0): 1, ("possible", "flow-unavailable:javascript", 1): 9,
                                                                                     ("possible", "flow-unavailable:javascript", 2): 9})
-    w = bfs.walk(reader, ("Symbol", bu), S.VALUE)
+    w = bfs.walk(reader, ("Symbol", bu), S.VALUE, table=bfs.ROWS)
     assert (len(w.items()), len(w.visited), w.unexplored) == (10, 21, 9)
     got = {qname[i.id]: (i.status, i.reason, i.distance) for i in w.items()}
     assert got.pop("salesperson/src/api/client.ts::apiFetch") == ("confirmed", None, 1)
     assert len(got) == 9 and set(got.values()) == {("possible", "flow-unavailable:javascript", 2)}
     assert all(q.startswith("salesperson/src/api/endpoints.ts::") for q in got)
+    w = bfs.walk(reader, ("Param", p0), S.path_state("p0"))                            # the shipped V-both walk: the same caller items and the callees of every function reached at call level
+    assert (len(w.items()), len(w.visited), w.unexplored) == (25, 96, 20)
+    assert Counter((i.status, i.reason, i.distance) for i in w.items()) == Counter({("confirmed", None, 0): 1, ("possible", "flow-unavailable:javascript", 1): 15,
+                                                                                    ("possible", "flow-unavailable:javascript", 2): 9})
+    w = bfs.walk(reader, ("Symbol", bu), S.VALUE)
+    assert (len(w.items()), len(w.visited), w.unexplored) == (15, 59, 18)
+    assert Counter((i.status, i.reason, i.distance) for i in w.items()) == Counter({("confirmed", None, 1): 1, ("possible", "flow-unavailable:javascript", 2): 14})

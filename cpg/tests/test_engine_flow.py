@@ -15,6 +15,7 @@ import pytest
 from engine_walk_helpers import G, MemoryReader
 
 from ccg.engine import bfs
+from ccg.engine.reader import GraphDataError
 from ccg.engine import state as S
 from test_engine_bfs import edge_types, items_by_id, nodes, run
 
@@ -355,8 +356,9 @@ def test_the_as_built_table_is_the_shipped_one_and_the_candidates_are_named_and_
 
 def test_v_flow_follows_data_controlled_by_and_the_argument_rows_in_a_flag_false_unit_every_added_hop_possible_flow_unavailable():
     g = reach_graph()
-    shipped = items_by_id(run(g, ("Param", "px"), S.path_state("p0")))
-    assert set(shipped) == {"X"}                                                       # the shipped table follows none of them
+    shipped = items_by_id(run(g, ("Param", "px"), S.path_state("p0"), table=bfs.ROWS))
+    assert set(shipped) == {"X"}                                                       # the caller-only table follows none of them
+    assert set(items_by_id(run(g, ("Param", "px"), S.path_state("p0")))) >= {"X"} and "D" not in items_by_id(run(g, ("Param", "px"), S.path_state("p0")))     # nor does the shipped V-both one
     w = run(g, ("Param", "px"), S.path_state("p0"), table=flow.candidate_table("V-flow"))
     items = items_by_id(w)
     assert {"X", "D", "K", "F2"} <= set(items)
@@ -389,9 +391,10 @@ def callee_reach_graph():
 
 def test_v_both_lists_the_callees_of_a_function_reached_at_call_level_as_well_every_added_hop_possible():
     g = callee_reach_graph()
-    assert {"Q", "R"}.isdisjoint(items_by_id(run(g, ("Param", "pF"))))
+    assert {"Q", "R"}.isdisjoint(items_by_id(run(g, ("Param", "pF"), table=bfs.ROWS)))                 # the caller-only table lists no callee
     items = items_by_id(run(g, ("Param", "pF"), table=flow.candidate_table("V-both")))
     assert {"F", "C", "Q", "R"} <= set(items)
+    assert {(i.id, i.status, i.reason, i.distance) for i in run(g, ("Param", "pF")).items()} == {(i.id, i.status, i.reason, i.distance) for i in items.values()}     # the default walk is V-both
     q, r = items["Q"], items["R"]
     assert (q.status, q.reason, q.distance, q.possible_hops) == ("possible", "flow-unavailable:javascript", 1, 2)       # HAS_CALL -> and CALLS ->: both added hops
     assert (r.status, r.reason, r.distance) == ("possible", "flow-unavailable:javascript", 1)                          # the first possible hop is the HAS_CALL ->
@@ -603,13 +606,14 @@ def test_the_candidate_names_keep_their_meaning_and_v_both_is_the_shipped_table(
     assert flow.candidate_table("V-union") == bfs.ROWS + tuple(r for r in flow.candidate_table("V-flow") if r not in bfs.ROWS) + bfs.V_BOTH_ROWS
 
 
-def test_the_default_walk_and_definition_are_still_the_caller_only_table_at_1_1():
-    """P1-23d does not flip the default (P1-39d does)."""
-    assert bfs.definition() == bfs.definition(bfs.ROWS) != bfs.definition(bfs.SHIPPED_ROWS)
-    assert bfs.algorithm_version() == "1.1" and bfs.algorithm_version(bfs.definition(bfs.ROWS)) == "1.1"
-    assert bfs.algorithm_version(bfs.definition(bfs.SHIPPED_ROWS)) == "1.2"
+def test_the_default_walk_and_definition_are_the_v_both_table_at_1_2_and_the_caller_only_table_keeps_1_1():
+    """P1-39d flips the default (P1-23d added the table and the pin)."""
+    assert bfs.definition() == bfs.definition(bfs.SHIPPED_ROWS) != bfs.definition(bfs.ROWS)
+    assert bfs.algorithm_version() == "1.2" and bfs.algorithm_version(bfs.definition(bfs.SHIPPED_ROWS)) == "1.2"
+    assert bfs.algorithm_version(bfs.definition(bfs.ROWS)) == "1.1"
     g = callee_reach_graph()
-    assert run(g, ("Param", "pF")).table == bfs.ROWS and run(g, ("Param", "pF")).version() == "1.1"
+    assert run(g, ("Param", "pF")).table == bfs.SHIPPED_ROWS and run(g, ("Param", "pF")).version() == "1.2"
+    assert run(g, ("Param", "pF"), table=bfs.ROWS).version() == "1.1"
 
 
 def test_the_shipped_item_rules_carry_no_v_both_arrival_and_the_shipped_rows_carry_no_item_of_their_own():
@@ -810,11 +814,16 @@ def test_a_name_matched_caller_in_a_flag_true_unit_is_reached_in_path_state_and_
 @pytest.mark.parametrize("make,anchor,state,column", [
     (lambda: caller_chain(flow=False), ("Param", "pF"), S.VALUE, bfs.IMPACT), (lambda: callee_graph(False), ("Symbol", "F"), S.VALUE, bfs.DEPENDS_ON),
     (lambda: callee_graph(True), ("Symbol", "F"), S.VALUE, bfs.DEPENDS_ON), (callee_reach_graph, ("Param", "pF"), S.VALUE, bfs.IMPACT)])
-def test_a_row_pair_that_shares_a_read_issues_it_once_per_level_and_the_walk_is_unchanged(make, anchor, state, column):
+@pytest.mark.parametrize("table", [bfs.ROWS, None], ids=["caller-only", "shipped"])
+def test_a_row_pair_that_shares_a_read_issues_it_once_per_level_and_the_walk_is_unchanged(make, anchor, state, column, table):
+    """The caller-only table and the depends-on column read each text once per walk. The shipped V-both table, in the impact column, reaches a callee in the ``end:callee`` state as
+    well as a function in the ``function`` state, so ``has_out:CallSite`` is asked again of the same ids at a later level: the one repeat allowed, pinned to ``F`` (both worlds' function-state node) and exactly twice."""
     r = MemoryReader(make())
-    w = bfs.walk(r, anchor, state, column=column)
+    w = bfs.walk(r, anchor, state, column=column, table=table)
     keys = [(n, json.dumps(p, sort_keys=True)) for n, p in r.calls]
-    assert len(keys) == len(set(keys)), [k for k in set(keys) if keys.count(k) > 1]
+    repeated = {k for k in set(keys) if keys.count(k) > 1}
+    expected = {("has_out:CallSite", json.dumps({"ids": ["F"]}, sort_keys=True))} if table is None and column == bfs.IMPACT else set()      # F: once in ``function``, once in ``end:callee``
+    assert repeated == expected and all(keys.count(k) == 2 for k in repeated), repeated
     assert w.items()
 
 
@@ -843,13 +852,20 @@ def mixed_world(seed):
     return g, anchors, units
 
 
-def check_v18(w, tables_shipped):
-    """The conditions of ``-answer-spec2.md`` §7.2 V18 (a)-(e) on every item's chain, from ``answer.FUNCTION_ENTRY``/``FLOW_ROWS``, and what §5 says of flag-false units."""
+def check_v18(w, table):
+    """The conditions of ``-answer-spec2.md`` §7.2 V18 (a)-(e) on every item's chain, and what §5 says of flag-false units. ``table`` is ``"as-built"`` (the caller-only table, rules from
+    ``answer.FUNCTION_ENTRY``/``FLOW_ROWS``), ``"V-both"`` (the shipped table: the same rules written out by hand below, plus §5's callee run) or anything else (a candidate: (a), (b) only).
+
+    The V-both rules are literals here, not ``answer.CALLEE_ROWS``: a run is ``HAS_CALL ->`` from a flag-false ``function`` (or from a callee in ``end``) to a call site in ``end``, then
+    ``CALLS ->``/``CALLS_NAME ->`` to the callee in ``end``; every hop of it is ``possible``; a ``flow-unavailable:<lang>`` label is the language of hop i-1's unit (§5 (d))."""
     from ccg import answer
     col = w.column
     unit_of = lambda hop: w.facts.get(hop["node"], {}).get("unit")           # noqa: E731
+    run_opens = ("HAS_CALL", "->")
+    runs = 0                                                                  # run hops checked: the test asserts the check is not vacuous
     for item in w.items():
         assert item.possible_hops == sum(s["edge"]["status"] == "possible" for s in item.chain[1:]) and (item.status == "possible") == bool(item.possible_hops)
+        opener = None                                                         # the ``function`` hop whose callee run the walk is in
         for i in range(1, len(item.chain)):
             hop, prev = item.chain[i], item.chain[i - 1]
             edge, kind = hop["edge"], hop["state"][0]
@@ -859,27 +875,134 @@ def check_v18(w, tables_shipped):
                 assert w.units[unit_of(hop)].flag is False                                                                 # only in a flag-false unit
             if prev["state"][0] == "function" and row in answer.FLOW_ROWS[col]:
                 assert edge["status"] == "possible"                                                                        # (b)
-            if not tables_shipped:
+            if table not in ("as-built", "V-both"):
                 continue
             reason = edge.get("reason") or ""
+            if table == "V-both":
+                if prev["state"][0] == "function" and row == run_opens:
+                    opener = prev
+                in_run = opener is not None and kind == "end" and row in (run_opens, ("CALLS", "->"), ("CALLS_NAME", "->"))
+                if not in_run:
+                    opener = None
+                if in_run:
+                    runs += 1
+                    assert col == "impact" and edge["status"] == "possible"                                              # (b), the run: every hop possible
+                    assert (row == run_opens) == (prev["node"][0] == "Symbol") and (row[0] in ("CALLS", "CALLS_NAME")) == (prev["node"][0] == "CallSite")
+                    if reason.startswith("flow-unavailable:"):
+                        assert row != ("CALLS_NAME", "->") and reason == "flow-unavailable:" + w.units[unit_of(prev)].lang       # (c), (d): the label is hop i-1's unit's language
+                    continue
             if reason.startswith("flow-unavailable:"):
                 assert prev["state"][0] == "function" and row in answer.FLOW_ROWS[col] and row[0] != "CALLS_NAME"          # (c)
                 assert reason == "flow-unavailable:" + w.units[unit_of(prev)].lang                                         # (d)
             if prev["state"][0] == "function":
-                assert row in answer.FLOW_ROWS[col]                                                                        # (e)
+                assert row in answer.FLOW_ROWS[col] or (table == "V-both" and col == "impact" and row == run_opens)        # (e)
             if i >= 1 and kind == "path":
                 assert w.units[unit_of(hop)].flag is True                                                                  # no path hop in a flag-false unit
+    return runs
 
 
-def test_the_v18_conditions_hold_on_the_walk_output_of_random_flag_mixed_worlds_for_the_shipped_table_and_the_three_candidates():
-    walks = functions = exits = 0
+def test_the_v18_conditions_hold_on_the_walk_output_of_random_flag_mixed_worlds_for_the_shipped_v_both_table_the_caller_only_one_and_the_candidates():
+    walks = functions = exits = runs = 0
     for seed in range(24):
         g, anchors, _ = mixed_world(seed)
         for anchor, state, column in anchors:
             for name in flow.CANDIDATES:
                 w = bfs.walk(MemoryReader(g), anchor, state, column=column, bound=3, table=flow.candidate_table(name))
-                check_v18(w, name == "as-built")
+                n = check_v18(w, name)
+                runs += n if name == "V-both" else 0
                 walks += 1
                 functions += sum(k[2] == "function" for k in w.visited)
                 exits += sum(1 for i in w.items() for s in i.chain[1:] if (s["edge"].get("reason") or "").startswith("flow-unavailable:"))
-    assert walks > 700 and functions > 100 and exits > 100, (walks, functions, exits)     # the property is not vacuous
+    assert walks > 700 and functions > 100 and exits > 100 and runs > 50, (walks, functions, exits, runs)     # the property is not vacuous
+
+
+# --------------------------------------------------------------------------- P1-39d: ``Walk.flow_langs`` (``-answer-spec2.md`` §5.1, the trigger)
+
+CODE = ("Symbol", "CallSite", "Param", "Ret", "Cond")
+NOT_CODE = ("Link", "ConfigEntry", "ContractPoint", "Unit")
+
+
+def hand_walk(*nodes, facts=None, units=None):
+    """A ``Walk`` whose visited set is the anchor ``("Symbol", "anc")`` plus ``nodes`` (``(label, id)``): only ``visited`` (and ``units``) are read from it; ``facts`` is the explicit argument of ``flow_langs``."""
+    anchor = ("Symbol", "anc", "value", "")
+    visited = {anchor} | {(label, ident, "value", "") for label, ident in nodes}
+    return bfs.Walk(anchor, bfs.IMPACT, 2, bfs.SHIPPED_ROWS, 0, [], visited, {}, {}, frozenset(), facts or {}, units or {})
+
+
+def units_graph():
+    g = G(unit="ut", flow=True, lang="javascript")             # the anchor's unit: flag-true, so it never names a language
+    g.unit_node("up", flow=False, lang="python")
+    g.unit_node("ug", flow=False, lang="go")
+    return g
+
+
+def facts_of(units=None):
+    return {("Symbol", "anc"): {"unit": "ut"}, **{node: {"unit": unit} for node, unit in (units or {}).items()}}
+
+
+@pytest.mark.parametrize("label", CODE)
+def test_a_visited_code_node_of_a_flag_false_unit_names_its_language_whatever_its_label(label):
+    w = hand_walk((label, "x"), facts={**facts_of(), (label, "x"): {"unit": "up"}})
+    assert w.flow_langs(MemoryReader(units_graph()), w.facts) == {"python"}
+
+
+@pytest.mark.parametrize("label", NOT_CODE)
+def test_a_visited_link_config_entry_contract_point_or_unit_node_names_no_language_even_in_a_flag_false_unit(label):
+    w = hand_walk((label, "x"), facts={**facts_of(), (label, "x"): {"unit": "up"}})
+    assert w.flow_langs(MemoryReader(units_graph()), w.facts) == frozenset()
+
+
+def test_the_anchor_is_part_of_the_visited_set_so_a_flag_false_anchor_alone_names_its_language():
+    facts = {("Symbol", "anc"): {"unit": "up"}}
+    assert hand_walk(facts=facts).flow_langs(MemoryReader(units_graph()), facts) == {"python"}
+
+
+def test_the_languages_are_a_set_and_a_flag_true_language_is_never_in_it():
+    w = hand_walk(("Symbol", "a"), ("CallSite", "b"), ("Param", "c"), ("Symbol", "d"),
+                  facts=facts_of({("Symbol", "a"): "up", ("CallSite", "b"): "up", ("Param", "c"): "ug", ("Symbol", "d"): "ut"}))
+    assert w.flow_langs(MemoryReader(units_graph()), w.facts) == {"python", "go"}
+
+
+def test_the_facts_argument_replaces_the_walks_own_facts_for_the_anchors_unit():
+    w = hand_walk()                                       # the walk's own facts hold no unit for the anchor (no gated row left it)
+    assert w.flow_langs(MemoryReader(units_graph()), {("Symbol", "anc"): {"unit": "ug"}}) == {"go"}
+
+
+def test_a_flag_true_unit_with_no_language_does_not_raise_and_names_nothing():
+    g = G(unit="ut", flow=True, lang=None)
+    f = {("Symbol", "anc"): {"unit": "ut"}}
+    assert hand_walk(facts=f).flow_langs(MemoryReader(g), f) == frozenset()
+
+
+def test_a_flag_false_unit_with_no_language_is_a_graph_data_error():
+    g = G(unit="ut", flow=False, lang=None)
+    with pytest.raises(GraphDataError):
+        f = {("Symbol", "anc"): {"unit": "ut"}}
+        hand_walk(facts=f).flow_langs(MemoryReader(g), f)
+
+
+@pytest.mark.parametrize("label", CODE)
+def test_a_visited_code_node_with_no_unit_or_with_a_unit_that_has_no_unit_row_is_a_graph_data_error(label):
+    r = MemoryReader(units_graph())
+    with pytest.raises(GraphDataError):
+        hand_walk((label, "x"), facts=facts_of()).flow_langs(r, facts_of())                                                 # no facts at all for the node
+    with pytest.raises(GraphDataError):
+        hand_walk((label, "x"), facts={**facts_of(), (label, "x"): {"unit": None}}).flow_langs(r, {**facts_of(), (label, "x"): {"unit": None}})               # a node carrying no unit
+    with pytest.raises(GraphDataError):
+        hand_walk((label, "x"), facts={**facts_of(), (label, "x"): {"unit": "ghost"}}).flow_langs(r, {**facts_of(), (label, "x"): {"unit": "ghost"}})            # a unit with no Unit row
+
+
+def test_a_node_that_is_not_code_with_no_unit_does_not_raise():
+    assert hand_walk(("Link", "l"), ("ContractPoint", "c"), facts=facts_of()).flow_langs(MemoryReader(units_graph()), facts_of()) == frozenset()
+
+
+def test_a_unit_the_walk_already_read_is_not_read_again():
+    r = MemoryReader(units_graph())
+    w = hand_walk(("Symbol", "x"), facts=facts_of({("Symbol", "x"): "up"}), units={"up": flow.UnitInfo(False, "python")})
+    assert w.flow_langs(r, w.facts) == {"python"}
+    assert [p["ids"] for n, p in r.calls if n == "units"] == [["ut"]]
+
+
+def test_the_facts_argument_of_flow_langs_is_required():
+    with pytest.raises(TypeError):
+        hand_walk(facts={("Symbol", "anc"): {"unit": "up"}}).flow_langs(MemoryReader(units_graph()))

@@ -1,7 +1,7 @@
 """The answer builder (C-1001 P1-39b): the walk's output as the canonical answer document, validated by ``ccg.answer`` before it leaves the engine.
 
 Contract: ``docs/plans/connected-code-graph-p1-answers.md`` P1-39 behaviours (0)-(3), (5), (6); ``-answer-spec2.md`` §3 (hops; wiring items §3.3; the ``site`` state §3.6; the ``Unit``
-hop §3.5), §4.3 (``builtAt``/``failedAt`` are in the answer, outside a 1.1 answer's ``facts_bytes``), §5 (labelled rows), §6, §7 (V1-V19), §8; ``-answer-spec.md`` §4-§6.
+hop §3.5), §4.3 (``builtAt``/``failedAt`` are in the answer, outside a 1.1-or-later answer's ``facts_bytes``), §5 (labelled rows), §5.1 (``notices``), §6, §7 (V1-V20), §8; ``-answer-spec.md`` §4-§6.
 :func:`build_answer` is the one entry point: it resolves nothing (the anchor is what ``ccg.engine.anchors`` returned), runs the walk, groups and folds the items, reads the evidence the
 hops carry, and returns the **canonical** document (every array sorted per spec §6 by ``ccg.answer.canonicalize``, never by the engine's raw code-point order).
 
@@ -36,11 +36,14 @@ measured unit and flag-true units exist only in fixtures; a flag that flips true
 ``to_out`` return neither), so the builder reads ``symbol_by_qname`` for those symbols only and matches the row by ``symbolId``; a call site reached by a ``DATA`` or ``CONTROLLED_BY`` row has
 no ``calleeName`` (those texts return only its line), so ``owner_of:CallSite`` then ``has_out:CallSite`` name it. A site the graph cannot name fails the hop (``BuildError``).
 
-**Candidate tables.** ``table=`` is an engine-internal candidate row table (``ccg.engine.flow.candidate_table``), never a request field; its document carries :data:`CANDIDATE_VERSION`. V18
-(``-answer-spec2.md`` §5) encodes the shipped table only, so a candidate walk's added hops (V-flow's labelled ``DATA``/``CONTROLLED_BY``/``arg(i)`` hops, V-both's ``HAS_CALL ->`` exits
-from ``function``) are refused with rule V18, never returned: a candidate walk is measured through ``Walk.items()``, and a shipped table other than §5's needs §5 and V18 revised first
-(``tests/test_engine_answer_v18.py`` pins exactly which documents are refused and why). P1-39c measures candidate walks through ``Walk.items()`` and needs no document, so ``table=`` and
-:data:`CANDIDATE_VERSION` have no caller in P1; they are kept (not removed) to pin V18's refusal of a flag-false candidate-table document, and are rewritten when a shipped table other than §5's is chosen.
+**The notice** (``-answer-spec2.md`` §5.1). ``notices`` is ``[{"code": "flow-not-enumerated", "langs": sorted(Walk.flow_langs)}]`` when the walk visited a code node of a flag-false unit
+(the anchor included, whatever the items), and absent otherwise; the walk's merged facts name the anchor's unit. A visited code node with no unit, or with no ``Unit`` row, is a
+``GraphDataError`` (the omission is never silent), and a language is required only of a flag-false unit.
+
+**Candidate tables.** ``table=`` is an engine-internal row table (``ccg.engine.flow.candidate_table``), never a request field; the default is the shipped ``bfs.SHIPPED_ROWS`` (algorithm
+``1.2``). A document from an explicit table carries the version its walk definition maps to (``bfs.ALGORITHM_VERSIONS``: ``bfs.ROWS`` is ``1.1``) and :data:`CANDIDATE_VERSION` only when none
+does. V18 (``-answer-spec2.md`` §5) encodes the shipped table, so a candidate walk's added hops (V-flow's labelled ``DATA``/``CONTROLLED_BY``/``arg(i)`` hops) are refused with rule V18,
+never returned (``tests/test_engine_answer_v18.py`` pins exactly which documents are refused and why). P1-39c measures candidate walks through ``Walk.items()`` and needs no document.
 """
 from __future__ import annotations
 
@@ -376,11 +379,22 @@ def _spans(reader: Reader, items: Iterable[bfs.Item], facts: Mapping[Node, Mappi
 # The build.
 # ---------------------------------------------------------------------------------------------
 
+def _version(w: bfs.Walk, table: Sequence[bfs.Row] | None) -> str:
+    """The ``algorithm.version`` of the walk: the shipped table's must map; an explicit table's does when its definition is a published one, else :data:`CANDIDATE_VERSION`."""
+    try:
+        return w.version()
+    except bfs.WalkError:
+        if table is None:
+            raise
+        return CANDIDATE_VERSION
+
+
 def build_answer(reader: Reader, anchor: Any, *, question: str = "impact", measured: Mapping[str, Iterable[tuple[int, int]]] | None = None,
                  table: Sequence[bfs.Row] | None = None) -> dict[str, Any]:
     """The validated, canonical answer document for ``question`` (``"impact"`` or ``"depends-on"``) asked of ``anchor`` (a ``ccg.engine.anchors`` symbol, contract or config anchor).
 
-    ``measured`` replaces :data:`FOLD_MEASURED`; ``table`` is an engine-internal candidate row table (never a request field): such a document carries :data:`CANDIDATE_VERSION`.
+    ``measured`` replaces :data:`FOLD_MEASURED`; ``table`` is an engine-internal row table (never a request field), the shipped one by default: a document from another table carries the
+    version its walk definition maps to, :data:`CANDIDATE_VERSION` when none does.
     Raises :class:`BuildError` (or the reader's ``GraphDataError``/``ReaderError``) and never returns a document ``ccg.answer.validate`` rejects."""
     if question not in group.QUESTIONS:
         raise ValueError(f"unknown question {question!r}"[:64])
@@ -402,13 +416,14 @@ def build_answer(reader: Reader, anchor: Any, *, question: str = "impact", measu
     groups = [{"kind": g.kind, "key": g.key, "reason": g.reason, "count": g.count, "members": [_item(m, facts, spans, ev) for m in g.members]} for g in listing.groups]
     evidence_units = {x["unit"] for it in items + [m for g in groups for m in g["members"]] for h in it["chain"] for x in (*h.get("lifted", ()), *h.get("bound", ())) if "unit" in x}
     staleness = ST.staleness_block(reader, (p.item for p in placed), facts, evidence_units)
+    flow_langs = w.flow_langs(reader, facts)
     stamp = ST.stamp(reader)
     if stamp != stamp0:
         _fail("the snapshot changed during the build")
     doc = {
-        "answerSchemaVersion": "1.1",
+        "answerSchemaVersion": "1.2",
         "interpretation": {"status": "resolved", "request": {"useCase": "impact", "direction": question, "anchors": [request_anchor]}},
-        "recipe": {"algorithm": {"id": "bfs-v1", "version": CANDIDATE_VERSION if table is not None else w.version()},
+        "recipe": {"algorithm": {"id": "bfs-v1", "version": _version(w, table)},
                    "queries": reader.recipe_queries(), "guards": {"visitedSeedsAnchor": True, "levelGuard": config.LEVEL_GUARD}},
         "stamp": stamp,
         "staleness": staleness,
@@ -416,6 +431,8 @@ def build_answer(reader: Reader, anchor: Any, *, question: str = "impact", measu
         "groups": groups,
         "depthBound": {"bound": w.bound, "unexplored": w.unexplored},
     }
+    if flow_langs:
+        doc["notices"] = [{"code": "flow-not-enumerated", "langs": sorted(flow_langs)}]
     doc = clean(doc)
     try:
         answer.validate(doc)

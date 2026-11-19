@@ -1,8 +1,8 @@
-"""P1-39b carry-over (g): V17-V19 (``ccg.answer.validate``) re-run over **real walk output**, not planted documents.
+"""P1-39b carry-over (g): V17-V20 (``ccg.answer.validate``) re-run over **real walk output**, not planted documents.
 
 Every world the engine's walk tests use (``tests/test_engine_flow.py``, ``tests/test_engine_group.py`` and the builder tests' own), rewritten to 32-hex ids, is built into an answer
 by ``ccg.engine.answer_build`` from every symbol, contract point and config entry as anchor, in both columns, with every unit's ``flowAvailable`` forced true and forced false,
-over the shipped table and (internally) the three candidate tables ``V-flow``, ``V-both`` and ``V-union`` (``ccg.engine.flow.candidate_table``). The builder validates before it
+over the shipped table (V-both, ``table=None``) and (internally) the three other tables ``as-built`` (caller-only), ``V-flow`` and ``V-union`` (``ccg.engine.flow.candidate_table``). The builder validates before it
 returns, so a document is a pass; the tests assert the population is not trivial (the ``function`` state, ``flow-unavailable`` labels and a candidate walk's callee state occur).
 The stored slice bundles (``slice`` marker: absent artifacts skip, reported unrun) are walked the same way.
 """
@@ -22,7 +22,13 @@ import test_engine_answer as TA
 import test_engine_flow as TF
 import test_engine_group as TG
 
-TABLES = ["as-built", "V-flow", "V-both", "V-union"]
+TABLES = ["V-both", "as-built", "V-flow", "V-union"]
+SHIPPED = "V-both"          # P1-39d: the shipped table is V-both (``table=None``); the caller-only ``as-built`` table and the V-flow and V-union tables are the candidates
+
+
+def table_arg(name):
+    """The ``table=`` of ``build_answer`` for a table name: the shipped one is the default, the others are passed explicitly."""
+    return None if name == SHIPPED else flow.candidate_table(name)
 
 
 def raw_worlds():
@@ -80,7 +86,7 @@ def run_all(worlds, tables=TABLES, monkeypatch=None):
                                 raise
                         AB.answer.validate = spy
                         try:
-                            doc = AB.build_answer(AnswerReader(g), a, question=question, table=None if table == "as-built" else flow.candidate_table(table))
+                            doc = AB.build_answer(AnswerReader(g), a, question=question, table=table_arg(table))
                         except GraphDataError as exc:
                             refused.append((name, flag, table, question, type(a).__name__, str(exc), seen[0] if seen else ""))
                             continue
@@ -95,28 +101,31 @@ def population():
     return run_all(raw_worlds())
 
 
-def test_every_shipped_table_document_over_every_world_anchor_column_and_flag_builds_and_validates_v17_to_v19(population):
+def test_every_shipped_table_document_over_every_world_anchor_column_and_flag_builds_and_validates_v17_to_v20(population):
+    """The shipped table is V-both (``table=None``): every document is ``"1.2"`` at algorithm ``1.2`` and validates under V20 and V18's ``"1.2"`` rules; the caller-only table, passed
+    explicitly, builds and validates as well (a ``"1.2"`` document with the ``1.1`` record's version), so nothing but V-flow and V-union is ever refused."""
     docs, refused = population
-    shipped = [d for d in docs if d[2] == "as-built"]
-    assert len(shipped) > 300
-    assert [r for r in refused if r[2] == "as-built"] == []
+    shipped = [d for d in docs if d[2] == SHIPPED]
+    assert len(shipped) > 300 and len([d for d in docs if d[2] == "as-built"]) == len(shipped)
+    assert [r for r in refused if r[2] in (SHIPPED, "as-built")] == []
     for *_, doc in shipped:
         answer.validate(doc)
-        assert doc == answer.canonicalize(doc) and doc["answerSchemaVersion"] == "1.1"
+        assert doc == answer.canonicalize(doc) and doc["answerSchemaVersion"] == "1.2"
+    for *_, doc in [d for d in docs if d[2] == "as-built"]:
+        answer.validate(doc)
+        assert doc["answerSchemaVersion"] == "1.2"
 
 
 def test_a_candidate_table_refuses_exactly_where_v18_does_not_define_its_added_hops_and_nowhere_else(population):
-    """V18 (``-answer-spec2.md`` §5) encodes the shipped table: V-flow's added rows label a hop that does not leave ``function`` (clause (c)), V-both's leave ``function`` by a row
-    the shipped list lacks (clause (e)). Flag-false units only, and nothing else is ever refused: a shipped table other than §5's needs §5 (and V18) revised first (spec2 §1.2)."""
+    """V18 (``-answer-spec2.md`` §5) encodes the shipped table (V-both): V-flow's added rows label a hop that does not leave ``function`` (clause (c)), and so do V-union's (it holds them
+    as well). Flag-false units only; the shipped table and the caller-only one are never refused, and nothing else is: another shipped table needs §5 (and V18) revised first (spec2 §1.2)."""
     docs, refused = population
-    candidate = [r for r in refused if r[2] != "as-built"]
+    candidate = [r for r in refused if r[2] != SHIPPED]
     assert candidate, "the candidate tables added hops no world reached"
     for name, flag, table, question, kind, msg, detail in candidate:
         assert flag is False and msg == "the built answer does not validate (rule V18)", (name, table, msg)
-        clause = detail.split(": ", 2)[2][:3]
-        assert clause in ("(c)", "(e)"), detail
-        assert clause == "(c)" if table == "V-flow" else clause in ("(c)", "(e)") if table == "V-union" else clause == "(e)", (table, detail)
-    assert {r[2] for r in candidate} == {"V-flow", "V-both", "V-union"}
+        assert detail.split(": ", 2)[2][:3] == "(c)", (table, detail)
+    assert {r[2] for r in candidate} == {"V-flow", "V-union"}
 
 
 def test_the_population_is_not_trivial_the_function_state_the_labels_and_a_candidate_walks_callee_state_all_occur(population):
@@ -125,7 +134,7 @@ def test_the_population_is_not_trivial_the_function_state_the_labels_and_a_candi
     by_table = {t: 0 for t in TABLES}
     for name, flag, table, question, a, doc in docs:
         by_table[table] += len(doc["items"])
-        if table != "as-built":
+        if table != SHIPPED:
             continue
         seen["group"] += len(doc["groups"])
         for it in doc["items"] + [m for g in doc["groups"] for m in g["members"]]:
@@ -138,9 +147,12 @@ def test_the_population_is_not_trivial_the_function_state_the_labels_and_a_candi
                 seen["wiring"] += h["kind"] == "ConfigEntry" and h.get("edgeType") == "BOUND_BY" and h.get("dir") == "->"
     assert all(v > 0 for v in seen.values()), seen
     assert all(v > 0 for v in by_table.values()), by_table
+    callee = [h for name, flag, table, question, a, doc in docs if table == SHIPPED and question == "impact" and flag is False for it in doc["items"] for h in it["chain"]
+              if (h.get("edgeType"), h.get("dir")) == ("HAS_CALL", "->")]
+    assert callee, "no flag-false V-both answer holds a callee run"                      # P1-39d: the shipped walk lists callees as well
 
 
-def test_a_candidate_table_lists_at_least_what_the_shipped_one_does_and_the_v_union_what_each_does(population):
+def test_a_candidate_table_lists_at_least_what_the_caller_only_one_does_and_the_v_union_what_each_does(population):
     docs, _ = population
     got = {}
     for name, flag, table, question, a, doc in docs:
@@ -155,10 +167,32 @@ def test_a_candidate_table_lists_at_least_what_the_shipped_one_does_and_the_v_un
     assert checked > 300
 
 
-def test_a_candidate_table_document_carries_the_unpublished_version_and_the_shipped_one_1_1(population):
+def test_a_document_carries_the_version_its_walk_definition_maps_to_and_candidate_version_only_when_none_does(population):
     docs, _ = population
+    want = {SHIPPED: "1.2", "as-built": "1.1", "V-flow": AB.CANDIDATE_VERSION, "V-union": AB.CANDIDATE_VERSION}
+    assert {d[2] for d in docs} == set(want)
     for name, flag, table, question, a, doc in docs:
-        assert doc["recipe"]["algorithm"]["version"] == ("1.1" if table == "as-built" else AB.CANDIDATE_VERSION)
+        assert doc["recipe"]["algorithm"]["version"] == want[table]
+
+
+def test_the_shipped_walk_over_random_flag_mixed_worlds_builds_documents_whose_callee_runs_v18_accepts():
+    """Mixed-flag, mixed-language worlds (``test_engine_flow.mixed_world``) through the builder, which validates: a callee run in a flag-false unit is accepted by V18's ``"1.2"``
+    rules (``CALLEE_ROWS``, (b)-(g)). A V18 refusal (``BuildError``) is a failure; the random worlds' other ``GraphDataError`` kinds (hexified ids with no Unit row) are skipped."""
+    docs = runs = refused = 0
+    for seed in range(40):
+        g, ids_ = hexify(TF.mixed_world(seed)[0])
+        for a in anchors_of(g):
+            for question in ("impact", "depends-on"):
+                try:
+                    doc = AB.build_answer(AnswerReader(g), a, question=question)
+                except AB.BuildError:
+                    raise
+                except GraphDataError:
+                    refused += 1
+                    continue
+                docs += 1
+                runs += any((h.get("edgeType"), h.get("dir")) == ("HAS_CALL", "->") for it in doc["items"] for h in it["chain"])
+    assert docs > 200 and runs > 20, (docs, runs, refused)
 
 
 # ------------------------------------------------------------------------------------------------------------------ the stored slice bundles (marker ``slice``)
@@ -228,7 +262,7 @@ def slice_population(slice_rows):
                             raise
                     AB.answer.validate = spy
                     try:
-                        doc = AB.build_answer(reader, a, question=question, table=None if table == "as-built" else flow.candidate_table(table))
+                        doc = AB.build_answer(reader, a, question=question, table=table_arg(table))
                     except GraphDataError as exc:
                         refused.append((flag, table, question, str(exc), seen[0] if seen else ""))
                         continue
@@ -241,8 +275,8 @@ def slice_population(slice_rows):
 @_marked
 def test_every_shipped_table_answer_over_the_stored_slice_validates_in_both_columns_and_both_flag_states(slice_population):
     docs, refused = slice_population
-    shipped = [d for d in docs if d[1] == "as-built"]
-    assert [r for r in refused if r[1] == "as-built"] == []
+    shipped = [d for d in docs if d[1] == SHIPPED]
+    assert [r for r in refused if r[1] in (SHIPPED, "as-built")] == []
     assert len(shipped) == 2 * 13 * 2 and all(doc == answer.canonicalize(doc) for *_, doc in shipped)
     health = next(d for d in shipped if d[3].__class__.__name__ == "ContractAnchor" and d[3].key_norm == "GET /shop/api/health" and d[0] is False and d[2] == "impact")[4]
     (item,) = health["items"]
@@ -254,13 +288,16 @@ def test_every_shipped_table_answer_over_the_stored_slice_validates_in_both_colu
 @_marked
 def test_the_flag_false_slice_answers_carry_the_function_state_and_the_flow_unavailable_labels_the_real_data_gives(slice_population):
     docs, _ = slice_population
-    hops = [h for flag, table, question, a, doc in docs if table == "as-built" and flag is False for it in doc["items"] + [m for g in doc["groups"] for m in g["members"]] for h in it["chain"]]
+    hops = [h for flag, table, question, a, doc in docs if table == SHIPPED and flag is False for it in doc["items"] + [m for g in doc["groups"] for m in g["members"]] for h in it["chain"]]
     assert any(h["state"] == "function" for h in hops)
     assert {h["reason"] for h in hops if str(h.get("reason", "")).startswith("flow-unavailable")} == {"flow-unavailable:javascript"}
     assert any(h["state"] == "path" and h["accessPath"] == "r" for flag, table, question, a, doc in docs if flag is True for it in doc["items"] for h in it["chain"])
 
 
 @_marked
-def test_a_slice_candidate_table_is_refused_only_by_v18_in_flag_false_units(slice_population):
-    _, refused = slice_population
-    assert refused and all(r[0] is False and r[1] != "as-built" and r[3] == "the built answer does not validate (rule V18)" and r[4].split(": ", 2)[2][:3] in ("(c)", "(e)") for r in refused)
+def test_a_slice_document_is_refused_only_by_v18_c_in_flag_false_v_flow_or_v_union_and_the_shipped_walk_lists_callees_there(slice_population):
+    docs, refused = slice_population
+    assert all(r[0] is False and r[1] in ("V-flow", "V-union") and r[3] == "the built answer does not validate (rule V18)" and r[4].split(": ", 2)[2][:3] == "(c)" for r in refused)
+    callee = [it for flag, table, question, a, doc in docs if table == SHIPPED and flag is False and question == "impact" for it in doc["items"]
+              if (it["chain"][-1].get("edgeType"), it["chain"][-1].get("dir")) == ("CALLS", "->")]
+    assert callee and all(it["status"] == "possible" for it in callee)

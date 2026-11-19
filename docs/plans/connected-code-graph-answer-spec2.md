@@ -471,7 +471,7 @@ document, not of a renderer, so a JSON client sees it and a renderer cannot forg
 host a code node the walk visited**: the visited set (`bfs.Walk.visited`), the anchor included, restricted to `Symbol`, `CallSite` and point nodes (`Param`, `Ret`, `Cond`, …;
 a point's unit is its owner's). It does not depend on the items: an answer that lists nothing for a flag-false anchor carries it, because that is where silence misleads most.
 - `Link`, `ConfigEntry`, `ContractPoint` and `Unit` nodes do not trigger it. A config anchor with a binding does reach a code node (`bound_in` then `via_in:site` visit the bound `CallSite` within the minimum bound), so
-  only an unbound config anchor or a contract-point anchor yields no code node, hence no notice.
+  only an unbound config anchor or an edge-less contract point (no provider or consumer) yields no code node, hence no notice. A contract anchor whose walk reaches a flag-false `Symbol` or `CallSite` carries it.
 - An ambiguous or unresolved answer has no walk and no notice.
 - **Missing data fails closed (decision).** A visited code node with no unit, or whose unit has no `Unit` row, is a data error (`GraphDataError`), as §5 says for a gated row, so the omission is never silently unstated. A unit's
   language is required only when its flag is false (a flag-true unit with no language is not an error). The extra `units` read adds a `recipe.queries` name to answers that did not read units before (P1-39d updates those pins).

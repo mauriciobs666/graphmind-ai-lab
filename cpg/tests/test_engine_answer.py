@@ -1,7 +1,7 @@
 """P1-39b: the answer builder (``ccg.engine.answer_build``): the walk's output as the canonical answer document, validated by ``ccg.answer``.
 
 Contract: ``docs/plans/connected-code-graph-p1-answers.md`` P1-39 (0)-(3), (5), (6); ``-answer-spec2.md`` §3 (hops, wiring items, ``site``, ``Unit``), §3.5/§4.3 (staleness, ``builtAt``
-outside the facts), §5, §6 (v1 text it replaces), §7 (V1-V19), §8 (one answer-level test per staleness-unit source); ``-answer-spec.md`` §4-§6 (document shapes, canonical bytes,
+outside the facts), §5, §6 (v1 text it replaces), §7 (V1-V20), §8 (one answer-level test per staleness-unit source); ``-answer-spec.md`` §4-§6 (document shapes, canonical bytes,
 ``facts_bytes``). Offline: worlds in readable names rewritten to 32-hex ids (``tests/engine_answer_helpers.py``); the one live round trip is ``test_engine_answer_live.py``.
 """
 from __future__ import annotations
@@ -76,11 +76,11 @@ def caller_world_g(*, flow=True, lang="python"):
 
 # ------------------------------------------------------------------------------------------------------------------ (0) the document
 
-def test_a_direct_caller_builds_a_valid_resolved_1_1_answer_whose_chain_is_the_walks():
+def test_a_direct_caller_builds_a_valid_resolved_1_2_answer_whose_chain_is_the_walks():
     g, ids_ = caller_world()
     doc, _ = built(g, ids_, sym_anchor, "A")
     answer.validate(doc)
-    assert doc["answerSchemaVersion"] == "1.1"
+    assert doc["answerSchemaVersion"] == "1.2" and "notices" not in doc          # a flag-true world: nothing is stated as not enumerated
     assert doc["interpretation"] == {"status": "resolved", "request": {"useCase": "impact", "direction": "impact", "anchors": [
         {"type": "symbol", "symbolId": ids_["A"], "qname": "m.py::A", "repoId": "repo-a", "path": "m.py"}]}}
     (item,) = doc["items"]
@@ -99,7 +99,7 @@ def test_a_direct_caller_builds_a_valid_resolved_1_1_answer_whose_chain_is_the_w
 def test_the_recipe_names_the_shipped_definition_the_guards_and_every_query_the_build_ran():
     g, ids_ = caller_world()
     doc, reader = built(g, ids_, sym_anchor, "A")
-    assert doc["recipe"]["algorithm"] == {"id": "bfs-v1", "version": "1.1"}
+    assert doc["recipe"]["algorithm"] == {"id": "bfs-v1", "version": "1.2"}                  # the shipped V-both table
     assert doc["recipe"]["guards"] == {"visitedSeedsAnchor": True, "levelGuard": config.LEVEL_GUARD}
     assert doc["recipe"]["queries"] == sorted(reader.recipe_queries(), key=lambda q: q["name"])
     names = {q["name"] for q in doc["recipe"]["queries"]}
@@ -922,11 +922,15 @@ def test_a_call_site_reached_by_data_carries_its_callee_name_in_impact_too_and_n
 def test_the_depth_bound_cuts_are_counted_into_unexplored_and_the_item_beyond_is_not_listed():
     g = flag_false_two_callers_g()
     g.sym("E", "m.py::E", path="m.py", start=31, end=39), g.site("cE", "E", line=32, callee="D"), g.calls("cE", "D")
+    g.sym("F2", "m.py::F2", path="m.py", start=41, end=49), g.site("cF2", "B", line=13, callee="F2"), g.calls("cF2", "F2")      # B's callee: distance 2, listed
+    g.sym("F3", "m.py::F3", path="m.py", start=51, end=59), g.site("cF3", "D", line=23, callee="F3"), g.calls("cF3", "F3")      # D's callee: distance 3, cut
     g, ids_ = hexify(g)
     doc, _ = built(g, ids_, sym_anchor, "A")
-    assert doc["depthBound"] == {"bound": 2, "unexplored": 1}
-    assert {subject_id(i) for i in doc["items"]} == {ids_["B"], ids_["D"]}
+    # three stored edges are cut at the bound: ``E`` calling ``D`` (a caller) and, from ``D`` (distance 2), its callees ``B`` (via ``cD``'s ``CALLS``) and ``F3``
+    assert doc["depthBound"] == {"bound": 2, "unexplored": 3}
+    assert {subject_id(i) for i in doc["items"]} == {ids_["B"], ids_["D"], ids_["F2"]}
     assert max(i["distance"] for i in doc["items"]) == 2
+    assert item_of(doc, ids_, "F2")["status"] == "possible" and ids_["F3"] not in {subject_id(i) for i in doc["items"]}
 
 
 def test_the_span_read_takes_the_row_of_the_symbol_by_id_when_other_symbols_share_the_qname_and_the_repository():
@@ -1098,3 +1102,167 @@ def test_a_malformed_row_of_a_read_the_builder_adds_is_a_graph_data_error_that_n
     with pytest.raises(GraphDataError, match="malformed row") as exc:
         AB.build_answer(Corrupt(g, read, fn, last), a, question=question)
     assert not any(v in str(exc.value) for v in ids_.values())
+
+
+# ------------------------------------------------------------------------------------------------------------------ P1-39d: the flow notice (``-answer-spec2.md`` §5.1) and the shipped V-both walk
+
+def notice(*langs):
+    return [{"code": "flow-not-enumerated", "langs": sorted(langs)}]
+
+
+def test_the_builder_emits_schema_1_2_and_the_v_both_algorithm_1_2_for_the_default_table_and_the_two_columns():
+    for question in ("impact", "depends-on"):
+        g, ids_ = caller_world(flow=False)
+        doc, _ = built(g, ids_, sym_anchor, "A", question=question)
+        assert doc["answerSchemaVersion"] == "1.2" and doc["recipe"]["algorithm"] == {"id": "bfs-v1", "version": "1.2"}
+        answer.validate(doc)
+
+
+def test_a_flag_false_python_anchor_with_callers_lists_them_and_carries_the_python_notice():
+    g, ids_ = caller_world(flow=False)
+    doc, _ = built(g, ids_, sym_anchor, "A")
+    assert [subject_id(i) for i in doc["items"]] == [ids_["C"]]
+    assert doc["notices"] == notice("python")
+
+
+def test_a_flag_false_anchor_with_no_listed_item_carries_the_notice_all_the_same():
+    g = G(unit="u1", flow=False, lang="python")
+    g.sym("A", "m.py::A", path="m.py")
+    g, ids_ = hexify(g)
+    doc, _ = built(g, ids_, sym_anchor, "A")
+    assert doc["items"] == [] and doc["notices"] == notice("python")
+    answer.validate(doc)
+
+
+def test_a_flag_true_anchor_and_its_callers_carry_no_notice():
+    g, ids_ = caller_world(flow=True)
+    doc, _ = built(g, ids_, sym_anchor, "A")
+    assert doc["items"] and "notices" not in doc
+
+
+def mixed_world(*, anchor_flag, caller_flag):
+    """``C`` (u2, javascript) calls ``A`` (u1, python); the flags are the arguments."""
+    g = G(unit="u1", flow=anchor_flag, lang="python")
+    g.unit_node("u2", flow=caller_flag, root="svc", lang="javascript")
+    g.sym("A", "m.py::A", path="m.py", start=3, end=9)
+    g.sym("C", "svc/c.js::C", path="svc/c.js", start=10, end=30, unit="u2")
+    g.site("cC", "C", line=12, callee="A", path="svc/c.js", unit="u2")
+    g.calls("cC", "A")
+    return hexify(g)
+
+
+def test_a_chain_across_a_flag_false_python_unit_and_a_flag_true_javascript_one_names_python_only():
+    g, ids_ = mixed_world(anchor_flag=False, caller_flag=True)
+    doc, _ = built(g, ids_, sym_anchor, "A")
+    assert [subject_id(i) for i in doc["items"]] == [ids_["C"]] and doc["notices"] == notice("python")
+
+
+def test_the_flag_false_unit_the_walk_arrives_in_is_named_not_only_the_anchors():
+    g, ids_ = mixed_world(anchor_flag=True, caller_flag=False)
+    doc, _ = built(g, ids_, sym_anchor, "A")
+    assert [subject_id(i) for i in doc["items"]] == [ids_["C"]] and doc["notices"] == notice("javascript")
+
+
+def test_both_languages_are_named_when_both_units_are_flag_false_and_sorted():
+    g, ids_ = mixed_world(anchor_flag=False, caller_flag=False)
+    doc, _ = built(g, ids_, sym_anchor, "A")
+    assert doc["notices"] == notice("javascript", "python") and doc["notices"][0]["langs"] == ["javascript", "python"]
+
+
+def test_an_unbound_config_anchor_and_a_contract_point_anchor_visit_no_code_node_and_carry_no_notice():
+    g = G(unit="u1", flow=False, lang="python")
+    g.entry("e1", key_path="svc.url", path="cfg/a.yaml", line=3, unit="u1")
+    g.cp("cp1", key="GET /x")
+    g, ids_ = hexify(g)
+    for make, name in ((cfg_anchor, "e1"), (cp_anchor, "cp1")):
+        doc, _ = built(g, ids_, make, name)
+        assert doc["items"] == [] and "notices" not in doc
+
+
+def test_a_bound_config_anchor_reaching_a_flag_false_call_site_carries_that_sites_language():
+    g, ids_ = link_world()
+    doc, _ = built(g, ids_, cfg_anchor, "e1")
+    assert doc["notices"] == notice("javascript")          # the call site ``cs`` and ``getHealth`` are in u_ui (javascript); the config entry's yaml unit is not named
+
+
+def test_the_depends_on_column_carries_the_notice_of_every_flag_false_language_it_walks():
+    g, ids_ = depends_world()
+    doc, _ = built(g, ids_, sym_anchor, "getHealth", question="depends-on")
+    assert doc["notices"] == notice("javascript", "python")        # the call site and the anchor (javascript), the provider ``H`` (python)
+
+
+def test_a_flag_true_unit_with_no_language_does_not_raise_and_carries_no_notice():
+    g = G(unit="u1", flow=True, lang=None)     # no item, so no unit is listed in the staleness block (which needs a language of every listed unit): only the notice reads this one
+    g.sym("A", "m.py::A", path="m.py")
+    g, ids_ = hexify(g)
+    doc, _ = built(g, ids_, sym_anchor, "A")
+    assert doc["items"] == [] and "notices" not in doc
+
+
+def test_a_flag_false_unit_with_no_language_and_a_visited_node_with_no_unit_row_are_graph_data_errors():
+    g = G(unit="u1", flow=False, lang=None)
+    g.sym("A", "m.py::A", path="m.py")
+    g, ids_ = hexify(g)
+    with pytest.raises(GraphDataError):
+        built(g, ids_, sym_anchor, "A")
+    g, ids_ = caller_world(flow=False)
+    drop(g, "Unit", "unitId", ids_["u2"])
+    with pytest.raises(GraphDataError):
+        built(g, ids_, sym_anchor, "A")
+
+
+def test_a_flag_false_v_both_answer_lists_the_callees_of_a_reached_function_possible_with_the_flow_unavailable_reason():
+    g = flag_false_two_callers_g()
+    g.sym("F2", "m.py::F2", path="m.py", start=41, end=49), g.site("cF", "B", line=13, callee="F2"), g.calls("cF", "F2")
+    g, ids_ = hexify(g)
+    doc, _ = built(g, ids_, sym_anchor, "A")
+    f2 = item_of(doc, ids_, "F2")
+    assert (f2["status"], f2["reason"], f2["distance"]) == ("possible", "flow-unavailable:python", 2)
+    assert [(h["edgeType"], h["dir"]) for h in f2["chain"][1:]][-2:] == [("HAS_CALL", "->"), ("CALLS", "->")]
+    assert doc["notices"] == notice("python")
+
+
+@pytest.mark.parametrize("question", ["impact", "depends-on"])
+def test_the_notice_is_identical_for_the_same_request_twice_and_is_a_fact_in_facts_bytes_across_rebuilds(question):
+    g, ids_ = caller_world(flow=False)
+    a = sym_anchor(g, ids_, "A")
+    first, second = AB.build_answer(AnswerReader(g), a, question=question), AB.build_answer(AnswerReader(g), a, question=question)
+    assert first["notices"] == second["notices"] == notice("python") and answer.dumps(first) == answer.dumps(second)
+    for n in g.rows.nodes["Unit"]:
+        n["builtAt"] = T2
+    rebuilt = AB.build_answer(AnswerReader(g), a, question=question)
+    assert answer.facts_bytes(first) == answer.facts_bytes(rebuilt)
+    stripped = {k: v for k, v in first.items() if k != "notices"}
+    assert answer.facts_bytes(first) != answer.facts_bytes(stripped)
+
+
+def test_an_explicit_table_takes_the_version_its_record_maps_to_and_candidate_version_only_when_none_does():
+    g, ids_ = caller_world(flow=False)
+    a = sym_anchor(g, ids_, "A")
+    assert AB.build_answer(AnswerReader(g), a, table=bfs.ROWS)["recipe"]["algorithm"]["version"] == "1.1"
+    assert AB.build_answer(AnswerReader(g), a, table=bfs.SHIPPED_ROWS)["recipe"]["algorithm"]["version"] == "1.2"
+    odd = tuple(dataclasses.replace(r, inc=0) if r.id == "calls_in" else r for r in bfs.ROWS)
+    assert AB.build_answer(AnswerReader(g), a, table=odd)["recipe"]["algorithm"]["version"] == AB.CANDIDATE_VERSION
+
+
+def test_the_units_read_of_the_notice_puts_units_in_the_recipe_of_an_answer_that_listed_no_unit_and_a_walk_with_no_code_node_reads_none():
+    """Before P1-39d an answer with no item read no unit (``staleness`` is empty): the anchor's unit is now read for the notice, and is named in ``recipe.queries``."""
+    g = G(unit="u1", flow=True)
+    g.sym("A", "m.py::A", path="m.py")
+    g.entry("e1", key_path="svc.url", path="cfg/a.yaml", line=3, unit="u1")
+    g, ids_ = hexify(g)
+    doc, reader = built(g, ids_, sym_anchor, "A")
+    assert doc["staleness"] == {"units": []} and "units" in {q["name"] for q in doc["recipe"]["queries"]}
+    assert [c[1]["ids"] for c in reader.calls if c[0] == "units"] == [[ids_["u1"]]]
+    doc, reader = built(g, ids_, cfg_anchor, "e1")
+    assert doc["items"] == [] and "units" not in {q["name"] for q in doc["recipe"]["queries"]} and not [c for c in reader.calls if c[0] == "units"]
+
+
+@pytest.mark.parametrize("world", ["link", "depends"])
+def test_a_contract_anchor_whose_walk_reaches_flag_false_code_carries_the_notice_in_the_impact_column(world):
+    """The trigger is the visited code nodes, not the anchor's type: ``cp1``'s consumer call site and symbol (javascript) and its provider (python) are visited and flag-false."""
+    g, ids_ = {"link": link_world, "depends": depends_world}[world]()
+    doc, _ = built(g, ids_, cp_anchor, "cp1")
+    assert len(doc["items"]) == 2 and doc["notices"] == notice("javascript", "python")
+    depends, _ = built(g, ids_, cp_anchor, "cp1", question="depends-on")
+    assert depends["items"] == [] and "notices" not in depends          # nothing of the contract is a dependency: no code node is visited

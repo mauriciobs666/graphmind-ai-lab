@@ -17,9 +17,9 @@ labelled).
 labelled hop whose unit has no language, raise :class:`ccg.engine.reader.GraphDataError`: a label that cannot say ``<lang>`` is not guessed.
 
 **Candidate walks** (:func:`candidate_table`) are row-table variants chosen by an engine-internal argument of ``bfs.walk(table=...)``, never by a request field; only the
-shipped table has an ``algorithm.version``. ``V-flow`` follows the precise rows in a flag-false unit as well, every hop on them labelled; ``V-both`` lists, for a function
-the walk reached only at call level, the callees as well as the callers, every added hop labelled; ``V-union`` holds both sets of added rows. P1-39's rule picks the
-shipped table (``-p1-ml.md`` §3.5); until it does the shipped one is ``-answer-spec2.md`` §5's.
+shipped table (V-both) and ``as-built`` have an ``algorithm.version``. ``V-flow`` follows the precise rows in a flag-false unit as well, every hop on them labelled; ``V-both`` lists, for a function
+the walk reached only at call level, the callees as well as the callers, every added hop labelled; ``V-union`` holds both sets of added rows. P1-39's rule
+picked V-both (``-p1-ml.md`` §3.5), which P1-23d and P1-39d ship (``bfs.SHIPPED_ROWS``, ``algorithm.version`` 1.2); ``as-built`` is the caller-only table (1.1).
 """
 from __future__ import annotations
 
@@ -115,14 +115,14 @@ def labelled_edge(own_status: str, own_reason: str | None, lang: str) -> tuple[s
 # The candidate walks (-p1-ml.md §3.5).
 # ---------------------------------------------------------------------------------------------
 
-#: the four walks P1-39 measures; ``as-built`` is the shipped table
+#: the four walks P1-39 measures; ``as-built`` is the caller-only table, ``V-both`` the shipped one
 CANDIDATES = ("as-built", "V-flow", "V-both", "V-union")
 
 
 def candidate_table(name: str):
-    """The row table of one candidate walk, for ``bfs.walk(table=...)`` (an engine argument, never a request field; only the shipped table has an ``algorithm.version``).
+    """The row table of one candidate walk, for ``bfs.walk(table=...)`` (an engine argument, never a request field; only the published tables, ``as-built`` and V-both, have an ``algorithm.version``).
 
-    * ``as-built``: the shipped table (``bfs.ROWS``);
+    * ``as-built``: the caller-only table (``bfs.ROWS``, ``algorithm.version`` 1.1);
     * ``V-flow``: every precise row a flag-false unit does not follow (``DATA``, ``CONTROLLED_BY``, the ``arg(i)`` rows) gains a twin followed *only* where the shipped one is
       not (``src:false``, ``any:false`` for ``CALLS ->`` into a callee, whose twin is followed when either unit is flag-false), every hop on it labelled;
     * ``V-both``: the shipped table, ``bfs.SHIPPED_ROWS`` (``bfs.ROWS`` plus ``bfs.V_BOTH_ROWS``, the callee run; ``algorithm.version`` 1.2);

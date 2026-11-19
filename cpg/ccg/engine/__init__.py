@@ -8,5 +8,5 @@ Built by P1-22 (``ccg.engine.bfs``, ``ccg.engine.state``; the flow fallback P1-2
 
 Built by P1-39 (``ccg.engine.staleness``, the staleness block and the stamp, P1-39a; ``ccg.engine.answer_build``, the answer builder that assembles the canonical document and validates it with ``ccg.answer``, P1-39b).
 
-Seam left for a later step: P1-39c, the flow-fallback measurement over the four candidate walks (``ccg.engine.flow.CANDIDATES``); it is not built, and reads ``Walk.items()`` rather than a document (V18 refuses a candidate table's added hops).
+Seam left for a later step: P1-39c, the flow-fallback measurement over the four candidate walks (``ccg.engine.flow.CANDIDATES``); it is not built, and reads ``Walk.items()`` rather than a document (V18 refuses the added hops of the V-flow and V-union candidates; V-both is the shipped table).
 """
