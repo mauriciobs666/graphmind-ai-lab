@@ -74,7 +74,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _dump(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+    return common.dump_json(value) + "\n"
 
 
 def run(args: argparse.Namespace, client: Client, out: TextIO) -> int:

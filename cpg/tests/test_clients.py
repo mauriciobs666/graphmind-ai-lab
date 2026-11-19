@@ -764,7 +764,7 @@ def test_no_broker_module_is_loaded_by_ask_resolve_or_raw_and_refresh_imports_it
     import sys
     code = """
 import json, sys
-sys.path.insert(0, %r)
+sys.path[:0] = [%r, %r]
 import clients.common as c, clients.cli.main
 assert not [m for m in sys.modules if m.startswith('ccg.broker')], 'import'
 assert 'ccg.refresh' not in sys.modules
@@ -780,7 +780,278 @@ try: cl.raw_query('RETURN 1')
 except c.ClientError: pass
 assert not [m for m in sys.modules if m.startswith('ccg.broker')], sorted(m for m in sys.modules if m.startswith('ccg.broker'))
 print('ok')
-""" % str(__import__("pathlib").Path(__file__).parent)
+""" % (str(__import__("pathlib").Path(__file__).parent.parent), str(__import__("pathlib").Path(__file__).parent))      # this tree's ccg/clients first, not the editable install's
     r = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, cwd=str(__import__("pathlib").Path(__file__).parent.parent),
                        env={"PATH": os.environ["PATH"], "CCG_CREDENTIALS_DIR": "/nonexistent"})
     assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr[-600:]
+
+
+# ------------------------------------------------------------------------------------------------------------------ review Pass 2 minor findings (P1-25b cleanup)
+
+@pytest.mark.parametrize("where", ["reader", "refresh"])
+def test_the_store_failure_message_names_the_exception_type_never_its_text(where):
+    """M51: the "not reachable" / "refresh failed" messages are built from the type name; the exception's own text (which may hold a password) never leaves."""
+    write_credentials()
+
+    def boom(*a, **k):
+        raise ConnectionError(f"AUTH ccg_engine_shop {PLANTED} refused")
+
+    c = Client(SYSTEM, host="h", port=16399, reader_factory=boom, connect=boom)
+    argv = ["refresh"] if where == "refresh" else ["resolve", "--anchor", json.dumps({"kind": "symbol", "repo": "r", "qname": "q"})]
+    code, out, err = run_cli(argv, c)
+    payload = json.loads(err)["error"]
+    assert (code, out, payload["code"]) == (2, "", "store-error") and "ConnectionError" in payload["message"]
+    assert PLANTED not in err and "refused" not in err
+
+
+def test_the_client_safe_text_is_the_refresh_reports_rule():
+    """``clients.common._safe`` duplicates ``ccg.refresh.safe_text`` on purpose: importing ``ccg.refresh`` would load the broker client (``-egress-spec3.md`` §2.1). Pinned equal."""
+    import random
+    rnd = random.Random(25)
+    alphabet = "ab\\\n\r\t\x00\x1b\x7f é€😀" + "".join(chr(c) for c in range(0x20, 0x7f))
+    cases = ["", "plain", "a\nb", "\x1b[31mred", "back\\slash", "é", "😀" * 50, "x" * 200, "y" * 120, "z" * 121] + \
+            ["".join(rnd.choice(alphabet) for _ in range(rnd.randrange(0, 300))) for _ in range(300)]
+    for cap in (120, 50, 10):
+        assert [common._safe(c, cap) for c in cases] == [refresh_mod.safe_text(c, cap) for c in cases], cap
+    assert [common._safe(c) for c in cases] == [refresh_mod.safe_text(c) for c in cases]          # the defaults agree too
+
+
+@pytest.mark.parametrize("argv", [["resolve", "--anchor", json.dumps({"kind": "symbol", "repo": "r", "qname": "q"})],
+                                  ["ask", "--request", json.dumps({"useCase": "impact", "anchor": {"kind": "symbol", "repo": "r", "qname": "q"}}), "--fail-on", "any"],
+                                  ["refresh"], ["raw", "--cypher", "RETURN 1"]], ids=["resolve", "ask", "refresh", "raw"])
+def test_a_refused_credential_is_a_distinct_typed_error_pointing_at_the_credentials_and_leaks_no_password(argv):
+    from redis.exceptions import AuthenticationError
+    write_credentials(passwords={"build": PLANTED + "b", "verdict": PLANTED + "v", "engine": PLANTED + "e", "raw": PLANTED})
+
+    def refused(*a, **k):
+        raise AuthenticationError(f"invalid username-password pair {PLANTED}")
+
+    c = Client(SYSTEM, host="h", port=16399, reader_factory=refused, connect=refused, raw_connect=refused)
+    code, out, err = run_cli(argv, c)
+    payload = json.loads(err)["error"]
+    assert (code, out, payload["code"]) == (2, "", "store-auth"), err
+    assert "credential" in payload["message"] and "reachable" not in payload["message"] and PLANTED not in err
+    role = {"resolve": "engine", "ask": "engine", "refresh": "build or verdict", "raw": "raw"}[argv[0]]
+    assert f"the {role} credential of {SYSTEM!r}" in payload["message"]
+
+
+def test_an_unreachable_store_is_still_not_reported_as_a_credential_problem():
+    def down(*a, **k):
+        raise ConnectionError("Error 111 connecting")
+    c = Client(SYSTEM, host="h", port=16399, reader_factory=down)
+    with pytest.raises(StoreError, match="not reachable"):
+        c.resolve({"kind": "symbol", "repo": "r", "qname": "q"})
+
+
+# ------------------------------------------------------------------------------------------------------------------ P1-25b: the MCP server (a thin wrapper over Client)
+
+def mcp_call(name, arguments, client=None, factory=None):
+    """One tool call through FastMCP's own argument validation and dispatch: ``(isError, text, systems the factory was asked for)``."""
+    import asyncio
+    from clients.mcp import server as S
+    asked = []
+
+    def make(system):
+        asked.append(system)
+        return client
+    srv = S.build_server(factory or make)
+    res = asyncio.run(srv.call_tool(name, arguments))
+    (content,) = res.content
+    return res.isError, content.text, asked
+
+
+class FullRecorder(Recorder):
+    def ask(self, request=None, *, question=None, cache_bypass=False):
+        self.calls.append(("ask", request, question, cache_bypass))
+        return b_12()
+
+    def raw_query(self, cypher, *, timeout_ms=None):
+        self.calls.append(("raw", cypher, timeout_ms))
+        return {"rows": []}
+
+
+def test_the_mcp_server_lists_exactly_the_four_tools_with_their_arguments():
+    import asyncio
+    from clients.mcp import server as S
+    tools = {t.name: t for t in asyncio.run(S.build_server().list_tools())}
+    assert sorted(tools) == ["ask", "raw_query", "refresh", "resolve"]
+    props = {n: sorted(t.inputSchema["properties"]) for n, t in tools.items()}
+    assert props == {"ask": ["cacheBypass", "question", "request", "system"], "resolve": ["anchor", "system"], "refresh": ["scope", "system"],
+                     "raw_query": ["cypher", "system", "timeoutMs"]}
+    assert tools["resolve"].inputSchema["required"] == ["anchor"] and tools["raw_query"].inputSchema["required"] == ["cypher"]
+    assert "required" not in tools["ask"].inputSchema
+
+
+def test_mcp_ask_returns_the_canonical_bytes_of_the_engines_document_with_its_notice_intact():
+    g, _, reader = world(flow=False)
+    expected = client_over(reader).ask(req(g))
+    assert expected["notices"]
+    is_error, text, asked = mcp_call("ask", {"request": req(g)}, client_over(ClientReader(g)))
+    assert not is_error and text.encode() == answer.dumps(expected) and answer.is_canonical(text.encode())
+    assert json.loads(text)["notices"] == expected["notices"] and asked == [None]
+    code, out, _ = run_cli(["ask", "--request", json.dumps(req(g))], client_over(ClientReader(g)))
+    assert code == 0 and out == text                                                          # the canonical bytes, the CLI's exactly
+
+
+def test_mcp_passes_every_argument_through_unchanged():
+    """The silent corruptions: a dropped or defaulted ``system``, ``cacheBypass``, ``question``, ``scope`` or ``timeoutMs`` changes no output shape, only what was asked."""
+    r = FullRecorder()
+    request = {"useCase": "impact", "anchor": {"kind": "name", "name": "A"}}
+    assert mcp_call("ask", {"request": request, "system": "beta"}, r)[2] == ["beta"]
+    assert mcp_call("ask", {"question": "who calls A?", "cacheBypass": True, "system": "gamma"}, r)[2] == ["gamma"]
+    mcp_call("ask", {"question": "who calls A?"}, r)
+    assert mcp_call("resolve", {"anchor": {"kind": "name", "name": "A"}}, r)[2] == [None]
+    assert mcp_call("resolve", {"anchor": {"kind": "name", "name": "A"}, "system": "zeta"}, r)[2] == ["zeta"]
+    assert mcp_call("refresh", {"scope": ["a", "b"], "system": "delta"}, r)[2] == ["delta"]
+    mcp_call("refresh", {}, r)
+    assert mcp_call("raw_query", {"cypher": "RETURN 1", "timeoutMs": 1234, "system": "eps"}, r)[2] == ["eps"]
+    mcp_call("raw_query", {"cypher": "MATCH (n) RETURN n"}, r)
+    assert r.calls == [("ask", request, None, False), ("ask", None, "who calls A?", True), ("ask", None, "who calls A?", False),
+                       ("resolve", {"kind": "name", "name": "A"}), ("resolve", {"kind": "name", "name": "A"}), ("refresh", ["a", "b"]), ("refresh", None),
+                       ("raw", "RETURN 1", 1234), ("raw", "MATCH (n) RETURN n", None)]
+
+
+def test_mcp_resolve_refresh_and_raw_return_the_clis_json(monkeypatch):
+    g, _, reader = world(flow=True)
+    anchor = req(g)["anchor"]
+    is_error, text, _ = mcp_call("resolve", {"anchor": anchor}, client_over(reader))
+    assert not is_error and text + "\n" == run_cli(["resolve", "--anchor", json.dumps(anchor)], client_over(reader))[1]
+    assert json.loads(text)["candidates"][0]["symbolId"]
+    write_credentials()
+    is_error, text, _ = mcp_call("raw_query", {"cypher": "RETURN 1"}, raw_client(FakeDB()))
+    _, out, _ = run_cli(["raw", "--cypher", "RETURN 1"], raw_client(FakeDB()))
+    assert not is_error and text + "\n" == out and json.loads(text)["timeoutMs"] == config.QUERY_TIMEOUT_MS
+    r = Recorder()
+    assert mcp_call("refresh", {"scope": ["x"]}, r)[:2] == (False, '{"ok":true}') and r.calls == [("refresh", ["x"])]
+
+
+def test_every_non_answer_result_is_one_compact_sorted_json_line_in_both_clients():
+    """``dump_json`` is the one form (sorted keys, no spaces, UTF-8 text): the CLI prints it plus a newline, the MCP tool returns it."""
+    g, _, reader = world(flow=True)
+    anchor = req(g)["anchor"]
+    _, text, _ = mcp_call("resolve", {"anchor": anchor}, client_over(reader))
+    value = json.loads(text)
+    assert text == json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) and list(value) == sorted(value)
+    assert run_cli(["resolve", "--anchor", json.dumps(anchor)], client_over(reader))[1] == text + "\n"
+    assert common.dump_json({"b": 1, "a": "é"}) == '{"a":"é","b":1}'
+
+
+def test_mcp_typed_errors_are_tool_errors_carrying_the_clis_payload_and_nothing_else():
+    g, _, reader = world(flow=True)
+    cases = [("ask", {"request": {**req(g), "scope": ["r"]}}, ["ask", "--request", json.dumps({**req(g), "scope": ["r"]})], "not-built"),
+             ("ask", {"request": req(g, use_case="vuln")}, ["ask", "--request", json.dumps(req(g, use_case="vuln"))], "not-built"),
+             ("ask", {"question": "who calls A?"}, ["ask", "--question", "who calls A?"], "not-built"),
+             ("ask", {"request": req(g), "question": "q"}, None, "bad-request"),
+             ("resolve", {"anchor": {"kind": "nope"}}, ["resolve", "--anchor", '{"kind": "nope"}'], "bad-request")]
+    for name, args, argv, code in cases:
+        is_error, text, _ = mcp_call(name, args, client_over(ClientReader(g)))
+        assert is_error and json.loads(text)["error"]["code"] == code, (name, args, text)
+        if argv:
+            assert text + "\n" == run_cli(argv, client_over(ClientReader(g)))[2]
+    write_credentials()
+    is_error, text, _ = mcp_call("raw_query", {"cypher": "CREATE (n)"}, raw_client(FakeDB()))
+    assert is_error and json.loads(text)["error"]["code"] == "raw-refused"
+
+
+def test_mcp_ask_validates_first_and_returns_nothing_of_an_invalid_document():
+    bad = b_12()
+    del bad["stamp"]
+    is_error, text, _ = mcp_call("ask", {"request": {}}, DocClient(bad))
+    assert is_error and json.loads(text) == {"error": {"code": "invalid-answer", "message": "the answer does not validate; nothing was returned"}}
+    assert "items" not in text and "stamp" not in text
+
+
+@pytest.mark.parametrize("exc", [ConnectionError(PLANTED), RuntimeError(PLANTED), KeyError(PLANTED)])
+def test_mcp_never_answers_with_a_traceback_or_an_exceptions_text(exc):
+    class Exploding:
+        def ask(self, *a, **k):
+            raise exc
+    is_error, text, _ = mcp_call("ask", {"request": {}}, Exploding())
+    assert is_error and json.loads(text)["error"] == {"code": "internal-error", "message": f"unexpected failure ({type(exc).__name__})"}
+    is_error, text, _ = mcp_call("ask", {"request": {}}, factory=lambda system: (_ for _ in ()).throw(BadRequest("bad system")))
+    assert is_error and json.loads(text)["error"]["code"] == "bad-request"
+
+
+def _server_env(tmp_path, **extra):
+    env = {"PATH": os.environ["PATH"], "CCG_FORBID_REAL_CREDENTIALS": "1", "CCG_CREDENTIALS_DIR": str(tmp_path / "cred"), "CCG_CONFIG_DIR": str(tmp_path / "cfg"),
+           "CCG_SYSTEM": SYSTEM, "CCG_FALKORDB_HOST": "127.0.0.1", "CCG_FALKORDB_PORT": str(free_port())}
+    return {**env, **extra}
+
+
+def test_the_stdio_server_starts_serves_the_tools_and_answers_typed_errors_end_to_end(tmp_path):
+    """``python -m clients.mcp.server`` over a real stdio session (the mcp SDK's client): the tools are listed, a question is ``not-built``, and ``raw_query`` against
+    a closed port is a typed ``store-error`` (or ``no-credentials``), never a crash of the server."""
+    import asyncio
+    import sys
+    from pathlib import Path
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+
+    cpg = Path(__file__).resolve().parent.parent
+    params = StdioServerParameters(command=sys.executable, args=["-m", "clients.mcp.server"], cwd=str(cpg), env=_server_env(tmp_path))
+
+    async def session():
+        async with stdio_client(params, errlog=open(os.devnull, "w")) as (read, write):
+            async with ClientSession(read, write) as s:
+                await s.initialize()
+                names = sorted(t.name for t in (await s.list_tools()).tools)
+                q = await s.call_tool("ask", {"question": "who calls A?"})
+                raw = await s.call_tool("raw_query", {"cypher": "RETURN 1"})
+                return names, q, raw
+
+    names, q, raw = asyncio.run(asyncio.wait_for(session(), 60))
+    assert names == ["ask", "raw_query", "refresh", "resolve"]
+    assert q.isError and json.loads(q.content[0].text)["error"]["code"] == "not-built"
+    assert raw.isError and json.loads(raw.content[0].text)["error"]["code"] in ("store-error", "no-credentials")
+
+
+@pytest.mark.parametrize("extra,code", [({"CCG_FALKORDB_PORT": "6379"}, "bad-request"), ({"CCG_SYSTEM": "Bad Name!"}, "bad-request")])
+def test_the_stdio_server_refuses_a_bad_configuration_at_start_with_exit_2(tmp_path, extra, code):
+    import subprocess
+    import sys
+    from pathlib import Path
+    r = subprocess.run([sys.executable, "-m", "clients.mcp.server"], cwd=str(Path(__file__).resolve().parent.parent), env=_server_env(tmp_path, **extra),
+                       capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+    assert r.returncode == 2 and r.stdout == "" and json.loads(r.stderr.strip().splitlines()[-1])["error"]["code"] == code, r.stderr[-400:]
+
+
+# ------------------------------------------------------------------------------------------------------------------ P1-25b review F3, F5
+
+@pytest.mark.parametrize("tool,args", [
+    ("raw_query", {"cypher": "RETURN 1", "timeoutMs": True}), ("raw_query", {"cypher": "RETURN 1", "timeoutMs": "5"}), ("raw_query", {"cypher": "RETURN 1", "timeoutMs": 2.5}),
+    ("raw_query", {"cypher": "RETURN 1", "timeoutMs": 2.0}), ("raw_query", {"cypher": 5}), ("raw_query", {"cypher": "RETURN 1", "system": 7}),
+    ("ask", {"question": "who calls A?", "cacheBypass": 1}), ("ask", {"question": "who calls A?", "cacheBypass": "yes"}), ("ask", {"question": 42}),
+    ("ask", {"request": "not an object"}), ("refresh", {"scope": "abc"}), ("refresh", {"scope": [1, 2]}), ("resolve", {"anchor": "abc"}), ("resolve", {"anchor": [1]}),
+], ids=lambda v: json.dumps(v) if isinstance(v, dict) else v)
+def test_a_wrong_argument_type_is_never_coerced_and_is_the_typed_bad_request(tool, args):
+    """F3: the tools declare ``Any``, so FastMCP coerces nothing and ``Client`` rejects the type with its own typed error (never pydantic's text, never a silent 1)."""
+    write_credentials()
+    is_error, text, _ = mcp_call(tool, args, factory=lambda system: Client(system, host="127.0.0.1", port=16399, raw_connect=lambda *a, **k: FakeDB()))
+    assert is_error and json.loads(text)["error"]["code"] == "bad-request", text
+    assert "pydantic" not in text and "validation error" not in text
+
+
+def test_a_json_array_sent_as_a_string_is_still_parsed_by_fastmcp_and_a_scalar_string_is_not():
+    r = FullRecorder()
+    mcp_call("refresh", {"scope": '["a"]'}, r)
+    mcp_call("raw_query", {"cypher": "RETURN 1", "timeoutMs": 2000}, r)
+    assert r.calls == [("refresh", ["a"]), ("raw", "RETURN 1", 2000)]
+
+
+def test_an_auth_failure_is_recognised_through_a_subclass_of_the_drivers_class():
+    """F5: the match walks the MRO, so a driver subclass (a future redis-py split, a wrapper) is still ``store-auth``."""
+    from redis.exceptions import AuthenticationError
+
+    class TokenExpired(AuthenticationError):
+        pass
+
+    def refused(*a, **k):
+        raise TokenExpired(f"expired {PLANTED}")
+
+    write_credentials()
+    c = Client(SYSTEM, host="h", port=16399, reader_factory=refused, raw_connect=refused, connect=refused)
+    for call in (lambda: c.resolve({"kind": "symbol", "repo": "r", "qname": "q"}), lambda: c.raw_query("RETURN 1"), lambda: c.refresh()):
+        with pytest.raises(common.StoreAuthError) as info:
+            call()
+        assert PLANTED not in str(info.value)
+    assert common._is_auth_failure(TokenExpired()) and not common._is_auth_failure(ConnectionError())

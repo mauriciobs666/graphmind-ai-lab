@@ -2,7 +2,8 @@
 
 Contract: ``docs/plans/connected-code-graph-p1-answers.md`` P1-25 behaviours (1)-(5), (8), (9); ``-answer-spec2.md`` §2 (``cacheBypass``), §4.1 (no depth bound),
 §5.1 (the flow notice is never dropped); ``-egress-spec3.md`` §10.1 (this is the one client module that opens ``raw_query``'s ``ccg_raw_<s>`` connection).
-The CLI (``clients/cli/main.py``) and the MCP server (P1-25b) are thin wrappers over :class:`Client`; neither re-implements a rule below.
+The CLI (``clients/cli/main.py``) and the MCP server (``clients/mcp/server.py``) are thin wrappers over :class:`Client`; neither re-implements a rule below, and both print
+:func:`dump_json` for every result that is not an answer.
 
 * **Structured request.** ``{"useCase": "impact" | "depends-on", "anchor": {...}}`` (:func:`parse_request`; ``scope`` and a depth bound are not part of P1). The anchor is one of
   ``{"kind": "symbol", "repo", "qname"}``, ``{"kind": "name", "name", "repo"?}``, ``{"kind": "location", "repo", "path", "line"? | "symbol"?}``,
@@ -22,10 +23,13 @@ The CLI (``clients/cli/main.py``) and the MCP server (P1-25b) are thin wrappers 
   answers first; a reply of ``RESULTSET_SIZE`` rows may have been cut short by the server and is a typed error, never presented as complete. A time limit bounds wall time, not memory.
 * **Identity** (5): the asker is the launching OS user (:func:`asker`). Access control is P4 (FR-24): in P1 ``raw_query`` is open to the local user.
 * **Network** (7): the client opens a socket to FalkorDB only (``CCG_FALKORDB_HOST``/``CCG_FALKORDB_PORT``, default ``127.0.0.1:6390``; port 6379 is refused).
+* **Store failures are typed and value-free:** an unreachable store is ``store-error`` naming the exception type only; a refused credential (the driver's
+  ``AuthenticationError``) is ``store-auth`` naming the role, so an operator checks the credentials, not the network. Neither carries the driver's text.
 """
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import pwd
 from pathlib import Path
@@ -91,6 +95,11 @@ class AnchorNotResolved(ClientError):
 
 class StoreError(ClientError):
     code = "store-error"
+
+
+class StoreAuthError(ClientError):
+    """The store refused a role's credential (wrong or rotated password, disabled user): an operator checks the credentials, not the network. Value-free."""
+    code = "store-auth"
 
 
 class NoCredentials(ClientError):
@@ -221,6 +230,11 @@ def resolution_json(res: A.Resolution) -> dict[str, Any]:
 
 # --------------------------------------------------------------------------------------------- render
 
+def dump_json(value: Any) -> str:
+    """A non-answer result (``resolve``, ``refresh``, ``raw_query``, an error payload) as the one JSON form every client prints: sorted keys, compact, UTF-8 text."""
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
 def render_answer(doc: dict, fmt: str) -> str:
     """``doc`` as ``json`` (the canonical bytes), ``text`` (``ccg.render.render_text``) or ``markdown``. The document is validated FIRST: an invalid one raises ``AnswerError``
     and no renderer runs. The notice is in every form (JSON: the field; text/markdown: the renderers' notice)."""
@@ -268,6 +282,15 @@ def _safe(value: object, cap: int = 120) -> str:
     return text if len(text) <= cap else text[:cap - 3] + "..."
 
 
+def _is_auth_failure(exc: BaseException) -> bool:
+    """Whether ``exc`` is the driver's authentication refusal (redis-py's ``AuthenticationError``, matched by class name so ``redis`` stays a lazy import)."""
+    return any(cls.__name__ == "AuthenticationError" for cls in type(exc).__mro__)
+
+
+def _auth_error(system: str, roles: str) -> StoreAuthError:
+    return StoreAuthError(f"the store refused the {roles} credential of {system!r}; check the ccg credentials of the system, not the network")
+
+
 def _credential(system: str, role: str) -> str:
     try:
         return acl.read_credentials(system)[role]
@@ -309,6 +332,8 @@ class Client:
         except (atrest.AtRestError, acl.AclError, FileNotFoundError) as exc:
             raise NoCredentials(f"the engine credential of {self.system!r} is not readable ({type(exc).__name__})") from None
         except Exception as exc:  # noqa: BLE001 - an unreachable or refusing store (redis/falkordb errors are not ReaderErrors): typed, value-free, never a traceback
+            if _is_auth_failure(exc):
+                raise _auth_error(self.system, "engine") from None
             raise StoreError(f"the store is not reachable ({type(exc).__name__})") from None
 
     # (2)
@@ -363,6 +388,8 @@ class Client:
         except (refresh_mod.RefreshError, L.LoadError) as exc:
             raise RefreshFailed(str(exc)[:200]) from None
         except Exception as exc:  # noqa: BLE001 - a connection or server failure of the refresh: typed, value-free
+            if _is_auth_failure(exc):
+                raise _auth_error(self.system, "build or verdict") from None
             raise StoreError(f"the refresh failed against the store ({type(exc).__name__})") from None
         return {"system": report.system, "snapshotId": report.snapshot_id, "scope": list(report.scope) if report.scope else None,
                 "units": [{"unitId": u.unit_id, "repoId": u.repo_id, "language": u.language, "status": u.status, "failReason": u.fail_reason} for u in report.units],
@@ -390,8 +417,9 @@ class Client:
         return {"asker": asker(), "system": self.system, "timeoutMs": timeout_ms, "columns": [h[1] for h in result.header],
                 "rows": [[_plain(c) for c in row] for row in result.result_set]}
 
-    @staticmethod
-    def _raw_error(exc: Exception, timeout_ms: int) -> ClientError:
+    def _raw_error(self, exc: Exception, timeout_ms: int) -> ClientError:
+        if _is_auth_failure(exc):
+            return _auth_error(self.system, "raw")
         text = " ".join(str(exc).split())[:200]
         low = text.lower()
         if "timeout_max" in low or "timeout parameter" in low:

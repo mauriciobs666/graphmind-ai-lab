@@ -554,7 +554,8 @@ PATH_TOOLS = ("Read", "Edit", "Write", "Glob", "Grep", "NotebookEdit", "MultiEdi
 TOOL_FLAGS = ("--allowedTools", "--allowed-tools", "--tools")
 # The ccg tools' parameters (index D6: ask, resolve, refresh, raw_query) name graph objects, never files. Any
 # other parameter name fails closed until it is reviewed and added here.
-SAFE_TOOL_PARAMS = {"request", "anchor", "system", "scope", "cypher", "depth", "depth_bound", "use_case"}
+SAFE_TOOL_PARAMS = {"request", "anchor", "system", "scope", "cypher", "depth", "depth_bound", "use_case",
+                    "question", "cacheBypass", "timeoutMs"}   # P1-25b: free text, a boolean, an integer; none names a file
 # Exact launch strings of the `.mcp.json` `ccg` entry that P1-27 adds under review; empty until then.
 MCP_LAUNCH_ALLOWLIST: set[str] = set()
 BUNDLE_STORE_NAMES = {"read_bundle", "bundle_dir", "bundle_path", "prune_unit", "read_private", "atrest"}
