@@ -1,0 +1,35 @@
+{
+  "candidateId": "join-in-judge-v2-handoff-f1",
+  "decisionModel": "laya",
+  "decisionTimeoutSeconds": 180.0,
+  "fit": {
+    "outcome": "fit-infeasible: agreement",
+    "qualityTarget": "max-min-agreement"
+  },
+  "fitManifest": {
+    "file": "join-in-judge-v2-f1.fit.txt",
+    "purposes": [
+      "question-tuning",
+      "cutoff"
+    ],
+    "sha256": "4ec799b6abb40fe5b4f5952367a09a9c38f7e25c3139c6a759e6e103ea3e5aef",
+    "size": 200
+  },
+  "handoffModel": "qwen/qwen3-4b-2507",
+  "policy": {
+    "kind": "predicate-band",
+    "noBelow": 0.22823574951596218,
+    "yesAtOrAbove": 0.7430691792482803
+  },
+  "provenance": {
+    "builtBy": "decision-models",
+    "datasetVersion": "v2",
+    "sourceSha": "04c6c5da211d34f6a60ecb82deedb333db2a71f9939b69e0250245e24b8639de"
+  },
+  "question": {
+    "instructions": "The new message may be a question or request to the room. It expects the agent only if answering it is the agent's job in this thread, nobody has already answered it, and no named person was expected to handle it. A question outside what the agent does here, or one that a person was clearly asked, does not. Small talk expects an answer only when it is put to the agent by name, and a greeting to everyone does not. A message addressed to the agent itself, and not merely naming it, is for the agent whatever else the room is doing. Should the agent reply?",
+    "name": "reply",
+    "type": "predicate"
+  },
+  "role": "join-in-judge"
+}

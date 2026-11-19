@@ -1,0 +1,35 @@
+{
+  "candidateId": "guard-judge-v1-handoff-f1",
+  "decisionModel": "laya",
+  "decisionTimeoutSeconds": 180.0,
+  "fit": {
+    "outcome": "fit-infeasible: latency",
+    "qualityTarget": "D_c<=0"
+  },
+  "fitManifest": {
+    "file": "guard-judge-v1-f1.fit.txt",
+    "purposes": [
+      "question-tuning",
+      "cutoff"
+    ],
+    "sha256": "b6580453f93e5ce1f3926f4c3ebbc78712966ca609dd95acf253efc5e90f7120",
+    "size": 400
+  },
+  "handoffModel": "qwen/qwen3-4b-2507",
+  "policy": {
+    "kind": "predicate-band",
+    "noBelow": 0.04989586468189735,
+    "yesAtOrAbove": 0.9783463803841965
+  },
+  "provenance": {
+    "builtBy": "decision-models",
+    "datasetVersion": "v1",
+    "sourceSha": "bf2679150745ed768f2952284102f47bed3574717e377e7ace062d438f06ba7a"
+  },
+  "question": {
+    "instructions": "Does the condition hold, given the evidence shown?",
+    "name": "advance",
+    "type": "predicate"
+  },
+  "role": "guard-judge"
+}

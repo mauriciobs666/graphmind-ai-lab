@@ -1,0 +1,35 @@
+{
+  "candidateId": "join-in-judge-v2-only-f3",
+  "decisionModel": "laya@bf16",
+  "decisionTimeoutSeconds": 360.0,
+  "fit": {
+    "outcome": "fit-infeasible: agreement",
+    "qualityTarget": "max-min-agreement"
+  },
+  "fitManifest": {
+    "file": "join-in-judge-v2-f3.fit.txt",
+    "purposes": [
+      "question-tuning",
+      "cutoff"
+    ],
+    "sha256": "4ec799b6abb40fe5b4f5952367a09a9c38f7e25c3139c6a759e6e103ea3e5aef",
+    "size": 200
+  },
+  "handoffModel": null,
+  "policy": {
+    "kind": "predicate-band",
+    "noBelow": 0.4701842521611813,
+    "yesAtOrAbove": 0.4701842521611813
+  },
+  "provenance": {
+    "builtBy": "decision-models",
+    "datasetVersion": "v2",
+    "sourceSha": "04c6c5da211d34f6a60ecb82deedb333db2a71f9939b69e0250245e24b8639de"
+  },
+  "question": {
+    "instructions": "Look at the agent's most recent turn and what the new message does with it. A message right after the agent's turn expects a reply only if it engages with what the agent said, by answering its question, asking about its answer or correcting it; a thank-you, a closing remark or a turn to another person does not. When several people are discussing among themselves and the message continues that discussion, the agent stays silent. A follow-up that asks about or corrects what the agent said counts, while the exchange is still between that person and the agent. Should the agent reply?",
+    "name": "reply",
+    "type": "predicate"
+  },
+  "role": "join-in-judge"
+}
