@@ -1,0 +1,33 @@
+{"vector": "question-rules", "note": "hand-written (plan4 3.11, U6f.4b); verdict only; question is the spec as sent"}
+{"branch": "not an object", "case": "object-string", "question": "x", "valid": false}
+{"branch": "not an object", "case": "object-list", "question": [], "valid": false}
+{"branch": "not an object", "case": "object-null", "question": null, "valid": false}
+{"branch": "unknown type", "case": "type-missing", "question": {"instructions": "Is it met?", "name": "advance"}, "valid": false}
+{"branch": "score", "case": "type-score", "question": {"instructions": "Is it met?", "name": "advance", "type": "score"}, "valid": false}
+{"branch": "score with valid choices", "case": "type-score-with-choices", "question": {"choices": [{"instructions": "i", "value": "a"}, {"instructions": "i", "value": "b"}], "instructions": "Which?", "name": "kind", "type": "score"}, "valid": false}
+{"branch": "unknown type", "case": "type-unknown", "question": {"instructions": "Is it met?", "name": "advance", "type": "ranking"}, "valid": false}
+{"branch": "unknown type with valid choices", "case": "type-unknown-with-choices", "question": {"choices": [{"instructions": "i", "value": "a"}, {"instructions": "i", "value": "b"}], "instructions": "Which?", "name": "kind", "type": "ranking"}, "valid": false}
+{"branch": "list-valued type", "case": "type-list", "question": {"instructions": "Is it met?", "name": "advance", "type": ["predicate"]}, "valid": false}
+{"branch": "object-valued type", "case": "type-object", "question": {"instructions": "Is it met?", "name": "advance", "type": {"predicate": 1}}, "valid": false}
+{"branch": "empty name", "case": "name-empty", "question": {"instructions": "Is it met?", "name": "", "type": "predicate"}, "valid": false}
+{"branch": "non-string name", "case": "name-nonstring", "question": {"instructions": "Is it met?", "name": 7, "type": "predicate"}, "valid": false}
+{"branch": "missing name", "case": "name-missing", "question": {"instructions": "Is it met?", "type": "predicate"}, "valid": false}
+{"branch": "non-string instructions", "case": "instructions-nonstring", "question": {"instructions": 3, "name": "advance", "type": "predicate"}, "valid": false}
+{"branch": "missing instructions", "case": "instructions-missing", "question": {"name": "advance", "type": "predicate"}, "valid": false}
+{"branch": "predicate with choices", "case": "predicate-choices", "question": {"choices": [{"instructions": "i", "value": "a"}, {"instructions": "i", "value": "b"}], "instructions": "Is it met?", "name": "advance", "type": "predicate"}, "valid": false}
+{"branch": "predicate with choices null", "case": "predicate-choices-null", "question": {"choices": null, "instructions": "Is it met?", "name": "advance", "type": "predicate"}, "valid": false}
+{"branch": "choices missing", "case": "choices-missing", "question": {"instructions": "Which?", "name": "kind", "type": "choice"}, "valid": false}
+{"branch": "choices empty", "case": "choices-empty", "question": {"choices": [], "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": false}
+{"branch": "choices not a list", "case": "choices-notlist", "question": {"choices": {"a": "b"}, "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": false}
+{"branch": "a choice not an object", "case": "choice-notobject", "question": {"choices": ["a", "b"], "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": false}
+{"branch": "empty choice value", "case": "choice-value-empty", "question": {"choices": [{"instructions": "i", "value": "a"}, {"instructions": "i", "value": ""}], "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": false}
+{"branch": "non-string choice value", "case": "choice-value-nonstring", "question": {"choices": [{"instructions": "i", "value": 1}], "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": false}
+{"branch": "list choice value", "case": "choice-value-list", "question": {"choices": [{"instructions": "i", "value": ["a"]}], "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": false}
+{"branch": "choice value missing", "case": "choice-value-missing", "question": {"choices": [{"instructions": "i"}], "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": false}
+{"branch": "non-string choice instructions", "case": "choice-instructions-nonstring", "question": {"choices": [{"instructions": null, "value": "a"}], "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": false}
+{"branch": "choice instructions missing", "case": "choice-instructions-missing", "question": {"choices": [{"value": "a"}], "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": false}
+{"branch": "repeated values", "case": "choice-values-repeat", "question": {"choices": [{"instructions": "i", "value": "a"}, {"instructions": "i", "value": "b"}, {"instructions": "i", "value": "a"}], "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": false}
+{"branch": "a valid predicate", "case": "valid-predicate", "question": {"instructions": "Is it met?", "name": "advance", "type": "predicate"}, "valid": true}
+{"branch": "valid predicate, empty instructions", "case": "valid-predicate-empty-instructions", "question": {"instructions": "", "name": "advance", "type": "predicate"}, "valid": true}
+{"branch": "a valid choice", "case": "valid-choice", "question": {"choices": [{"instructions": "i", "value": "a"}, {"instructions": "i", "value": "b"}], "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": true}
+{"branch": "valid choice, one value", "case": "valid-choice-single", "question": {"choices": [{"instructions": "i", "value": "a"}], "instructions": "Which?", "name": "kind", "type": "choice"}, "valid": true}

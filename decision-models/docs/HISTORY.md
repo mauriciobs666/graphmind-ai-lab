@@ -2,6 +2,14 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-19 — typed-decision-models U6f.3b, U6f.4b — hand-off instruction files, question loader
+
+**What:** plan4 `docs/plans/typed-decision-models4.md` §3.11, §4.4/§5 rows U6f.3b/4b; gate `docs/reviews/typed-decision-models.md` Pass 47 (approve for both).
+- **U6f.3b:** `fit/{guard-judge,join-in-judge,message-type-classifier}/handoff.md`, each byte-equal to the prompt file its pack's `pack.json` names; `tests/test_handoff_files.py` (17 tests): guarded byte-equality (skips only when `model-bench/` is absent), pack path read from `pack.json`, forbidden-fragment scan over `fit/**/handoff.md` with a planted-fragment refusal on a temp copy.
+- **U6f.4b:** `decisionmodels/questions.py` (`load_questions`/`parse_questions`, `QuestionsRefused(rule)`; ≤ 5 questions, one control, unique ids, the point's question type, choice values equal `expected` as a set; a copy of the bench's `_question_problem`), the hand-written vector `tests/fixtures/question-rules.jsonl` (32 rows, one per §3.11 branch), and `tests/test_questions.py`/`test_questions_vector.py`/`test_questions_differential.py` (123 tests; the differential module puts `model-bench/` on `sys.path` and runs every row through the bench's real function).
+
+**Verified:** delegates' mutant tables (3b 8 killed; 4b 16 of 18, the two survivors equivalent per the gate); full suite re-run by the coordinator; ruff clean.
+
 ## 2026-11-18 — typed-decision-models U6f.3a, U6f.4a, U6f.5 — hand-off parse, fit manifest, fit statistics
 
 **What:** plan4 `docs/plans/typed-decision-models4.md` §3.11, §4.4 and §5 rows U6f.3a/4a/5; one combined gate, `docs/reviews/typed-decision-models.md` Passes 45–46 (approve).
