@@ -1,0 +1,49 @@
+{
+  "questions": [
+    {
+      "id": "j-control",
+      "control": true,
+      "spec": {
+        "type": "predicate",
+        "name": "reply",
+        "instructions": "Should the agent reply to the new message?"
+      }
+    },
+    {
+      "id": "j-rubric",
+      "control": false,
+      "spec": {
+        "type": "predicate",
+        "name": "reply",
+        "instructions": "The new message does not @mention the agent. Answer true when a reasonable participant would expect the agent to answer it now: it is addressed to the agent by name or an unmistakable reference, it answers the agent's last question or follows up on what the agent just said, or it asks the group for something that is clearly the agent's job in this thread while nobody else has been asked or has answered. Answer false when no reply is expected: it is for another person, small talk, a bare acknowledgement, a remark about the agent rather than to it, already answered or handed to someone, or outside the agent's job. When the thread does not settle whether it is for the agent, answer false."
+      }
+    },
+    {
+      "id": "j-addressee",
+      "control": false,
+      "spec": {
+        "type": "predicate",
+        "name": "reply",
+        "instructions": "Who is the new message addressed to? The agent's name in passing does not make it addressed to the agent: telling someone to ask the agent later is said to a person, while the agent's name followed by a request is said to the agent. A message that continues an exchange between people, or names another person, is theirs. In a mixed message, judge the part for the agent, and a thank-you alone expects no answer. Should the agent reply?"
+      }
+    },
+    {
+      "id": "j-continuity",
+      "control": false,
+      "spec": {
+        "type": "predicate",
+        "name": "reply",
+        "instructions": "Look at the agent's most recent turn and what the new message does with it. A message right after the agent's turn expects a reply only if it engages with what the agent said, by answering its question, asking about its answer or correcting it; a thank-you, a closing remark or a turn to another person does not. When several people are discussing among themselves and the message continues that discussion, the agent stays silent. A follow-up that asks about or corrects what the agent said counts, while the exchange is still between that person and the agent. Should the agent reply?"
+      }
+    },
+    {
+      "id": "j-room",
+      "control": false,
+      "spec": {
+        "type": "predicate",
+        "name": "reply",
+        "instructions": "The new message may be a question or request to the room. It expects the agent only if answering it is the agent's job in this thread, nobody has already answered it, and no named person was expected to handle it. A question outside what the agent does here, or one that a person was clearly asked, does not. Small talk expects an answer only when it is put to the agent by name, and a greeting to everyone does not. A message addressed to the agent itself, and not merely naming it, is for the agent whatever else the room is doing. Should the agent reply?"
+      }
+    }
+  ]
+}

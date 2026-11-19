@@ -520,6 +520,26 @@ def _side_check_items(model_bench: Path) -> Path:
     return items
 
 
+def _side_check_shingles() -> set[tuple[str, ...]]:
+    """The 8-token shingles of every side-check item's evidence (one home, shared with
+    `test_questions_files.py`)."""
+    side: set[tuple[str, ...]] = set()
+    for line in _side_check_items(_MODEL_BENCH).read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            item = json.loads(line)
+            evidence = json.dumps(item.get("understanding"), ensure_ascii=False)
+            evidence += " " + " ".join(t.get("text", "") for t in item.get("turns") or [])
+            side |= _shingles(evidence)
+    return side
+
+
+def test_a_shingle_is_exactly_eight_tokens_long() -> None:
+    """The length is the note's §Q1.3 constant; the scans use one helper on both sides, so only a
+    literal input pins it."""
+    assert len(_shingles("a b c d e f g h")) == 1
+    assert _shingles("a b c d e f g") == set()
+
+
 def test_a_moved_side_check_pack_fails_rather_than_skips(tmp_path: Path) -> None:
     """`pytest.skip` raises a `BaseException`, which `pytest.raises(AssertionError)` would let
     through as a skip of this very test; so the skip is caught and turned into a failure."""
@@ -536,14 +556,7 @@ def test_a_moved_side_check_pack_fails_rather_than_skips(tmp_path: Path) -> None
 def test_no_points_text_shares_an_eight_token_span_with_a_side_check_item() -> None:
     """Note §Q1.4: the 85 human-curated items never appear in any prompt. Reading them from
     `tests/` is not an FR-8 reach (the scan covers `decisionmodels/`)."""
-    side_check = _side_check_items(_MODEL_BENCH)
-    side: set[tuple[str, ...]] = set()
-    for line in side_check.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            item = json.loads(line)
-            evidence = json.dumps(item.get("understanding"), ensure_ascii=False)
-            evidence += " " + " ".join(t.get("text", "") for t in item.get("turns") or [])
-            side |= _shingles(evidence)
+    side = _side_check_shingles()
     assert side
     ours = set().union(*(_shingles(text) for _, text in _points_texts()))
     assert ours & side == set()

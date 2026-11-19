@@ -2,6 +2,15 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-19 — typed-decision-models U6f.3c, U6f.4c — hand-off call parity, question files
+
+**What:** plan4 `docs/plans/typed-decision-models4.md` §3.11, §4.4/§5 rows U6f.3c/U6f.4c; gate `docs/reviews/typed-decision-models.md` Pass 51; question review `decision-models/docs/reviews/typed-decision-models-ml.md` Pass 1–2.
+- **U6f.3c:** `decisionmodels/handoff.py` gains `HANDOFF_TEMPERATURE = 0.0`, `HANDOFF_MAX_TOKENS = 256`, `HANDOFF_CHAT_TIMEOUT_SECONDS = 180.0` and `handoff_messages(role, rendered_input)` (system = `fit/<role>/handoff.md` verbatim, user = the rendering; unknown role raises). `tests/test_handoff_parity.py` pins the constants to each pack's `prompt.temperature`/`maxTokens` and the 180 to `DECISION_POINT_CHAT_TIMEOUT_SECONDS` (source regex), and asserts the guard's `judge.md` equals `_JUDGE_SYSTEM_PROMPT` in falkor-chat's `app.py` (`ast`, `strip()`-equal; skips only when the checkout is absent, fails when the name is not a module-level assignment). Join-in and message-type parity is an item in `docs/BACKLOG.md`.
+- **U6f.4c:** `fit/{guard-judge,join-in-judge,message-type-classifier}/questions.json`, five questions each with one control, drafted from the rubrics only; `tests/test_questions_files.py` loads each through `load_questions` and runs the forbidden-fragment and side-check shingle scans. `data-scientist` approved all three after one wording round (message-type's off-topic → `other` boundary).
+- **Gate fixes:** `tests/test_points.py` pins the shingle length (8) by a literal test, and one shared side-shingle helper replaces a copy.
+
+**Verified:** delegates' mutant tables (3c: 10 caught; 4c: 16 refusals; shingle n=7/n=9 killed after the gate fix); the gate's 11 own mutants (two survivors, now killed); my own `HANDOFF_MAX_TOKENS` mutant killed by 3 tests; full suite re-run by the coordinator.
+
 ## 2026-11-19 — typed-decision-models U6f.6, U6f.7 — the ladders (guard, predicate, choice)
 
 **What:** plan4 `docs/plans/typed-decision-models4.md` v1.11–v1.12 §3.11, §4.4/§5 rows U6f.6/U6f.7; notes `docs/plans/typed-decision-models-ml.md` §Q2.1–§Q2.2 and `docs/plans/typed-decision-models-fit-ml.md` §1–§5; gates `docs/reviews/typed-decision-models.md` Passes 47 and 50 (approve with suggestions; plan Passes 48–49).

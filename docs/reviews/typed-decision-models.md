@@ -2477,3 +2477,29 @@ Target `REVIEW.md`, heading *Always check*. Source: P50-M1 (and P47-M1's late-fa
 
 ### Stopping condition
 One major remains: **P50-M1, owner `architect`** (a clause in the plan's `ScoredCall` row and a round-trip line in U6f.8a's done-condition; no method ruling needed). Not blocking U6f.6/U6f.7 commit: no code major; P50-m1–m4 are `tdd-engineer`'s, to fold into the next ladder touch (or the commit round), none changes a result. U6f.8a must not be dispatched before P50-M1 is folded in.
+
+## Pass 51 — U6f.3c and U6f.4c gate (2026-11-19)
+
+**Scope.** Uncommitted `decision-models/`: `decisionmodels/handoff.py` (`HANDOFF_*` constants, `handoff_messages`), `tests/test_handoff_parity.py`, `docs/BACKLOG.md`, `fit/{guard-judge,join-in-judge,message-type-classifier}/questions.json`, `tests/test_questions_files.py`. Baseline: plan4 §3.11 (`handoff.py`, guarded equality tests, pack against runtime prompt, question texts), §5 rows U6f.3c/U6f.4c. Static plus pytest on the two new files and `test_fr8_isolation.py` (69 passed, 0 skipped; full suite not run) and 11 mutants on a scratch copy (siblings symlinked, tree untouched). Question wording not re-judged (`-ml.md`). Growth-stops: new scope, no prior finding restated.
+**Verdict: approve with suggestions.** No blocker, no major.
+CPG: considered, not relevant — one small pure module and tests read in full.
+
+**Done-conditions.**
+- *U6f.3c, met.* `handoff_messages` equals the bench's `build_messages` (`scoring/agreement.py:195`, `classification.py:245`): `[system = pack prompt verbatim, user = the rendering]`; the pack's `systemPrompt` is the resolved file content, and `fit/<role>/handoff.md` is byte-equal to it (U6f.3b). The three constants equal all three `pack.json` `prompt` blocks (0.0 / 256) and `decisions.py:39` (180). The guard's `_JUDGE_SYSTEM_PROMPT` (`app.py:678`) equals `judge.md.strip()`. `_runtime_prompt` skips only on an absent `app.py`; renamed, in-function, in-class, bare-annotation and empty sources each fail with "module-level assignment" (tested, five rows) and the live test ran, not skipped. `handoff.py` imports stdlib plus `decisionmodels.points`; FR-8 test green. BACKLOG item exists, header matches root grammar, forward-looking, names owner and done-when.
+- *U6f.4c, met.* Each file has 5 questions, one control, unique ids, loads through `load_questions` and is refused for another point's answer space (`answer-space`). Guard/join-in controls are one-line predicates, the message-type control is five bare labels (empty choice instructions). Planted forbidden fragment and planted side-check shingle are refused by tests that copy the real files first; the live scans read the real `fit/` and `test_each_questions_file_loads_for_its_point` fails if the files vanish, so the glob is not vacuous. Blind-hygiene (drafted from rubric only) is not checkable statically; the side-check scan is clean and no text restates a rule it should not.
+
+**Mutants (scratch copy).** Killed: temperature 0.1, max tokens 255, timeout 120, system/user swap, role-fixed `_FIT_DIR` path, `.strip()` on the system text, dropped `ValueError` guard, scan glob renamed, shingle `n=3`. **Survived: shingle length 7 and 9** (P51-m1).
+
+### Findings
+
+**P51-m1 (minor, verified by mutant) — the shingle length 8 is pinned by no test.** `tests/test_points.py:_shingles(text, n=8)`: `n=9` and `n=7` leave `test_points.py` (101) and `test_questions_files.py` (34) green, because the side set, the scanned set and the planted span all use the same helper, so the length cancels. `n=9` silently weakens the §Q1.4 gate (an 8-token verbatim lift is not caught). Fix, in `test_points.py` (it owns the helper): one test with literal input independent of the constant: `_shingles("a b c d e f g h")` has exactly one element and `_shingles("a b c d e f g")` is empty. Verified the mutants would redden it by reading; not run.
+**P51-m2 (minor, by reading) — `handoff.py` docstring cites a test that does not exist.** The constants' comment says "pinned by `tests/test_handoff_constants.py`"; the file is `tests/test_handoff_parity.py` (`ls tests`). Correct the path.
+**P51-m3 (minor, by reading) — the side-check shingle set is built twice.** `test_questions_files._side_shingles` is a copy of the loop in `test_points.test_no_points_text_shares_an_eight_token_span...`. A change to the evidence construction (what counts as item text) in one leaves the other on the old rule. Move one function next to `_shingles` and call it from both.
+**P51-n1 (nit, `teco`)** — `docs/BACKLOG.md`'s item has no work-item ID (module convention: `K-`numbered); assign via `wi`. The U6f.3c/U6f.4c `HISTORY.md` entries and `decision-models/AGENTS.md` "Current state" (`handoff_messages`, `questions.json`, `BACKLOG.md`) are not yet written; that is the close, not this gate.
+
+**What's solid.** The sampling, timeout and message-order tests each redden on a one-value mutant; the runtime-prompt helper is tested on its own failure shapes (including `AnnAssign`) so the skip rule cannot degrade to a skip; expected values come from the pack files and the bench source, not from the constants.
+
+**Growth-stops.** Pass 51 is new scope (a gate); nothing restated.
+
+### Stopping condition
+No blocker or major. P51-m1–m3 are `tdd-engineer`/`coder`'s, foldable into the commit round; none changes a result.

@@ -1,0 +1,84 @@
+{
+  "questions": [
+    {
+      "id": "m-control",
+      "control": true,
+      "spec": {
+        "type": "choice",
+        "name": "type",
+        "instructions": "What type of message is the MESSAGE?",
+        "choices": [
+          {"value": "order", "instructions": ""},
+          {"value": "question", "instructions": ""},
+          {"value": "complaint", "instructions": ""},
+          {"value": "escalation", "instructions": ""},
+          {"value": "other", "instructions": ""}
+        ]
+      }
+    },
+    {
+      "id": "m-definitions",
+      "control": false,
+      "spec": {
+        "type": "choice",
+        "name": "type",
+        "instructions": "Give the MESSAGE exactly one type; the previous message is context only and is never the one classified.",
+        "choices": [
+          {"value": "order", "instructions": "The sender places, changes, confirms or cancels a purchase, booking or reservation, or gives the details needed to complete one."},
+          {"value": "question", "instructions": "The sender asks for information and is not unhappy about anything, including the status of an order when nothing has gone wrong yet."},
+          {"value": "complaint", "instructions": "The sender says something went wrong or is unsatisfactory, raised for the first time, with no demand beyond a normal fix."},
+          {"value": "escalation", "instructions": "The sender pushes an unresolved problem further: asks for a manager or a human, says it was raised before without result, sets an ultimatum or threatens consequences."},
+          {"value": "other", "instructions": "None of the above: greetings, thanks, small talk, reactions, unrelated topics, or messages too fragmentary to place."}
+        ]
+      }
+    },
+    {
+      "id": "m-precedence",
+      "control": false,
+      "spec": {
+        "type": "choice",
+        "name": "type",
+        "instructions": "A message may fit several types; the first that applies in this order wins: escalation, complaint, order, question, other. The content decides, not the form, so a question about something that went wrong is a complaint. Classify the MESSAGE; the previous message is context only.",
+        "choices": [
+          {"value": "order", "instructions": "The sender commits to a purchase, booking or change, or cancels with nothing wrong."},
+          {"value": "question", "instructions": "A plain request for information about the business, or one on which a purchase depends."},
+          {"value": "complaint", "instructions": "Dissatisfaction raised once, in any tone, even when worded as a question or paired with a cancel or return request."},
+          {"value": "escalation", "instructions": "Only with a signal: a repeat of an unresolved problem, including as shown by the previous message, a demand for a human or manager, an ultimatum or a threat."},
+          {"value": "other", "instructions": "Nothing above applies, including a question unrelated to the business."}
+        ]
+      }
+    },
+    {
+      "id": "m-severity",
+      "control": false,
+      "spec": {
+        "type": "choice",
+        "name": "type",
+        "instructions": "Decide first whether anything went wrong. If nothing did, the message is an order, a question or other. If something did, it is a complaint on first mention, and an escalation only when the sender pushes it beyond ordinary handling: a human or manager is demanded, the problem was already raised, there is an ultimatum or a threat to cancel, dispute or review. Angry tone alone does not make an escalation. Classify the MESSAGE; the previous message is context only.",
+        "choices": [
+          {"value": "order", "instructions": "Nothing went wrong and the sender is buying, booking, changing or cancelling."},
+          {"value": "question", "instructions": "Nothing went wrong and the sender wants information about the business."},
+          {"value": "complaint", "instructions": "Something went wrong and it is a first, ordinary report."},
+          {"value": "escalation", "instructions": "Something went wrong and the sender pushes it beyond ordinary handling."},
+          {"value": "other", "instructions": "Nothing went wrong and nothing is being asked or bought."}
+        ]
+      }
+    },
+    {
+      "id": "m-context",
+      "control": false,
+      "spec": {
+        "type": "choice",
+        "name": "type",
+        "instructions": "Read the MESSAGE with the previous message, which only explains what it refers to. A short reply such as yes, that one or the 14th works is an order when the previous message asked the sender to choose or confirm something for a purchase or booking, and other after anything else. Thanks with a further request is judged by the request. A previous message showing the problem was already raised counts as a repeat. A question unrelated to the business is other.",
+        "choices": [
+          {"value": "order", "instructions": "Chooses or confirms something for a purchase or booking, or asks for a change or return with nothing wrong."},
+          {"value": "question", "instructions": "Asks the business for information about its products, prices, hours, delivery, or order status."},
+          {"value": "complaint", "instructions": "Reports a first problem with a product, delivery, charge or service."},
+          {"value": "escalation", "instructions": "Repeats a problem already raised, or demands a human or manager, or sets an ultimatum."},
+          {"value": "other", "instructions": "A reply that fits no purchase or problem, thanks, small talk, or an unrelated topic."}
+        ]
+      }
+    }
+  ]
+}

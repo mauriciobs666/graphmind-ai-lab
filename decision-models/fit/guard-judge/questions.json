@@ -1,0 +1,49 @@
+{
+  "questions": [
+    {
+      "id": "g-control",
+      "control": true,
+      "spec": {
+        "type": "predicate",
+        "name": "advance",
+        "instructions": "Does the condition hold, given the evidence shown?"
+      }
+    },
+    {
+      "id": "g-rubric",
+      "control": false,
+      "spec": {
+        "type": "predicate",
+        "name": "advance",
+        "instructions": "The workflow may move on only if the condition is established by what is written in the item. Answer true when the user has done what the condition says, plainly enough that the workflow could act on it now without asking again; a fact counts when the user states it, confirms it when it is offered, or puts it in other words than the condition's, and facts may be spread over several turns or listed under known. Answer false when a fact the condition needs is absent, ambiguous, only promised, withdrawn, or stated only by the assistant. Use nothing beyond the item, and when you are unsure the condition is established, answer false."
+      }
+    },
+    {
+      "id": "g-source",
+      "control": false,
+      "spec": {
+        "type": "predicate",
+        "name": "advance",
+        "instructions": "Who supplied the fact the condition asks for? It holds if the user stated it, or confirmed it after it was offered to them, in the evidence shown. It does not hold if only the assistant stated it and the user has not confirmed it, if the user only promised to give it later, or if it was given before the turns shown and is merely referred to. A fact put in other words than the condition's, or spread over several turns, still counts. Does the condition hold?"
+      }
+    },
+    {
+      "id": "g-completeness",
+      "control": false,
+      "spec": {
+        "type": "predicate",
+        "name": "advance",
+        "instructions": "Check what the condition needs against what the evidence provides. An entry in the missing list that the condition needs makes it not hold; an entry it does not need changes nothing; an empty missing list is not enough, so compare the known facts with the condition. For a condition about enough information, every fact the request depends on must be present, while a detail that would only refine the result is not required. A fact put in other words than the condition's, or spread over several turns, still counts. Does the condition hold?"
+      }
+    },
+    {
+      "id": "g-wording",
+      "control": false,
+      "spec": {
+        "type": "predicate",
+        "name": "advance",
+        "instructions": "Read the condition literally and judge only whether it holds, not whether the request is sensible. A hedged answer does not choose an option, a user question that asks which options exist has not chosen one, a user question that proposes a specific value has proposed it, and a choice among options holds only if the option named was offered. When the user changed a fact, the last version counts, and if the last version leaves it unsettled the condition does not hold. Does the condition hold?"
+      }
+    }
+  ]
+}

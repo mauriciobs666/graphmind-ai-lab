@@ -14,7 +14,19 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
+
+from decisionmodels.points import ROLES
+
+#: The hand-off call's parity constants: fit and eval send the same budget as the bench pack
+#: (`prompt.temperature`/`maxTokens`) and `decisions.DECISION_POINT_CHAT_TIMEOUT_SECONDS`,
+#: pinned by `tests/test_handoff_parity.py`.
+HANDOFF_TEMPERATURE = 0.0
+HANDOFF_MAX_TOKENS = 256
+HANDOFF_CHAT_TIMEOUT_SECONDS = 180.0
+
+_FIT_DIR = Path(__file__).resolve().parents[1] / "fit"
 
 GUARD_KEY = "decision"
 JOIN_IN_KEY = "reply"
@@ -179,3 +191,15 @@ def parse_message_type_handoff(
         return None, True
     value = parsed.get(MESSAGE_TYPE_KEY)
     return (value if isinstance(value, str) and value in labels else None), False
+
+
+def handoff_messages(role: str, rendered_input: str) -> list[dict[str, str]]:
+    """The hand-off chat messages, as the bench's `build_messages`: system = the role's
+    `fit/<role>/handoff.md` verbatim, user = the rendering. An unknown role raises `ValueError`."""
+    if role not in ROLES:
+        raise ValueError(f"unknown role {role!r}; expected one of {ROLES}")
+    system = (_FIT_DIR / role / "handoff.md").read_text(encoding="utf-8")
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": rendered_input},
+    ]
