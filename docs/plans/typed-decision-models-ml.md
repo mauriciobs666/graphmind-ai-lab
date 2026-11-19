@@ -450,10 +450,12 @@ FR-1's test (§Q3), FR-2's 2.0, and FR-10's 0.90 and 350 ms. One rule covers all
   `(max_c D_c ↑, max_c m_c ↑, s ↑)`: least worst-cell excess, then least discordance, never a
   noisier band. With one cell differing and worst, `(b_w, c_w)` = (2,0) beats (3,1) and (19,16).
   - The search is exhaustive over `l ≤ h`, from the distinct calibration `p` values plus `{0, 1}`.
-  - `s = 1` gives every `D_c = 0`, so rung 4 always exists.
+  - Rung 4 exists unless an item has `p = 1` (decided *yes* in every band, since `h ≤ 1`), label
+    *no*, and the LLM right: its cell has `D_c ≥ 1` everywhere. Then rung 4 is missing, rungs 2–3 or the latency fallback may still be
+    reached, and fit note §2's fallback applies (`rung` `None`). A `p = 0` item is never stuck (`l = 0`).
   - An over-limit calibration item has no `p`, so it is a hand-off in every band (§Q4.3), here and
-    in §Q2.2. It adds 0 to every `D_c`, it raises the floor of `s`, and it enters `t̄_{L|H}` with
-    the failed call's time included.
+    in §Q2.2. It adds 0 to every `D_c`, it raises the floor of `s`, and its hand-off call's time (not
+    the failed decision call's, which sits in `t̄_d`) enters `t̄_{L|H}`.
 
 ### Q2.2 New-ability points
 
