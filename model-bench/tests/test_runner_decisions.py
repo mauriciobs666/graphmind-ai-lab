@@ -1286,14 +1286,37 @@ def test_a_run_off_a_decision_point_pack_records_its_request_timeout(tmp_path, m
         assert run.requestTimeoutSeconds == recorded, explicit
 
 
-def test_a_legacy_record_without_request_timeout_loads_it_as_none():
-    shipped = Path(__file__).resolve().parents[1]
-    records = sorted((shipped / "results" / "runs").glob("*.json"))
-    assert records
-    for path in records:
-        body = json.loads(path.read_text())
+# The field landed with U1d.3 (2026-10-31, docs/HISTORY.md); a record ended before it is legacy
+# and cannot carry it. Records ended on/after it (U7 decision-candidate runs) may.
+_REQUEST_TIMEOUT_FIELD_DAY = "2026-10-31"
+
+
+def _legacy_run_records(runs_dir: Path) -> list[tuple[Path, dict]]:
+    bodies = [(p, json.loads(p.read_text())) for p in sorted(runs_dir.glob("*.json"))]
+    return [(p, b) for p, b in bodies if b["fingerprint"]["endedAt"] < _REQUEST_TIMEOUT_FIELD_DAY]
+
+
+def _assert_legacy_records_load_timeout_as_none(runs_dir: Path) -> int:
+    legacy = _legacy_run_records(runs_dir)
+    for path, body in legacy:
         assert "requestTimeoutSeconds" not in body, path.name
         assert RunResult.from_dict(body).requestTimeoutSeconds is None, path.name
+    return len(legacy)
+
+
+def test_a_legacy_record_without_request_timeout_loads_it_as_none():
+    shipped = Path(__file__).resolve().parents[1]
+    assert _assert_legacy_records_load_timeout_as_none(shipped / "results" / "runs") > 0
+
+
+def test_the_legacy_record_scan_rejects_a_legacy_record_carrying_the_field(tmp_path):
+    shipped = Path(__file__).resolve().parents[1] / "results" / "runs"
+    src = next(p for p, _ in _legacy_run_records(shipped))
+    body = json.loads(src.read_text())
+    body["requestTimeoutSeconds"] = 120.0
+    (tmp_path / src.name).write_text(json.dumps(body))
+    with pytest.raises(AssertionError, match="requestTimeoutSeconds|assert"):
+        _assert_legacy_records_load_timeout_as_none(tmp_path)
 
 
 # --- the load rule, the within-load re-check and `basis` (plan2 §3.4) ----------------------------
