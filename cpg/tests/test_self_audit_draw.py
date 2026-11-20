@@ -55,3 +55,9 @@ def test_the_draw_was_remade_over_the_p1_50_population_and_keeps_the_previous_on
     assert {u["rootPath"]: u["selfResolved"] for u in DRAW["units"].values() if u["selfResolved"]} == {
         "claude": 9, "falkor-chat/server": 147, "mcp-monitor": 7, "salesperson": 17, "model-bench": 22, "skills": 11, "decision-models": 166}
     assert set(DRAW["populationIds"]) <= set(prev["populationIds"])          # the rule only narrowed: ids are content hashes of unchanged call sites
+
+
+def test_the_name_linked_demotions_over_all_units_total_3694():
+    """P1-50 Done-when 2: the total of sites that lost a target to the type rule (the `self` rule's population is the 379 of them that kept one)."""
+    assert sum(u["nameLinkedDemoted"] for u in DRAW["units"].values()) == 3694
+    assert DRAW["units"]["0fb899742d4d3687495c30357ca16253"]["nameLinkedDemoted"] == 1333     # falkor-chat/server, pinned at its own row in the slice tier

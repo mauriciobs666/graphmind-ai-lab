@@ -686,10 +686,11 @@ def test_without_the_overlay_the_stored_facts_demote_nothing(tmp_path):
 
 
 # -- P1-50 Part B: the template edits against the independent `ast` reference ----------------------------------------------------------
-#: Reference-only f-string arguments that no value set records and that are not decorators or implicit concatenations: two keyword arguments of
-#: multi-line `call_with_retry(lambda: ..., label=f"...")` calls. The stored bundle holds no value set at those call sites; the cause is not
-#: established (an open item reported with the unit), so they are named here and any further one fails.
-UNRECORDED_REFERENCE_ONLY = {("falkor-chat/server/falkorchat/embedding.py", 259, "kw.label"), ("falkor-chat/server/falkorchat/ingestion.py", 138, "kw.label")}
+#: Reference-only f-string arguments that no value set records and that are not decorators or implicit concatenations: the `label=f"..."` keyword
+#: of two multi-line `retry.call_with_retry(lambda: ..., label=...)` calls. Joern writes such a call as a `deco` fact whose target is the lambda,
+#: and the existing `drop-lambda-decorators` delta drops that record (3 such facts in `p1-09/fixed-fcs.facts.jsonl`: these two and
+#: `services.py:2264`), so no value set exists at the site. Any further one fails.
+ON_A_DROPPED_LAMBDA_DECORATOR = {("falkor-chat/server/falkorchat/embedding.py", 259, "kw.label"), ("falkor-chat/server/falkorchat/ingestion.py", 138, "kw.label")}
 
 
 def merged_pieces(pieces: list[dict]) -> list[dict]:
@@ -713,7 +714,7 @@ def test_the_template_edits_equal_the_ast_reference_over_the_oracles_stage_tree(
     line, argument path), or the module constant of the qname); a stored value set with no f-string argument at its key (a value Joern reached
     through a variable or a collection lowering) must still equal some f-string of the unit; a reference f-string with no value set is admitted
     only as an implicit concatenation (Joern writes one `stringExpressionList`, the stored element is unknown), a decorator argument
-    (`deco`, not a call site) or one of `UNRECORDED_REFERENCE_ONLY`. A disagreement in either direction fails with its ids."""
+    (`deco`, not a call site) or one of `ON_A_DROPPED_LAMBDA_DECORATOR`. A disagreement in either direction fails with its ids."""
     import fstring_reference as FR
     recs = [json.loads(x) for x in stored_lines("fcs")[1:]]
     syms = {r["id"]: r for r in recs if r["type"] == "symbol"}
@@ -745,7 +746,7 @@ def test_the_template_edits_equal_the_ast_reference_over_the_oracles_stage_tree(
     rest = {k: v for k, v in left.items() if v}
     implicit = sum(1 for v in rest.values() for _, imp in v if imp)
     unexplained = {k for k, v in rest.items() if any(not imp for _, imp in v)}
-    assert unexplained == UNRECORDED_REFERENCE_ONLY, f"reference f-strings with no value set: {sorted(unexplained - UNRECORDED_REFERENCE_ONLY)}"
+    assert unexplained == ON_A_DROPPED_LAMBDA_DECORATOR, f"reference f-strings with no value set: {sorted(unexplained - ON_A_DROPPED_LAMBDA_DECORATOR)}"
     assert (keyed, len(flow), implicit, const_ok, len(ref.decorators)) == (446, 29, 144, 3, 1)
     assert keyed + len(flow) + const_ok == len(P1_50_FSTRING["fcs"])
     for r in recs:                                          # a decorator call's argument values sit in the decorator record, not in a value set

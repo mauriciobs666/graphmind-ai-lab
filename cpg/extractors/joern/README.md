@@ -113,7 +113,9 @@ Joern writes the pieces of a Python f-string (`formatString`) as raw source text
 `\n` arrive as written, a nested format spec is one `formattedValue`, an empty f-string has no pieces). A `lit` child of a `fmt` in a Python file
 is therefore `{"const": <c>}`, not parsed as a literal; the normalizer does not merge adjacent pieces and keeps escapes as source text. Not
 changed: JavaScript/TypeScript templates, `concat`, every other literal, the empty-piece filter, the depth cap. Limit: an implicitly concatenated
-string that holds an f-string (`"p" f"{x}"`, a multi-line message) is one `stringExpressionList` in Joern's output, so its value stays unknown.
+string that holds an f-string (`"p" f"{x}"`, a multi-line message) is one `stringExpressionList` in Joern's output, so its value stays unknown. Size: in `falkor-chat/server` at the oracle
+stage tree, 144 of the 592 f-string call arguments the `ast` reference finds (`fstring_reference.scan`, `is_implicit_concatenation`) are such
+concatenations; the census row of `tests/slice/test_normalize_equivalence.py` pins the 144.
 The independent reference is `tests/fstring_reference.py` (stdlib `ast`); the opt-in `CCG_FSTRING_LIVE=1` row of `tests/test_fstring_constants.py`
 re-runs the probe through live Joern.
 

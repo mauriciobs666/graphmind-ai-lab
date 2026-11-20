@@ -26,27 +26,32 @@ FORMS = {
                   "TOPIC", lambda tgt: {"importRef": {"module": "pkg", "name": "TOPIC"}}),
 }
 
-POSITIONS = {
-    "bare": (lambda name: {"o": "name", "n": name}, lambda el: el),
-    "concat-part": (lambda name: {"o": "add", "p": [{"o": "name", "n": name}, {"o": "lit", "c": "'.x'"}]},
-                    lambda el: {"concat": [el, {"const": ".x"}]}),
-    "template-part": (lambda name: {"o": "fmt", "p": [{"o": "lit", "c": "'p.'"}, {"o": "name", "n": name}]},
-                      lambda el: {"template": [{"const": "p."}, el]}),
-}
+def _positions(lang):
+    # the text piece of a Python f-string is raw source text (`tests/golden/fstring/probe.json`), not a quoted literal (P1-50)
+    text = "p." if lang == "python" else "'p.'"
+    return {
+        "bare": (lambda name: {"o": "name", "n": name}, lambda el: el),
+        "concat-part": (lambda name: {"o": "add", "p": [{"o": "name", "n": name}, {"o": "lit", "c": "'.x'"}]},
+                        lambda el: {"concat": [el, {"const": ".x"}]}),
+        "template-part": (lambda name: {"o": "fmt", "p": [{"o": "lit", "c": text}, {"o": "name", "n": name}]},
+                          lambda el: {"template": [{"const": "p."}, el]}),
+    }
 
 
-@pytest.mark.parametrize("position", POSITIONS)
+POSITIONS = _positions
+POSITION_NAMES = ("bare", "concat-part", "template-part")
+
+
+@pytest.mark.parametrize("position", POSITION_NAMES)
 @pytest.mark.parametrize("form", FORMS)
 @pytest.mark.parametrize("lang", LANGS)
 def test_an_imported_name_is_not_shadowed_by_the_importing_files_own_constant_entry(tmp_path, lang, form, position):
     file, path, target = LANGS[lang]
     make_import, local, expect = FORMS[form]
-    expr, wrap = POSITIONS[position]
+    expr, wrap = POSITIONS(lang)[position]
     B = core.Builder(lang, "svc", "r", {}, core.Source(tmp_path))
     R = core.Resolver(B, {file: [make_import(target)]}, {path: {f"{path}::{local}"}})   # the import-bound name is in the set
     e = expr(local)
-    if position == "template-part" and lang == "python":
-        e["p"][0]["c"] = "p."          # P1-50: the text piece of a Python f-string is raw source text (`tests/golden/fstring/probe.json`), not a quoted literal
     assert R.element(e, file) == wrap(expect(target))
 
 
