@@ -152,12 +152,16 @@ def test_known_limit_another_literal_url_in_the_unit_adds_an_alternative_to_ever
 # ---------------------------------------------------------------------------------------------------------------------
 
 def link_failures(the_pack: dict) -> list[str]:
-    """The pack's `link` declaration read end to end: tool names match exactly, so a template-shaped provider key is not matched by
-    a literal consumer key (read as `path-template`, `a/{}` would link `a/7`)."""
+    """The pack's `link` declaration read end to end: tool names match exactly, so a provider key shaped as a template, a glob or a regex
+    is not matched by a literal consumer key (read as `path-template`, `glob` or `regex`, one of these would link)."""
     b = [r for part in (sym_in("P", "svc"), sym_in("C", "web")) for r in part]
-    facts = pack_facts(providers=[prov("P", "mcp_tool", "a/{}")], consumers=[cons("C", "mcp_tool", "a/7", "s1")])
-    got = [(x.status, x.matcher) for x in link(facts, [b], packs=[the_pack]).links]
-    return [] if not any(m == "path-template" for _, m in got) else [f"link: {got}"]
+    bad = []
+    for provided, consumed in (("a/{}", "a/7"), ("a*", "a7"), ("a.*", "a7")):
+        facts = pack_facts(providers=[prov("P", "mcp_tool", provided)], consumers=[cons("C", "mcp_tool", consumed, "s1")])
+        got = [(x.status, x.matcher) for x in link(facts, [b], packs=[the_pack]).links]
+        if any(m != "exact" for _, m in got):
+            bad.append(f"link {provided} ~ {consumed}: {got}")
+    return bad
 
 
 def behaviour_failures(the_pack: dict) -> list[str]:
@@ -173,6 +177,7 @@ def behaviour_failures(the_pack: dict) -> list[str]:
     cases = [
         ("literal name", module(SDK) + site(), [("get_item", "confirmed", "ts-call-tool")]),
         ("another sdk import path", module("@modelcontextprotocol/sdk/client/streamableHttp.js") + site(), [("get_item", "confirmed", "ts-call-tool")]),
+        ("an sdk subpath outside client/ gates too", module("@modelcontextprotocol/sdk/shared/transport.js") + site(), [("get_item", "confirmed", "ts-call-tool")]),
         ("second import is the sdk", module("react", SDK) + site(), [("get_item", "confirmed", "ts-call-tool")]),
         ("no sdk import", module("react") + site(), []),
         ("a similar package", module("@modelcontextprotocol-x/sdk/client") + site(), []),
@@ -227,6 +232,9 @@ def _lifting(p: dict) -> dict:
     ("binding scope dropped (the default is file)", lambda p: p["urlBindings"][0]["urlSources"][0].pop("scope")),
     ("binding also for http", lambda p: p["urlBindings"][0].update(kinds=["mcp_tool", "http"])),
     ("link matcher path-template", lambda p: p["link"][0].update(matcher="path-template")),
+    ("link matcher glob", lambda p: p["link"][0].update(matcher="glob")),
+    ("link matcher regex", lambda p: p["link"][0].update(matcher="regex")),
+    ("import gate narrowed to sdk/client", lambda p: _lifting(p)["seeds"][0]["scope"]["imports"][0]["module"].update(glob="@modelcontextprotocol/sdk/client/**")),
     ("seed resolution widened to resolved", lambda p: _lifting(p)["seeds"][0]["call"].update(resolution=["unresolved", "resolved"])),
     ("seed resolution widened to external", lambda p: _lifting(p)["seeds"][0]["call"].update(resolution=["unresolved", "external"])),
     ("seed argument a0", lambda p: _lifting(p)["seeds"][0].update(arg="a0")),
@@ -240,3 +248,14 @@ def test_a_valid_alternative_of_a_pack_value_is_caught(label, change):
     p = copy.deepcopy(pack(PID))
     change(p)
     assert behaviour_failures(p) != [], label
+
+
+@pytest.mark.parametrize("value", [42, True, False, ""])
+def test_known_limit_a_non_string_or_empty_literal_name_is_a_confirmed_consumer_keyed_by_its_text(value):
+    """Pinned, not fixed (plan P1-52 Done-when (3), "a non-string name"): the bundle schema's `elementLeaf` `const` admits integers and
+    booleans (`{"const": 1}` and `{"const": true}` occur in the stored bundles), so `callTool({ name: 42 })` reaches the value set. The pack
+    takes the element as written: the key is its text, `confirmed`. A string-only guard would be a format change, returned to the architect."""
+    recs = module(SDK) + [call("c1", "fn", "callTool"),
+                          {"type": "valueSet", "id": "vs-c1-a0.name", "callSiteId": "c1", "arg": "a0.name", "values": [{"const": value}]}]
+    got = [(c["key"], c["status"]) for c in run_packs([recs], [pack(PID)]).consumers]
+    assert got == [(str(value), "confirmed")]
