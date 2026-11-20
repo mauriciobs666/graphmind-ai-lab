@@ -2247,6 +2247,56 @@ def test_tp006_planted_failing_inputs_a_comments_only_unit_and_a_unit_with_no_so
     assert v == {aid: "EMPTY", ids["good"]: "ok"} and c[aid] == 0
     assert r.returncode != 0, "the check exits non-zero when any CPG is EMPTY"
 
+# ======================================================================================== P1-51a live guard: typed `requests` verbs
+
+
+REQUESTS_VERB_CALL = re.compile(r"\brequests\.(?:get|post|put|patch|delete)\(")
+
+
+@pytest.mark.live
+def test_p1_51a_every_python_unit_that_calls_requests_verbs_yields_an_http_consumer(built, runner_ready, tmp_path, monkeypatch):
+    """P1-51a Done-when (4): the real sandbox build of each fixture Python unit that calls `requests.<verb>` stores those calls as
+    `external` `requests.py:<module>.<verb>` (not `unresolved`), and the `python-http-client` pack turns them into http consumers.
+    Baseline before the typed seeds: 0 consumers from these units (D1, `docs/test-reports/connected-code-graph-p1-5d-50-report.md`)."""
+    from ccg import atrest, bundle, build, units as U
+    from ccg.manifest import load_manifest
+    from ccg.packrt import run_packs
+    from ccg.rulepack import load_pack
+    from ccg.staleness import local_head
+
+    out, _ = built
+    monkeypatch.setenv("CCG_AUDIT_DIR", str(tmp_path / "audit"))
+    mf_path = CPG / "fixtures" / "system1" / "system.yaml"
+    mf = load_manifest(mf_path)
+    repos = {r.repo_id: out / r.path for r in mf.repos}
+    heads = {k: local_head(v) for k, v in repos.items()}
+    all_units = U.discover_units(out, mf, commit=heads)
+
+    def calls_requests(u):
+        root = out / next(r.path for r in mf.repos if r.repo_id == u.repoId) / ("" if u.rootPath == "." else u.rootPath)
+        return any(REQUESTS_VERB_CALL.search(f.read_text()) for f in root.rglob("*.py"))
+
+    callers = [u for u in all_units if u.language == "python" and calls_requests(u)]
+    assert callers, "the fixtures hold Python units that call requests.<verb> (fx-svc, fx-job)"
+    area, keys = tmp_path / ".ccg-work", tmp_path / "keys"
+    area.mkdir(mode=0o700)
+    keys.mkdir(mode=0o700)
+    ctx = build.BuildContext(units=tuple(all_units), root=area, keys_root=keys, manifest=mf_path)
+    pack = load_pack(CPG / "packs" / "python-http-client" / "pack.yaml")
+    report = {}
+    for u in callers:
+        res = build.build_unit(u, repos[u.repoId], heads[u.repoId], "fixture-live", ctx)
+        assert (res.ok, res.fail_reason) == (True, None), u
+        records = bundle.loads(atrest.read_bundle("fixture-live", u.unitId, heads[u.repoId], area))
+        typed = [r for r in records if r["type"] == "callsite" and (r.get("externalTarget") or "").startswith("requests.py:<module>.")]
+        assert typed, f"{u.unitId}: the real build stores no typed requests.<verb> callsite (the form the pack seeds)"
+        consumers = [c for c in run_packs([records], [pack]).consumers if c["packId"] == "python-http-client" and c["kind"] == "http"]
+        assert consumers, f"{u.unitId}: no http consumer from its requests calls"
+        report[u.unitId] = sorted((c["path"], c["line"], c["key"], c["status"], c["reason"]) for c in consumers)
+    if os.environ.get("CCG_FIXTURES_REPORT"):                 # the observed forms, for the acceptance report (as TP-006's)
+        Path(os.environ["CCG_FIXTURES_REPORT"]).write_text(json.dumps(report, indent=1, sort_keys=True))
+
+
 # ======================================================================================== P1 form of the flow-dependent rows (plan 5.5)
 # The manifests hold the flag-true form in `status`/`reason`/`dependencies`; `p1Form` is the form P1-41 asserts while
 # the flow flag is false. The expected values are read from the plan's "P1 form" table, not from a constant here.

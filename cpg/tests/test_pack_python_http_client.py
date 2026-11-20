@@ -155,6 +155,21 @@ def behaviour_failures(the_pack: dict) -> list[str]:
                       module("requests") + [sym("m", "m", fid="f1", path="svc/client.py", start=60),
                                             call("c1", "fn", verb, line=10, resolution="resolved", targets=("m",)), vs("c1", "a0", "/x")], []))
         cases.append((f"{verb} typed non-http", module("requests") + [external("c1", verb, "__builtin.dict." + verb), vs("c1", "a0", "/x")], []))
+    # P1-51a: a TYPED verb call (`external`, `<lib>.py:<module>.<verb>`) is seeded beside the untyped one. The `httpx` shape is
+    # ASSUMED by symmetry (observed nowhere); only these synthetic rows pin it.
+    for verb in VERBS:
+        for lib in LIBS:
+            target = f"{lib}.py:<module>.{verb}"
+            cases.append((f"{lib}.{verb} typed literal", module(lib) + [external("c1", verb, target), vs("c1", "a0", "http://svc:8000/items")],
+                          [(f"{verb.upper()} /items", "confirmed", verb)]))
+            cases.append((f"{lib}.{verb} typed own-site wrapper", own_site_wrapper(external("rq", verb, target, owner="w"), lib,
+                                                                                  seed_slot={"template": [{"const": "/items/"}, UNK]}),
+                          [(f"{verb.upper()} /items/{{?}}", "possible", verb)]))
+            cases.append((f"{lib}.{verb} typed, file imports neither", module("os") + [external("c1", verb, target), vs("c1", "a0", "/x")], []))
+            cases.append((f"{lib}.{verb} typed non-url", module(lib) + [external("c1", verb, target), vs("c1", "a0", "timeout")], []))
+            for other in [x for x in LIBS if x != lib]:   # the import gate is per seed, not per target: either library's import admits either target
+                cases.append((f"{other} import alone gates typed {lib}.{verb}", module(other) + [external("c1", verb, target), vs("c1", "a0", "/x")],
+                              [(f"{verb.upper()} /x", "confirmed", verb)]))
     cases += [("seed file has no import, caller has", two_files((), ("requests",)), []),
               ("seed file imports, caller has none", two_files(("requests",), ()), [("GET /items", "confirmed", "get")])]
     ul = lambda *body: module("urllib.request") + list(body)                                   # noqa: E731
@@ -238,6 +253,10 @@ def _lifting(p: dict, lid: str) -> dict:
     return next(lf for lf in p["liftings"] if lf["id"] == lid)
 
 
+def _typed_seed(p: dict, lid: str) -> dict:
+    return _lifting(p, lid)["seeds"][1]["call"]
+
+
 @pytest.mark.parametrize("label, change", [
     ("link matcher exact", lambda p: p["link"][0].update(matcher="exact")),
     ("seed resolution widened to resolved", lambda p: _lifting(p, "py-get")["seeds"][0]["call"].update(resolution=["unresolved", "resolved"])),
@@ -247,6 +266,18 @@ def _lifting(p: dict, lid: str) -> dict:
     ("urlopen urlLike dropped", lambda p: _lifting(p, "py-urlopen").pop("urlLike")),
     ("a verb's urlLike dropped", lambda p: _lifting(p, "py-get").pop("urlLike")),
     ("a verb's ownSite dropped", lambda p: _lifting(p, "py-get").pop("ownSite")),
+    # P1-51a: the plan's argued-down alternatives to the exact typed pair, and its absence
+    ("typed seed: externalTarget as a glob over any module", lambda p: _typed_seed(p, "py-get").update(externalTarget={"glob": "*.get"})),
+    ("typed seed: externalTarget as a glob over the library files", lambda p: _typed_seed(p, "py-get").update(externalTarget={"glob": "*.py:<module>.get"})),
+    ("typed seed: externalTarget as a glob over any member", lambda p: _typed_seed(p, "py-get").update(externalTarget={"glob": "requests.py:*get"})),
+    ("typed seed: resolution [unresolved, external] instead of the target", lambda p: _typed_seed(p, "py-get").update(resolution=["unresolved", "external"]) or _typed_seed(p, "py-get").pop("externalTarget")),
+    ("typed seed: resolution [external] alone", lambda p: _typed_seed(p, "py-delete").update(resolution=["external"]) or _typed_seed(p, "py-delete").pop("externalTarget")),
+    ("untyped seed widened to external", lambda p: _lifting(p, "py-post")["seeds"][0]["call"].update(resolution=["unresolved", "external"])),
+    ("typed seed removed", lambda p: _lifting(p, "py-put")["seeds"].pop(1)),
+    ("typed seed: httpx target removed", lambda p: _typed_seed(p, "py-patch")["externalTarget"].pop(1)),
+    ("typed seed: requests target removed", lambda p: _typed_seed(p, "py-patch")["externalTarget"].pop(0)),
+    ("typed seed: import gate removed", lambda p: _lifting(p, "py-delete")["seeds"][1].pop("scope")),
+    ("typed seed: argument slot a1", lambda p: _lifting(p, "py-get")["seeds"][1].update(arg="a1")),
 ])
 def test_a_valid_alternative_of_a_pack_value_is_caught(label, change):
     assert behaviour_failures(mutant(change)) != [], label

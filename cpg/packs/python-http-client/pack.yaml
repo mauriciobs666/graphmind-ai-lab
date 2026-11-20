@@ -5,6 +5,9 @@
 # the gate is the file's import of the library (`scope.imports` on the seed) plus URL-likeness at the leaf (`urlLike`), never the
 # seed alone. Not covered: `requests.request`, `Session`, `aiohttp`, `http.client`, an aliased import, a relative URL without a
 # leading `/`, a fully unknown URL.
+# Typed verbs (P1-51a): a verb call the extractor typed is `external` `requests.py:<module>.<verb>` (observed on the fixture build) and
+# `httpx.py:<module>.<verb>` (ASSUMED by symmetry, observed nowhere); it is the second seed of each verb, an exact pair, never a glob or
+# `resolution: [unresolved, external]` (`__builtin.dict.get`, `typing.Mapping.get`, `TestClient.get` are `external` too).
 packFormat: 1
 id: python-http-client
 version: 0.1.0
@@ -21,27 +24,37 @@ urlBindings:
 liftings:
   - id: py-get
     role: {kind: http, slot: url}
-    seeds: [{call: {callee: get, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}]
+    seeds:
+      - {call: {callee: get, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
+      - {call: {callee: get, externalTarget: [{exact: "requests.py:<module>.get"}, {exact: "httpx.py:<module>.get"}]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
     ownSite: true
     urlLike: true
   - id: py-post
     role: {kind: http, slot: url}
-    seeds: [{call: {callee: post, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}]
+    seeds:
+      - {call: {callee: post, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
+      - {call: {callee: post, externalTarget: [{exact: "requests.py:<module>.post"}, {exact: "httpx.py:<module>.post"}]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
     ownSite: true
     urlLike: true
   - id: py-put
     role: {kind: http, slot: url}
-    seeds: [{call: {callee: put, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}]
+    seeds:
+      - {call: {callee: put, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
+      - {call: {callee: put, externalTarget: [{exact: "requests.py:<module>.put"}, {exact: "httpx.py:<module>.put"}]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
     ownSite: true
     urlLike: true
   - id: py-patch
     role: {kind: http, slot: url}
-    seeds: [{call: {callee: patch, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}]
+    seeds:
+      - {call: {callee: patch, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
+      - {call: {callee: patch, externalTarget: [{exact: "requests.py:<module>.patch"}, {exact: "httpx.py:<module>.patch"}]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
     ownSite: true
     urlLike: true
   - id: py-delete
     role: {kind: http, slot: url}
-    seeds: [{call: {callee: delete, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}]
+    seeds:
+      - {call: {callee: delete, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
+      - {call: {callee: delete, externalTarget: [{exact: "requests.py:<module>.delete"}, {exact: "httpx.py:<module>.delete"}]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
     ownSite: true
     urlLike: true
   # `urllib.request.Request(url, method=...)`: a bare `Request(url)` is a GET; `data=` or `headers=` withhold the default.

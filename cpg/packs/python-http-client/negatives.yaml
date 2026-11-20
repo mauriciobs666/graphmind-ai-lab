@@ -14,10 +14,25 @@ negatives:
     no-call-record: {imports: [requests], callee: null}
     get-without-an-argument: {imports: [requests], callee: get, resolution: unresolved, a0: null}
     other-verb-name: {imports: [requests], callee: getter, resolution: unresolved, a0: /health}
+    # P1-51a: the externalTarget strings of the proving repository's verb-named callsites (import gate satisfied, URL-like argument):
+    # the typed seed is an exact pair, so none of them is a consumer. A glob or `resolution: [unresolved, external]` would seed them.
+    typing-mapping-get: {imports: [requests], callee: get, resolution: external, external: "typing.Mapping.get", a0: /looks/like/a/path}
+    typing-any-get: {imports: [requests], callee: get, resolution: external, external: "typing.Any.get", a0: /looks/like/a/path}
+    testclient-get: {imports: [requests], callee: get, resolution: external, external: "fastapi/testclient.py:<module>.TestClient.get", a0: /health}
+    test-wrapper-client-get: {imports: [requests], callee: get, resolution: external, external: "tests/test_api.py:<module>.wf_client.get", a0: /health}
+    pathlib-path-get: {imports: [requests], callee: get, resolution: external, external: "pathlib.py:<module>.Path.get", a0: /looks/like/a/path}
+    json-loads-return-get: {imports: [httpx], callee: get, resolution: external, external: "json.py:<module>.loads.<returnValue>.get", a0: /looks/like/a/path}
+    dict-get-return-get: {imports: [httpx], callee: get, resolution: external, external: "__builtin.dict.get.<returnValue>.get", a0: /looks/like/a/path}
+    other-library-get-with-the-verb-name-in-the-module: {imports: [requests], callee: get, resolution: external, external: "other.py:<module>.get", a0: /health}
+    requests-module-other-member: {imports: [requests], callee: get, resolution: external, external: "requests.py:<module>.Session.get", a0: /health}
   py-post:
+    testclient-post: {imports: [requests], callee: post, resolution: external, external: "fastapi/testclient.py:<module>.TestClient.post", a0: /jobs}
+    testclient-init-return-post: {imports: [httpx], callee: post, resolution: external, external: "fastapi/testclient.py:<module>.TestClient.__init__.<returnValue>.post", a0: /jobs}
     untyped-post-of-a-non-url-string: {imports: [httpx], callee: post, resolution: unresolved, a0: payload}
     untyped-post-in-a-file-importing-no-http-client: {imports: [os], callee: post, resolution: unresolved, a0: /jobs}
   py-delete:
+    falkordb-select-graph-delete: {imports: [requests], callee: delete, resolution: external, external: "FalkorDB.select_graph.delete", a0: /looks/like/a/path}
+    testclient-delete: {imports: [httpx], callee: delete, resolution: external, external: "fastapi/testclient.py:<module>.TestClient.delete", a0: /items/1}
     untyped-delete-of-a-non-url-string: {imports: [requests], callee: delete, resolution: unresolved, a0: key}
   py-request:
     request-in-a-file-importing-no-urllib: {imports: [requests], callee: Request, resolution: external, external: "urllib.py:<module>.<member>(request).Request.__init__", a0: /x}
