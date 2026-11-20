@@ -10,7 +10,7 @@ from .config import Config
 from .discover import discover
 from .history import coverage
 from .lint import item_counts, lint_repo
-from .migrate import analyze, apply_file, dry_run_report, wi_flush, wi_minter
+from .migrate import TitleReviewRequired, WiError, analyze, apply_file, dry_run_report, wi_flush, wi_minter
 from .parse.backlog import BacklogParseError, parse_backlog
 from .scope import load_legacy_paths
 
@@ -45,11 +45,27 @@ def cmd_migrate(args, root: Path) -> int:
         if path not in _backlogs(root):
             print(f"{path} is not a covered backlog file", file=sys.stderr)
             return 2
-        rf = apply_file(root, path, wi_minter(root), flush=lambda: wi_flush(root))
+        try:
+            rf = apply_file(root, path, wi_minter(root), flush=lambda: wi_flush(root),
+                            titles_reviewed=args.titles_reviewed)
+        except TitleReviewRequired as exc:
+            print(f"{path}: refusing to mint; {len(exc.flagged)} title(s) need review "
+                  "(see `migrate --dry-run`; nothing was allocated):", file=sys.stderr)
+            for it in exc.flagged:
+                print(f"  line {it.line}: {it.title!r}: {'; '.join(it.issues)}", file=sys.stderr)
+            print("fix the source text, or pass --titles-reviewed once the titles are acknowledged",
+                  file=sys.stderr)
+            return 2
+        except WiError as exc:
+            print(f"{path}: not written: {exc}", file=sys.stderr)
+            return 1
         print(f"{path}: minted {len(rf.new_items)} id(s)")
         return 0
     paths = args.paths or _backlogs(root)
     for path in paths:
+        if not (root / path).is_file():
+            print(f"{path}: no such file", file=sys.stderr)
+            return 2
         rf = analyze(path, (root / path).read_text(encoding="utf-8"))
         print(dry_run_report(rf, legacy_paths))
     return 0
@@ -109,6 +125,8 @@ def build_parser() -> argparse.ArgumentParser:
     mode = mig.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="report and diff; allocates nothing")
     mode.add_argument("--apply", action="store_true", help="allocate IDs via `wi new` and rewrite ONE file")
+    mig.add_argument("--titles-reviewed", action="store_true",
+                     help="with --apply: acknowledge the titles `--dry-run` flagged (IDs are permanent)")
     mig.add_argument("paths", nargs="*")
     facts = sub.add_parser("facts", help="list fact tokens used in `Touches`")
     facts.add_argument("--like")

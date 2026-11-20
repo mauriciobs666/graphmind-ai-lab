@@ -38,6 +38,16 @@ matched / (matched + unmatched).
 | `opencode/docs/HISTORY.md` | 0 | 0 | n/a |
 | **Total** | **67** | **377** | **15%** |
 
+Denominators (recounted 2026-11-20 over the same 444 IDs, none open in any backlog): 268 of them are
+never named in a history *heading*, so no heading rule could match them. (A) any mention, strict
+rule: 67/444 = 15%. (B) restricted to the 176 heading-named IDs, strict rule: 67/176 = 38%.
+(C) the same 176, a heading carrying `✅` or any delivery verb (`closed`/`delivered`/`fixed`/
+`shipped`/`done`, plus `implemented`/`resolved`/`landed`/`complete(d)`/`merged`): 123/176 = 70% (an
+upper bound: `(K-023)` in "U46: made the stamp's closed list enforceable" counts; with only the
+five rule verbs it is 110/176 = 62%). 15% is therefore not a defect rate of the rule; among
+heading-named IDs it misses real forms (verb-first `Closed C-309`, `K-005 + K-006 closed`), which
+`lint` reports as a visible `unresolvable-dependency` error, never a false delivery.
+
 Reading: today's history files match few deliveries, as the plan expected (P2-M4). Correctness
 rests on the delivery-heading convention (`<ID> delivered` / `<ID> closed`, slash-joined
 siblings) and on `lint` flagging a `Depends on` ref that is open nowhere with no delivery

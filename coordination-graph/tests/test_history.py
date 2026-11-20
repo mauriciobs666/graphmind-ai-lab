@@ -29,6 +29,10 @@ def tokens(heading):
     ("## 2026-11-20 — GAL-F0042 delivered", ["GAL-F0042"]),
     ("## 2026-11-20 — GAL-I02-K0007/K-070/GAL-F0043 closed", ["GAL-I02-K0007", "K-070", "GAL-F0043"]),
     ("## 2026-11-20 — falkor-chat:K-065 shipped", ["falkor-chat:K-065"]),
+    ("## 2026-11-20 — K-065 Closed: capitalised", ["K-065"]),
+    ("## 2026-11-20 — K-065 DELIVERED", ["K-065"]),
+    ("## 2026-11-20 — K-065 Done", ["K-065"]),
+    ("## 2026-11-20 — K-065 fixed.", ["K-065"]),
 ])
 def test_delivery_shaped_headings_yield_their_id_tokens(heading, ids):
     assert tokens(heading) == ids
@@ -43,6 +47,10 @@ def test_delivery_shaped_headings_yield_their_id_tokens(heading, ids):
     "K-065 closed: not a heading",
     "# K-065 closed: level one is not a delivery heading",
     "##### K-065 closed: nor level five",
+    "## 2026-11-20 — K-065 fixed-up: a hyphenated word is not the verb",
+    "## 2026-11-20 — K-065 done criteria",
+    "## 2026-11-20 — K-065 Done Definition: a noun phrase, not a delivery",
+    "## 2026-11-20 — K-065 closed-loop check",
 ])
 def test_non_delivery_shapes_match_nothing(heading):
     assert tokens(heading) == []

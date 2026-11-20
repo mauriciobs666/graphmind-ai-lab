@@ -22,8 +22,12 @@ from .shapes import Candidates, classify, offline_candidates
 VERBS = ("closed", "delivered", "fixed", "shipped", "done")
 _HEADING = re.compile(r"^#{2,4}\s")
 _TOKEN = r"[A-Za-z0-9][A-Za-z0-9._:-]*"
+# A verb counts as a verb: any case, but not the start of a hyphenated word (`fixed-up`) nor of a
+# noun phrase (`done criteria`).
+_NOT_A_NOUN_PHRASE = r"(?![-\w])(?!\s+(?:criteria|definition|checklist|condition|conditions)\b)"
 _RUN = re.compile(
-    rf"(?<![A-Za-z0-9._:/-])(?P<run>{_TOKEN}(?:/{_TOKEN})*)\s+(?:{'|'.join(VERBS)})\b"
+    rf"(?<![A-Za-z0-9._:/-])(?P<run>{_TOKEN}(?:/{_TOKEN})*)\s+(?:{'|'.join(VERBS)}){_NOT_A_NOUN_PHRASE}",
+    re.I,
 )
 _TOKEN_RE = re.compile(rf"(?<![A-Za-z0-9._:/-]){_TOKEN}")
 _FENCE = re.compile(r"^\s*(```|~~~)")

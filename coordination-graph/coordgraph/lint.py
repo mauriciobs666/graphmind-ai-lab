@@ -44,6 +44,11 @@ def default_wi_root() -> Path:
     return Path(os.environ.get("COORDGRAPH_WI_ROOT") or package_repo_root() / "skills" / "work-items" / "scripts")
 
 
+def wilib_expected() -> bool:
+    """`wilib` should be importable: the work-items root was named explicitly or the default exists."""
+    return bool(os.environ.get("COORDGRAPH_WI_ROOT")) or default_wi_root().is_dir()
+
+
 def load_wilib_rules():
     """`wilib.rules` or None when `wilib` cannot be imported (lint then skips canonical checks)."""
     root = str(default_wi_root())
@@ -79,8 +84,12 @@ def lint_repo(
     chosen = backlogs if paths is None else [p for p in backlogs if p in set(paths)]
     findings: list[Finding] = []
     if rules is None:
-        findings.append(Finding(".", None, "warn", "wilib-unavailable",
-                                "wilib not importable: canonical ID checks skipped"))
+        # No canonical-ID verdict can be given. Where wilib is expected (root named explicitly, or the
+        # default root exists) that is an error, so a gate (`audit-team.sh`) cannot pass unchecked;
+        # a checkout with no work-items scripts at all only warns.
+        findings.append(Finding(
+            ".", None, "error" if wilib_expected() else "warn", "wilib-unavailable",
+            "wilib not importable: canonical ID checks (malformed id, illegal parent) were NOT run"))
     docs: dict[str, BacklogDoc] = {}
     for path in backlogs:
         try:

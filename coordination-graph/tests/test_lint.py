@@ -97,6 +97,52 @@ def test_a_bare_legacy_ref_means_the_referrers_own_backlog(repo):
     assert code == "unresolvable-dependency" and "K-065" in msg
 
 
+def test_a_bare_legacy_ref_resolves_to_an_open_item_of_the_referrers_own_backlog(repo):
+    """Base 3.6: bare = same backlog. Pins the scope the resolver is asked in (a wrong scope leaves the
+    bare ref unqualified-for-this-backlog and the open item unfound)."""
+    put(repo, "falkor-chat/docs/BACKLOG.md",
+        "# B\n\n" + item("K-065") + item("K-066", ("Depends on", "K-065")))
+    assert lint(repo) == []
+
+
+def test_a_bare_ref_in_a_backlog_with_no_such_item_is_unresolved_even_if_another_backlog_has_it(repo):
+    put(repo, "falkor-chat/docs/BACKLOG.md", "# B\n\n" + item("K-001", ("Depends on", "K-065")))
+    put(repo, "opencode/docs/BACKLOG.md", "# B\n\n" + item("K-065"))
+    ((code, msg),) = codes(lint_repo(repo, ["falkor-chat/docs/BACKLOG.md"]))
+    assert code == "unresolvable-dependency" and "K-065" in msg
+
+
+def test_the_scope_passed_to_the_resolver_is_the_referrers(repo):
+    seen = []
+
+    def candidates(token, scope):
+        seen.append((token, scope))
+        return {qualify(token, scope)}
+
+    put(repo, "opencode/docs/BACKLOG.md",
+        "# B\n\n" + item("K-065") + item("K-066", ("Depends on", "K-065")))
+    assert lint(repo, "opencode/docs/BACKLOG.md", candidates=candidates) == []
+    assert ("K-065", "opencode") in seen and not any(scope == "unscoped" for _, scope in seen)
+
+
+def test_an_unavailable_wilib_is_an_error_where_it_is_expected_and_a_warning_where_it_is_not(
+        repo, monkeypatch):
+    """No canonical-ID verdict can be given: visible either way, exit-1 (error) when wilib should exist."""
+    from coordgraph import lint as lint_mod
+    put(repo, "falkor-chat/docs/BACKLOG.md", "# B\n\n" + item("K-001"))
+    monkeypatch.setattr(lint_mod, "load_wilib_rules", lambda: None)
+    monkeypatch.setenv("COORDGRAPH_WI_ROOT", str(repo / "nowhere"))
+    (f,) = lint(repo)
+    assert (f.severity, f.code) == ("error", "wilib-unavailable") and "NOT run" in f.message
+    monkeypatch.delenv("COORDGRAPH_WI_ROOT")
+    monkeypatch.setattr(lint_mod, "default_wi_root", lambda: repo / "no-such-scripts")
+    (f,) = lint(repo)
+    assert (f.severity, f.code) == ("warn", "wilib-unavailable")
+    monkeypatch.setattr(lint_mod, "default_wi_root", lambda: repo)
+    (f,) = lint(repo)
+    assert f.severity == "error"
+
+
 def test_a_dependency_open_nowhere_needs_a_delivery_shaped_history_heading(repo):
     put(repo, "falkor-chat/docs/BACKLOG.md",
         "# B\n\n" + item("K-001", ("Depends on", "K-066, K-067, K-068, none-such")))

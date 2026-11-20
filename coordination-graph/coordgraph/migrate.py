@@ -25,6 +25,7 @@ from __future__ import annotations
 import difflib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -60,6 +61,7 @@ class NewItem:
     home: str
     origin: str  # "parking-lot" | "open-items" | "open-heading"
     line: int
+    issues: list[str] = field(default_factory=list)  # `title_issues`: why the title needs a human
 
     @property
     def command(self) -> list[str]:
@@ -95,6 +97,71 @@ def _clean_title(text: str) -> str:
     return title or "Untitled"
 
 
+TITLE_LIMIT = 90
+_ABBREV = ("e.g", "i.e", "vs", "etc", "cf")
+_CLAUSE = (" — ", "; ", ": ", ", ")
+
+
+def _boundary_ok(text: str, end: int) -> bool:
+    """A cut after `text[:end]` is not inside backticks, brackets or an abbreviation."""
+    head = text[:end]
+    return (head.count("`") % 2 == 0 and head.count("(") <= head.count(")")
+            and head.count("[") <= head.count("]") and not head.rstrip(".").endswith(_ABBREV))
+
+
+def _short_title(text: str) -> tuple[str, bool]:
+    """`(title, force_cut)`: the text itself when short, else its first sentence, else the last clause
+    that fits `TITLE_LIMIT`; only when neither exists is it cut at a word (`force_cut`, reviewed by the
+    owner). A title carries no ellipsis: the full text is always kept in the item body by the caller."""
+    flat = " ".join(text.replace("**", "").split())
+    if len(flat) <= TITLE_LIMIT:
+        return _clean_title(flat), False
+    for m in re.finditer(r"[.!?](?=\s)", flat):
+        if m.end() > TITLE_LIMIT:
+            break
+        if _boundary_ok(flat, m.end()):
+            return _clean_title(flat[: m.end()]), False
+    best = 0
+    for sep in _CLAUSE:
+        for m in re.finditer(re.escape(sep), flat):
+            if m.start() > TITLE_LIMIT:
+                break
+            if m.start() > best and _boundary_ok(flat, m.start()):
+                best = m.start()
+    if best >= 12:
+        return _clean_title(flat[:best]), False
+    cut = flat.rfind(" ", 0, TITLE_LIMIT)
+    head = flat[: cut if cut > 0 else TITLE_LIMIT]
+    while not _boundary_ok(head, len(head)) and (k := max(head.rfind("("), head.rfind("["), head.rfind("`"))) > 12:
+        head = head[:k].rstrip()
+    return _clean_title(head), True
+
+
+_RECORD = re.compile(
+    r"^(judged and kept|no\b.*\bbacklog item\b|still kept|routed outward|done\b|resolved\b|closed\b|"
+    r"delivered\b|shipped\b|completed\b|fixed\b|noted\b)", re.I)
+
+
+def title_issues(title: str, force_cut: bool = False) -> list[str]:
+    """Why a title is not fit to be minted (IDs are permanent): reasons, empty when fit.
+
+    Conservative on purpose: an ellipsis, a bare parenthetical or stub, a title cut mid-clause, an
+    over-long one, or one that opens like a record of past work ("Judged and kept...", "Done ...",
+    "No analyst backlog item ...") rather than a piece of work."""
+    out = []
+    if "…" in title or "..." in title:
+        out.append("contains an ellipsis")
+    if force_cut:
+        out.append("cut mid-clause to fit the title length")
+    if len(re.sub(r"\(.*?\)", "", title).strip()) < 12:
+        out.append("a stub or bare parenthetical, not a title")
+    if len(title) > 120:
+        out.append("over 120 characters")
+    if _RECORD.match(title):
+        out.append("reads as a record of past work, not an open item")
+    return out
+
+
 def _bullet_block(lines: list[str], i: int) -> int:
     """Index one past the last line of the top-level bullet starting at `i` (trailing blanks excluded)."""
     j, n = i + 1, len(lines)
@@ -123,15 +190,14 @@ def _bullet_text(lines: list[str], i: int, j: int) -> str:
     return "\n".join([first, *rest]).strip("\n")
 
 
-def _split_lead(text: str) -> tuple[str, str]:
-    """`(title, body)` of a bullet: its bold lead and the rest, else its first line and everything."""
+def _split_lead(text: str) -> tuple[str, str, bool]:
+    """`(title, body, force_cut)` of a bullet: its bold lead and the rest, else a short title from its
+    first line and everything as the body."""
     m = _LEAD.match(text)
     if m:
-        return _clean_title(m.group("lead")), text[m.end():].lstrip(" ").strip("\n")
-    first = " ".join(text.splitlines()[0].replace("**", "").split())
-    if len(first) > 90:
-        first = first[: first.rfind(" ", 0, 90) if " " in first[:90] else 90].rstrip(",;:") + "…"
-    return _clean_title(first), text
+        return _clean_title(m.group("lead")), text[m.end():].lstrip(" ").strip("\n"), False
+    title, cut = _short_title(text)
+    return title, text, cut
 
 
 def _status_field(emoji: str, note: str = "") -> str:
@@ -168,9 +234,37 @@ def _heads(lines: list[str]) -> list[tuple[int, int]]:
 @dataclass
 class _Row:
     added: str
-    priority: str
+    priority: str  # the cell as written
     emoji: str | None
     summary: str
+
+
+_PRIORITY = re.compile(r"(?P<word>high|medium|med|low)\b(?P<rest>.*)$", re.I | re.S)
+
+
+def _priority_value(cell: str) -> str | None:
+    """The `Priority` field value for a table cell, never dropping a word of it.
+
+    A leading recognised word (`med` is `medium`) is the value and what follows it (` — filed
+    upstream`, `(raised ...)`) is kept after ` — `; a cell that starts otherwise is emitted as written
+    (`lint` then warns it unrecognised) rather than skipped."""
+    clean = " ".join(cell.replace("**", "").split())
+    if not clean:
+        return None
+    m = _PRIORITY.match(clean)
+    if not m:
+        return clean
+    word = m.group("word").lower()
+    word = "medium" if word == "med" else word
+    rest = m.group("rest").strip().lstrip("—–-:·, ").strip()
+    return f"{word} — {rest}" if rest else word
+
+
+_WORD = re.compile(r"\w+")
+
+
+def _words(text: str) -> set[str]:
+    return {w.casefold() for w in _WORD.findall(text)}
 
 
 def _tables(text: str, lines: list[str]):
@@ -218,8 +312,8 @@ def analyze(path: str, text: str) -> Reformat:
     out: list[str] = []
     n_lines = len(lines)
 
-    def mint(title: str, origin: str, line: int) -> str:
-        item = NewItem(len(rf.new_items), title, wi_type, home, origin, line)
+    def mint(title: str, origin: str, line: int, cut: bool = False) -> str:
+        item = NewItem(len(rf.new_items), title, wi_type, home, origin, line, title_issues(title, cut))
         rf.new_items.append(item)
         return f"\x00NEW{item.index}\x00"
 
@@ -246,13 +340,15 @@ def analyze(path: str, text: str) -> Reformat:
                 if ident in headed_ids:
                     continue
                 fields = [_status_field(row.emoji or "🔵")]
-                if row.priority in ("high", "medium", "low"):
-                    fields.append(f"- **Priority:** {row.priority}")
+                if (value := _priority_value(row.priority)) is not None:
+                    fields.append(f"- **Priority:** {value}")
                 if row.added:
                     fields.append(f"- **Added:** {row.added}")
                 if not row.emoji:
                     rf.status_defaulted.append(ident)
-                item_block(f"### {ident} — {row.summary or 'Untitled'}", fields, "")
+                title, _cut = _short_title(row.summary or "Untitled")
+                covered = _words(row.summary) <= _words(title)
+                item_block(f"### {ident} — {title}", fields, "" if covered else row.summary)
                 rf.notes.append(f"table row {ident} became an item")
             rf.notes.append("summary table folded into its items and removed")
             i = span[1]
@@ -316,7 +412,7 @@ def analyze(path: str, text: str) -> Reformat:
         if not in_fence and ctx in ("container", "group") and _BULLET.match(line):
             j = _bullet_block(lines, i)
             text_ = _bullet_text(lines, i, j)
-            title, body = _split_lead(text_)
+            title, body, cut = _split_lead(text_)
             idm = _ID_LEAD.match(title) if _LEAD.match(text_) else None
             if idm:
                 emoji = next((e for e in EMOJI_WORD if e in body[:40]), None)
@@ -331,7 +427,7 @@ def analyze(path: str, text: str) -> Reformat:
                 rf.notes.append(f"bullet {idm.group('id')} became a heading item")
             else:
                 origin = "parking-lot" if _is_parking(out) else "open-items"
-                token = mint(title, origin, i + 1)
+                token = mint(title, origin, i + 1, cut)
                 rf.status_defaulted.append(title)
                 note = "parking-lot origin; owner confirms status" if origin == "parking-lot" \
                     else "defaulted; owner confirms status"
@@ -383,15 +479,47 @@ def _reformat_known(block: list[str], m: re.Match, fields: dict[str, str], summa
         else:
             new_fields.append(_status_field("🔵", "defaulted; owner confirms status"))
             rf.status_defaulted.append(ident)
+    priority = _priority_value(row.priority) if row is not None else None
     if row is not None:
-        if "Priority" not in fields and row.priority in ("high", "medium", "low"):
-            new_fields.append(f"- **Priority:** {row.priority}")
-        if "Added" not in fields and row.added:
+        if priority and not _has_field(fields, "Priority"):
+            new_fields.append(f"- **Priority:** {priority}")
+        if row.added and not _has_field(fields, "Added"):
             new_fields.append(f"- **Added:** {row.added}")
     if "Milestone" not in fields and ident in milestone_of:
         new_fields.append(f"- **Milestone:** {milestone_of[ident]}")
         rf.notes.append(f"{ident}: Milestone {milestone_of[ident]} from the milestone table")
-    return _insert_fields([heading, *block[1:]], new_fields)
+    out = _insert_fields([heading, *block[1:]], new_fields)
+    if row is not None:
+        out = _keep_table_text(out, row, priority, rf, ident)
+    return out
+
+
+def _has_field(fields: dict[str, str], label: str) -> bool:
+    return label in fields or any(f"**{label}:**" in v for v in fields.values())
+
+
+def _keep_table_text(block: list[str], row: _Row, priority: str | None, rf: Reformat, ident: str) -> list[str]:
+    """Text of the removed index-table row that the item block does not already carry stays as
+    `> Summary:` / `> Index row:` lines under its field block (plan3 section 7: text is never
+    dropped; the owner deletes what is redundant)."""
+    have = _words("\n".join(block))
+    extra = []
+    if row.summary and not _words(row.summary) <= have:
+        extra.append(f"> Summary: {row.summary}")
+    cells = [f"{k} {v}" for k, v in (("Priority", priority), ("Added", row.added))
+             if v and not _words(v) <= have]
+    if cells:
+        extra.append(f"> Index row: {'; '.join(cells)}")
+    if not extra:
+        return block
+    rf.notes.append(f"{ident}: index-table text kept as a quote under the fields")
+    j = 1
+    if j < len(block) and not block[j].strip():
+        j += 1
+    while j < len(block) and (FIELD.match(block[j]) or (block[j].startswith("  ") and block[j].strip())):
+        j += 1
+    tail = block[j:]
+    return [*block[:j], "", *extra, *([""] + tail if tail and tail[0].strip() else tail)]
 
 
 # ----------------------------------------------------------------------------- reports
@@ -409,6 +537,11 @@ def dry_run_report(rf: Reformat, legacy_paths: Mapping[str, str]) -> str:
            f"   new ids to mint: {len(rf.new_items)}"]
     for it in rf.new_items:
         out.append(f"   mint [{it.origin}, line {it.line}] {' '.join(_quote(a) for a in it.command)}")
+    flagged = [it for it in rf.new_items if it.issues]
+    if flagged:
+        out.append(f"   TITLE REVIEW: {len(flagged)} title(s) not fit to mint as written "
+                   "(an ID is permanent; fix the source text, then `--apply --titles-reviewed`)")
+        out.extend(f"     - line {it.line}: {it.title!r}: {'; '.join(it.issues)}" for it in flagged)
     if rf.status_defaulted:
         out.append(f"   status defaulted to proposed (owner confirms): {len(rf.status_defaulted)}")
         out.extend(f"     - {t}" for t in rf.status_defaulted)
@@ -456,20 +589,61 @@ def wi_flush(repo_root: str | Path, wi_script: str | Path | None = None) -> None
         raise WiError(f"`wi flush` failed: {proc.stderr.strip()}")
 
 
-def apply_file(root: str | Path, path: str, mint: Minter, flush: Callable[[], None] | None = None) -> Reformat:
-    """Allocate every id-less item's ID, rewrite the file atomically; idempotent (no ids when done)."""
+class TitleReviewRequired(RuntimeError):
+    """`--apply` refused: titles flagged by `title_issues` were not acknowledged."""
+
+    def __init__(self, flagged: list[NewItem]):
+        self.flagged = flagged
+        super().__init__("; ".join(f"line {i.line}: {i.title!r} ({', '.join(i.issues)})" for i in flagged))
+
+
+class ApplyError(WiError):
+    """Applying failed after allocation began: `minted` IDs exist in the registry but are in no file."""
+
+    def __init__(self, message: str, minted: list[str]):
+        self.minted = minted
+        super().__init__(f"{message}; IDs already minted and now orphaned (retire with `wi retire`): "
+                         f"{', '.join(minted) or 'none'}")
+
+
+def apply_file(root: str | Path, path: str, mint: Minter, flush: Callable[[], None] | None = None,
+               titles_reviewed: bool = False) -> Reformat:
+    """Allocate every id-less item's ID, rewrite the file atomically; idempotent (no ids when done).
+
+    Refuses before the first mint when a title is flagged and not `titles_reviewed`. If a mint (or
+    the write) fails after allocation began, nothing is written and the IDs already minted are
+    reported (`ApplyError`); the file is also re-read and compared before the replace, so an edit
+    made since analysis is never overwritten."""
     target = Path(root) / path
-    rf = analyze(path, target.read_text(encoding="utf-8"))
-    ids = [mint(item) for item in rf.new_items]  # all allocation before any write
-    if flush is not None and ids:
-        flush()
-    if rf.changed:
-        fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".migrate-", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(rf.render(ids))
-            os.replace(tmp, target)
-        except BaseException:
-            Path(tmp).unlink(missing_ok=True)
+    raw = target.read_bytes()
+    rf = analyze(path, raw.decode("utf-8"))
+    flagged = [i for i in rf.new_items if i.issues]
+    if flagged and not titles_reviewed:
+        raise TitleReviewRequired(flagged)
+    ids: list[str] = []
+    try:
+        for item in rf.new_items:  # all allocation before any write
+            ids.append(mint(item))
+        if flush is not None and ids:
+            flush()
+        if rf.changed:
+            _replace_if_unchanged(target, raw, rf.render(ids))
+    except BaseException as exc:
+        if not ids:
             raise
+        raise ApplyError(f"{path}: {exc}", ids) from exc
     return rf
+
+
+def _replace_if_unchanged(target: Path, raw: bytes, new_text: str) -> None:
+    fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".migrate-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(new_text)
+        shutil.copymode(target, tmp)  # mkstemp creates 0600
+        if target.read_bytes() != raw:
+            raise WiError(f"{target} changed since it was analysed; nothing written")
+        os.replace(tmp, target)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
