@@ -1,0 +1,183 @@
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ falkor-chat query tests
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶ connectivity
+  ✓ FalkorDB reachable
+
+▶ teardown (clean slate)
+ERR Invalid graph operation on empty key
+
+ERR Invalid graph operation on empty key
+
+
+▶ bootstrap schema
+ERROR: planted bootstrap failure (stub)
+
+▶ §2 users & membership
+  ✓ ensure user Alice (v2 fresh create)
+  ✓ ensure user Bob (v2 fresh create)
+  ✓ re-ensure user idempotent (existed, no write)
+  ✓ re-ensure user creates no node
+  ✓ re-ensure left exactly one Alice node
+  ✗ constraint blocks duplicate userId
+    expected to contain: unique constraint violation
+    got: Labels added: 1
+Nodes created: 1
+Properties set: 2
+Cached execution: 0
+Query internal execution time: 0.155704 milliseconds
+
+▶ §3 channels & threads
+  ✓ create channel general
+  ✓ create channel random
+  ✗ constraint blocks duplicate channelId
+    expected to contain: unique constraint violation
+    got: Labels added: 1
+Nodes created: 1
+Properties set: 2
+Cached execution: 0
+Query internal execution time: 0.131050 milliseconds
+  ✗ list channels: missing channel or wrong order
+    got: channelId
+name
+createdAt
+ch1
+imposter
+
+ch2
+random
+1001
+ch1
+general
+1000
+Cached execution: 0
+Query internal execution time: 0.380932 milliseconds
+  ✓ add Alice to general
+  ✓ add Bob to general
+  ✓ no threads yet
+  ✓ create thread th1
+  ✓ create thread th2
+  ✗ constraint blocks duplicate threadId
+    expected to contain: unique constraint violation
+    got: Labels added: 2
+Nodes created: 2
+Properties set: 4
+Cached execution: 0
+Query internal execution time: 0.175793 milliseconds
+  ✓ list threads returns th1
+  ✓ list threads returns th2
+
+▶ §4 messages — write path (v2)
+  ✓ post first message m1: status row written
+  ✓ post first message m1: node exists
+  ✓ post second message m2 (v2 subsequent)
+  ✓ post third message m3 (v2 subsequent)
+  ✓ post reply m4 (v2 subsequent + REPLY_TO in guard)
+  ✓ m4 REPLY_TO edge exists (created inside guarded FOREACH)
+  ✓ TAIL points to last message
+  ✓ HEAD still points to first message
+  ✗ constraint blocks duplicate msgId
+    expected to contain: unique constraint violation
+    got: Labels added: 1
+Nodes created: 1
+Properties set: 2
+Cached execution: 0
+Query internal execution time: 0.115329 milliseconds
+
+▶ §4 write-path v2 guards (retry replay / first-post race / unknown author)
+  ✓ replay of subsequent write reports dupMsg=true (idempotent)
+  ✗ replay left NEXT chain intact (3 edges, no self-loop)
+    expected to contain: next=3 self=0
+    got: s
+next=280 self=0.000000
+Cached execution: 0
+Query internal execution time: 0.741795 milliseconds
+  ✗ replay created no message node (still 4)
+    expected to contain: 4
+    got: n
+289
+Cached execution: 0
+Query internal execution time: 0.317387 milliseconds
+  ✓ late first-post refused with hadHead=true
+  ✓ thread still has exactly one HEAD
+  ✓ unknown author refused with authorFound=false
+  ✓ unknown-author message was not written
+  ✓ v2 write stamped threadId on m1
+  ✓ v2 subsequent write has no All Node Scan
+
+▶ §4 messages — read path
+  ✓ thread read: m1 present
+  ✓ thread read: m2 present
+  ✓ thread read: m3 present
+  ✓ thread read: m4 present
+  ✓ thread read: Alice present
+  ✓ thread read: Bob present
+  ✓ thread read: messages in chronological order
+  ✓ cursor pagination: m3 after m2
+  ✗ cursor pagination: m4 after m2
+    expected to contain: m4
+    got: m.msgId
+m3
+m3
+m3
+m3
+m3
+m3
+m3
+m3
+m3
+m3
+Cached execution: 0
+Query internal execution time: 0.420392 milliseconds
+  ✓ cursor pagination: m1 not in result
+  ✓ cursor pagination: m2 not in result
+  ✓ get single message m4: text
+  ✓ get single message m4: author
+  ✓ get single message m4: quotedId
+  ✓ thread updatedAt bumped to last msg createdAt
+
+▶ §4.x threadId backfill (one-off ops query)
+  ✓ backfill run 1 stamps the 2 stripped messages
+  ✓ backfill run 2 is idempotent (0)
+
+▶ §3 list recent threads (after messages posted)
+  ✓ recent threads: th1 most recent
+
+▶ §5 full-text search
+  ✗ fulltext: 'welcome' finds m3
+    expected to contain: m3
+    got: m.msgId
+m.text
+score
+
+Cached execution: 0
+Query internal execution time: 0.225655 milliseconds
+  ✓ fulltext: 'welcome' no error
+  ✗ fulltext: 'Hello' finds m1
+    expected to contain: m1
+    got: m.msgId
+
+Cached execution: 0
+Query internal execution time: 0.291219 milliseconds
+  ✗ fulltext rows carry threadId
+    expected to contain: th1
+    got: m.msgId
+threadId
+m.text
+m.createdAt
+score
+
+Cached execution: 0
+Query internal execution time: 0.259359 milliseconds
+
+▶ §6 GraphRAG — set embeddings and query
+  ✓ §6 set-embedding write commits (Properties set)
+  ✗ vector query: m1 in top-2
+    expected to contain: m1
+    got: Invalid arguments for procedure 'db.idx.vector.queryNodes'
+  ✗ vector query: m2 in top-2
+    expected to contain: m2
+    got: Invalid arguments for procedure 'db.idx.vector.queryNodes'
+  ✓ vector query: m3 not in top-2 (different direction)

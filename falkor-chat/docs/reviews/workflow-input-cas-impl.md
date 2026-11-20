@@ -217,3 +217,181 @@ Target: `falkor-chat/REVIEW.md`.
   `echo | grep -q` under `pipefail` (SIGPIPE: a false miss in `assert_contains`, a false pass in
   `assert_not_contains`) before it is attributed to the change or dismissed. Until the helper is
   fixed, an `assert_not_contains` on a large output is not evidence."
+
+## U11 gate
+
+This gates the U11 fix to F2: commit `8d629cad`, which changes `falkor-chat/scripts/test_queries.sh`
+(13 hunks, +22/−22). I checked the working tree against `HEAD` and the copy matches. The
+delegate's evidence is in `falkor-chat/docs/reviews/test-queries-sigpipe-evidence/`. Mine is in
+`falkor-chat/docs/reviews/workflow-input-cas-evidence/u11/`. I held `ws:test` for this run.
+
+**Verdict: approve.** Every claim the delegate made reproduces. My own planted helper mutants go
+red. My own sweep finds no early-exit pipe left in the script.
+
+**What I re-checked:**
+
+- **Probe, re-run** (`probe_pre_1000.txt`, `probe_head_1000.txt`). I ran the delegate's
+  `probe.sh` at N=1000 on two copies. The first is the pre-fix script (`8d629cad~1`), which is
+  byte-equal to the delegate's `test_queries.orig.sh`. The second is `HEAD`.
+  - Pre-fix: **6,035** wrong verdicts. The delegate's 12,012 was at N=2000, so this is the same
+    rate. On the small redis-cli-shaped output, 33/1000 were false reds and 2/1000 false greens.
+  - HEAD: **0** wrong verdicts.
+  - The fix also closes a second defect the old helpers had. A needle starting with `-`, such as
+    `-1`, was parsed as a grep option and gave a wrong verdict every time. `--` now stops that.
+- **Planted helper mutants** (scratchpad copies only; `probe_mutA_nodash.txt`,
+  `probe_mutB_pipe.txt`):
+  - **A** removes the `--` from `assert_not_contains`. The probe goes red with 400 wrong verdicts,
+    all on the leading-dash controls.
+  - **B** reverts `assert_not_contains` to `echo | grep -q`. The probe goes red with 201 wrong
+    verdicts: the large-output false pass, 200 out of 200.
+
+  So the probe can both fail and pass.
+- **The suite itself:**
+  - Two runs at HEAD: **486/486** each (`suite_head_run{1,2}.txt`). A third run, which restored
+    `ws:test` after the bootstrap plant below, was also 486/486.
+  - **My own in-suite plant** (`tq_plantA_fresh_version_in_aba.sh`). It gives the ABA replay the
+    fresh `ctxVersion=1` instead of the stale 0. Result: **481/486** (`suite_plantA.txt`).
+  - The five reds include three `assert_not_contains`: "zero rows", "sets no property" and
+    "wrote no ctx". That is the helper kind that used to pass falsely, now failing as it should
+    through the fixed helper.
+  - The delegate's P1, P2 and P3 outputs show 480, 480 and 485 of 486, each red where its plant
+    lands. I read them; I did not re-run them. My own plant covers the same property.
+- **Early-exit sweep, with my own grep.** I matched every `|` into an early-exiting consumer: any
+  `grep|head|awk|sed|read|tail|cut|wc|sort|uniq|tr|xargs|python|jq|tee` after a pipe, plus
+  `grep -q`/`-m`, `head`, `awk … exit` and `sed … q` anywhere.
+  - Every `grep -q`, `grep -m1` and `awk … exit` in the script now reads from a here-string.
+  - The pipes that remain are `grep -n -m1 … <<< | cut` at 16 sites, `echo | grep -A1 | tail -1 |
+    tr` at `:377`, and the bootstrap line at `:114`. Their consumers (`cut`, `grep -A1`
+    without `-m`, `tail`) read all of their input, so none of these pipes can SIGPIPE its writer.
+  - `:399` and `:417` match only Cypher `|` inside query strings.
+  - The delegate's 22 sites match this set. Nothing is missing from it.
+
+**Observations (not blocking U11):**
+
+- **The `|| true` at `:114` is a real defect, but a minor one.** Under `pipefail`, a failing
+  `bootstrap_schema.sh` makes the pipeline fail, and `|| true` swallows that, so the suite runs on
+  with no schema. I planted a stub that prints `ERROR` and exits 3 (`suite_plantB_bootstrap_fails.txt`).
+  - The run reported **13 ✗** across unrelated sections: constraints, channel listing, vector
+    queries. One of them, "vector query: m3 not in top-2", passed against the error text.
+  - It then aborted at `:377` under `set -e`, with no `Results` line.
+  - It does fail loudly (exit 1). It is never a false green over the whole run. The cost is
+    misdiagnosis: the real cause shows only as one `ERROR` line above many unrelated reds.
+  - **Fix:** capture the output (`boot=$(… 2>&1) || { echo "  ✗ bootstrap failed"; echo
+    "$boot"; exit 1; }`), then filter it with the here-string grep.
+  - **It does not need its own item.** Fold it into one low-priority shell-harness backlog item
+    with the next bullet.
+- **Other `falkor-chat/scripts/*.sh` files under `pipefail` still use `| grep -q`.** Most are
+  `PING | grep -q PONG`, where the 5-byte producer has finished writing before grep exits, so the
+  risk is negligible. Two are multi-line: `verify_catalog.sh:77,82` and `start_demo.sh:289`. Their
+  failure mode is a false "missing" (a fail-loud false red, never a false green). This is out of
+  U11's scope (`test_queries.sh` only). It belongs in the same backlog item.
+- **Pre-existing and kept deliberately:** an order check whose `grep -n -m1` finds no row now
+  ends the suite with a non-zero exit under `set -e`, rather than reporting a ✗. The old pipeline
+  did the same; the delegate's `probe_other_idioms_out.txt` confirms the "absent needle" rows,
+  and the fix preserves that.
+
+## Close check
+
+This is step 3 of the live-spec close. It checks commit `89306a90` (DESIGN §6.2, QUERIES §12)
+against two things: the shipped diff `7cff155b`, and the spec close list above. The query
+strings in `7cff155b` are identical to the ones this review's first section gated. The only code
+differences after that gate are docstrings (F3) and the F1 test. Evidence is in
+`falkor-chat/docs/reviews/workflow-input-cas-evidence/close/`.
+
+**Verdict: approve with suggestions.** Every Cypher block matches the shipped code. Every item on
+the close list is done. Every absolute statement I checked holds. The one finding is
+duplication, and all of its copies are consistent (C1).
+
+- **Every §12 Cypher block matches the shipped code. This was checked mechanically**
+  (`cypher_match.py`).
+  - The script takes all 17 ```cypher blocks in QUERIES §12 at `89306a90`, strips `//` comments
+    and normalises whitespace. It compares each one with every `.query`/`.ro_query` string
+    literal in `repository.py` at `7cff155b`.
+  - Result: **17/17 match**, each to its same-named method (`cypher_match_close.txt`).
+  - **Positive control:** the same script on the pre-close docs (`89306a90~1`) reports exactly
+    the four K-097 blocks as mismatches: §12.4, §12.5 `fail_run`, §12.7 and §12.13
+    (`cypher_match_control_preclose.txt`). So the check can fail.
+- **Close list: every item is done.**
+  - **DESIGN:**
+    - the `WorkflowRun` property list;
+    - the run-model bullet, worded as this review asked ("every resume … and every ctx write
+      to an existing run"; `complete_run` named as leaving it unchanged);
+    - "Who writes the run `ctx`";
+    - the R-1 blockquote, replaced by the closed statement;
+    - "Timer release…", which names the step 5.1 read F1 pinned;
+    - the design-rule blockquote.
+  - **QUERIES:**
+    - the §12 model block and the status-move contract;
+    - §12.4: Cypher, plus "a refused resume does not bump";
+    - §12.5 `fail_run`: Cypher, plus prose;
+    - §12.7: Cypher, plus prose;
+    - §12.13: heading, opening, comment, Cypher, zero-row contract, PROFILE block, indexes/RAM.
+  - SERVER.md is unchanged, which is correct (see "Spec sentences for the close").
+- **Absolute statements, checked against the code with an unfiltered `git grep` at `7cff155b`:**
+  - "on an existing run, by exactly two queries" (DESIGN): every `ctx` write is
+    `start_run`/`start_run_untriggered` (create), `resume_run_with_ctx` or `fail_run`.
+  - the bump set and the leave-unchanged set: the only `ctxVersion` writes are at
+    `repository.py:3018,3052,3094`.
+  - "no version bump" on a refused CAS: the `SET` is gated by the `WHERE`.
+
+  The new "live-verified" claim in §12.13 (a run resumed and re-parked after the read gives zero
+  rows and no property set) is backed by the `test_queries.sh` ABA case. My in-suite plant
+  (U11 gate) shows that case can go red.
+- **Text the update left unchanged** (root `REVIEW.md`):
+  - DESIGN §6.2's "`status` as a property" note ("guarded single-query CAS flips … can't
+    double-resume") is still true.
+  - QUERIES' build-quirks bullet ("Guarded CAS via `WHERE` on the current status value
+    (§12.3/§12.4)") is still true.
+  - The §12.16 RAM paragraph still names §12.13 as the sweep's write.
+  - No sentence still says "R-1", "plus one `SET` term", "remains in use unchanged", "can never
+    disagree" or "unbuilt" about this path (grep over DESIGN/QUERIES/SERVER).
+- **No change history** in the updated text. The "a `status` compare alone cannot see that
+  re-park" sentence states a design reason; it does not narrate a past change.
+
+**C1 (minor): the bump and refusal semantics are stated in several places.**
+- The set of queries that bump `ctxVersion` and the set that leave it unchanged appear in:
+  - DESIGN §6.2's run-model bullet;
+  - QUERIES §12.4's note;
+  - QUERIES §12.5's note;
+  - QUERIES §12.13's zero-row contract ("no resume (§12.4, §12.13) and no ctx write (§12.5)").
+- "Refused, nothing written (no flip, no ctx, no version bump)" appears in DESIGN "Who writes"
+  and in QUERIES §12.13.
+
+Root `REVIEW.md` reports a fact stated twice in the spec set. I checked every copy against the
+code above, and all of them agree today. **Suggested fix**, at the next ordinary revision rather
+than as a blocker: keep the per-query facts in QUERIES (§12.4, §12.5, §12.13), and have DESIGN's
+bullet state the invariant and cite them, dropping its enumerated list.
+
+**Still owed at step 5:** the `HISTORY.md` entry has to name `GET /workflow-runs/{runId}`'s new
+`ctxVersion` key as a public contract addition. That entry is the only place the addition is
+named, because SERVER.md defers the route's shape to §12.7. No K-097 `HISTORY.md` entry exists yet,
+which is expected for step 5.
+
+## REVIEW.md proposals (final)
+
+These replace this review's earlier "Proposed REVIEW.md lines" section. Neither earlier line has
+been applied to `falkor-chat/REVIEW.md` (checked at HEAD).
+
+- **Drop** the earlier *Evidence bar* SIGPIPE line. U11 fixed the defect it guarded against. It
+  was never added, so no prune line is needed. U11 also left **no automated guard**: the
+  delegate's `probe.sh` is evidence, and no test, CI job or hook runs it. A prune line would need
+  such an enforcer to cite, so none is justified.
+- **Replace it** with a narrower line, because the suite cannot police its own helpers. Under
+  helper mutant B, the false pass shows up only on large outputs, which the probe exercises and
+  the suite does not. Target: `falkor-chat/REVIEW.md`, **Always check**. Source: F2 and the U11
+  gate. Verbatim:
+
+  > - A change to an assertion helper in `scripts/test_queries.sh` re-runs
+  >   `docs/reviews/test-queries-sigpipe-evidence/probe.sh` against the changed script, and the
+  >   review reports its `TOTAL wrong verdicts` (0 required) together with one planted helper
+  >   mutant that makes it non-zero.
+
+- **Keep** the F1 line. Target: `falkor-chat/REVIEW.md`, **Always check**. Source: F1 and the
+  `/input` precedent, where only test 3b kills the re-read mutant. Verbatim:
+
+  > - A value a compare-and-set checks (a version, a status, a key) is pinned by a test that
+  >   injects a concurrent writer between the read the value came from and the CAS, ahead of any
+  >   later read the code could substitute. A test that injects at the CAS itself cannot tell
+  >   "carried from the read" from "re-read just before the CAS".
+
+- **No prunes.** Neither addition makes an existing line in `falkor-chat/REVIEW.md` redundant.

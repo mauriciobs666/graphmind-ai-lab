@@ -1,0 +1,16 @@
+probe of: /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_pre.sh  (N=1000)
+assert_contains      big    needle=needle         want=pass -> wrong verdicts 1000/1000
+assert_contains      big    needle=zzz            want=fail -> wrong verdicts 0/1000
+assert_contains      small  needle=mn3            want=pass -> wrong verdicts 33/1000
+assert_contains      small  needle=zzz            want=fail -> wrong verdicts 0/1000
+assert_not_contains  big    needle=needle         want=fail -> wrong verdicts 1000/1000
+assert_not_contains  big    needle=zzz            want=pass -> wrong verdicts 0/1000
+assert_not_contains  small  needle=mn3            want=fail -> wrong verdicts 2/1000
+assert_not_contains  small  needle=zzz            want=pass -> wrong verdicts 0/1000
+assert_contains      dash   needle=-1             want=pass -> wrong verdicts 1000/1000
+assert_contains      dash   needle=--flag         want=pass -> wrong verdicts 1000/1000
+assert_contains      dash   needle=-zzz           want=fail -> wrong verdicts 0/1000
+assert_not_contains  dash   needle=-1             want=fail -> wrong verdicts 1000/1000
+assert_not_contains  dash   needle=--flag         want=fail -> wrong verdicts 1000/1000
+assert_not_contains  dash   needle=-zzz           want=pass -> wrong verdicts 0/1000
+TOTAL wrong verdicts: 6035
