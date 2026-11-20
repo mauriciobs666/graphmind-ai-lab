@@ -1,6 +1,6 @@
 {
   "candidateId": "join-in-judge-v2-only-f1",
-  "decisionModel": "laya",
+  "decisionModel": "laya@q8_0",
   "decisionTimeoutSeconds": 180.0,
   "fit": {
     "outcome": "fit-infeasible: agreement",

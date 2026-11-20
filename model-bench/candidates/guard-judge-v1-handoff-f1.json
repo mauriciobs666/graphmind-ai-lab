@@ -1,6 +1,6 @@
 {
   "candidateId": "guard-judge-v1-handoff-f1",
-  "decisionModel": "laya",
+  "decisionModel": "laya@q8_0",
   "decisionTimeoutSeconds": 180.0,
   "fit": {
     "outcome": "fit-infeasible: latency",
