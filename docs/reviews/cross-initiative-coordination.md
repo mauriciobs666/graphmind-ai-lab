@@ -138,3 +138,7 @@ Citations are correct (checked FR-2..5, FR-6, FR-9, FR-13, FR-14 against the tex
 
 ### What's solid
 The extension framing is accurate: restatement is now limited to the intro summary. The FR citations to `coordination-graph.md` are correct. Out of scope is crisp, and the FR-3 stop-and-raise rule and FR-4's "never silently dropped" give testable edges. The log is append-only and the new reversals name their targets.
+
+## Later review
+
+The 2026-11-20 work-item alignment changes to this requirements document (terminology, FR-4/FR-5/AC-4) were re-read in Passes 5–7 of `claude/docs/reviews/coordination-graph.md` (latest verdict: approve with suggestions).
