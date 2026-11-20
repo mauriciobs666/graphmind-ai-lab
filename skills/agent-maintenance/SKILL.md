@@ -64,8 +64,8 @@ Example (per-agent folders): `~/.claude/agents/cobb/kaizen/plan.md` and `.../his
    `agentId`, nothing to pre-create.
 2. **Modifying:** before editing, check `plan.md` for relevant items; after
    editing, append a dated `history.md` entry (*what* changed and *why*), and
-   update the status of any plan items you advanced — move completed ones out of
-   the active table into `history.md`.
+   update the status of any plan items you advanced — move delivered ones out of
+   the active items into `history.md`.
 3. **Reviewing (no change):** record new ideas in `plan.md` even if not implemented now.
 4. **Always** read existing kaizen files first — don't duplicate items, and
    respect prior decisions (including things explicitly rejected/deferred).
@@ -79,7 +79,7 @@ update. Keep entries concise.
 # Kaizen — Improvement Plan: {name}
 
 > Forward-looking backlog for the `{name}` {agent|skill}.
-> Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
+> Status: 🔵 proposed · 🟡 in-progress · ✅ delivered (then moved to history.md) · ⚪ rejected/deferred
 > Last reviewed: YYYY-MM-DD
 
 ## Active
@@ -101,7 +101,7 @@ update. Keep entries concise.
 - **Status:** 🔵 proposed — parked YYYY-MM-DD
 ```
 
-In a project with the work-items registry, cite a kaizen entry by its full scheme ID (`skills/work-items/SKILL.md`); allocate a new one with `wi new K`, never by hand-numbering the next `K-00N`. Items are `###` headings with a field block (no summary table, parking-lot ideas included); `Priority`/`Depends on`/`Touches` are recorded only when established — an absent field means "not recorded", `none` means "recorded empty". Grammar and conventions: `skills/coordination-graph/SKILL.md`.
+In a project with the work-items registry, cite a kaizen entry by its full scheme ID (`skills/work-items/SKILL.md`); allocate a new one with `wi new K --home <agent>`, never by hand-numbering the next `K-00N`. Items are `###` headings with a field block (no summary table, parking-lot ideas included); `Priority`/`Depends on`/`Touches` are recorded only when established — an absent field means "not recorded", `none` means "recorded empty". Grammar and conventions: `skills/coordination-graph/SKILL.md`.
 
 ### `history.md` template
 

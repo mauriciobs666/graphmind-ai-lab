@@ -25,12 +25,12 @@ Mapped by header name, optional, absent = not recorded:
   or a unit label of the same ledger (`U3`). An empty token between commas is a malformed cell
   (`needs not recorded`, a warning): fix the cell. A need never copies another ledger's status.
   Need is **met** when the task's unit is `accepted`, or (feature ID) every ledger carrying it is
-  archived or all its units are `accepted`; `unknown`-status units are *unresolvable*, never met.
+  archived or it has at least one unit and all its units are `accepted` (an empty live ledger is unmet); `unknown`-status units are *unresolvable*, never met.
   A feature ID matches ledgers by their header `Item:`.
 
 `Status` cells use teco's seven words: `queued`, `in-flight`, `delivered`, `gated`, `accepted`,
 `abandoned`, `paused`; closed aliases `relayed`→`paused`, `done`→`delivered`, `superseded`→`abandoned`
-(archived ledgers only). Anything else is `unknown` with a warning: a cell to fix, not a token to add.
+(in every ledger; write teco's seven words, the aliases only absorb old cells). Anything else is `unknown` with a warning: a cell to fix, not a token to add.
 
 ## `unit <ledger-slug|ID> [<unit>]`
 

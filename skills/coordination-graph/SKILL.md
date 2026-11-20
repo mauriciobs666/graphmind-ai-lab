@@ -24,8 +24,8 @@ views read the mirror. Never write to the graph; edit the file. Live design:
 ## Build status — read before trusting a recipe
 
 - **Built (offline, no store):** `lint`, `migrate`, `facts`, `history-coverage`.
-- **Planned, not built:** the store and the views (S3 `bootstrap`/`sync`/`rebuild`/`drift`; S7a
-  `inflight`/`unit`/`planned`/`query`; S7b `propose`), KB freshness (S6 `kb-*`), the post-edit hook
+- **Planned, not built:** the store and the views (S3 `bootstrap`/`sync`/`rebuild`/`drift`/`query`; S7a
+  `inflight`/`unit`/`planned`; S7b `propose`), KB freshness (S6 `kb-*`), the post-edit hook
   (S8). Until S7a lands, answer "what is in flight / status of unit X" by reading the ledger file;
   this skill's rules about the sync header, drift and hook failures take effect when the views ship.
   When a planned subcommand errors as unknown, that is why, not a fault.
@@ -54,12 +54,12 @@ views read the mirror. Never write to the graph; edit the file. Live design:
 | What is in flight / waiting on the stakeholder / open "needs changes" / unpicked requirements | `coordgraph inflight [--waiting]` | planned (S7a) |
 | One unit's status, owner, deliverable, question | `coordgraph unit <ledger-slug\|ID> [<unit>]` | planned (S7a) |
 | What is planned for a component or agent | `coordgraph planned <component\|agent> [--all]` | planned (S7a) |
-| Propose milestones for a backlog | `coordgraph propose <component\|agent> [--per-milestone N]` | planned (S7b) |
-| Anything else (ad-hoc Cypher) | `coordgraph query '<cypher>' [--covers PATH…]` — not raw `mcp__cypher__query`, so the sync header and drift flag still apply | planned (S7a) |
+| Propose milestones for a backlog | `coordgraph propose <component\|agent> [--per-milestone N]` | planned (S7b; overlap rules and never inserting ahead of a started milestone are its behaviour, unbuilt) |
+| Anything else (ad-hoc Cypher) | `coordgraph query '<cypher>' [--covers PATH…]` — not raw `mcp__cypher__query`, so the sync header and drift flag still apply; until built, read the files | planned (S3) |
 | Is the mirror current / force a sync | `coordgraph drift [PATH…]`, `coordgraph sync <PATH…>\|--changed\|--all`, `rebuild` | planned (S3) |
 | Backlog format check | `coordgraph lint [--count] [PATH…]` (exit 1 on errors) | built |
 | Fact tokens in use (reuse, never reinvent) | `coordgraph facts [--like X]` | built |
-| One-time reformat of a backlog | `coordgraph migrate --dry-run [PATH…]`; `--apply PATH [--titles-reviewed]` (one file per run; mints IDs via `wi new`, refuses while `--dry-run`-flagged titles are unacknowledged — IDs are permanent) | built |
+| One-time reformat of a backlog | `coordgraph migrate --dry-run [PATH…]`; `--apply PATH --titles-reviewed` (S4 only, plan §4 S4: `--dry-run` that file first; the owner fixes flagged titles before `--apply`, which refuses without `--titles-reviewed`; one file per run and per commit, stage `.work-items/registry.jsonl` with it; mints IDs via `wi new` — IDs are permanent) | built |
 | Delivery-heading match rate | `coordgraph history-coverage [-v]` | built |
 | KB mirror staleness of a search hit | `coordgraph kb-status --ids <documentIds>` | planned (S6) |
 
@@ -74,6 +74,7 @@ Each item is its own `###` heading and a field block, then free prose. Heading
 `### <ID> — <title>`; `<ID>` is a `wi new` ID (never hand-numbered), or an existing `K-NNN`/`C-NNN`.
 
 ```markdown
+<!-- IDs in this skill's examples are illustrative -->
 ### GAL-I02-K0042 — Example item title
 
 - **Status:** 🔵 proposed — filed 2026-10-15
@@ -106,13 +107,13 @@ convention and the milestone `started` convention: `references/backlog-format.md
 - **Deliver with a heading.** When an item is delivered, its `HISTORY.md` (agent plans:
   `kaizen/history.md`) heading carries `<ID> delivered` or `<ID> closed`; several IDs are
   **slash-joined with no spaces**: `K-070/K-071 delivered`. A comma list, `and`, `+` or a space
-  beside the slash does **not** deliver the earlier IDs. Or drop the dependent's ref.
+  beside the slash does **not** deliver the earlier IDs.
 - **`started`.** The first time any item of a milestone turns `🟡`, append `— started YYYY-MM-DD`
   to the `Milestone` field of **every** open item of that milestone, in the same edit.
 
 ## Ledger edits
 
-A ledger edit is only done when the hook reports no failure (rule 3). Optional ledger columns
+Once the hook is registered (S8), a ledger edit is only done when it reports no failure (rule 3). Optional ledger columns
 `Item` (the unit's task ID) and `Needs` (comma-separated IDs, `<ledger-slug>:<unit>`, a local unit
 label, or `none`); `Status` cells use teco's seven words (`queued`, `in-flight`, `delivered`,
 `gated`, `accepted`, `abandoned`, `paused`) — anything else reads `unknown` and is a cell to fix.
