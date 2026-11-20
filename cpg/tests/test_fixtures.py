@@ -141,16 +141,16 @@ def test_tp001_planted_mutant_committer_date_unset_is_detected(tmp_path):
 # regenerate with `cd cpg && .venv/bin/python fixtures/materialize.py --json` and update this table in the same commit.
 PINNED_SHAS = {
     'fx-job': {
-        "commits": {'H0': '7eb574a91d1abfc3e38930e139be2ef38ef8b42d', 'H1': '1595bdc063bacd92728767a049aa5ed5421ddec3', 'H2': '40f23388e6ab3b01ab5b1191857fb6059aff0d6d', 'H3': 'bf1fff8f2fdfc1aaeba960bfae771d6206dff154', 'H4': 'efbaa1946d52d5f7b4b3618bf73e7930f009db39'},
-        "branches": {'ov-job': '6a29ed25ee6808f7d4bfb063a6cb6589f389612f'},
+        "commits": {'H0': '789ac0215c413944a76b4cf14be479ac9de90b06', 'H1': '03ed20d8b1e8099eabedba207a52cdf70640e58d', 'H2': '9d97204b80a6ce5f1ded294203d2842f34f16829', 'H3': '9be30c3e3fd5fc6e772d1d937e3849aa038f954f', 'H4': '449150c60e7b7f287ef96241423ef3e27d8035b7'},
+        "branches": {'ov-job': '04513b842af47fb22f19ea4e77f12fabe2c1efdd'},
     },
     'fx-lib': {
         "commits": {'H0': '436df2c4bfdfda2f7253e9708b83d47b27998b17', 'H1': '0042d7183f93e2c0023129f3a50a21fd54f3f599', 'H3': '7f407188f9743be5c975d45faed8b5238410e175'},
         "branches": {},
     },
     'fx-svc': {
-        "commits": {'H0': '800d4989f80b190627f5054e14138b90b3df529e', 'H1': 'a0d013542e9a441386683c8456ca494b4ba6c31a', 'H2': '86623ce31e542a5009eae97de27e828849a7d053', 'H3': 'd92a9b5cf21e2367b054444920124566d17c009d', 'H4': '0f6946d91444fcefdef471e8319465a037663306'},
-        "branches": {'ov-svc': '1629f8de093b12d662d92b03893f69feec5031f1', 'tf-mid': '2e3c2f5384ae4a1e9297b6c256faae0ea42f7f2b', 'tf-sink': '6c4e202ddc84b48bc5661e155f5beaeb937a20f2', 'tf-src': '015d468222daf220a247293c0f7e470608712945'},
+        "commits": {'H0': 'e449f3e126a5d040daa0e4d638d1a098e0f4e310', 'H1': '9d4f60ef6b6c9ec3cde5c610c49bd4be3594325d', 'H2': 'd0b128cad5f213d3532023ad331f28ace500621b', 'H3': 'b7694015a9f3548ca79dcb6fa06ca8cfb7530e61', 'H4': '5f796928b38c2d8e2f921e14ca8887b470f0b2d0'},
+        "branches": {'ov-svc': '7a9af135ff2975c81b007edaa67edc1e48c07e49', 'tf-mid': '70ee07a375d7ce53625971f0cf995b5b29eebf60', 'tf-sink': '638a417611761a6dfbe007b5ad689b3bbeed86a8', 'tf-src': 'f100ed9db50033d3d549c7d384c14545459a5af1'},
     },
     'fx-web': {
         "commits": {'H0': '83926b1ce6a603de66e276a666bccdf5714d53ad', 'H1': '26ecd3c6e93ab35ad0744f905a89115688850b3e'},

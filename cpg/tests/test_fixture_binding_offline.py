@@ -116,7 +116,7 @@ def _git(repo: Path, *args: str) -> str:
 
 def edited_root(base: Path, dest: Path, edits: dict) -> Path:
     """A copy of ``base`` with ``edits`` committed on each repository's current branch: ``path -> text``, ``None`` (delete), or
-    ``("sub", old, new)`` (replace ``old`` once; it must occur)."""
+    ``("sub", old, new)`` (replace ``old`` once; ``old`` or ``new`` must occur)."""
     shutil.copytree(base, dest, symlinks=True)
     touched = set()
     for rel, new in edits.items():
@@ -126,7 +126,8 @@ def edited_root(base: Path, dest: Path, edits: dict) -> Path:
             f.unlink(missing_ok=True)
         elif isinstance(new, tuple):
             text = f.read_text()
-            assert new[1] in text, f"{rel}: {new[1]!r} not found"
+            # idempotent: once P1-53b has edited the committed fixtures, the conforming edit is already in the tree
+            assert new[1] in text or new[2] in text, f"{rel}: {new[1]!r} not found"
             f.write_text(text.replace(new[1], new[2], 1))
         else:
             f.parent.mkdir(parents=True, exist_ok=True)
