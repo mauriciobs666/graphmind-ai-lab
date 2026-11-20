@@ -255,7 +255,7 @@ the status its edge would have in a flag-true unit). The labeller is a fresh `qa
 applies the rubric of EP §11.4; raw agreement and κ are reported, and below 0.8 raw agreement the possible-precision
 figure is marked "labels unstable". The measurement
 reports the ratified thresholds (4:1 cap, possible precision ≥ 0.20 pooled, p90 ≤ 100, reduction ≥ 5×; `-p1-ml.md`
-§5.3), which apply from the next gate on. **Gate:** `analyst` on arithmetic.
+§5.3), which apply from the next gate on. It also reports the count of unbound links whose key has providers in more than one unit (Q-NC5 = A: an unbound `confirmed` link to a same-named tool in a second unit is a known false-confirmed shape at P1; `-p1-linking.md` P1-53). **Gate:** `analyst` on arithmetic.
 
 ## P1-37 · AC-5 first gate run — `qa-engineer`
 
