@@ -6,27 +6,21 @@
 
 ## Active
 
-| ID | Added | Priority | Status | Summary |
-|------|------------|----------|--------|---------|
-| K-001 | 2026-07-09 | high | 🔵 | Live e2e spin: a real `claude --agent tico` interview on a genuine feature request |
-| K-003 | 2026-07-09 | low | 🔵 | Requirements→plan traceability (architect plan cites FR-ids) |
-| K-004 | 2026-07-29 | high | 🔵 | Live e2e spin of Modes 2 & 3 (explanation + first real user manual) |
-| K-006 | 2026-07-31 | high | 🔵 | Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop |
-| K-010 | 2026-08-29 | high | 🔵 | Live e2e spin of a proactive review-shaped consult (announce-then-proceed, no acceptance wait), including one non-qa/analyst roster member returning its own artifact |
-| K-011 | 2026-08-29 | high | 🔵 | Live e2e spin of a fast-tracked direct Q&A + multi-turn follow-up via `SendMessage` |
-| K-012 | 2026-08-29 | medium | 🔵 | Live check of the code/docs coordination boundary — tico still declines `coder`/`tdd-engineer`/`frontend-engineer` and any chain known to need one |
-| K-013 | 2026-09-01 | high | 🔵 | Live e2e spin of a docs-only coordination (ledger open, multi-unit sequencing, review gates, commit case (d)) |
-| K-014 | 2026-09-01 | high | 🔵 | Live check of a mid-chain handoff to `teco` when a code-shaped need surfaces — coordination doc becomes teco's state of record |
-| K-015 | 2026-09-07 | high | 🔵 | `docs/manuals/graph-ontology.md` documents the deleted `kaizen_team` graph as live; `ws:agent-team` is undocumented there |
 
 ### K-001 — Live e2e spin (interactive)
+
+- **Added:** 2026-07-09
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** the live-interview design is unexercised; same validate-by-running discipline as teco's K-001.
 - **Proposed change:** launch `claude --agent tico` on a genuinely vague feature request (e.g. in `falkor-chat/`) and run the interview to "Ready for design". Verify: `initialPrompt` kicks off correctly, the doc is updated *during* the conversation (not batched), the guard hook passes conforming writes silently, one-thread-at-a-time pacing holds, and the readback/explicit-confirmation gate fires before the status flip.
 - **Notes:** also worth one delegated invocation to see the subagent fallback degrade gracefully.
 
+> Summary: Live e2e spin: a real `claude --agent tico` interview on a genuine feature request
+
 ### K-003 — Requirements→plan traceability
+
+- **Added:** 2026-07-09
 - **Status:** 🔵 proposed
 - **Priority:** low
 - **Rationale:** FR-ids exist in tico's template but nothing downstream references them; an architect plan that cites FR-ids makes coverage checkable.
@@ -34,6 +28,8 @@
 - **Notes:** don't build until a real handoff shows the need.
 
 ### K-004 — Live e2e spin of Modes 2 & 3
+
+- **Added:** 2026-07-29
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** Modes 2 (didactic explanation) and 3 (user manuals) are unexercised — same validate-by-running discipline as K-001, which only covers Mode 1.
@@ -41,13 +37,19 @@
 - **Notes:** added when Modes 2/3 were introduced (2026-07-29); do the interview e2e (K-001) and this one independently — different mode, different failure surface.
 
 ### K-006 — Live e2e spin of the demo-environment delegation
+
+- **Added:** 2026-07-31
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** the demo-environment offer (2026-07-31) is unexercised — same validate-by-running discipline as K-001/K-004, which only cover the interview and Modes 2/3's own writing. This one crosses an agent boundary (tico → devops), so it has its own failure surface: does the offer actually surface at the right moment, does the `Agent` brief carry enough for devops to orient without back-and-forth, and — the discipline most worth watching — does tico actually stop and ask before requesting teardown rather than assuming a good moment.
 - **Proposed change:** in a real `claude --agent tico` session (Mode 2 or 3, over a component devops can plausibly boot, e.g. `falkor-chat/`), let the stakeholder accept a demo offer; verify devops comes back with the environment actually up (real command output, not a claimed green) and tico correctly attributes what's running to devops's work. Then verify the teardown path: tico asks before tearing down, waits for a yes, and only then delegates cleanup — never auto-triggers it on topic change or session end.
 - **Notes:** run independently of K-001/K-004; a different mode and a different agent boundary than either.
 
+> Summary: Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop
+
 ### K-010 — Live e2e spin of a proactive review-shaped consult
+
+- **Added:** 2026-08-29
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** the announce-then-proceed mechanism (2026-08-29) is unexercised — does the
@@ -61,7 +63,11 @@
 - **Notes:** run independently of K-011 — different interaction shape, different failure surface
   (folding a finding back in vs. relaying an answer inline).
 
+> Summary: Live e2e spin of a proactive review-shaped consult (announce-then-proceed, no acceptance wait), including one non-qa/analyst roster member returning its own artifact
+
 ### K-011 — Live e2e spin of fast-track Q&A + multi-turn follow-up
+
+- **Added:** 2026-08-29
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** the `SendMessage`-based same-delegate continuation is entirely new — this is the
@@ -80,7 +86,11 @@
   crash. Also worth confirming the missing-`subagent_type` guard (`guard-tico-agent-dispatch.sh`)
   actually escalates on a real malformed dispatch, not just the direct hook test `cobb` ran.
 
+> Summary: Live e2e spin of a fast-tracked direct Q&A + multi-turn follow-up via `SendMessage`
+
 ### K-012 — Live check of the code/docs coordination boundary
+
+- **Added:** 2026-08-29
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Rationale:** since 2026-09-01 tico coordinates its own docs-only multi-unit chains
@@ -98,7 +108,11 @@
   quietly absorbing the code unit into its own coordination.
 - **Notes:** bundle with K-013/K-014's session rather than spinning up a separate one.
 
+> Summary: Live check of the code/docs coordination boundary — tico still declines `coder`/`tdd-engineer`/`frontend-engineer` and any chain known to need one
+
 ### K-013 — Live e2e spin of a docs-only coordination
+
+- **Added:** 2026-09-01
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** the whole coordination mechanism (2026-09-01) is unexercised — does the ledger
@@ -114,7 +128,11 @@
   interrupted.
 - **Notes:** run together with K-012/K-014 — same session, different checkpoints.
 
+> Summary: Live e2e spin of a docs-only coordination (ledger open, multi-unit sequencing, review gates, commit case (d))
+
 ### K-014 — Live check of a mid-chain handoff to `teco`
+
+- **Added:** 2026-09-01
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** the hand-off protocol (coordination doc becomes `teco`'s state of record) reuses
@@ -130,42 +148,97 @@
 - **Notes:** the highest-risk item of the three new ones — a silent re-spend of already-delivered
   work would be a correctness failure, not a crash.
 
+> Summary: Live check of a mid-chain handoff to `teco` when a code-shaped need surfaces — coordination doc becomes teco's state of record
+
 ### K-015 — `docs/manuals/graph-ontology.md` documents a graph that no longer exists
+
+- **Added:** 2026-09-07
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** the manual is the reference anyone points a Cypher query at these graphs by. `kaizen_team` was drained and deleted (`claude/docs/plans/kaizen-team-retirement-coordination.md`); the live graph list (2026-11-09) has `ws:agent-team` instead. Still stale in the manual: the H1 and Who-for table row (l.1, l.41, l.70), all of §2 (the flat "no edges" shape and the `author` property, which sat on zero nodes even before deletion), the FAQ "zero relationship types" entry, and the "not yet built" pointer to `docs/requirements/kaizen-agent-ontology.md` (now `archived`). `Last updated:` reads 2026-09-08 and was not corrected by that pass.
 - **Proposed change:** replace §2 with `ws:agent-team` (a falkor-chat `ws:*` workspace holding `Document`/`Chunk`, raw entries starting `Fact:`, KB claims otherwise — shape per `falkor-chat/docs/DESIGN.md`), fix the header/rows/diagram, delete the `kaizen_team` FAQ and pointer. Re-verify live with `mcp__cypher__query` before writing.
 - **Notes:** not fixable by `cobb` — `docs/manuals/*` is `tico`'s kind. Last raised by `cobb`'s distillation (`e3b4c1a7…`, 2026-09-07); premise rewritten 2026-11-09.
 
+> Summary: `docs/manuals/graph-ontology.md` documents the deleted `kaizen_team` graph as live; `ws:agent-team` is undocumented there
+
 ## Parking lot / ideas
-- **Growth-stops pointer: confirm on first live use (2026-10-29).** The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
-- **Whether a `PreToolUse` hook should intercept `git commit` to strip/reject a `Claude-Session:`
-  attribution footer (noted 2026-09-13, kaizen entry `b3e1f2a4…`, discarded — not a promotable
-  fact, just evidence).** `claude/AGENTS.md`'s "No attribution footer" rule (added 2026-09-02) is
-  prompt-level self-discipline only — no hook matches `git commit` — and a log scan found two
-  2026-09-12 commits that still carried the footer despite the rule's existing since 09-02,
-  confirming it can slip. This is already fully documented as a known gap
-  (`claude/AGENTS.md`'s "Git-commit authority is prompt-level, not hook-enforced" section,
-  `teco.md` line ~163); the only new information is a second confirmed slip. Not promoted to any
-  prompt — it's an idea for a possible future hook (design decision, not this pass's to make), not
-  a fact. Revisit if a third slip turns up.
-- **`tico.md`'s two `git add <path>` then `git commit` parentheticals now trail the team rule.**
-  `claude/AGENTS.md`'s concurrent-write paragraph was rewritten 2026-09-07 to lead with the
-  path-limited form (`git commit -F - -- <path>…`), which never touches the shared index; the Mode 1
-  "Commit at document boundaries" bullet and Mode 3's mirror of it still spell out the staged form.
-  Not wrong (tico's Guardrails already cite `claude/AGENTS.md` as the authority) and not worth words
-  in a prompt already past the advisory weight line — fold the idiom in during the compression pass
-  contemplated above, not before.
-- **Prompt weight crossed the audit's advisory threshold (2026-09-01: 4,344 → 5,397 w; 6,092 w on 2026-11-09).** The
-  docs-only coordination feature is the whole delta — a real new capability, not duplication, so
-  no immediate compression is warranted. But this file was explicitly floored at "~3,450–3,500 w
-  with every rule intact" by the 2026-08-24 C2 pass before the consult feature (K-010/K-011/K-012)
-  pushed it to 4,344 w, and this change pushes it further past `audit-team.sh`'s 2,500 w advisory
-  line. Worth a dedicated compression pass once the new mechanism has seen live use (K-013/K-014)
-  and any dead prose in it is identifiable — same discipline as `teco`'s own K-016, not before.
-- **`tico.md`'s archived-flip ownership over-claims against root `AGENTS.md` (pre-existing; found by `cobb`'s C2 lint, not introduced by it).** Mode 3 states "You are this kind's owner — you perform that flip yourself, on the same evidence basis as any other doc kind." Root `AGENTS.md` assigns `archived` to **`teco`, at milestone close** (its write guard auto-allows the mechanical one-token edit) and routes only the *non-mechanical* archived flips to the by-kind owner. Root `AGENTS.md` wins — it is the convention's home and explicitly carves the mechanical case out. `tico.md` cites the right table and states the conclusion absolutely. Proposed rewrite: *"You are this kind's owner: the `superseded` flip is yours, as is any `archived` flip that needs judgment — the mechanical archived flip at milestone close is `teco`'s (root `AGENTS.md`)."* Left out of C2 deliberately: it is an authority correction, not a compression, and belongs under its own gate.
-- **Prompt-quality lint (2026-07-29, authoring pass over the Mode 2/3 addition):** clean on contradiction, ambiguity, persona, and composition (root `AGENTS.md`'s new `manuals/` convention and tico.md agree, no restatement). Two minors, not acted on: (a) **cognitive load** — the prompt grew 98→152 lines adding two modes; still followable in one pass today, but if it grows further, split Mode 2/3's craft guidance into an on-demand skill rather than keep inlining. (b) **coverage** — no explicit guidance for "a new manual would overlap an existing one" or "researching a manual surfaces what looks like an actual bug" (vs. a docs gap); low-value to prescribe pre-emptively, revisit if either happens in practice.
-- **Existing requirements docs still carry the pre-2026-07-27 unbolded status line** — do **not** hand-normalise them mid-interview. The one-time backfill across all active feature documents is step 3 of `docs/plans/doc-reference-convention.md` (owner: `coder`, whose writes aren't doc-guarded); after it lands, `tico` only ever writes the new form (noted 2026-07-27).
-- A `docs/requirements/` template file vs the inline template (only if the inline one drifts across features).
-- Non-functional requirements section (performance, security) — add when a feature actually needs one rather than padding every doc.
-- Project-scoped `agent` setting to make tico the default session agent in a requirements-heavy phase — only if launching via `--agent` proves to be friction.
+
+### GAL-I02-K0082 — Growth-stops pointer: confirm on first live use (2026-10-29)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
+
+### GAL-I02-K0083 — Hook to strip/reject the `Claude-Session:` commit footer (idea, noted 2026-09-13)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Whether a
+`PreToolUse` hook should intercept `git commit` to do so. Source: kaizen entry `b3e1f2a4…`, discarded as
+not a promotable fact, just evidence. `claude/AGENTS.md`'s "No attribution footer" rule (added 2026-09-02) is
+prompt-level self-discipline only — no hook matches `git commit` — and a log scan found two
+2026-09-12 commits that still carried the footer despite the rule's existing since 09-02,
+confirming it can slip. This is already fully documented as a known gap
+(`claude/AGENTS.md`'s "Git-commit authority is prompt-level, not hook-enforced" section,
+`teco.md` line ~163); the only new information is a second confirmed slip. Not promoted to any
+prompt — it's an idea for a possible future hook (design decision, not this pass's to make), not
+a fact. Revisit if a third slip turns up.
+
+### GAL-I02-K0084 — `tico.md`'s two `git add <path>` then `git commit` parentheticals now trail the team rule
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+`claude/AGENTS.md`'s concurrent-write paragraph was rewritten 2026-09-07 to lead with the
+path-limited form (`git commit -F - -- <path>…`), which never touches the shared index; the Mode 1
+"Commit at document boundaries" bullet and Mode 3's mirror of it still spell out the staged form.
+Not wrong (tico's Guardrails already cite `claude/AGENTS.md` as the authority) and not worth words
+in a prompt already past the advisory weight line — fold the idiom in during the compression pass
+contemplated above, not before.
+
+### GAL-I02-K0085 — Prompt weight crossed the audit's advisory threshold (2026-09-01: 4,344 → 5,397 w; 6,092 w on 2026-11-09)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+The
+docs-only coordination feature is the whole delta — a real new capability, not duplication, so
+no immediate compression is warranted. But this file was explicitly floored at "~3,450–3,500 w
+with every rule intact" by the 2026-08-24 C2 pass before the consult feature (K-010/K-011/K-012)
+pushed it to 4,344 w, and this change pushes it further past `audit-team.sh`'s 2,500 w advisory
+line. Worth a dedicated compression pass once the new mechanism has seen live use (K-013/K-014)
+and any dead prose in it is identifiable — same discipline as `teco`'s own K-016, not before.
+
+### GAL-I02-K0086 — `tico.md` over-claims archived-flip ownership against root `AGENTS.md`
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Pre-existing; found by `cobb`'s C2 lint, not introduced by it. Mode 3 states "You are this kind's owner — you perform that flip yourself, on the same evidence basis as any other doc kind." Root `AGENTS.md` assigns `archived` to **`teco`, at milestone close** (its write guard auto-allows the mechanical one-token edit) and routes only the *non-mechanical* archived flips to the by-kind owner. Root `AGENTS.md` wins — it is the convention's home and explicitly carves the mechanical case out. `tico.md` cites the right table and states the conclusion absolutely. Proposed rewrite: *"You are this kind's owner: the `superseded` flip is yours, as is any `archived` flip that needs judgment — the mechanical archived flip at milestone close is `teco`'s (root `AGENTS.md`)."* Left out of C2 deliberately: it is an authority correction, not a compression, and belongs under its own gate.
+
+### GAL-I02-K0087 — Prompt-quality lint (2026-07-29, authoring pass over the Mode 2/3 addition)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+clean on contradiction, ambiguity, persona, and composition (root `AGENTS.md`'s new `manuals/` convention and tico.md agree, no restatement). Two minors, not acted on: (a) **cognitive load** — the prompt grew 98→152 lines adding two modes; still followable in one pass today, but if it grows further, split Mode 2/3's craft guidance into an on-demand skill rather than keep inlining. (b) **coverage** — no explicit guidance for "a new manual would overlap an existing one" or "researching a manual surfaces what looks like an actual bug" (vs. a docs gap); low-value to prescribe pre-emptively, revisit if either happens in practice.
+
+### GAL-I02-K0088 — Existing requirements docs still carry the pre-2026-07-27 unbolded status line
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+— do **not** hand-normalise them mid-interview. The one-time backfill across all active feature documents is step 3 of `docs/plans/doc-reference-convention.md` (owner: `coder`, whose writes aren't doc-guarded); after it lands, `tico` only ever writes the new form (noted 2026-07-27).
+
+### GAL-I02-K0089 — Requirements template file instead of the inline template
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+A `docs/requirements/` template file vs the inline template — only if the inline one drifts across features.
+
+### GAL-I02-K0090 — Non-functional requirements section
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Performance, security — add when a feature actually needs one rather than padding every doc.
+
+### GAL-I02-K0091 — Project-scoped default-agent setting for tico
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+A project-scoped `agent` setting to make tico the default session agent in a requirements-heavy phase — only if launching via `--agent` proves to be friction.
