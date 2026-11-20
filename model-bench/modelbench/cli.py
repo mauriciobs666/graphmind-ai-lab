@@ -17,10 +17,9 @@ and the `PACK DISPATCH FAILURES` disclosure land on disk *before* the process re
 an aborted run, dispatch-failure note §4(d)) · `5` fingerprint incomplete, or `host.json`
 absent/invalid/stale.
 
-`validate --strict` is accepted but deliberately unimplemented (`_cmd_validate` raises
-`NotImplementedError`): the runner-spec (§9) states plainly that `--strict`'s semantics are never
-given anywhere in the plan, and names a `NotImplementedError` + citing `TODO` as the sanctioned way
-to leave a genuinely open question open — an accepted flag that silently no-ops is explicitly ruled
+`validate --strict` is accepted but deliberately unimplemented (`_cmd_validate` refuses with exit 2
+and one "not implemented" line): the runner-spec (§9) states plainly that `--strict`'s semantics
+are never given anywhere in the plan — an accepted flag that silently no-ops is explicitly ruled
 out as a third option. Resolve or replace this per
 `docs/plans/small-model-benchmarking-runner-spec.md` §9 once the plan states a ruling.
 """
@@ -57,6 +56,12 @@ from modelbench.runner import RunConfig, RunRefused, _load_item_scorer, run_pack
 
 class UnknownModelKey(ValueError):
     """`--models` named a key with no stored run for this pack (§3.6a's exit 2)."""
+
+
+class CompareArmCountError(ValueError):
+    """A plain `compare` (no `--models`) over more than two arms: which two to pair is the
+    caller's call, so it is a usage error (§3.6a's exit 2), never the first two by file name.
+    Fewer than two is still a report (the "fewer than two arms" verdict), not a refusal."""
 
 
 class DecisionPointUsageError(ValueError):
@@ -163,8 +168,8 @@ def _build_parser() -> argparse.ArgumentParser:
     validate.add_argument(
         "--strict",
         action="store_true",
-        help="not yet implemented (runner-spec §9) — raises NotImplementedError rather than "
-        "silently no-op",
+        help="not yet implemented (runner-spec §9) — refused with exit 2 rather than silently "
+        "no-op",
     )
 
     run = with_root(
@@ -180,7 +185,6 @@ def _build_parser() -> argparse.ArgumentParser:
         "(typed-decision-models plan v1.3 §3.3)",
     )
     run.add_argument("--session")
-    run.add_argument("--reference")
     run.add_argument("--warmup", type=int, help="extra untimed warm-up calls, additive")
     run.add_argument("--first-call-timeout", type=float)
     run.add_argument("--request-timeout", type=float)
@@ -241,6 +245,12 @@ def _select_arms(
                 "`model-bench models --tested --pack <id>` lists what is stored"
             )
         candidates = [by_key[m] for m in wanted]
+    elif not negative_control and len(candidates) > 2:
+        keys = ", ".join(r.armKey for r in candidates) or "none"
+        raise CompareArmCountError(
+            f"compare without --models needs exactly two arms and found {len(candidates)} "
+            f"({keys}); --models a,b selects which arms to compare"
+        )
     if negative_control and candidates:
         # Two copies of ONE record, deliberately. The mode's own `--help` text and the report's
         # first banner both say why this cannot fail (`-ml` §9) — the report said nothing at all
@@ -485,7 +495,7 @@ def _cmd_compare(args: argparse.Namespace) -> int:
                 session=args.session,
                 negative_control=args.negative_control,
             )
-    except (UnknownModelKey, DecisionPointUsageError) as exc:
+    except (UnknownModelKey, DecisionPointUsageError, CompareArmCountError) as exc:
         print(f"model-bench: {exc}", file=sys.stderr)
         return EXIT_USAGE
     except (OSError, PackConfigError) as exc:
@@ -675,14 +685,15 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
     `--strict` is named in §3.6a's table with no elaboration anywhere in the plan (runner-spec §9:
     "a genuine gap, not merely scattered"). Silently accepting it as a no-op is the one option the
-    spec rules out, so it is a deliberate, documented deferral instead: raise, don't pretend.
+    spec rules out, so it is a deliberate, documented deferral instead: refuse, don't pretend.
     """
     if args.strict:
-        raise NotImplementedError(
-            "validate --strict: semantics are not decided anywhere in the plan (runner-spec §9, "
-            "docs/plans/small-model-benchmarking-runner-spec.md §6.1/§9) — deliberately deferred "
-            "rather than accepted as a silent no-op"
+        print(
+            "model-bench: validate --strict: not implemented (its semantics are undecided, "
+            "runner-spec §9); run `validate` without --strict",
+            file=sys.stderr,
         )
+        return EXIT_USAGE
     try:
         pack = load_pack(Path(args.pack))
     except (OSError, PackConfigError) as exc:
@@ -738,7 +749,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         modelKey=args.model,
         candidateId=args.candidate,
         sessionId=args.session,
-        referenceKey=args.reference,
+        referenceKey=None,  # the field stays on `RunConfig`; `run` has no `--reference`
         warmupExtra=args.warmup or 0,
         firstCallTimeoutSeconds=args.first_call_timeout or 300.0,
         # `None` when absent (or 0, as before): `run_pack` resolves the default, or the decision-

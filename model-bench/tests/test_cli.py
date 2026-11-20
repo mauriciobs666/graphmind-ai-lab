@@ -12,7 +12,7 @@ from conftest import classification_aggregates, item, model_fields, run
 
 from modelbench import cli, hostinfo
 from modelbench.cli import main
-from modelbench.lmstudio import LMStudioCallTimeout, LoadResult, ModelInfo
+from modelbench.lmstudio import LMStudioCallTimeout, LMStudioUnreachable, LoadResult, ModelInfo
 from modelbench.results import ItemResult, ItemTiming, store
 from modelbench.runner import DispatchFailureDisclosure
 
@@ -178,6 +178,32 @@ def test_compare_selects_the_named_models(workspace, capsys) -> None:
     assert code == 0
     assert "| third |" in out and "| incumbent |" in out
     assert "| cand |" not in out
+
+
+def test_plain_compare_over_more_than_two_arms_refuses_instead_of_pairing_the_first_two(
+    workspace, capsys
+) -> None:
+    """Defect: with no `--models`, every valid run is an arm and the verdict paired the first two
+    by file-name order, so a third arm was silently left out of the verdict. Now: exit 2, one line
+    saying `--models` selects arms, nothing written."""
+    _store_arm(workspace, "aaa", 40)
+    _store_arm(workspace, "bbb", 34)
+    _store_arm(workspace, "ccc", 20)
+    code = main(["compare", "--pack", PACK, "--root", str(workspace)])
+    captured = capsys.readouterr()
+    assert code == 2
+    assert captured.err.count("\n") == 1
+    assert "--models" in captured.err and "3" in captured.err
+    assert captured.out == ""
+    assert not list((workspace / "reports").glob("*.md"))
+
+
+def test_plain_compare_over_exactly_two_arms_still_compares_them(workspace, capsys) -> None:
+    _store_arm(workspace, "aaa", 40)
+    _store_arm(workspace, "bbb", 34)
+    assert main(["compare", "--pack", PACK, "--root", str(workspace)]) == 0
+    out = capsys.readouterr().out
+    assert "| aaa |" in out and "| bbb |" in out
 
 
 def test_compare_exits_two_naming_a_models_key_with_no_stored_run(workspace, capsys) -> None:
@@ -919,12 +945,18 @@ def test_validate_exits_four_when_validate_pack_reports_problems(valid_pack_dir,
     assert "environment.requires" in err
 
 
-def test_validate_strict_is_a_deliberate_deferral_not_a_silent_no_op(valid_pack_dir) -> None:
-    """Runner-spec §9: `--strict`'s semantics are never stated anywhere in the plan, and the spec
-    names a `NotImplementedError` + citing comment as the sanctioned way to leave that open rather
-    than accept the flag as a no-op. `main()` catches only `SystemExit`, so this propagates."""
-    with pytest.raises(NotImplementedError, match="strict"):
-        main(["validate", "--pack", str(valid_pack_dir), "--strict"])
+def test_validate_strict_refuses_cleanly_with_exit_two_and_one_line(
+    valid_pack_dir, capsys
+) -> None:
+    """Defect: `--strict` raised `NotImplementedError` (a traceback, exit 1). Its semantics are
+    still undecided (runner-spec §9), so it is still not a silent no-op, but the refusal is a
+    usage error: exit 2, one stderr line saying "not implemented", nothing raised."""
+    code = main(["validate", "--pack", str(valid_pack_dir), "--strict"])
+    captured = capsys.readouterr()
+    assert code == 2
+    assert captured.err.count("\n") == 1 and "not implemented" in captured.err
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
 
 
 def test_validate_without_strict_still_runs_normally(valid_pack_dir, capsys) -> None:
@@ -1011,19 +1043,27 @@ class _StubLMStudioForRun:
         probe_result: str = "api-v0",
         catalog_result: list[ModelInfo] | None = None,
         warm_up_error: Exception | None = None,
+        residency_error: Exception | None = None,
+        catalog_error: Exception | None = None,
     ) -> None:
         self.base_url = base_url
         self._probe_result = probe_result
         self._catalog_result = list(catalog_result or [])
         self._warm_up_error = warm_up_error
+        self._residency_error = residency_error
+        self._catalog_error = catalog_error
 
     def probe(self) -> str:
         return self._probe_result
 
     def catalog(self) -> list[ModelInfo]:
+        if self._catalog_error is not None:
+            raise self._catalog_error
         return list(self._catalog_result)
 
     def residency(self):
+        if self._residency_error is not None:
+            raise self._residency_error
         return []
 
     def warm_up(self, model_key, *, call_surface, system_prompt, was_resident_before, timeout_s):
@@ -1163,6 +1203,30 @@ def test_run_exits_four_on_the_tool_calling_eligibility_gate(
     assert "not eligible" in err
 
 
+@pytest.mark.parametrize("failing_read", ["residency", "catalog"])
+def test_run_exits_three_when_a_start_of_run_read_times_out_after_the_probe_passed(
+    run_workspace, capsys, monkeypatch, failing_read
+) -> None:
+    """Defect (read from code, reproduced here): `probe()` answers `api-v0`, then step 3's
+    `residency()` (or step 3a's `catalog()`) gets no response. `LMStudio` folds a timeout to
+    `LMStudioUnreachable`, which `cli` did not catch: a traceback, exit 1. It is a refusal like
+    the probes' own: exit 3, one `model-bench:` line, nothing stored."""
+    _write_host_json(run_workspace)
+    _patch_run_lmstudio(
+        monkeypatch,
+        catalog_result=[_model_info()],
+        **{f"{failing_read}_error": LMStudioUnreachable("GET /api/v0/models: no response")},
+    )
+    code = main(
+        ["run", "--root", str(run_workspace), "--pack", ITEM_PACK,
+         "--model", "qwen/qwen3-4b-2507"]
+    )
+    err = capsys.readouterr().err
+    assert code == 3
+    assert err.startswith("model-bench: ") and "LM Studio" in err and "Traceback" not in err
+    assert not list((run_workspace / "results").rglob("*.json*"))
+
+
 def test_run_exits_three_when_warm_up_times_out(run_workspace, capsys, monkeypatch) -> None:
     _write_host_json(run_workspace)
     _patch_run_lmstudio(
@@ -1191,6 +1255,21 @@ def test_run_exits_five_when_attestation_trip_wire_is_stale(
     err = capsys.readouterr().err
     assert code == 5
     assert "re-check the app version" in err
+
+
+def test_run_refuses_a_reference_flag_as_a_usage_error(run_workspace, capsys, monkeypatch) -> None:
+    """Defect: `run --reference` was accepted and read nowhere. It is removed from `run` (it stays
+    on `rank`), so argparse rejects it: exit 2, and nothing is run or stored."""
+    _write_host_json(run_workspace)
+    _patch_run_lmstudio(monkeypatch, catalog_result=[_model_info()])
+    code = main(
+        ["run", "--root", str(run_workspace), "--pack", ITEM_PACK,
+         "--model", "qwen/qwen3-4b-2507", "--reference", "incumbent"]
+    )
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "--reference" in err
+    assert not list((run_workspace / "results").rglob("*.json*"))
 
 
 def test_run_exits_zero_and_stores_the_record_on_a_full_success(

@@ -1930,3 +1930,16 @@ def test_step_10_refuses_with_exit_5_after_three_retries_of_a_call_failure(tmp_p
     with pytest.raises(RunRefused) as caught:
         _run_with_sleep(tmp_path, lms)
     assert caught.value.exitCode == 5 and "three retries" in str(caught.value)
+
+
+def test_step_10_exit_5_message_names_no_transcript_file_because_no_run_writes_one(tmp_path):
+    """Defect: the message said the transcript was "retained at results/transcripts/<runId>.jsonl",
+    a file no run writes. It must not name that path (or any transcript) at all."""
+    _workspace(tmp_path)
+    residency = [*[list(_LAYA_RESIDENT)] * 7, *[_probe_failure() for _ in range(4)]]
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9), residency_sequence=residency)
+    with pytest.raises(RunRefused) as caught:
+        _run_with_sleep(tmp_path, lms)
+    message = str(caught.value)
+    assert "transcript" not in message and ".jsonl" not in message
+    assert "residentModelsAtEnd could not be captured after three retries" in message

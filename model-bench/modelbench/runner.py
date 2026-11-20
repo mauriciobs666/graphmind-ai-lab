@@ -51,7 +51,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from fractions import Fraction
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, TypeVar
 
 import modelbench
 from modelbench import hostinfo
@@ -388,6 +388,23 @@ def _between_item_residency(lmstudio: LMStudio, *, where: str) -> list[ResidentM
             file=sys.stderr,
         )
         return []
+
+
+_T = TypeVar("_T")
+
+
+def _start_of_run_read(read: Callable[[], _T], what: str) -> _T:
+    """Step 3/3a's read of LM Studio's state, after step 2's probe passed. A timeout or dropped
+    connection there is `LMStudioUnreachable` (`lmstudio._raw_get` folds both to it); a refusal
+    like the probe's own, exit 3, never a traceback."""
+    try:
+        return read()
+    except LMStudioUnreachable as exc:
+        raise RunRefused(
+            f"LM Studio stopped answering while the run read its {what} at the start ({exc}); "
+            "nothing was run or stored.",
+            exitCode=3,
+        ) from exc
 
 
 def _gap_ms(call: CallTiming) -> float | None:
@@ -1884,10 +1901,10 @@ def run_pack(
     if probe_result != "api-v0":
         raise RunRefused(_PROBE_MESSAGES[probe_result], exitCode=3)
 
-    resident_at_start = lmstudio.residency()  # step 3
+    resident_at_start = _start_of_run_read(lmstudio.residency, "residency")  # step 3
     residency_source = _RESIDENCY_SOURCE
 
-    catalog = lmstudio.catalog()  # step 3a
+    catalog = _start_of_run_read(lmstudio.catalog, "catalog")  # step 3a
     decision_arm: _DecisionArm | None = None
     call_surface: Literal["chat", "embeddings", "decisions", "handoff"] | None
     if cfg.candidateId is not None:
@@ -2078,8 +2095,7 @@ def run_pack(
         except (LMStudioUnreachable, LMStudioCallFailed, TimeoutError):  # P7-n1's class too
             if attempt == 3:
                 raise RunRefused(
-                    "residentModelsAtEnd could not be captured after three retries; transcript "
-                    f"retained at results/transcripts/{run_id}.jsonl",
+                    "residentModelsAtEnd could not be captured after three retries",
                     exitCode=5,
                 )
             sleep(1.0)

@@ -20,7 +20,7 @@ items out of `BACKLOG.md` and into `docs/HISTORY.md`.
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
-| U1 five defect fixes + tests (leaves DESIGN/FORMATS/README/manual alone) | `tdd-engineer` | — | queued (after the item-1 re-runs exit: `modelbench/` is read by them) | `model-bench/modelbench/{cli,runner}.py`, `tests/` | `analyst` → — | — |
+| U1 five defect fixes + tests (leaves DESIGN/FORMATS/README/manual alone) | `tdd-engineer` | `ab317a6b89a52b0a1` | delivered 2026-11-20 (124k / 33); suite 3661 passed, re-run by teco; defect 3 refuses only for >2 arms (0/1 arms stay a report, §3.6a) — pending user ruling | `model-bench/modelbench/{cli,runner}.py`, `tests/` | `analyst` → — | — |
 | U2 live-spec update (DESIGN §2.x), README/AGENTS pointers, BACKLOG removals | `coder` | — | queued (after U1 gate) | `model-bench/docs/DESIGN.md`, `README.md`, `BACKLOG.md` | `analyst` impl check vs shipped diff → — | — |
 | U3 manual update | `tico` | — | queued (after U2) | `model-bench/docs/manuals/small-model-benchmarking.md` | `analyst` + `qa-engineer` → — | — |
 
