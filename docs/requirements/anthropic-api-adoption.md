@@ -1,6 +1,6 @@
 # Anthropic API adoption across modules — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-03
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-19
 
 ## Intent
 The stakeholder has received Anthropic API credits and wants to experiment with them. They want the Anthropic API usable from **every module of the repository that calls an LLM**, configured through the default-and-fallback mechanism `falkor-chat` already has, and used as well as possible.
@@ -22,20 +22,20 @@ The stakeholder has received Anthropic API credits and wants to experiment with 
 
 ## Functional requirements
 - **FR-1** — Defaults stay local everywhere: with no Anthropic configuration, every module behaves as it does today and spends nothing.
-- **FR-2** — falkor-chat: a chosen workspace can be switched to Anthropic for its agent, workflow steps and guard judge (an observable switch, not a code change); the existing per-workspace override is the expected carrier. Ingestion extraction stays local. The storefront demo's workspace is switchable the same way; its pinned local model stays the default.
-- **FR-3** — In an Anthropic-switched workspace, a temporarily failed Anthropic call (credits exhausted, API down, rate limit) falls back to the local model, and the step record shows which model answered and that a fallback occurred. A missing, invalid or revoked key does not fall back: the step fails with a clear message.
+- **FR-2** — falkor-chat: a chosen workspace can be switched to Anthropic for its agent, workflow steps and guard judge (an observable switch, not a code change); the existing per-workspace override is the only carrier: a workflow definition cannot name a hosted model directly. Ingestion extraction stays local. The storefront demo's workspace is switchable the same way; its pinned local model stays the default.
+- **FR-3** — In an Anthropic-switched workspace, a temporarily failed Anthropic call (credits exhausted, API down, rate limit) falls back to the local model, and the step record shows which model answered and that a fallback occurred. A missing, invalid or revoked key, or any other rejected request (a 4xx other than rate limit or a billing/credit failure), does not fall back: the step fails with a clear message.
 - **FR-4** — Embeddings stay local (Anthropic offers no embeddings model). Checked by AC-11.
 - **FR-5** — model-bench can score an Anthropic model on the chat-responder, tool-caller, nlq-generator and guard-judge roles, stored and compared like any other run. The embedder role is excluded.
 - **FR-6** — model-bench can score Anthropic on all three decision points (guard, message type, join-in).
 - **FR-7** — decision-models generates and labels data through the Anthropic API when a key is available, with the generator/labeller model split left to design (the labeller stays independent of the generator). Claude Code subagents remain the path when no key exists.
 - **FR-8** — `tank` is unchanged and stays on its local model (excluded; see Out of scope).
 - **FR-9** — `mcp-monitor` needs no change. Satisfied by AC-1.
-- **FR-10** — Each Anthropic result (workflow step, benchmark run, generation/labelling call) records the answering model, approximate token usage and a hosted flag, and nothing else about the call: raw request headers, credentials in URLs, provider error bodies and the Anthropic organization or workspace id are never persisted. No spend cap is required of the software.
+- **FR-10** — Each Anthropic result (workflow step, benchmark run, generation/labelling call) records the answering model, approximate token usage and a hosted flag (for a falkor-chat step the usage is a stated floor: agent-loop calls only; the hosted flag is correct regardless), and nothing else about the call: raw request headers, credentials in URLs, provider error bodies and the Anthropic organization or workspace id are never persisted. No spend cap is required of the software.
 - **FR-11** — The API key is stored and handled safely: it is never in the repository, config files, results, logs, graph records or test fixtures (fixtures use obviously fake keys); never passed on a command line, in a prompt or message body, or into the context of any LLM-driven agent or tool; held only by a closed list of components; can be rotated or revoked without editing tracked files; and a missing key fails closed (no silent switch to another provider, except FR-7's explicit subagent path). Error text from a failed call must not echo credentials. The mechanism is for design, with a security review.
 - **FR-12** — Where an existing guarantee depends on a local model (model-bench's environment fingerprint, "compared only within a role", reproducible runs), a hosted model's results are marked as hosted so they are never read as locally reproducible. A hosted result names the exact pinned model version, not a moving alias.
 - **FR-13** — In a storefront workspace switched to Anthropic, a full multi-turn shopping conversation with tool calls completes, as it does on the local model.
 - **FR-14** — Unattended Anthropic-backed runs (generation and labelling campaigns, benchmark sweeps) stop at a token bound set before the run starts, because no spending limit is set on the Anthropic side. The bound limits one run; it is not a budget across runs. Interactive and workflow use in a switched workspace is deliberately unbounded.
-- **FR-15** — Only synthetic, demo or benchmark content is sent to Anthropic. The owner flags a workspace as private; a flagged workspace cannot be switched to it. A workspace with no flag can be switched, so existing workspaces are switchable until flagged. Benchmark packs and decision-model campaigns use synthetic content by construction.
+- **FR-15** — Only synthetic, demo or benchmark content is sent to Anthropic. The owner flags a workspace as private; a flagged workspace cannot be switched to it. A workspace with no flag can be switched, so existing workspaces are switchable until flagged. Benchmark packs and decision-model campaigns use synthetic content by construction; the packs `guard-judge-understanding` and `nlq-structured-query` are confirmed synthetic, backed by an owner attestation.
 
 ## Out of scope
 - Anthropic embeddings; any spend cap or budget enforcement.
@@ -93,3 +93,11 @@ None. The exact Anthropic models (one small, one large) and the decision-models 
 2026-11-03 — How is a workspace known as private? → **The owner flags it as private (mark-list);** unflagged workspaces can be switched. Refines the 2026-11-03 "Real or private data barred" entry. (FR-15, AC-10)
 2026-11-03 — Consult: analyst Pass 2 → approve with suggestions; N1–N6 folded in (AC-11, AC-12, canary via local stand-in, K-056 reference removed, FR-14 clarified, duplicates removed). (FR-4, FR-14, AC-7, AC-8, AC-11, AC-12)
 2026-11-03 — Readback: is the document ready for design? → **Yes, confirmed**; latest analyst verdict (Pass 2) is approve with suggestions. Status flipped to Ready for design. (all)
+2026-11-19 — Should guard-judge, nested-NLQ and responder calls count toward a falkor-chat step's tokens? → **No: a stated floor (agent-loop calls only) plus a correct hosted flag.** (FR-10)
+2026-11-19 — Confirm hosted use only via the workspace override; other 4xx errors fail loudly; `guard-judge-understanding` and `nlq-structured-query` are synthetic? → **Confirmed, all three.** (FR-2, FR-3, FR-15)
+2026-11-19 — Key hard control (broker / sandbox denyRead) in this feature? → **No: user-scope tripwire, live check, human-terminal provisioning now; broker decided later if the key sits on a shared or demo box.** Residual risk stated, not closed. (FR-11)
+2026-11-19 — Spend choices (Opus effort; second Opus replicate; Fable generator; decision-models bounds)? → **Opus effort medium confirmed; the other three left unconfirmed.** (FR-5, FR-7, FR-14)
+2026-11-19 — Consult: analyst Pass 5 m8 → FR-3's "any 4xx fails loudly" contradicted "credits exhausted falls back"; wording now excepts billing/credit failures, matching the plan. (FR-3)
+2026-11-19 — Second Opus replicate in the hosted benchmark? → **Yes: two replicates per hosted arm-pack (28 runs).** Settles the unconfirmed part of the 2026-11-19 spend entry. (FR-5)
+2026-11-19 — Generator for decision-models data: `claude-fable-5-2` or `claude-opus-5-5`? → **`claude-opus-5-5` with the caveat:** the generator is also a scored arm, so those rows carry a caveat and a mandatory human side-check. Overrides the data-scientist note's Fable recommendation; consistent with the 2026-10-31 "generator opus, labeller sonnet" entry. (FR-7)
+2026-11-19 — Decision-models token bounds? → **Pilot 0.6M, then 1.0M per invocation.** Settles the unconfirmed part of the 2026-11-19 spend entry. (FR-14)
