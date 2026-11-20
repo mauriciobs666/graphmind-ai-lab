@@ -13,11 +13,6 @@
 
 ## Active
 
-| ID | Added | Priority | Status | Summary |
-|-------|------------|----------|--------|---------|
-| K-005 | 2026-07-28 | med | 🔵 | Streaming loader for large-repo CPGs — `joern-cpg`'s transformer dedupes in memory, fine for moderate repos but a risk at repo scale (inherited from the retired `joern` agent's K-003) |
-| K-006 | 2026-07-28 | low | 🔵 | CPGQL script library (`skills/joern-cpg/scripts/queries/*.sc`) for common security/taint/call-graph queries (inherited from `joern` K-004) |
-| K-007 | 2026-08-18 | low | 🔵 | Unreconciled relationship-count discrepancy on a scoped `DETACH DELETE` of a workflow-snapshot subgraph (34 deleted vs. ~15 expected) — investigate if it recurs |
 
 ### K-001 — Tool permissions decision  ⚪ DEFERRED (2026-06-05)
 - **Status:** ⚪ deferred — user chose "just document for now."
@@ -31,6 +26,8 @@
 - **Revisit if:** the user wants the agent to tune against real plans rather than stay advice-only.
 
 ### K-005 — Streaming loader for large-repo CPGs
+
+- **Added:** 2026-07-28
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Rationale:** `skills/joern-cpg/scripts/cpg-to-falkordb.py` collects all nodes/edges into
@@ -41,7 +38,11 @@
   via `MERGE` at load time; benchmark against a genuinely large real repo first rather than
   guessing the threshold.
 
+> Summary: Streaming loader for large-repo CPGs — `joern-cpg`'s transformer dedupes in memory, fine for moderate repos but a risk at repo scale (inherited from the retired `joern` agent's K-003)
+
 ### K-006 — CPGQL script library
+
+- **Added:** 2026-07-28
 - **Status:** 🔵 proposed
 - **Priority:** low
 - **Rationale:** common Joern REPL queries (dangerous-sink reachability, unsanitized-input
@@ -49,7 +50,11 @@
 - **Proposed change:** add `skills/joern-cpg/scripts/queries/*.sc` runnable via
   `joern --script`, referenced from the skill's CPGQL cheat-sheet.
 
+> Summary: CPGQL script library (`skills/joern-cpg/scripts/queries/*.sc`) for common security/taint/call-graph queries (inherited from `joern` K-004)
+
 ### K-007 — Unreconciled `DETACH DELETE` relationship-count discrepancy
+
+- **Added:** 2026-08-18
 - **Status:** 🔵 proposed (opened from a kept-open kaizen-graph entry, cobb distillation
   pass 2026-08-18)
 - **Priority:** low
@@ -73,41 +78,88 @@
   `kaizen_graph_dba` (entryId `6e5d6451-72fa-400c-b002-52757727f805`) alongside this backlog
   item, in case a future occurrence supplies the missing pre-delete count.
 
-## Parking lot / ideas
-- **Growth-stops pointer: confirm on first live use (2026-10-29).** The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
+> Summary: Unreconciled relationship-count discrepancy on a scoped `DETACH DELETE` of a workflow-snapshot subgraph (34 deleted vs. ~15 expected) — investigate if it recurs
 
-- **Judged and kept, do not re-litigate (2026-08-24, C6 lint).** Five passages will read as class-6/7
-  waste to a future sweep; all are keeps.
-  - **The single-shard-per-graph rule, in "FalkorDB fundamentals" and again in "Principles."** The
-    fundamental carries the **mechanism** (Redis Cluster distributes whole graphs across shards,
-    never splits one); the principle carries the **action** (estimate up front, watch it in
-    production). Two further mentions — step 4's trade-off list and the communication-style flag
-    list — are **checklists of what to raise with the user**, a third function, not a third
-    statement of the rule.
-  - **Verify-against-`docs.falkordb.com`, stated three times** (fundamentals' "never assume
-    Neo4j-only syntax works", step 6's version-sensitive check, communication style's "never
-    present a fabricated function… as fact"). Three decision points: while writing Cypher, while
-    judging a version-gated feature, while reporting. Finding 5's shape.
-  - **`(successor to RedisGraph)`** — not lineage trivia but a live **anti-trigger**: it is what
-    makes RedisGraph-era documentation and Stack Overflow answers legible as applicable.
-  - **"mirroring the data-scientist's `-ml.md` convention"** (step 7) and **"(Mirrors its deferral
-    of data-model/query design to you.)"** (the `devops` boundary) — both make a *reciprocal*
-    contract visible from this side, which is what `agent-maintenance` §4's check-5 boundary
-    reciprocity reads.
-  - **"Both also resolve at `~/.claude/agents/graph-dba/` via the deployment symlink."** Mechanism:
-    the knowledge-base links above it are repo-relative, and this is the fallback resolution path.
-- **This file has the lowest total residual of the eleven measured (2026-08-24, C6).** ~20 w, against
-  a band of 20–40. Not because it is leaner per rule but because its top layer is *reference
-  mechanism* with no workflow counterpart re-aiming the same rules at a second altitude. Nothing to
-  do — recorded so a future sweep reads a low number as structural, not as a missed opportunity.
-- **The agent owns one recurring `Status: archived` flip it isn't told about yet (noted 2026-07-27).** Root `AGENTS.md`'s routing table makes `graph-dba` the performer for `plans/<slug>-graph.md` at milestone close, on `teco`'s coordination; today that reaches the agent only through the closing unit's brief. Zero `-graph.md` files exist so far, so there is nothing to fix yet — revisit once the first one ships.
-- If another project in the lab (or a future one) accumulates its own "live-verified FalkorDB
-  facts" against this same edge build, fold the generic ones into the `falkordb-quirks.md`
-  knowledge base rather than letting them sit siloed in that project's docs; keep only the
-  project-specific corollaries in that project's `AGENTS.md`, pointing back here (2026-07-05).
-- On any FalkorDB tagged-release upgrade (edge → `v4.x`), re-verify every entry in
-  `falkordb-quirks.md` against the live instance and re-stamp its `Verified:` date; retire any
-  quirk the new build fixes (2026-07-05).
-- Add a concrete `GRAPH.PROFILE` operator cheat-sheet (label scan vs. index scan, cartesian product, dense expansion → matrix-density reasoning) — possibly as a skill rather than bloating the always-loaded prompt.
-- Neo4j/openCypher/GQL portability is currently kept for *porting models into FalkorDB*; deepen only if the lab targets multiple engines.
-- RedisGraph migration note: FalkorDB is the drop-in successor — could add explicit migration guidance if any legacy RedisGraph data is in play.
+## Parking lot / ideas
+
+### GAL-I02-K0031 — Growth-stops pointer: confirm on first live use (2026-10-29)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
+
+
+### GAL-I02-K0032 — Five prompt passages kept on purpose (judged and kept, C6 lint 2026-08-24; do not re-litigate)
+
+- **Status:** ⚪ rejected — record, not work (judged and kept 2026-08-24)
+
+Five passages will read as class-6/7
+waste to a future sweep; all are keeps.
+- **The single-shard-per-graph rule, in "FalkorDB fundamentals" and again in "Principles."** The
+  fundamental carries the **mechanism** (Redis Cluster distributes whole graphs across shards,
+  never splits one); the principle carries the **action** (estimate up front, watch it in
+  production). Two further mentions — step 4's trade-off list and the communication-style flag
+  list — are **checklists of what to raise with the user**, a third function, not a third
+  statement of the rule.
+- **Verify-against-`docs.falkordb.com`, stated three times** (fundamentals' "never assume
+  Neo4j-only syntax works", step 6's version-sensitive check, communication style's "never
+  present a fabricated function… as fact"). Three decision points: while writing Cypher, while
+  judging a version-gated feature, while reporting. Finding 5's shape.
+- **`(successor to RedisGraph)`** — not lineage trivia but a live **anti-trigger**: it is what
+  makes RedisGraph-era documentation and Stack Overflow answers legible as applicable.
+- **"mirroring the data-scientist's `-ml.md` convention"** (step 7) and **"(Mirrors its deferral
+  of data-model/query design to you.)"** (the `devops` boundary) — both make a *reciprocal*
+  contract visible from this side, which is what `agent-maintenance` §4's check-5 boundary
+  reciprocity reads.
+- **"Both also resolve at `~/.claude/agents/graph-dba/` via the deployment symlink."** Mechanism:
+  the knowledge-base links above it are repo-relative, and this is the fallback resolution path.
+
+### GAL-I02-K0033 — Lowest total residual of the eleven measured files (C6, 2026-08-24)
+
+- **Status:** ⚪ rejected — record, not work (nothing to do, recorded 2026-08-24)
+
+This file: ~20 w, against
+a band of 20–40. Not because it is leaner per rule but because its top layer is *reference
+mechanism* with no workflow counterpart re-aiming the same rules at a second altitude. Nothing to
+do — recorded so a future sweep reads a low number as structural, not as a missed opportunity.
+
+### GAL-I02-K0034 — The agent owns one recurring `Status: archived` flip it isn't told about yet (noted 2026-07-27)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Root `AGENTS.md`'s routing table makes `graph-dba` the performer for `plans/<slug>-graph.md` at milestone close, on `teco`'s coordination; today that reaches the agent only through the closing unit's brief. Zero `-graph.md` files exist so far, so there is nothing to fix yet — revisit once the first one ships.
+
+### GAL-I02-K0035 — Fold other projects' generic FalkorDB facts into `falkordb-quirks.md`
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+If another project in the lab (or a future one) accumulates its own "live-verified FalkorDB
+facts" against this same edge build, fold the generic ones into the `falkordb-quirks.md`
+knowledge base rather than letting them sit siloed in that project's docs; keep only the
+project-specific corollaries in that project's `AGENTS.md`, pointing back here (2026-07-05).
+
+### GAL-I02-K0036 — Re-verify `falkordb-quirks.md` on a FalkorDB tagged-release upgrade
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+On any such upgrade (edge → `v4.x`), re-verify every entry in
+`falkordb-quirks.md` against the live instance and re-stamp its `Verified:` date; retire any
+quirk the new build fixes (2026-07-05).
+
+### GAL-I02-K0037 — Concrete `GRAPH.PROFILE` operator cheat-sheet
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Label scan vs. index scan, cartesian product, dense expansion → matrix-density reasoning) — possibly as a skill rather than bloating the always-loaded prompt.
+
+### GAL-I02-K0038 — Neo4j/openCypher/GQL portability beyond porting into FalkorDB
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+It is currently kept for *porting models into FalkorDB*; deepen only if the lab targets multiple engines.
+
+### GAL-I02-K0039 — RedisGraph migration note
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+FalkorDB is the drop-in successor — could add explicit migration guidance if any legacy RedisGraph data is in play.
