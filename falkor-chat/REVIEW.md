@@ -34,6 +34,7 @@
   is cited in docstrings across `falkorchat/`. A text match is a bound; count AST loads.
 - When a change touches a query whose copies are inlined in `scripts/test_queries.sh`, the sweep that finds those copies matches a clause of the query body, never the composed status string. In an implementation review, compare each copy with the text the method actually sends, after normalizing literals and parameters.
 - When a query's correctness or cost rests on a clause planning as an index scan, a pytest EXPLAINs the text the method actually sends (captured at the graph call). It asserts the presence of `Node By Index Scan | (<var>:<Label>)` for that clause. Absence of `All Node Scan` doesn't count: a `Label Scan` regression, or an error string, passes it.
+- A per-query memory or size bound sized from measured reads is checked at the read's full fan-out. Per-seed aggregation scales with k (the ANN fan-out) and with each seed's edges, so a measurement with one heavy seed among k is a bound, not the worst case.
 
 ## Evidence bar
 

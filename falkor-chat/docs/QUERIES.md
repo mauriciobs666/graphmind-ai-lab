@@ -3618,6 +3618,10 @@ server-side; the real bound is `FALKORDB_SOCKET_TIMEOUT` (default **10 s**, `con
 a reset therefore means *unknown*, **never** "nothing changed": re-read state and report from the
 graph.
 
+**One failure is server-side, and it is atomic.** A reset is a write under `QUERY_MEM_CAPACITY`
+(DESIGN §10). If the cap is hit before the client's socket timeout, a reset raises `ResponseError`
+(`Query's mem consumption exceeded capacity`), not `TimeoutError`, and deletes nothing.
+
 **Atomicity is per query, not per turn**, so the quiesce is application-level: "reset mine" cancels
 that participant's queued turn and waits (bounded) for one in flight; "reset everyone" stops intake
 (`409`), drains, then runs the single query. **The order is not interchangeable** — deleting first

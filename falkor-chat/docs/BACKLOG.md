@@ -118,6 +118,22 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   with no added scan.
 - **Owner:** `architect` (plan), then `tdd-engineer`.
 
+### GAL-I02-K0006 — A detached FalkorDB start that aborts on a bad env value is reported as a 30 s timeout (🔵 proposed — `docs/reviews/graph-config-defaults-impl.md` m3, 2026-11-20)
+
+> `start_server.sh` (`:173`), `start_demo.sh` (`:221`) and `start_agent_team.sh` (`:195`) start
+> FalkorDB with `start_falkordb.sh -d`. When `config/falkordb.env` holds a value the engine refuses
+> (an unknown module-arg key inside `FALKORDB_MODULE_ARGS`, a boolean written `1`), the server aborts inside the container, but `docker run
+> -d` has already exited 0, and `--rm` removes the container together with its abort log. Each
+> caller then reports only `FalkorDB did not respond … after 30s`, which points at the network,
+> not the config.
+- **Owner:** `devops`.
+- **Scope:** in `start_falkordb.sh`'s `-d` branch, poll for a few seconds after `docker run`; if the
+  container is gone or not running, exit non-zero with "container exited during start: run without `-d` to see
+  the log". The three callers then fail on that exit status.
+- **Done when:** a bad env value under `-d` exits non-zero with that message, pinned by a stubbed
+  `docker inspect` reporting the container missing and, separately, not running; a good start under `-d` is unchanged; the
+  three callers surface the failure instead of the 30 s timeout.
+
 ### K-082 — Storefront demo: optional long-conversation KV stress rerun (🔵 proposed — carried from K-066, closed 2026-10-22)
 
 > The demo runs on `ministral-3-3b` (`-c 8192 --gpu max`) plus the 0.6B embedder, and

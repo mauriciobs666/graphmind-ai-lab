@@ -1277,6 +1277,20 @@ to the general fact here.
   `aof_rewrite_in_progress:0` and `aof_last_bgrewrite_status:ok` already look finished (here for
   ~3 s on a 198 MB dataset). Gate on `aof_rewrite_scheduled:0` **and** `aof_rewrites` ≥ 1. Verify:
   `BGSAVE; CONFIG SET appendonly yes; INFO persistence` on a scratch instance.
+- **Above `maxmemory` with `noeviction`, `GRAPH.QUERY` is refused even for a pure read, and so is
+  `GRAPH.EXPLAIN`; only `GRAPH.RO_QUERY` and `GRAPH.DELETE` run** (verified 2026-11-20, same build,
+  throwaway; `graph-dba-r3/maxmemory_probe.txt`, first seen in `analyst/maxmemory_denyoom_probe.txt`).
+  Error: `OOM command not allowed when used memory > 'maxmemory'`. Any client sending reads through
+  `query()` instead of `ro_query()` loses them at the limit. Verify: `CONFIG SET maxmemory 1mb` on a
+  loaded scratch instance, then each command.
+- **`CLIENT PAUSE <ms> WRITE` holds every `GRAPH.QUERY`, a read included, while `GRAPH.RO_QUERY` and
+  `SAVE` still run and a SIGTERM stop still saves** (verified 2026-11-20, same build, throwaway;
+  `graph-dba-r3/pause_probe.txt`). It is a usable write freeze around a save-and-restart. The
+  converse trap: `docker stop` (SIGTERM) on an instance holding wrong data writes it over
+  `dump.rdb`; `SHUTDOWN NOSAVE` or `docker kill` (SIGKILL) exit without saving, and an auto-save
+  rule can already have persisted the wrong state, so a rollback restores a copy taken before the
+  start (`graph-dba-r3/rollback_rehearsal.txt`). Paths are under
+  `falkor-chat/docs/reviews/graph-config-defaults-evidence/`.
 - **Bolt port is `65535`** per `GRAPH.CONFIG` (not the Bolt default).
 - **Default `TIMEOUT` is 1000ms — and writes ignore it entirely while `TIMEOUT_MAX=0` (this lab's
   default)**; a write then runs to completion regardless of clause or default. Setting
@@ -1490,3 +1504,5 @@ to the general fact here.
   `Node By Index Scan`). Seen as 20 of 20 label x property cells of the `tests/test_indexed_live.py` grid (96 values x 20 cells; the
   same grid mis-indexes every value over 4,096 bytes (220) and every ASCII-whitespace-edged one (480), and no accepted value).
   `ccg.indexed.check` flags empty, over-4,096-bytes, edge-whitespace and non-Unicode; the loader preflight and the assembler share it.
+
+- **A NUL byte (`\x00`) in any string parameter fails the whole query** (2026-11-20, `falkordb-py` 1.6.x `g.query(q, params)` against `falkordb/falkordb:v4.18.11`, throwaway container): `Failed to parse query parameters`; nothing is written (atomic). Every other hostile string round-trips through the `CYPHER name=…` preamble intact — trailing backslash, `\r\n`, U+2028, `'''`/`"""`, a `" RETURN 1 // …` injection attempt, `$p`, `CYPHER x=1 MATCH`. A writer that loads free text must strip or replace `\x00` first. Non-unique indexed values over 4,096 bytes are silently unindexed (equality misses; a 4,096-byte lookup also matched longer values) — same boundary as the entry above, so cap indexed free text at the write boundary.

@@ -5,6 +5,53 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-20 — K-098 closed: `GRAPH.CONFIG` values decided and set in a per-deployment `config/falkordb.env`
+
+- **Cause.** DESIGN §13 listed a pre-production review of the live `GRAPH.CONFIG` defaults as
+  open. They were the engine's own defaults (and the image's `FALKORDB_ARGS`), never chosen for
+  this workload: `QUERY_MEM_CAPACITY 0` let one runaway query take the RAM every workspace graph
+  lives in. Design note `docs/plans/graph-config-defaults-graph.md` (`graph-dba`), reviewed in
+  `docs/reviews/graph-config-defaults.md` (Pass 3, approve with suggestions; committed in
+  `dac41d6e`).
+- **What (commit `8a49ebe9`, `devops`).**
+  - New `config/falkordb.env` with two keys: `FALKORDB_THREAD_COUNT=8` and `FALKORDB_MODULE_ARGS`
+    = `OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864
+    ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000`.
+  - `scripts/start_falkordb.sh` composes `THREAD_COUNT <n> <module args>` from the file. It parses
+    the file rather than sourcing it, with an allowlisted key set and a value grammar that compose's
+    dotenv reads identically, and passes the result as the image's `FALKORDB_ARGS`, which replaces
+    the image's own string. A full `FALKORDB_ARGS` in the environment is used as-is (the rollback
+    path). New overrides: `FALKORDB_ENV_FILE`, `FALKORDB_THREAD_COUNT`, `FALKORDB_MODULE_ARGS`,
+    `FALKORDB_ARGS` and `FALKORDB_VOLUME`.
+  - `compose.yaml` interpolates the same two keys and refuses without
+    `--env-file config/falkordb.env`. The compose lines in `README.md` and `Dockerfile` carry the
+    flag, and the `start_falkordb.sh` row in `AGENTS.md` says to pass it.
+  - New `server/tests/test_start_falkordb_script.py`.
+- **Not yet live on `falkordb-dev`.** It still runs the image's own module args. Putting the config
+  live is a stakeholder-run step, part A of `docs/plans/live-spec-defects-coordination.md`
+  `## Rollout runbook`, which follows the note's §5 Step 4 (save, copy `dump.rdb` aside, inventory
+  diff, `SHUTDOWN NOSAVE` rollback).
+- **Verified.** `test_start_falkordb_script.py`: 46 passed, 0 skipped. The values were read back
+  through the shipped script on throwaway containers. All runs used throwaway containers and
+  scratch volumes, never `falkordb-dev` or `ws:test`. Gate:
+  `docs/reviews/graph-config-defaults-impl.md` (Pass 2, approve).
+- **Live spec updated** (`graph-dba`):
+  - DESIGN §9, Backfill/import row;
+  - DESIGN §10: the Tuning, TIMEOUT-posture and Observability bullets;
+  - DESIGN §13: `GRAPH.CONFIG` values moved to resolved;
+  - QUERIES §18.7: the memory-cap failure mode of a reset;
+  - SERVER §1.5: Layout lists `config/falkordb.env`.
+
+  Checked by `docs/reviews/graph-config-defaults-impl.md` `## Close check`: Pass 1 needs changes
+  (C1: the rollback override is script-only; C2: the reset's `ResponseError` holds only before the
+  socket timeout). Both were fixed, and Pass 2 approves.
+- **REVIEW.md.** Five proposed lines applied verbatim: four in root `REVIEW.md` and one in
+  `falkor-chat/REVIEW.md`, all under `## Always check`.
+- **Follow-ups.**
+  - `GAL-I02-K0006`: a `-d` start that aborts on a bad module arg is reported as a 30 s timeout.
+  - `GAL-I02-K0004`: AOF and a deliberate `maxmemory`, split out of K-098.
+  - K-093's body records that its writer is blocked by the bounded `hybrid_search` query unit.
+
 ## 2026-11-20 — K-094 closed: posts can quote a same-thread message (`REPLY_TO` written by the §4 post paths)
 
 - **Cause.** `get_message` read `(m)-[:REPLY_TO]->(quoted)` as `quotedId`, but no server write

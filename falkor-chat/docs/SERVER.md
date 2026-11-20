@@ -593,7 +593,7 @@ falkor-chat/
 │   │                          #   tests/eval/ the NLQ evaluation harness
 │   └── pyproject.toml         # fastapi, uvicorn, falkordb, mcp; dev: pytest, httpx, ruff
 ├── web/{index.html, app.js, run-select.js}   # dev web UI; web/tests/ holds bare-node unit tests
-├── config/{models.json, opencode.example.json, logging.json}
+├── config/{models.json, opencode.example.json, logging.json, falkordb.env}
 ├── scripts/                   # bring-up, schema, seed and verify scripts (`falkor-chat/AGENTS.md`)
 ├── Dockerfile · compose.yaml
 salesperson/dist/              # the storefront SPA build served at /shop (repo-root `salesperson/`)

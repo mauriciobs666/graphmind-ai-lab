@@ -903,7 +903,7 @@ traversal — read-only queries, routable to a replica.
 | Create channel / thread | plain `CREATE` (server-minted uuid ids) | **Non-idempotent** — a retried create mints a new id; the uniqueness constraints backstop. A MERGE on a fresh uuid could never match. |
 | Ensure member / storefront participant | guarded `CREATE` with a status row | Member ids are unique across `User`/`Agent`; a participant is created with its own `Channel` (`participantId` set), `Thread` and both `MEMBER_OF` edges in one query. |
 | Advance read cursor | `MERGE` on `HAS_CURSOR`→`ReadCursor {cursorId}` + composite monotonic guard | Never moves backward on a stale or tie-smaller replay. |
-| Backfill / import | `UNWIND $rows AS row …` in chunks, or `falkordb-py` bulk loader | Never one giant CREATE — bound transaction memory; size batches (writes ignore TIMEOUT — §10) |
+| Backfill / import | `UNWIND $rows AS row …` in chunks, or `falkordb-py` bulk loader | Never one giant CREATE — size batches to bound transaction memory, which the engine also enforces per query (`QUERY_MEM_CAPACITY`, §10: a batch over it fails and commits nothing); writes ignore TIMEOUT (§10) |
 | Embed message / chunk | background job: compute embedding → `SET n.embedding = vecf32($v)` | Decoupled from the post/ingest path; a failure is logged, never surfaced to the caller. |
 | Ingest document | one guarded `CREATE` of `Document` + `INGESTED_BY` + every `Chunk`/`HAS_CHUNK` (chunks split app-side) | Chunking splits on paragraph breaks, then sentence ends (`. `, `! `, `? ` or a newline), then a hard cut at 1000 chars; every chunk after the first is prefixed with the previous chunk's last 150 chars, so a chunk can reach 1150 chars. Non-idempotent like channel creation. The create also stores the document's `textNormalizedHash` and `lshBand0..7` (§5.1). If a current `Document` has the same `textNormalizedHash`, the same query supersedes it (`SUPERSEDES` `confirmed`, technique `exact_normalized_text_hash`). |
 | Document background jobs | per chunk, one embed job and one extract job, each scheduled independently; the order they are scheduled in is `SERVER.md` §1.12 | `pendingJobs` is set to the job count before any job starts; each job decrements it once with its **final** outcome. `status` becomes `failed` at the first failed job, `ready` when the count reaches 0 with none failed; both flips guard on `processing`, so the first terminal write wins. A job retries a transient provider error (connection kinds; HTTP 408, 429, 5xx; known LM Studio error text) up to 4 attempts with 2 s / 8 s / 30 s nominal back-off, and stops retrying once its document is no longer `processing`; an embed job also retries a timeout, an extract job does not. |
@@ -957,8 +957,26 @@ with the constraint as backstop.)
 - **Scale tenants:** Redis Cluster spreads `ws:{id}` graphs across shards by hash slot. Each
   graph stays whole on one shard. Rebalance by moving slots; isolate hot workspaces onto
   dedicated shards if needed.
-- **Tuning:** `GRAPH.CONFIG` — `THREAD_COUNT` (size to cores), `QUERY_MEM_CAPACITY`,
-  `MAX_QUEUED_QUERIES`, `TIMEOUT_DEFAULT`/`TIMEOUT_MAX`, `CACHE_SIZE`.
+- **Tuning:** `GRAPH.CONFIG` is set at load time from the per-deployment file
+  `config/falkordb.env`, read by `scripts/start_falkordb.sh` and by `compose.yaml` through
+  `docker compose --env-file config/falkordb.env`; compose refuses every command that loads the
+  file without it. The file holds two keys, `FALKORDB_THREAD_COUNT` and `FALKORDB_MODULE_ARGS`, in
+  a restricted grammar both readers parse alike (its header comment). The composed string replaces
+  the image's own module args; for `start_falkordb.sh`, a full `FALKORDB_ARGS` in the environment
+  is used as-is instead (the rollback path); compose has no such override. An instance takes load-time keys at its next start. The shipped values, with the
+  measurements in `docs/plans/graph-config-defaults-graph.md`:
+  - `THREAD_COUNT` = the container's CPU allotment, set per deployment (8 in the shipped file),
+    because the engine's auto-detection ignores container CPU limits;
+  - `OMP_THREAD_COUNT 1`: intra-query parallelism costs more than it returns on many small
+    concurrent queries;
+  - `CACHE_SIZE 25`;
+  - `MAX_QUEUED_QUERIES` ≥ Σ client pool sizes on the instance − `THREAD_COUNT` (320 in the shipped
+    file); a query past running + queued is refused at once with `Max pending queries exceeded`;
+  - `QUERY_MEM_CAPACITY` 64 MiB (`67108864`), per query, on reads and writes: a query over it fails
+    with `Query's mem consumption exceeded capacity`, and a write commits nothing. Runtime-settable;
+  - `ASYNC_DELETE yes`. Booleans are written `yes`/`no`: a `1` aborts the server start;
+  - `TIMEOUT 1000` and `RESULTSET_SIZE 10000`, repeated because the string replaces the image's;
+    `TIMEOUT_DEFAULT`/`TIMEOUT_MAX` are not set (0/0, next bullet).
 - **TIMEOUT posture (live-probed).** Keep the legacy single-knob `TIMEOUT=1000` as the
   deployment default — right for chat CRUD and verified to fire (enforcement is
   batch-granular; slightly-over reads can slip through). GraphRAG reads (§8) pass a
@@ -966,12 +984,16 @@ with the constraint as backstop.)
   uncapped while `TIMEOUT_MAX=0`), held as one service-layer constant (`RAG_QUERY_TIMEOUT_MS`,
   5000 ms) rather than chosen per call.
   **Writes ignore TIMEOUT entirely on this build** — a write runs to completion regardless of
-  clause or default; bounded batches (≤ a few hundred `UNWIND` rows) and the existing API
-  input caps are the only write-path protection. If ops later wants a hard ceiling on client
+  clause or default; bounded batches (≤ a few hundred `UNWIND` rows), the existing API
+  input caps and the `QUERY_MEM_CAPACITY` memory bound are the write-path protection, and a
+  write still has no time bound. If ops later wants a hard ceiling on client
   overrides, switch to `TIMEOUT_DEFAULT`/`TIMEOUT_MAX` (>0) — mutually exclusive with the
   legacy `TIMEOUT` knob; change deliberately, in one step. One unreproduced anomaly is on
   record: an instant timeout right after a long override run; re-check on upgrades.
 - **Observability:** `GRAPH.SLOWLOG` for slow queries, `GRAPH.PROFILE` for plans, Redis metrics.
+  Two engine signals: the `Query's mem consumption exceeded capacity` error (a query hit
+  `QUERY_MEM_CAPACITY`) and `GRAPH.INFO`'s waiting-queries depth (admission pressure, before
+  `Max pending queries exceeded`).
 - **Security:** Redis ACLs scoping `GRAPH.*` per principal (ideally per workspace key pattern),
   TLS in transit, network isolation; secrets outside the data.
 
@@ -1017,13 +1039,13 @@ Open work and milestones: `falkor-chat/docs/BACKLOG.md`; delivered milestones: `
 - **App driver** — the server reaches FalkorDB over RESP via `falkordb-py` (§10).
 - **TIMEOUT** — the legacy `TIMEOUT=1000` single knob stays the deployment default, with a
   per-query override for GraphRAG reads (§10).
+- **`GRAPH.CONFIG` values** — decided per key and set in the per-deployment `config/falkordb.env`
+  (§10).
 
 **Open** — tracked in `falkor-chat/docs/BACKLOG.md`: message/embedding retention under the
 always-in-RAM constraint (§11), cross-workspace analytics (app-layer fan-out vs. an `analytics`
-rollup graph, §3), the real-time push gateway's transport (Bolt vs. RESP/WebSocket, **K-018**),
-and a pre-production review of the live `GRAPH.CONFIG` defaults (`THREAD_COUNT 4`,
-`OMP_THREAD_COUNT 4`, `CACHE_SIZE 25`, `MAX_QUEUED_QUERIES 25`, `QUERY_MEM_CAPACITY 0`
-(unlimited), `ASYNC_DELETE 1`).
+rollup graph, §3), and the real-time push gateway's transport (Bolt vs. RESP/WebSocket,
+**K-018**).
 
 ---
 

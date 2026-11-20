@@ -319,3 +319,184 @@ reversal.
 ```
 
 No prune.
+
+## Close check
+
+> 2026-11-20 · K-098 close, step 3 · uncommitted spec edits by `graph-dba`, checked against the
+> shipped `8a49ebe9` (`config/falkordb.env`, `scripts/start_falkordb.sh`, `compose.yaml`), with the
+> note as context.
+> Sections: DESIGN §9 Backfill/import row, §10 (Tuning, TIMEOUT posture, Observability), §13;
+> QUERIES §18.7; SERVER §1.5. Also `GAL-I02-K0006`.
+> Throwaways: `k098-analyst-close` (16385, the shipped args through the script),
+> `k098-analyst-adm` (16386), `k098-analyst-cap` (16387) and `k098-analyst-cpu` (16388), all on
+> scratch volumes. Nothing ran on `falkordb-dev` or `ws:test`, and I ran no suites.
+
+**Verdict: needs changes, narrowly.** There is one blocker under root `REVIEW.md`'s spec-update
+rule, and its fix is a single clause. There is one minor. Everything else checks out against what
+shipped.
+
+### C1 (blocker, one-clause fix) — DESIGN §10's rollback clause is false for one of the two readers it names
+
+The Tuning bullet first names both readers: "read by `scripts/start_falkordb.sh` and by
+`compose.yaml`". It then says "a full `FALKORDB_ARGS` in the environment is used as-is instead
+(the rollback path)". That holds only for the script.
+
+Verified on a scratch compose project. With `FALKORDB_ARGS="MAX_QUEUED_QUERIES 25 …"` exported
+and the shipped `--env-file`, compose still renders the composed eight-key string. Without
+`--env-file`, it refuses on `FALKORDB_THREAD_COUNT`. `compose.yaml:22` interpolates only the two
+file variables.
+
+An operator rolling back a compose deployment on the strength of this sentence would restart on
+the new args. **Fix:** "…; for `start_falkordb.sh`, a full `FALKORDB_ARGS` in the environment is
+used as-is instead (the rollback path); compose has no such override."
+
+### C2 (minor) — QUERIES §18.7's new paragraph holds only when the cap fires before the socket timeout
+
+Mechanism verified. On `k098-analyst-cap`, started from the shipped file, I lowered
+`QUERY_MEM_CAPACITY` at runtime (1 MiB). The real `Repository.reset_all_participants` over 200
+participants then raised `redis.exceptions.ResponseError: Query's mem consumption exceeded
+capacity` in 0.00 s, and the node count was 4,601 before and after. That is atomic, and nothing
+was deleted.
+
+At the **shipped** 64 MiB, I could not make a reset reach the cap before the client gave up. I
+tried three shapes: 10 × 100k messages, 100 × 1k and 1,000 × 300. All three raised `TimeoutError`
+at the 10 s `FALKORDB_SOCKET_TIMEOUT` while the query kept running server-side. This matches the
+note §3.1 ("its limit is time, not memory").
+
+So the sentence "raises `ResponseError` …, not `TimeoutError`" is true only for a reset that hits
+the cap inside the socket timeout. A reset that hits it later still surfaces as `TimeoutError`.
+The paragraph above it already makes `TimeoutError` mean *unknown*, so this is not a
+contradiction. **Fix:** "If the cap is hit before the client's socket timeout, a reset raises
+`ResponseError` (…), not `TimeoutError`, and deletes nothing."
+
+Server-side outcome of those three timed-out resets, at the shipped cap:
+- **100 × 1k: committed.** The graph was left with 1 node (the `Agent`) after the client's
+  `TimeoutError`. This is §18.7's existing "`TimeoutError` means unknown, the server commits"
+  case, not the cap.
+- **10 × 100k and 1,000 × 300: still running after more than 10 min** with no cap error, and
+  their node counts were unchanged. I stopped them by removing the throwaway.
+
+No reset reached 64 MiB, so the cap-raised path is shown only at a lowered cap.
+
+### Checked and holding
+
+**Values and mechanism** match `config/falkordb.env`, `start_falkordb.sh` and `compose.yaml`.
+- A readback through the shipped script showed `THREAD_COUNT 8`, `OMP_THREAD_COUNT 1`, `CACHE_SIZE 25`,
+  `MAX_QUEUED_QUERIES 320`, `QUERY_MEM_CAPACITY 67108864`, `ASYNC_DELETE 1` (written `yes`),
+  `TIMEOUT 1000`, `TIMEOUT_DEFAULT 0`, `TIMEOUT_MAX 0` and `RESULTSET_SIZE 10000`.
+- The rest of the mechanism also holds:
+  - the two keys and the restricted grammar (Pass 2);
+  - the composed string replacing the image's (Pass 1, positive control);
+  - compose refusing every command that loads the file (Pass 1 table).
+- **"Auto-detection ignores container CPU limits":** under `--cpus 2` on an 8-CPU host,
+  `THREAD_COUNT` read 8.
+- **"Runtime-settable":** `QUERY_MEM_CAPACITY` and `MAX_QUEUED_QUERIES` returned `OK`.
+  `THREAD_COUNT` and `OMP_THREAD_COUNT` returned "cannot be set at run-time", which agrees with
+  "an instance takes load-time keys at its next start".
+
+**Deployment, not live state.** An unfiltered grep of DESIGN, SERVER and QUERIES for every
+config key and for `falkordb-dev` found no claim about the running instance. The values read "in
+the shipped file", and §13's stale live snapshot is gone.
+
+**No change history, numbering kept.** There is no "was", "now" or date in the new text, and no
+section was renumbered. "Repeated because the string replaces the image's" is a reason, not
+history.
+
+**§9 batch-over-cap, verified at the real 64 MiB.**
+- A 100k-node `UNWIND … CREATE` committed.
+- 1M- and 3M-node batches failed with `Query's mem consumption exceeded capacity`.
+- The node count stayed at 100,000.
+- A read over the cap (`collect` of 30M) failed with the same message.
+
+**Observability, verified on `k098-analyst-adm`.** I ran it with `THREAD_COUNT 1` and
+`MAX_QUEUED_QUERIES 2` to reach saturation; it shows the mechanism, not the shipped values.
+- With 6 concurrent reads, 3 were admitted and 3 were refused at once with `Max pending queries
+  exceeded`. So running + queued was refused immediately.
+- During the burst, `GRAPH.INFO`'s `# Waiting queries` section listed 2 entries, which is the queue
+  depth.
+- The mem-cap error string matches the bullet.
+
+**SERVER §1.5:** the `config/` line lists `falkordb.env`, which matches the shipped tree.
+
+**`GAL-I02-K0006` is sound.**
+- The three caller lines (`start_server.sh:173`, `start_demo.sh:221`, `start_agent_team.sh:195`) and
+  the `did not respond … after 30s` text match.
+- The mechanism is the one reproduced in Pass 1 m3.
+- The done-condition has both a red route (stubbed `docker inspect`) and a green route.
+- Two nits:
+  - "an unknown key" should read "an unknown module-arg key inside `FALKORDB_MODULE_ARGS`". An
+    unknown *env-file* key is refused before `docker run` and never reaches this failure.
+  - The poll should treat "gone **or not running**" as failed, so it does not depend on how fast
+    `--rm` removes the container.
+
+**The text left unchanged on purpose still holds.**
+- **QUERIES §6:** the expansion no-ops because nothing writes `MENTIONS`, and that is still true.
+  The 64 MiB cap would bite the current text only once K-093's writer lands (k × fan-in ≈ 950k),
+  and the bounded-query unit is recorded as K-093's prerequisite. Nothing in §6 is false today.
+- **DESIGN §8:** it describes the read's shape and the `RAG_QUERY_TIMEOUT_MS` override. K-098 changes
+  neither.
+- **DESIGN §10 persistence bullet** ("RDB snapshots + AOF; choose AOF fsync policy per RPO"): this
+  is design posture, not a claim about the instance, so K-098 does not make it false. Its gap
+  against `falkordb-dev` is `GAL-I02-K0004`'s.
+- **DESIGN §10 memory-sizing bullet:** it is not falsified. The in-flight term (`THREAD_COUNT` ×
+  `QUERY_MEM_CAPACITY`, 512 MiB) belongs in `maxmemory` sizing, which the note assigns to
+  `GAL-I02-K0004`. That item's body already states it (`BACKLOG.md:87-88`).
+- **QUERIES §18.7's untouched lines** (the 240 ms / 50-participant headroom and "`TIMEOUT` applies to
+  reads only") are unchanged by K-098 and consistent with C2's runs.
+
+### K-098's open `REVIEW.md` proposals (verbatim)
+
+None of the five narrows an existing check. Each is an addition, none relaxes or exempts a
+current line, and none duplicates a test- or hook-enforced rule. So no `cobb` narrowing gate is
+needed.
+
+**Root `REVIEW.md`, `## Always check`:**
+1. *(this review, m2 and Pass 2)*
+   - When two programs read the same config file (a shell parser and compose's dotenv, a script and a loader), probe each grammar axis either reader treats specially (quoting, inline comments, `$` expansion, `export`, repeated keys, CRLF, trailing delimiters, edge whitespace that one reader trims) and require that each one either refuses or renders identically in both. Parity on the shipped file alone is a bound, and so is a reviewer-proposed character class until it has been run through the same probe.
+2. *(`docs/reviews/graph-config-defaults.md`, B1)*
+   - A procedure that waits on a status flag before an irreversible step names the state in which the flag already reads "done" before the work has run (scheduled, queued, never-run defaults). It requires a counter or timestamp that proves the work ran.
+3. *(same review, M2 and P2-M1)*
+   - A plan step that restarts a shared stateful service has five parts. It verifies before the stop that the state was saved. It copies the saved state out. It records an inventory of every graph or key before the stop and compares it after the restart. It names a rollback that cannot persist the wrong state over the copy. Its rehearsal covers the branch where the restart succeeds with wrong data, not only the branch where it fails to start. A verify step that checks one workspace is a bound, not proof.
+4. *(same review, P3-m1)*
+   - A fallback written as `<command> || <fallback>` for a peer that may not answer is checked against a hang, not only an error. The probe freezes the peer (for example `docker pause`) and asserts the fallback runs within a stated time.
+
+**`falkor-chat/REVIEW.md`, `## Always check`:**
+5. *(same review, M1)*
+   - A per-query memory or size bound sized from measured reads is checked at the read's full fan-out. Per-seed aggregation scales with k (the ANN fan-out) and with each seed's edges, so a measurement with one heavy seed among k is a bound, not the worst case.
+
+How they relate:
+- Line 1 sits beside the existing schema-walker line ("one planted X for each composition axis").
+  That line covers guards that enumerate a tree, and line 1 covers two parsers of one file. Neither
+  subsumes the other.
+- Line 4 is the hang-specific case of the existing process-tree line, and it does not narrow it.
+- Line 3 extends the evidence for restarts. It replaces nothing, because the Pass 1 wording was never
+  applied.
+
+## Close check — Pass 2
+
+> 2026-11-20 · checked against the working tree. Each line was read in place together with its
+> neighbouring sentences. No new probes were needed, because each disposition rests on the Close
+> check's runs. No containers were started.
+
+**Dispositions:**
+- **C1 — fixed.** DESIGN §10 now reads "for `start_falkordb.sh`, a full `FALKORDB_ARGS` … is used as-is instead
+  (the rollback path); compose has no such override." This matches the Close check's compose run,
+  where an exported `FALKORDB_ARGS` was ignored and the composed string rendered. The neighbouring
+  sentences stay true: "The composed string replaces the image's own module args" holds for both
+  readers, and "compose refuses every command that loads the file without it" holds per the Pass 1
+  table.
+- **C2 — fixed.** QUERIES §18.7 now reads "If the cap is hit before the client's socket timeout, a reset raises
+  `ResponseError` … and deletes nothing." This is true per the lowered-cap run (4,601 → 4,601). The
+  case where the cap is hit after the socket timeout is still covered by the unchanged paragraph
+  above it ("`TimeoutError` … means *unknown*"). The 100 × 1k reset committed after the client's
+  timeout, which is consistent with that paragraph. Nothing nearby is contradicted.
+- **K0006 nit 1 — fixed.** The body now reads "an unknown module-arg key inside `FALKORDB_MODULE_ARGS`". It is true
+  (`QUERY_MEM_CAPCITY` aborted under `-d`, Close check and Pass 1), and it no longer collides with
+  the script's own pre-`docker run` refusal of unknown env-file keys.
+- **K0006 nit 2 — fixed.** "Gone or not running" in Scope, and "missing and, separately, not running" in Done-when,
+  give both states their own red route. The rest of the item still holds: the caller line numbers,
+  the `did not respond … after 30s` text, and "a good start under `-d` is unchanged".
+- **New nit (cosmetic, take or leave).** The edits left unwrapped lines in DESIGN §10 Tuning and
+  in GAL-I02-K0006's body and Scope. Rewrap them on the next touch.
+
+**Verdict: approve.** Step 3 of K-098's close passes.
