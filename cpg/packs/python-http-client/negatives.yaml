@@ -23,8 +23,11 @@ negatives:
     pathlib-path-get: {imports: [requests], callee: get, resolution: external, external: "pathlib.py:<module>.Path.get", a0: /looks/like/a/path}
     json-loads-return-get: {imports: [httpx], callee: get, resolution: external, external: "json.py:<module>.loads.<returnValue>.get", a0: /looks/like/a/path}
     dict-get-return-get: {imports: [httpx], callee: get, resolution: external, external: "__builtin.dict.get.<returnValue>.get", a0: /looks/like/a/path}
+    # synthetic (0 occurrences in the proving repository): the shape of another library's module-level verb; kills the narrow `*.py:<module>.get` globs
     other-library-get-with-the-verb-name-in-the-module: {imports: [requests], callee: get, resolution: external, external: "other.py:<module>.get", a0: /health}
-    requests-module-other-member: {imports: [requests], callee: get, resolution: external, external: "requests.py:<module>.Session.get", a0: /health}
+    # synthetic KNOWN LIMIT (not a true negative): `Session` is listed as not covered (P1-49), so a typed Session call is a pinned miss.
+    # The string is inferred from the `TestClient` analogs, not probed; a real one is likely `requests.py:<module>.Session.__init__.<returnValue>.get`.
+    session-get-is-a-known-limit: {imports: [requests], callee: get, resolution: external, external: "requests.py:<module>.Session.get", a0: /health}
   py-post:
     testclient-post: {imports: [requests], callee: post, resolution: external, external: "fastapi/testclient.py:<module>.TestClient.post", a0: /jobs}
     testclient-init-return-post: {imports: [httpx], callee: post, resolution: external, external: "fastapi/testclient.py:<module>.TestClient.__init__.<returnValue>.post", a0: /jobs}

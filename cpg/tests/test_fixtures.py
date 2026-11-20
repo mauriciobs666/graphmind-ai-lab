@@ -2207,7 +2207,7 @@ def test_tp006_every_unit_parses_in_the_sandbox_and_passes_the_d15_content_check
                                "files_with_zero_methods": sorted(f for f, n in per_file.get(i, {}).items() if n == 0 and f != "N/A")}
         assert got, f"{u['unitId']}: only synthetic methods (a <module> per file): the D15 floor passes but nothing was parsed"
         assert set(report[u["unitId"]]["files_with_zero_methods"]) <= {"<unknown>"}, (u["unitId"], report[u["unitId"]]["files_with_zero_methods"])
-    if os.environ.get("CCG_FIXTURES_REPORT"):
+    if os.environ.get("CCG_FIXTURES_REPORT"):      # TP-006 owns this exact path; the P1-51a test writes `<path>.p1-51a.json` beside it
         Path(os.environ["CCG_FIXTURES_REPORT"]).write_text(json.dumps(report, indent=1, sort_keys=True))
     assert set(report) == set(UNIT_FLOORS), "every unit has a recorded floor"
     for unit, rep in report.items():
@@ -2248,6 +2248,17 @@ def test_tp006_planted_failing_inputs_a_comments_only_unit_and_a_unit_with_no_so
     assert r.returncode != 0, "the check exits non-zero when any CPG is EMPTY"
 
 # ======================================================================================== P1-51a live guard: typed `requests` verbs
+
+
+def p1_51a_report_path(base) -> Path:
+    """Where the P1-51a live test writes its observed forms when ``CCG_FIXTURES_REPORT=<base>`` is set: ``<base>.p1-51a.json``.
+    TP-006 owns ``<base>`` itself (per-unit verdicts); one shared variable must not make the later live test overwrite the earlier."""
+    return Path(str(base) + ".p1-51a.json")
+
+
+def test_p1_51a_report_path_never_collides_with_the_path_tp006_writes():
+    assert p1_51a_report_path("/x/report.json") != Path("/x/report.json")
+    assert p1_51a_report_path("/x/report.json").parent == Path("/x")
 
 
 REQUESTS_VERB_CALL = re.compile(r"\brequests\.(?:get|post|put|patch|delete)\(")
@@ -2293,8 +2304,8 @@ def test_p1_51a_every_python_unit_that_calls_requests_verbs_yields_an_http_consu
         consumers = [c for c in run_packs([records], [pack]).consumers if c["packId"] == "python-http-client" and c["kind"] == "http"]
         assert consumers, f"{u.unitId}: no http consumer from its requests calls"
         report[u.unitId] = sorted((c["path"], c["line"], c["key"], c["status"], c["reason"]) for c in consumers)
-    if os.environ.get("CCG_FIXTURES_REPORT"):                 # the observed forms, for the acceptance report (as TP-006's)
-        Path(os.environ["CCG_FIXTURES_REPORT"]).write_text(json.dumps(report, indent=1, sort_keys=True))
+    if os.environ.get("CCG_FIXTURES_REPORT"):                 # the observed forms, for the acceptance report
+        p1_51a_report_path(os.environ["CCG_FIXTURES_REPORT"]).write_text(json.dumps(report, indent=1, sort_keys=True))
 
 
 # ======================================================================================== P1 form of the flow-dependent rows (plan 5.5)
