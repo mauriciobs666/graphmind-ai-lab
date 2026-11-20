@@ -364,7 +364,8 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-50 | 5d fix round and Python f-string constants (normalizer 0.7) | `tdd-engineer` | ext | 05 (5d), 49 | `analyst` |
 | P1-51 | Typed `requests`/`httpx` verb seeds (51a); a wrapper's informative template is the consumer, `wrapperSite` (51b) | `tdd-engineer` | lnk | 49, 50 | `analyst` |
 | P1-52 | TypeScript MCP-client consumer pack, `scope: unit` URL binding | `tdd-engineer` | lnk | 16, 51 | `analyst` |
-| P1-53 | Fixture conformance to the P1 binding contract, defect D3 (53a pin test, row text and census sweep `qa-engineer`; 53b fixture edits `tdd-engineer`) | `qa-engineer`, `tdd-engineer` | lnk | 17, 51, 52 | `analyst` |
+| P1-54 | The Binder's environment-read recognition on real facts (`externalTarget`, not callee name); defect in P1-17 behaviour (5) | `tdd-engineer` | lnk | 17, 52 | `analyst` |
+| P1-53 | Fixture conformance to the P1 binding contract, defect D3 (53a pin test, row text and census sweep `qa-engineer`; 53b fixture edits `tdd-engineer`) | `qa-engineer`, `tdd-engineer` | lnk | 17, 51, 52, 54 (53c) | `analyst` |
 | P1-17 | Linker: matchers, statuses, bindings (Compose and `.mcp.json` are linker code, D10), example configs, prompt mentions | `tdd-engineer` | lnk | 16, 46, 07, 11, 14, `-graph` | `analyst` |
 | P1-18 | Assembler: bundles to graph rows, `mask_http_segments` import, `MOUNTED_BY`, `SkippedFile`, `Unit.flowAvailable`, pack-set identity | `graph-dba` | lnk | 16, 17, `-graph` | `analyst` |
 | P1-19 | Store loader, DDL, ACL users and test, swap, stamp, fuzz test, re-derived `TIMEOUT_MAX` and lock ttl, size re-estimate | `graph-dba` | lnk | 18, 48, 02, `-graph` | `analyst` |
@@ -389,8 +390,8 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-40 | AC-8 part 1 run: full refresh plus queries of a mixed fixture system | `devops` | gat | 31, 20, 25, 26 | `analyst` |
 | P1-32 | Eval tooling verbs, then the AC-5 gate harness (two dispatches) | `qa-engineer` | gat | 25, 20 (harness half) | `analyst`; `data-scientist` |
 | P1-33 | P1 test plan `docs/test-plans/connected-code-graph-p1.md` | `qa-engineer` | gat | 00 | `analyst` |
-| P1-41 | Fixture gate, part 1: the 87 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d, 05 (5d), 49, 50, 51, 52, 53 | `analyst` |
-| P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25); AC-16 is not read closed from P1-25's narrow raw-recipe test, P1-42 adds the other shapes | `qa-engineer` | gat | 41, 26, 39d, 24b, 49, 50, 51, 52, 53 | `analyst` |
+| P1-41 | Fixture gate, part 1: the 87 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d, 05 (5d), 49, 50, 51, 52, 53, 54 | `analyst` |
+| P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25); AC-16 is not read closed from P1-25's narrow raw-recipe test, P1-42 adds the other shapes | `qa-engineer` | gat | 41, 26, 39d, 24b, 49, 50, 51, 52, 53, 54 | `analyst` |
 | P1-34 | Flow re-measurement (§5): re-point `s28_run.py`, entry check, fresh draw only if entered, decision record | `data-scientist` + `qa-engineer` | gat | 09, `-ml` | `analyst` |
 | P1-35 | AC-24 smoke harness and run | `qa-engineer` | gat | 26, 29, `-ml` | `data-scientist` |
 | P1-47 | Runtime-oracle capture on an isolated instance | `qa-engineer` | gat | 48, 02, `-ml` | `analyst` |
@@ -407,7 +408,7 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 `cpg/packs/**`, `cpg/tests/**` and `**/*.md` (`-eval-protocol-ml.md` §12.3), and a first-contact run needs the record's
 commit to precede the build with no uncommitted change under `cpg/`. The `ac5-gate-1` pre-registration record
 therefore Needs **every step that edits a tracked file outside those exclusions**: 01, 02, 03–12, 14, 15, 16–26,
-28, 29, 31, 34 (`cpg/spikes/**` is hashed), 39, 44, 45, 48, 48b, 49 (its `httpkey.py` and `packrt/` edits; the pack files are excluded), 50 (normalizer), 51b (`packrt/lift.py`, the schema), 52 (`ccg/refresh.py` `DEFAULT_PACKS`, if built), 53b (`cpg/fixtures/**` is hashed), and 5d's `extract.sc` edit (committed after P1-09's, before the record). It also Needs **32 (both dispatches), 35, 36 and 47**,
+28, 29, 31, 34 (`cpg/spikes/**` is hashed), 39, 44, 45, 48, 48b, 49 (its `httpkey.py` and `packrt/` edits; the pack files are excluded), 50 (normalizer), 51b (`packrt/lift.py`, the schema), 54 (`ccg/linker/bind.py`), 52 (`ccg/refresh.py` `DEFAULT_PACKS`, if built), 53b (`cpg/fixtures/**` is hashed), and 5d's `extract.sc` edit (committed after P1-09's, before the record). It also Needs **32 (both dispatches), 35, 36 and 47**,
 which are not hashed (`cpg/eval/**` is excluded) but are written before the record and pinned at its commit
 (`-p1-ml.md` §6.1, §6.2: the gate harness is the one at the record's commit, and an edit after it makes the run "after
 adaptation"). Its commit is the freeze. **`cpg/spikes/frontend-fitness/s28_core.py` and `cpg/extractors/joern/extract.sc` are hashed, so P1-09's scorer and projection changes are committed together, after the P1-09 gates and C8–C12 of `docs/reviews/connected-code-graph-p1-09-ml.md`, before `ccg-prereg-v1`/`ac5-gate-1` and before P1-34's `ccg-p1-flow-python-v1` record; that record names the commit of both;  the scorer is not changed after a fresh-draw miss, whatever it shows** (`docs/reviews/connected-code-graph-p1-09-ml.md` C5). P1-15 either lands before it or

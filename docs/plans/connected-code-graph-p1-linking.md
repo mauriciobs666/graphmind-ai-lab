@@ -606,7 +606,7 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
   of the fixture build (with the P1-52 pack present) differs from the pre-edit one by exactly five rows: LNK-16 `port-shared` appears; LNK-45
   gains `BOUND_BY` ord 0 and 1; LNK-02 and LNK-06 go `key-match` to `binding-confirmed`; LNK-12 loses its `job` provider link and its `svc`
   link becomes `binding-confirmed`. Any other changed row stops the unit. Must not regress: LNK-13/14/15/22, AC6-EX-1/4, `UNIT_FLOORS` (68, 67), the walk rows.
-- **53c (`tdd-engineer`, serial after 53b; it regenerates the same pinned SHAs and family counts):** the AC-6 example-config floor at P1
+- **53c (`tdd-engineer`, serial after 53b **and after P1-54**, which fixes the env-read recognition 53c's EX-4 depends on and probes which `peer.py` shape carries a flow edge; it regenerates the same pinned SHAs and family counts):** the AC-6 example-config floor at P1
   (2: AC6-EX-1, AC6-EX-4) counts instances whose P1 form carries the `example-config` reason, not manifest rows gated P1. EX-4 does not
   today: `fx-svc/clients/peer.py` reads `os.environ["FX_PEER_BASE"]`, and `bind.py` reads only `environ.get`/`getenv` (`_ENV_READS`), so
   its link is `possible`/`partial-key`. Edit `peer.py` to `os.environ.get("FX_PEER_BASE", "")` **and** `deploy/compose.example.yaml`'s `FX_PEER_BASE` to `http://api:8000`:
@@ -616,6 +616,47 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
   `peer.example.internal` resolves to nothing and yields an unbound `partial-key`, a different AC-6 shape. Drop EX-4's `p1Form` from
   the manifest (its `reason: example-config` is the P1 form) and adjust its `item` text. Done: the pin's Link tier asserts EX-4
   `possible`/`example-config` through the example Compose chain, and no test pins the old host string (none found by grep).
+
+## P1-54 · the Binder's environment-read recognition on real facts — `tdd-engineer`
+
+Defect in an already-contracted behaviour (P1-17 behaviour (5), env default and Compose-set values bound into a consumer URL), not a
+scope change. Found by P1-53c's live tier. **Basis, observed in the stored bundles.** `bind.py:_env_urls` accepts a callsite only if
+`calleeName.endswith(("environ.get", "getenv"))`; on real facts the callee is the bare member: `os.environ.get(...)` is
+`calleeName: "get"`, `externalTarget: "os.py:<module>.<member>(environ).get"`, `resolution: external` (76 such callsites in the
+proving repository, 1 in the fixtures, `fx-svc/clients/jobs.py:6`), so only the hand-built records of `tests/test_linker_bind.py`
+satisfied it and behaviour (5) never fired live. Chained members (`...(environ).get.strip`, `.setdefault`, `.pop`) have their own
+targets. Data edges from an `environ.get` callsite to a use exist on real bundles (`int(...)` a0, `Path(...)` a0, `kw.env`,
+`recv`); whether one reaches a URL slot through `+` or an f-string is not observed anywhere and is step 1's probe. A module
+constant (`JOB_URL = os.environ.get(...)`, LNK-15) leaves no record (P1-17 decision (f), P2): it stays unbound.
+**Decision: recognise by `externalTarget`, exactly, in linker code** (the Binder's env and Compose rules are linker code, D10; a pack
+word would widen the pack format for one reader): a module table `_ENV_READ_TARGETS` of exact strings, `os.py:<module>.<member>(environ).get`
+observed, `os.py:<module>.getenv` and the `from os import environ` form **assumed** (no occurrence in the repository; pinned by
+synthetic rows only, flagged as such). Never the callee name, never a suffix or glob: `dict.get` and every other `.get` stay out. The
+`calleeName` suffix test is deleted. Rejected: a pack-level lifting word (format growth, no second user); a receiver test on the
+bundle (no receiver field in these records).
+- **Files:** `ccg/linker/bind.py`, `tests/test_linker_bind.py` (the hand-built records move to the real shape), a new
+  `tests/test_linker_bind_real_shapes.py`, a minimal golden fixture of real callsite, `valueSet` and `data` records for the jobs.py shape
+  (`tests/data/`, extracted from the fixture bundle, not hand-written), `cpg/fixtures/system1/fx-svc/clients/peer.py` only if step 1 below
+  says so (that edit belongs to 53c).
+- **Steps in order.** (1) Real-bundle probe: for each candidate shape of `peer_health` (`os.environ.get("X", "") + "/api/health"`, the
+  f-string, a local assigned from the read) build the fixture unit and record whether a `data` edge reaches the URL slot; report it.
+  If no shape has an edge, behaviour (5) cannot bind EX-4 at P1 and the AC-6 example-config floor at P1 is 1: stop and return to the
+  stakeholder (accept 1, or restore AC6-EX-2 at P1 with JS environment records). (2) Red: the golden-record test (below). (3) The
+  table and the deleted suffix test. (4) Before/after.
+- **Done when:** (a) the golden test: a consumer whose URL slot is fed by the real `environ.get` record binds the Compose-set value
+  and the default text, and a consumer fed by a `dict.get` record binds nothing; (b) a census test asserts the table matches at least
+  one record in the golden data (a predicate that matches 0 real records fails); (c) before/after acceptance report on the stored
+  proving-repository bundles (all ten Python units, `run_packs` + `link` with the real `Binder`): the set of `BOUND_BY` edges, link
+  statuses and reasons before and after, every changed link listed; no AC-5 dev item (`cpg/eval/dev/ac5-http.jsonl`, all strata) loses
+  its link, and the 8-script count is unchanged; a link that disappears is a stop, a `key-match` that becomes `binding-confirmed` is
+  expected and listed; (d) the fixture rows: LNK-15 and LNK-13 unchanged (module constant and JS: unbound at P1), LNK-14 unchanged,
+  EX-4 as step 1 decides, the live tier otherwise as before; (e) the whole `cpg` suite, known reds named.
+- **Must not regress:** providers, mounts, `confirmed` consumer facts (this unit changes links only), the 5d work, P1-51/52 outputs.
+- **Gate:** `analyst`. `ccg/linker/` is hashed: lands before the `ac5-gate-1` record.
+- **Defect-class lesson (for `REVIEW.md`, owner `teco`):** P1-17 required real extractor output only for behaviour (6)'s chain test; (5)
+  was tested with hand-built records and the unit gate and P1T-09 read those tests green. A Binder or pack predicate that reads a bundle
+  record shape needs one test whose input is a record extracted from a real build, and a census assertion that the predicate matches at
+  least one real record. The earlier step that should have caught it: P1-17 dispatch 2 and its analyst gate.
 
 ## P1-17 · linker — `tdd-engineer`
 
