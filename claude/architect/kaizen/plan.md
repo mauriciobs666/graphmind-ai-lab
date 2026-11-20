@@ -6,12 +6,10 @@
 
 ## Active
 
-| ID | Added | Priority | Status | Summary |
-|------|------------|----------|--------|---------|
-| K-004 | 2026-09-07 | medium | 🔵 | Undocumented `llm.py` probe-order collision: a bare call whose sole argument is a `tool_calls` list |
-| K-005 | 2026-09-07 | medium | 🔵 | `ws:acme` is a populated live workspace, not a scratch graph — not warned about in `falkor-chat/AGENTS.md` |
 
 ### K-004 — `falkor-chat` `llm.py`: the `tool_calls`-argument probe collision is real and untested
+
+- **Added:** 2026-09-07
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Rationale:** In `server/falkorchat/llm.py`, `_parse_content_tool_calls` runs the JSON probe
@@ -32,7 +30,11 @@
 - **Notes:** from `kaizen_team` entry `a3f5c8e2-4b1d-4e9a-9c7f-6d2b1a8e5f30` (2026-09-01),
   distillation pass 2 unit U7.
 
+> Summary: Undocumented `llm.py` probe-order collision: a bare call whose sole argument is a `tool_calls` list
+
 ### K-005 — Warn in `falkor-chat/AGENTS.md` that `ws:acme` is populated, not scratch
+
+- **Added:** 2026-09-07
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Rationale:** `config.WS_ID` defaults to `acme` (`server/falkorchat/config.py:16`) and `ws:acme`
@@ -51,10 +53,42 @@
   entry's second half — a test-design corollary — was `MENTIONS`-tagged to `qa-engineer` in the
   same pass, so the node survives for `qa-engineer`'s own distillation.
 
+> Summary: `ws:acme` is a populated live workspace, not a scratch graph — not warned about in `falkor-chat/AGENTS.md`
+
 ## Parking lot / ideas
-- **Growth-stops pointer: confirm on first live use (2026-10-29).** The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
-- **Live-probe seam check (parked, 2026-08-09 — ex-inbox entry 4).** Before scheduling a plan step that runs a live probe/experiment, check the target actually has a graph/tenancy/environment seam that makes the probe isolated (e.g. a throwaway `ws:<probe>` workspace) — surfaced designing K-031 (falkor-chat's `publish_def` writes to a hardcoded `reference` graph with no per-workspace override; `materialize_snapshot`'s shared query constant against a throwaway `ws:` graph was the workaround). Judged narrow/single-occurrence, not promoted to Guardrails — revisit if a second instance turns up.
-- A short self-review checklist before delivering a plan (every step concrete & file-specific, alternatives recorded, risks listed, handoff summary present) — and, since 2026-07-27, the canonical header block present and its `Status:`/`Owner:`/`Tracks:` filled.
-- **`architect` owns one recurring flip it isn't told about yet (noted 2026-07-27).** Root `AGENTS.md`'s routing table makes the architect the performer of the `Status: archived` flip on `plans/<slug>.md` at milestone close, on `teco`'s coordination. Today that reaches the agent only through the closing unit's brief; if a close ever ships with plans left `active`, the fix is one line in this prompt.
-- Optionally delegate wide codebase sweeps to the Explore agent by default for large repos.
-- Extend `hooks/guard-plan-doc-writes.sh` to cover Bash write patterns (`sed -i`, `>` redirects, `git commit`, package installs) **only if** the prompt-guarded Bash ever proves leaky in practice — deliberately left out on 2026-07-08 (see history).
+
+### GAL-I02-K0017 — Growth-stops pointer: confirm on first live use (2026-10-29)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
+
+### GAL-I02-K0018 — Live-probe seam check (parked, 2026-08-09 — ex-inbox entry 4)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Before scheduling a plan step that runs a live probe/experiment, check the target actually has a graph/tenancy/environment seam that makes the probe isolated (e.g. a throwaway `ws:<probe>` workspace) — surfaced designing K-031 (falkor-chat's `publish_def` writes to a hardcoded `reference` graph with no per-workspace override; `materialize_snapshot`'s shared query constant against a throwaway `ws:` graph was the workaround). Judged narrow/single-occurrence, not promoted to Guardrails — revisit if a second instance turns up.
+
+### GAL-I02-K0019 — Self-review checklist before delivering a plan
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Every step concrete & file-specific, alternatives recorded, risks listed, handoff summary present — and, since 2026-07-27, the canonical header block present and its `Status:`/`Owner:`/`Tracks:` filled.
+
+### GAL-I02-K0020 — `architect` owns one recurring flip it isn't told about yet (noted 2026-07-27)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Root `AGENTS.md`'s routing table makes the architect the performer of the `Status: archived` flip on `plans/<slug>.md` at milestone close, on `teco`'s coordination. Today that reaches the agent only through the closing unit's brief; if a close ever ships with plans left `active`, the fix is one line in this prompt.
+
+### GAL-I02-K0021 — Delegate wide codebase sweeps to Explore by default
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Optional, for large repos.
+
+### GAL-I02-K0022 — Guard hook coverage of Bash write patterns
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Extend `hooks/guard-plan-doc-writes.sh` to cover them (`sed -i`, `>` redirects, `git commit`, package installs) **only if** the prompt-guarded Bash ever proves leaky in practice — deliberately left out on 2026-07-08 (see history).
