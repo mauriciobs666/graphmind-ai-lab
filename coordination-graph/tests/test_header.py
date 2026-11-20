@@ -131,12 +131,19 @@ def test_parity_with_wilib_on_a_header_carrying_every_optional_field(wilib, tmp_
     assert h.alias_tokens == wilib.tokens(wilib.header_fields(f)["Aliases"])
 
 
-def test_production_code_imports_no_wilib():
+# The read side (plan3 section 3.1): `lint` and `identity.py` (S1d) may import `wilib`; the
+# sync path (parsers, discovery, keys, config, scope, history, migrate) never does.
+READ_SIDE = {"lint.py", "identity.py"}
+
+
+def test_production_code_imports_no_wilib_outside_the_read_side():
     import ast
 
     pkg = Path(__file__).resolve().parents[1] / "coordgraph"
     offenders = []
     for py in pkg.rglob("*.py"):
+        if py.name in READ_SIDE and py.parent == pkg:
+            continue
         for node in ast.walk(ast.parse(py.read_text())):
             names = []
             if isinstance(node, ast.Import):
@@ -146,3 +153,18 @@ def test_production_code_imports_no_wilib():
             if any(n.split(".")[0] == "wilib" for n in names):
                 offenders.append(str(py))
     assert offenders == []
+
+
+def test_importing_the_sync_path_modules_loads_no_wilib():
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, coordgraph.discover, coordgraph.keys, coordgraph.config, coordgraph.scope, "
+        "coordgraph.shapes, coordgraph.history, coordgraph.migrate, coordgraph.lint, coordgraph.cli, "
+        "coordgraph.parse.backlog, coordgraph.parse.ledger, coordgraph.parse.review, "
+        "coordgraph.parse.requirements, coordgraph.parse.kb; "
+        "sys.exit(1 if 'wilib' in sys.modules else 0)"
+    )
+    root = Path(__file__).resolve().parents[1]
+    assert subprocess.run([sys.executable, "-c", code], cwd=root).returncode == 0
