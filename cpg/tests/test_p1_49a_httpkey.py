@@ -281,6 +281,10 @@ SPOTS = [
     ("http://" + X + ":8000/a",         "/a",              True,  False),
     ("http://" + X,                     "/",               True,  False),     # authority runs to the end
     ("http://h/a",                      "/a",              False, False),     # a known host leaves origin_dropped false
+    ("http://h#" + X,                   "/",               False, False),     # a "#" ends the authority: a marker after it is the fragment's
+    ("//h#" + X,                        "/",               False, False),
+    ("http://h?" + X,                   "/",               False, False),     # so does a "?" (the marker is the query's)
+    ("http://h#" + X + "/a",            "/",               False, False),     # the path is empty: "/a" after the "#" is fragment text
     ("/x/" + X + "/y",                  "/x/{?}/y",        False, True),      # mid-path
     ("/x/" + X,                         "/x/{?}",          False, True),      # trailing
     ("/" + X + "/x",                    "/{?}/x",          False, True),      # first segment after a slash is not "leading no-scheme"

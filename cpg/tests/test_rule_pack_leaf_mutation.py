@@ -816,3 +816,62 @@ def test_every_leaf_of_a_files_only_pack_is_caught_by_its_behavioural_contract(p
     count, alive = file_pack_survivors(pid)
     assert count == FILE_PACKS[pid][1]
     assert alive == FILE_PACK_SURVIVORS, sorted(alive ^ FILE_PACK_SURVIVORS)
+
+
+# P1-49b gate M2: `Z`/+1/flip mostly die at the schema validator (`invalid:`), which proves a leaf is validated, not that its VALUE
+# matters. The sibling swap replaces a leaf with another value that the pack itself holds under the same key name (`callee: get` ->
+# `post`, `literal: GET` -> `POST`, `lifting: py-get` -> `py-post`): still schema-valid for those keys, so only behaviour can kill it.
+# `FILE_PACK_SWAP_SURVIVORS` lists the leaves whose swap is equivalent by design (a label no runtime reads).
+FILE_PACK_SWAP_SURVIVORS = {"python-http-client": {"urlBindings[0].id"}}
+
+
+def _file_pack_set(pack: dict, path: tuple, value):
+    import copy
+    out = copy.deepcopy(pack)
+    parent = out
+    for p in path[:-1]:
+        parent = parent[p]
+    parent[path[-1]] = value
+    return out
+
+
+def file_pack_swap_survivors(pid: str) -> tuple[int, set[str]]:
+    """``(swap count, leaves for which some sibling swap leaves the behavioural contract green)``."""
+    import importlib
+    import collections
+    mod = importlib.import_module(FILE_PACKS[pid][0])
+    from ccg.rulepack import load_pack
+    base = load_pack(CPG / "packs" / pid / "pack.yaml")
+    leaf_list = [(p, v) for p, v in _file_pack_leaves(base) if not isinstance(v, bool)]
+    by_key = collections.defaultdict(set)
+    for p, v in leaf_list:
+        by_key[next((x for x in reversed(p) if isinstance(x, str)), None)].add(v)
+    count, alive = 0, set()
+    for p, v in leaf_list:
+        for alt in sorted(by_key[next((x for x in reversed(p) if isinstance(x, str)), None)], key=str):
+            if alt != v:
+                count += 1
+                if mod.behaviour_failures(_file_pack_set(base, p, alt)) == []:
+                    alive.add(fmt(p))
+    return count, alive
+
+
+def file_pack_death_split(pid: str) -> tuple[int, int, int]:
+    """``(leaves killed by behaviour, leaves killed only by the schema validator, survivors)`` for the `Z`/+1/flip mutants."""
+    import importlib
+    mod = importlib.import_module(FILE_PACKS[pid][0])
+    from ccg.rulepack import load_pack
+    base = load_pack(CPG / "packs" / pid / "pack.yaml")
+    out = [mod.behaviour_failures(_file_pack_mutant(base, p)) for p, _ in _file_pack_leaves(base)]
+    return (sum(1 for r in out if r and not r[0].startswith("invalid:")), sum(1 for r in out if r and r[0].startswith("invalid:")),
+            sum(1 for r in out if not r))
+
+
+def test_a_sibling_value_swap_of_python_http_client_leaves_is_caught_by_behaviour():
+    count, alive = file_pack_swap_survivors("python-http-client")
+    assert count > 100
+    assert alive == FILE_PACK_SWAP_SURVIVORS["python-http-client"], sorted(alive ^ FILE_PACK_SWAP_SURVIVORS["python-http-client"])
+
+
+def test_the_python_http_client_leaf_mutants_die_behaviourally_and_at_the_validator_in_these_numbers():
+    assert file_pack_death_split("python-http-client") == (49, 76, 0)

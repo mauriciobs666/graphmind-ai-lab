@@ -21,7 +21,8 @@ from packrt_helpers import PACKS, call, data, file_, imp, pack, param, sym, vs
 from ccg.packrt import run_packs
 from ccg.rulepack import PackError, load_pack, pack_errors, validate_pack
 from linker_bind_helpers import make_binder, pack_facts, port_fact, unit_bundle, url_lifted
-from linker_helpers import cons, prov, sym_in
+from ccg.linker import link
+from linker_helpers import cons, facts, prov, sym_in
 from test_linker_bind import PORTS_8200, consumer as bind_consumer
 
 PID = "python-http-client"
@@ -31,6 +32,7 @@ VERBS = ("get", "post", "put", "patch", "delete")
 LIBS = ("requests", "httpx")
 REQUEST = "urllib.py:<module>.<member>(request).Request.__init__"
 URLOPEN = "urllib.py:<module>.<member>(request).urlopen"
+OPENER = "urllib.py:<module>.<member>(request).OpenerDirector.__init__"
 
 
 def module(*imports):
@@ -116,6 +118,15 @@ def bind_failures(the_pack: dict) -> list[str]:
     return bad
 
 
+def link_failures(the_pack: dict) -> list[str]:
+    """The pack's `link` declaration read end to end: a template provider and a literal consumer of one path are linked as
+    `path-template`; read as `exact`, no link exists."""
+    b = [sym_in("P", "svc") + sym_in("C", "web")]
+    b = [r for part in b for r in part]
+    got = link(facts([prov("P", "http", "GET /api/items/{}")], [cons("C", "http", "GET /api/items/7", "s1")]), [b], packs=[the_pack]).links
+    return [] if [(x.status, x.matcher) for x in got] == [("confirmed", "path-template")] else [f"link: {[(x.status, x.matcher) for x in got]}"]
+
+
 def behaviour_failures(the_pack: dict) -> list[str]:
     """What ``the_pack`` gets wrong, as short strings (empty for the shipped pack)."""
     errs = pack_errors(the_pack, dirname=PID)
@@ -139,6 +150,10 @@ def behaviour_failures(the_pack: dict) -> list[str]:
                               [(f"{verb.upper()} /x", "confirmed", verb)]))
         cases.append((f"{verb} no import", module("os") + [untyped("c1", verb), vs("c1", "a0", "/x")], []))
         cases.append((f"{verb} non-url", module("requests") + [untyped("c1", verb), vs("c1", "a0", "timeout")], []))
+        # the seed gate names `unresolved`: a `resolved` (Joern-linked, 5d-demoted population) `get` in an importing file is no seed
+        cases.append((f"{verb} resolved in an importing file",
+                      module("requests") + [sym("m", "m", fid="f1", path="svc/client.py", start=60),
+                                            call("c1", "fn", verb, line=10, resolution="resolved", targets=("m",)), vs("c1", "a0", "/x")], []))
         cases.append((f"{verb} typed non-http", module("requests") + [external("c1", verb, "__builtin.dict." + verb), vs("c1", "a0", "/x")], []))
     cases += [("seed file has no import, caller has", two_files((), ("requests",)), []),
               ("seed file imports, caller has none", two_files(("requests",), ()), [("GET /items", "confirmed", "get")])]
@@ -154,6 +169,9 @@ def behaviour_failures(the_pack: dict) -> list[str]:
         ("Request own-site wrapper", own_site_wrapper(external("rq", "Request", REQUEST, owner="w"), "urllib.request",
                                                        seed_slot={"template": [{"const": "/items/"}, UNK]}),
          [("GET /items/{?}", "possible", "request")]),
+        ("Request relative url is kept (no urlLike on Request)", ul(external("r1", "Request", REQUEST), vs("r1", "a0", "items")),
+         [("GET /items", "confirmed", "request")]),
+        ("another urllib class constructor", ul(external("r1", "OpenerDirector", OPENER), vs("r1", "a0", "/x")), []),
         ("Request no urllib", module("requests") + [external("r1", "Request", REQUEST), vs("r1", "a0", "/d")], []),
         ("urlopen literal", ul(external("u1", "urlopen", URLOPEN), vs("u1", "a0", "http://h/health")), [("GET /health", "confirmed", "urlopen")]),
         ("urlopen own-site wrapper", own_site_wrapper(external("rq", "urlopen", URLOPEN, owner="w"), "urllib.request",
@@ -167,6 +185,7 @@ def behaviour_failures(the_pack: dict) -> list[str]:
         if got(recs) != want:
             bad.append(f"{label}: {got(recs)} != {want}")
     bad += bind_failures(the_pack)
+    bad += link_failures(the_pack)
     bad += [f"negative {n}" for n in negatives_failures(the_pack)]
     return bad
 
@@ -209,3 +228,31 @@ def test_mutant_the_import_gate_on_the_rules_instead_of_the_seeds_is_caught():
                     if r["match"]["lifted"]["lifting"] == lf["id"]:
                         r["scope"] = scope
     assert behaviour_failures(mutant(gate_on_rules)) != []
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# valid-alternative mutants (P1-49b gate M2): another VALID value of a leaf, which the harness's `Z`/+1/flip never produces
+# ---------------------------------------------------------------------------------------------------------------------
+
+def _lifting(p: dict, lid: str) -> dict:
+    return next(lf for lf in p["liftings"] if lf["id"] == lid)
+
+
+@pytest.mark.parametrize("label, change", [
+    ("link matcher exact", lambda p: p["link"][0].update(matcher="exact")),
+    ("seed resolution widened to resolved", lambda p: _lifting(p, "py-get")["seeds"][0]["call"].update(resolution=["unresolved", "resolved"])),
+    ("py-request urlLike", lambda p: _lifting(p, "py-request").update(urlLike=True)),
+    ("Request glob loosened to *__init__", lambda p: _lifting(p, "py-request")["seeds"][0]["call"]["externalTarget"].update(glob="urllib.py:*__init__")),
+    ("base-url binding scope unit", lambda p: p["urlBindings"][0]["urlSources"][0].update(scope="unit")),
+    ("urlopen urlLike dropped", lambda p: _lifting(p, "py-urlopen").pop("urlLike")),
+    ("a verb's urlLike dropped", lambda p: _lifting(p, "py-get").pop("urlLike")),
+    ("a verb's ownSite dropped", lambda p: _lifting(p, "py-get").pop("ownSite")),
+])
+def test_a_valid_alternative_of_a_pack_value_is_caught(label, change):
+    assert behaviour_failures(mutant(change)) != [], label
+
+
+def test_dropping_the_binding_scope_is_the_default_file_scope_so_behaviour_is_unchanged():
+    """`scope: file` is `bind.py`'s default for a `callsite` source: removing the leaf is equivalent, not a survivor."""
+    p = mutant(lambda p: p["urlBindings"][0]["urlSources"][0].pop("scope"))
+    assert behaviour_failures(p) == []

@@ -19,7 +19,7 @@ import inspect
 
 import pytest
 
-from packrt_helpers import call, constant, data, file_, param, sym, vs
+from packrt_helpers import call, constant, data, file_, param, ret, sym, vs
 from ccg.linker import bind as bind_mod, link
 from ccg.packrt import run_packs
 from ccg.packrt.extract import MAX_ALTERNATIVES, MAX_REF_DEPTH, Corpus
@@ -351,6 +351,50 @@ def test_a_two_hop_chain_whose_middle_slot_is_concat_const_unknown_is_possible_a
     assert view(got["tc"]) == ("GET /api/deep", "possible", "partial-key")
     assert got["tc"]["evidence"]["opaqueSlot"] == {"siteId": "oc", "arg": "a0"}
     assert view(got["c1"]) == ("GET /api/x", "confirmed", "lifted-role")              # the other chain is still all-transparent
+
+
+def test_an_opaque_seed_slot_directly_behind_a_call_result_hop_is_found_by_the_rule_4_check():
+    """P1-49b gate m1: `fetch(ident("/api/x"))` where the seed slot is `"/p" + <unknown>`: the leaf is `ident`'s argument, and the
+    seed slot sits at index 1 of the chain, reached through a `call-ret` hop (a parameter hop would make that index a param)."""
+    recs = [
+        file_("f1", "web/client.ts", lang="javascript"),
+        sym("ident", "ident", fid="f1", path="web/client.ts", start=5), param("ip0", "ident", 0, "x", line=6), ret("rt", "ident"),
+        data("rt", "ip0", "ret", "p0"),
+        sym("outer", "outer", fid="f1", path="web/client.ts", start=10),
+        call("ic", "outer", "ident", line=11, resolution="resolved", targets=("ident",)), vs("ic", "a0", "/api/x"),
+        call("fe", "outer", "fetch", line=12, resolution="external", external="lib/fetch.js:<module>.fetch"),
+        data("fe", "ic", "a0", "r"), vs("fe", "a0", {"concat": [{"const": "/p"}, UNK]}),
+    ]
+    out = facts(recs, FETCH)
+    (c,) = out.consumers
+    assert c["siteId"] == "ic" and view(c) == ("GET /api/x", "possible", "partial-key")
+    assert c["evidence"]["opaqueSlot"] == {"siteId": "fe", "arg": "a0"}
+
+
+def _second_argument_chain(second):
+    """`top -> outer(p) -> get(b, p) -> fetch(path)`: the middle slot is the SECOND argument of `get(prefix, path)` (`oc`, `a1`),
+    holding `second`; its first argument (`oc`, `a0`) is the constant `/b`."""
+    return [
+        file_("f1", "web/client.ts", lang="javascript"),
+        sym("get", "get", fid="f1", path="web/client.ts", start=10), param("g0", "get", 0, "prefix", line=11), param("g1", "get", 1, "path", line=11),
+        call("fe", "get", "fetch", line=12, resolution="external", external="lib/fetch.js:<module>.fetch"), data("fe", "g1", "a0", "p1"),
+        sym("outer", "outer", fid="f1", path="web/client.ts", start=50), param("q0", "outer", 0, "p", line=51),
+        call("oc", "outer", "get", line=52, resolution="resolved", targets=("get",)), data("oc", "q0", "a1", "p0"),
+        vs("oc", "a0", "/b"), vs("oc", "a1", second),
+        sym("top", "top", fid="f1", path="web/client.ts", start=70),
+        call("tc", "top", "outer", line=71, resolution="resolved", targets=("outer",)), vs("tc", "a0", "/api/deep")]
+
+
+def test_the_opaque_slot_names_the_argument_path_it_is_at_not_a_fixed_first_argument():
+    """P1-49b gate m3: an opaque second argument is reported as `a1`."""
+    (c,) = consumers(_second_argument_chain({"concat": [{"const": "/p"}, UNK]}))
+    assert c["siteId"] == "tc" and view(c) == ("GET /api/deep", "possible", "partial-key")
+    assert c["evidence"]["opaqueSlot"] == {"siteId": "oc", "arg": "a1"}
+
+
+def test_a_transparent_second_argument_is_judged_on_its_own_value_not_on_the_constant_first_argument():
+    (c,) = consumers(_second_argument_chain(UNK))
+    assert view(c) == ("GET /api/deep", "confirmed", "lifted-role") and "opaqueSlot" not in c["evidence"]
 
 
 def test_the_caller_side_template_with_an_unknown_origin_is_possible_by_rule_2_and_has_no_opaque_slot():
