@@ -10,7 +10,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import commands_kb, commands_store
+from . import commands_kb, commands_propose, commands_store, views
 from .config import Config
 from .discover import discover
 from .history import coverage
@@ -169,6 +169,8 @@ def build_parser() -> argparse.ArgumentParser:
     kf.add_argument("--once", action="store_true", help="a single pass instead of looping until settled")
     for name in ("bootstrap", "sync", "rebuild", "drift", "query", "kb-sync", "kb-status", "kb-reconcile", "kb-finish"):
         sub.choices[name].add_argument("--graph", help="graph key (default: COORDGRAPH_KEY)")
+    views.register(sub)
+    commands_propose.register(sub)
     return p
 
 
@@ -179,7 +181,8 @@ def main(argv: list[str] | None = None) -> int:
                     "rebuild": commands_store.rebuild_cmd, "drift": commands_store.drift_cmd,
                     "query": commands_store.query_cmd, "kb-sync": commands_kb.kb_sync_cmd,
                     "kb-status": commands_kb.kb_status_cmd, "kb-reconcile": commands_kb.kb_reconcile_cmd,
-                    "kb-finish": commands_kb.kb_finish_cmd}
+                    "kb-finish": commands_kb.kb_finish_cmd, **views.COMMANDS,
+                    **commands_propose.COMMANDS}
     if args.cmd in store_backed:
         return store_backed[args.cmd](args)
     handler = {"lint": cmd_lint, "migrate": cmd_migrate, "facts": cmd_facts,

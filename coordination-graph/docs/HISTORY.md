@@ -2,6 +2,47 @@
 
 > Dated log of actual changes to the `coordination-graph` component. Most recent first.
 
+## 2026-11-20 — S7a: read views (`views.py`)
+
+Delivered base-plan step S7a (`claude/docs/plans/coordination-graph.md` §3.4/§3.4a, FR-6/FR-8/FR-9/FR-12, AC-5/AC-6/AC-7/AC-9;
+plan3 §3.1/§3.2/§3.4/§6 test 13; graph note v4 §7.2/§7.3/§7.4/§7.6). `coordgraph/views.py`: `inflight [--waiting]`,
+`unit <slug|ID> [<unit>]`, `planned <component|agent> [--all]`, each through `RO_QUERY` only, each printing the sync
+header (`drift.render_header` over every covered file, registry line included) with `⚠ drift` on the rows whose file
+row moved. `unit` expands an ID argument through `Identity.resolve` and joins `IN $candidates` (feature ledgers by
+`Source.itemId`, tasks by `Unit.itemId`), so the new ID, an alias and the old legacy name find the same ledger; the
+slug read always runs too, and a non-resolving ID is reported with its reason, never guessed. `inflight` decides
+"picked up" for a requirement by slug (§7.2(d)) and by its `Item:` candidates (§7.6(d)). The lookup rule is
+`identity.select_units`; `~n` is tried as written, then stripped. `--waiting` is the stakeholder questions only
+(§7.2(b)). `cli.py` gains three one-line insertions (`views` import, `views.register(sub)`, `**views.COMMANDS`); the
+views import `identity` lazily, so the sync path still loads neither it nor `wilib`.
+Tests: `tests/test_views.py` (38, offline, a fake `ro_query` graph with no `query` method) and
+`tests/test_views_live.py` (21, ephemeral container): AC-5 four kinds with component, path, header; AC-7 an
+all-accepted active ledger stays, an archived one and its paused unit never list, and after an archived flip `unit`
+still finds the minimal units; FR-6(c); AC-6 paused question and date, repeats, `~n`, label vs exact key; AC-9
+and the `⚪` trailing group; plan3 test 13 `unit` by new ID, old ID and task ID after a `wi move` on a scratch
+registry, an `IN` index plan, `Registry: unavailable` under a bogus `COORDGRAPH_WI_ROOT`. Mutation run on a copy:
+33 single-point mutants, all killed (two survivors on the first pass, a shared-slug archived paused unit and a
+word-only/emoji-only `⚪` marker, each fixed by a new test).
+
+## 2026-11-20 — S7b: milestone proposal (`propose.py`, `commands_propose.py`)
+
+Delivered base-plan step S7b (`claude/docs/plans/coordination-graph.md` §3.7, FR-13–FR-15, AC-11–AC-14; plan3 §3.1/§3.3
+for identity and delivery). `coordgraph/propose.py`: `propose(items, resolver, per_milestone=6) -> Proposal`, pure
+(no store, `wilib`, network or file read; `resolver(token, scope) -> DepResolution` answers whatever needs one) plus
+`touch_overlap`. Steps 0–6 as written: fixed items and milestone ordering (`ahead-of-Mx` just before `Mx`), insertion
+into the earliest not-started gap, classify, dependency resolution (internal / in-progress → wave ≥ 2 / external →
+held / delivered / unknown → not plannable), cycles, holding propagation, effective-priority rank, list-scheduled
+waves with conservative glob overlap, capacity cut, one criterion per placement, *approved placements now
+impossible*. `commands_propose.py`: `coordgraph propose <scope> [--per-milestone N] [--graph K]` reads note §7.5
+(i)/(ii) by `RO_QUERY` (the item query also returns `milestoneOrder`, `milestoneStarted` and the backlog path,
+which §7.5 (i) lacks), resolves tokens through `identity` and the history files, prints under the sync header.
+Choices the plan left open: a fixed `🟡` dependency imposes no wave constraint; unblocks counts plannable-or-fixed
+transitive dependents; an in-progress dependency blocks insertion; an equal `order` between a fixed item and its
+dependency is *impossible*; a gap whose `ahead-of-Mx` name is already an approved milestone is skipped.
+Verified offline: `tests/test_propose.py` (pure) and `tests/test_propose_cli.py` (fake graph); a 39-mutant
+check (plan §5's six, the rejected alternatives, and silently corrupted arguments) with every mutant killed. No
+live-graph run of the two new statements yet.
+
 ## 2026-11-20 — S6: KB sync (`kbsync.py`, `commands_kb.py`)
 
 Delivered base-plan step S6 (`claude/docs/plans/coordination-graph.md` §3.5, P2-M3, R10; graph note v4 §2.4, §6.4).
