@@ -89,8 +89,10 @@ item are asserted at P1 in the forms the key rule below gives; (2) on the dev go
 linking to the gold provider, at any status, by the path below; the count is reported, a miss is reported with its cause and
 never tuned past; dev items only, no held-out file read (the exposure path-set rule, `-p1-ml.md`). Paths (the wrapper calls
 are bare same-module calls, kept by 5d's `refsTo` rule, so `callers_of` carries them):
-`falkor-chat/scripts/load_append.py::{main,_worker}` call `httpx.Client(...)` methods directly: seeded at the call, no lifting,
-key is the path (`/threads/{?}/messages` for a parameter segment), the parameter `base_url` only feeds `urlBindings`;
+`falkor-chat/scripts/load_append.py::{main,_worker}` call `httpx.Client(...)` methods directly: seeded at the call, which is its
+own consumer (`ownSite`, below: `_worker` is reached by `pool.submit(_worker, ...)`, which no call edge carries, and its
+`thread_id` parameter feeds the path), key is the path (`/threads/{?}/messages` for a parameter segment), the parameter
+`base_url` only feeds `urlBindings`;
 `falkor-chat/scripts/seed_nlq_eval_corpus.py::{main,_check_server_reachable,_poll_until_terminal}` call `_http_json(method, path)`,
 whose `Request(url, ...)` is seeded and lifted through `path` (and `method`) to each caller's argument; the wrapper composes
 `url = f"{BASE_URL}{path}"` in a local before the call, so the seed slot is the bare local and rule 4's limit applies (the
@@ -99,30 +101,78 @@ lifted fact is `confirmed`/`lifted-role`);
 `http_json(method, url)`, whose seed slot is the bare parameter `url`; lifted to the caller's `f"{base_url}/shop/api/..."`
 (`\x01/shop/api/...`, `base_url` a parameter: rule 2 drops the origin, `possible`). If the lifting fixpoint does not
 carry a template that mixes a parameter with another unresolved piece, that is returned to the architect as a finding before
-any engine change; (3) the analyst plan-gate stopping conditions: the coverage table below
+any engine change. The item keys above need the constant text of Python f-strings, which the stored bundles do not carry
+(precondition S-1, below): the count is measured on bundles that have it, else reported with that cause; (3) the analyst plan-gate stopping conditions: the coverage table below
 is asserted cell by cell with its cause-axis rows committed in 49a before 49b starts; 5d's oracle mechanism is the one stated
 there; 5d's rule is the one stated there over both receiver shapes with its probe table.
 
 **Pack.** Files: `cpg/packs/python-http-client/{pack.yaml,negatives.yaml}`, `cpg/tests/test_pack_python_http_client.py`, the
 leaf-harness registration in `cpg/tests/test_rule_pack_leaf_mutation.py`, `SERVED` in `cpg/tests/test_packrt_generic.py` (by
-hand, or the pack is unguarded). Shapes, each `scope.imports` gated: `requests.<verb>(url)` and `httpx.<verb>(url)`;
-`httpx.Client(base_url=...)` then `<client>.<verb>(path)` (`base_url` is a `urlBindings` `callsite` source,
-`arg: kw.base_url`, `scope: file`; the key is the path alone, a base path prefix is not joined); `urllib.request.Request(url,
-method=...)` and a literal `urlopen(str)`. A wrapper such as `http_json(method, url)` is carried by the existing
-lifting fixpoint (spec §1.6) when the call reaching it is kept by 5d (a type-backed member call, or a bare call of a `LOCAL`). Verbs: one lifting per verb, `bareDefault` the
-verb; `Request` uses companion `kw.method`, `bareDefault: GET` (`data=` without `method=` stays `GET`: pinned limit). Not
-covered: `requests.request`, `Session`, `aiohttp`, `http.client`. **Probe first (reported):** the `externalTarget` and
-`resolution` each shape gets on the fixtures and the 8 gold scripts; seed by `externalTarget` glob where it exists, by callee
-plus import gate otherwise. If the negatives show a `dict.get` over-match cannot be kept out, or the format cannot express a
-per-verb seed or an absent companion `arg`, that is returned to the architect as a finding before any engine change.
+hand, or the pack is unguarded; each new `ALLOWED` row there is justified in a comment), and the format additions below
+(`ccg/schemas/rule-pack-v1.schema.json`, `ccg/packrt/{lift,run}.py`; spec §1.6 is amended at the feature's close). Every
+shape is a lifting; the direct call is the lifting's own seed site. Recorded shapes (probed in the stored bundles, 2,276
+bundle files at `builtCommit 8377c326`; the probe is re-run in 49b and reported): `requests.<verb>(u)`, `httpx.<verb>(u)` and
+`<client>.<verb>(p)` on an untyped client all have `calleeName` = the verb, `resolution` `unresolved`, no `externalTarget`, no
+receiver; `httpx.Client(...)` is `external` `httpx.py:<module>.Client.__init__`; `Request(...)` and `urlopen(...)` are `external`
+`urllib.py:<module>.<member>(request).Request.__init__` and `...urlopen`. No `requests`/`httpx` verb call is typed anywhere in the
+stored bundles, so the pack has no typed verb seed (adding one is a leaf no test could exercise).
+- *Verbs* `get|post|put|patch|delete`: one lifting each (`py-get`...), seed `{call: {callee: <verb>, resolution: [unresolved]},
+  arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}`, `ownSite: true`, `urlLike: true`; the
+  rule's `extract.verb` is `{literal: GET}` (the lifted `Hit` is the *leaf's* callee, so a callee group cannot carry the verb).
+- *`urllib.request.Request(url, method=...)`*: seed `externalTarget` glob `urllib.py:*Request.__init__`, `scope` the `urllib`
+  prefix, `ownSite: true`; companion `kw.method`, `bareDefault: GET`, `unknown: "*"`. *`urlopen(x)`*: seed `externalTarget` glob
+  `urllib.py:*urlopen`, `ownSite` and `urlLike` (so `urlopen(req)`, whose argument is a `Request` object, yields nothing;
+  `urlopen("http://h/x")` and a wrapper `def f(url): urlopen(url)` do), verb `{literal: GET}`.
+- *`httpx.Client(base_url=...)`* is no seed: `base_url` is a `urlBindings` `callsite` source, `arg: kw.base_url`, `scope: file`;
+  the key is the path alone, a base path prefix is not joined. Not covered: `requests.request`, `Session`, `aiohttp`, `http.client`.
+- A wrapper such as `http_json(method, url)` is carried by the lifting fixpoint (spec §1.6) when the call reaching it is kept by
+  5d (a type-backed member call, or a bare call of a `LOCAL`).
+
+**Format additions (all optional, default off, so the `fetch` pack and the S12 conformance oracle are unchanged).**
+`liftings[].seeds[].scope`: the file gate of rule `scope`, evaluated by `run_lifting` on the *seed call's own file* before the
+seed is used. A rule's `scope` on a `lifted` match keeps its meaning (the leaf site's file, which for a lifted fact is the
+caller's) and this pack leaves it off: the caller of a wrapper need not import the HTTP library; the wrapper's file does.
+`liftings[].ownSite` (boolean): a slot is a leaf when no *slot* lies beyond it on the fixpoint (today a parameter node below it also
+counts, so a seed fed by a parameter is never a consumer unless a call edge reaches its function). With it, a wrapper
+that no call edge reaches (`pool.submit(f, ...)`, an untyped receiver, an entry point) is a consumer at its own site, from its
+own template; a wrapper with at least one lifted caller is still not a leaf. `liftings[].urlLike` (boolean): a leaf keeps only
+the alternatives that are URL-like (`httpkey.is_url_like(alt)`: it starts with `/` or `//`, matches `scheme://`, or is a run of
+unresolved markers followed by `/`) and the wholly unresolved ones; a leaf with no URL-like alternative is dropped from
+`PackFacts.lifted` (no keyless `possible` fact either), and `partialAlternatives` is computed before the filter so `[/a, \x01]`
+stays partial. Intermediate slots are untouched. A format word the runtime spells must be in the schema vocabulary, as
+`test_packrt_generic.py` requires.
+
+**Untyped verbs (decided).** In the stored bundles `requests.get(u)` and `cfg.get("k")` are the same record, so no seed can
+separate them; the gate is the file's import of `requests`/`httpx` plus URL-likeness at the leaf, not at the seed (a bare
+parameter `path` and `self.base + path` must be seeded: `LNK-11`, every wrapper). Measured on the stored bundles: 725
+untyped, `unresolved` Python call sites named `get|post|put|patch|delete` (549 with a non-URL constant argument, 17 with an
+unknown argument fed by a parameter, ...) lie in files that import neither library and are never seeded; 5 lie in importing
+files (`load_append.py`, the `httpx.Client` calls), all HTTP. **Consequences.** Precision: the residual false consumer is an
+untyped `.get/.post(...)` in a file importing `requests`/`httpx` whose argument resolves to a URL-like string
+(`routes.get("/health")`); it is `confirmed` when the key is fully known (the key rule is unchanged), 0 in the stored data,
+and it enters P1-36's precision measure. Recall: not found are a relative URL with no leading `/` (`client.get("items")` against
+a `base_url`), an aliased import (`from requests import get as g`), a verb call in a file that imports neither library (a
+session passed in), and a fully unknown URL (no keyless fact). A receiver tag in the bundle (P2, owner `architect`) turns
+these into typed seeds. No acceptance number changes: done-condition (1) and (2)'s 8 items reach their provider through the
+`Request` lifting (6) or the `httpx.Client` verb liftings (2).
+
+**Precondition: constant text of Python f-strings (unit P1-50, below; decided by the stakeholder 2026-11-20).** The stored
+bundles carry no `const` piece for 1,834 of 1,835 Python f-strings, so the `/shop/api/...`, `/threads/...` and `/documents/{id}`
+keys of done-condition (2) cannot form: of the 8 items only those whose URL text is a plain constant can link (an estimate from
+the stored value sets, not measured). 49b's code and tests are independent of P1-50 (synthetic records); the (2) measurement and
+the fixture rows with f-string URLs are taken on bundles rebuilt after it.
 
 **Wrapper reached through a name-linked caller (decided).** `packrt/extract.py:Corpus.callers_of` is built from `targets`
 only, so a wrapper called through an untyped receiver (`self._get(path)`, an untyped parameter) has no caller edge after 5d:
-its URL role is not lifted, and the consumer is the wrapper's own site, `possible`/`partial-key`. This is the honest status
-and a pinned known limit, not fixed in P1; a P2 backlog item (owner `architect`) gives lifting the `nameLinked` candidates
-as weakened callers. Tests: a wrapper called through `self.` and through an untyped parameter (not lifted, `possible`);
-the same wrapper through a constructor-typed receiver (lifted, as the fixtures' `ApiClient`); the 8-script count of (2)
-detects any recall cost.
+its URL role is not lifted from that call. With `ownSite` the wrapper's seed is then a leaf and the consumer is the wrapper's
+own site, from its own template: `possible`/`partial-key` when a path piece is unresolved (`/items/{?}`), nothing when the
+template holds no URL-like text (`self.base + path` is `\x01\x01`: a `POST /{?}` key would only match any one-segment
+provider; a `Request` wrapper with a bare parameter gives a keyless `possible` fact). A wrapper with at least one lifted
+caller is not a leaf, so its name-linked callers contribute nothing: a pinned limit, not fixed in P1; a P2 item (owner
+`architect`) gives lifting the `nameLinked` candidates as weakened callers. Tests: a wrapper called through `self.` and through
+an untyped parameter (the call is not lifted; the wrapper's own site as above, for both a `/items/{?}` template and
+`self.base + path`); the same wrapper through a constructor-typed receiver (lifted, as the fixtures' `ApiClient`); a wrapper
+whose only reference is `pool.submit(w, ...)` (own site); the 8-script count of (2) detects any recall cost.
 
 **Unknown-origin key rule (the contract is unchanged: a `confirmed` fact needs every slot its key uses resolved, N-17).**
 `Corpus.alternatives` (`packrt/extract.py`) marks an unresolved piece by element kind. `\x00` (`UNKNOWN`): an `importRef`
@@ -144,9 +194,11 @@ marker (`\x00` or `\x01`): an *alternative* of a value set that is unknown as a 
 marker occurs anywhere in `s`: a *string under construction* that is partly unknown. `\x01\x01` (two adjacent unknown pieces)
 is `has_unresolved` and not wholly unresolved, as `\x00\x00` is today. For a consumer `http` URL, `httpkey.split_url(url) ->
 (path, origin_dropped)` and `httpkey.normalize_key_parts(raw, form) -> NormalizedKey(key, origin_dropped, unresolved_in_path)`
-(a `NamedTuple`; `normalize_key` and `url_path_of` stay as thin wrappers returning `.key` and `.path`):
-1. *Authority position* (after `scheme://` or `//`, up to the first `/`, `?`, `#` or the end): a piece with either marker there
-   is the host; it is dropped from the key, as a known host is; `origin_dropped` is true (a known host leaves it false).
+(a `NamedTuple`; `normalize_key` stays a thin wrapper returning `.key`, `url_path_of(url)` returns `split_url(url)[0]`):
+1. *Authority position* (after `scheme://`, or after a `//` that begins the URL, a scheme-relative URL; a `//` anywhere else is
+   a path's empty segment, collapsed by step 6; the authority runs to the first `/`, `?`, `#` or the end): a piece with either
+   marker there is the host; it is dropped from the key, as a known host is; `origin_dropped` is true (a known host leaves it
+   false). A known-host `//h/a` therefore keys `/a`, not as a path segment `h`.
 2. *No scheme*: a leading run of `\x01` (one piece or several adjacent) immediately followed by `/` is the origin and is
    dropped, `origin_dropped` true. Every other position keeps today's behaviour, the segment holding the marker becomes `{?}`: a leading `\x00` (a
    path-prefix constant that failed to resolve must not lose its segment, or the real provider stops matching), a partial
@@ -184,7 +236,7 @@ Cite `-rule-pack-spec.md` §1.4 and this step in the `httpkey.py` docstring.
 |---|---|---|
 | `extract.py:Corpus.alternatives` (emits) | n/a | element-kind matrix: `unknown` and `ref` without a record and the alternatives cap give `\x01`; `importRef`, a `ref` cycle and the depth cap give `\x00` |
 | `lift.py:_verbs_at` (verb alternative) | whole | verb slot `[\x01]` is partial and falls to `unknown`; `[GET, \x01]` gives `GET`, partial |
-| `lift.py:run_lifting`, `resolved` | whole | caller slot `\x01/shop/api/session` is resolved (the analyst's case: `load_demo` and `language_salience_probe` keep `GET /shop/api/session`, `possible`); `[\x01]` is not; `\x01\x01` is |
+| `lift.py:run_lifting`, `resolved` | whole | caller slot `\x01/shop/api/session` is resolved (`load_demo` and `language_salience_probe` keep `GET /shop/api/session`, `possible`); `[\x01]` is not; `\x01\x01` is |
 | `lift.py:run_lifting`, both `partialAlternatives` | whole (list membership) | `[/a, \x01]` partial; `["/a?q=\x01"]` is not (decided in `_one`) |
 | `lift.py` opaque-slot test (new, rule 4) | whole | the rule 4 tests below |
 | `run.py:_apply`, the `url` list | whole | `[\x01/shop/api/session, \x01]` leaves `[\x01/shop/api/session]` |
@@ -220,8 +272,165 @@ transparent, measured, so rule 4 moves none). Negatives (49b): `dict.get("x")`, 
 `requests.get`, `urlopen` of a non-URL object; `validate_pack`; the mutation check on the verb, the import gate, the marker
 split, the two predicates, the opaque-slot test and the status downgrade.
 
+**Tests that 49b changes or adds to the 49a set.** In `test_p1_49a_pack_python_http_client.py`: (a) `test_every_rule_is_gated_by_scope_imports` becomes
+"every lifting seed carries `scope.imports` and no rule needs one" (the gate lives on the seed, see Format additions); add a
+wrapper in a file without an HTTP import called from a file with one (dropped: the seed's file decides) and the reverse (a
+wrapper in an importing file called from a non-importing file: kept). (b) `test_pinned_limit_data_without_method_stays_get` and
+`test_another_keyword_on_request_does_not_defeat_the_bare_get_default` expect `* /documents`: `lift._verbs_at` withholds
+`bareDefault` when the companion's container argument (`kw`, `a1`) holds any value set or flow, deliberately, since `data=`
+makes a urllib `Request` a POST and `headers=` cannot be told apart from it by a `kw.*` head; the bare `Request(url)` stays
+`GET`, `Request(url, method="POST")` stays `POST`. (c)
+`test_a_wrapper_with_no_lifted_caller_is_itself_the_possible_partial_key_consumer_PLAN_STATEMENT` splits in two: a seed slot
+`template[const "/items/", unknown]` gives the own-site `POST /items/{?}` `possible`/`partial-key`; a seed slot
+`concat[unknown, unknown]` gives no consumer. (d) `test_an_untyped_dot_get_with_a_non_url_string_key...` stays and gains the
+parameter-fed `d.get(name)` called with `"timeout"` (dropped at the leaf) and with `"/x"` (kept: the residual limit, pinned by
+name). In `test_p1_49a_httpkey.py`: add the known-host `//h/a` row (path `/a`, `origin_dropped` false) to the grid and spot set.
+New in 49b: `ownSite` and `urlLike` each with the on/off pair over `fetch_chain()`-style records (the `fetch` pack's output is
+identical with both off, run over `s14a`), `is_url_like` rows, `partialAlternatives` surviving the filter, seed `scope` on the
+seed's file. Existing tests 49b updates: `tests/test_packrt_extract.py` (the `alternatives` rows at the top: `unknown`, a `ref`
+without a record and the cap give `\x01`; `importRef` and a cycle stay `\x00`), `tests/test_packrt_generic.py` (`SERVED`
+gains the pack; the token scan then flags the pack's words in the runtime, each resolved by renaming in the runtime or one
+justified `ALLOWED` row), `tests/test_rule_pack_leaf_mutation.py` (the pack's leaves registered `KILLED`, `GATE` extended with
+the pack's test file).
+
 **Gate:** `analyst` (plan and code); no `data-scientist` note (no method choice; recall is P1-37's measure, already gated).
 **Sequencing:** after 5d and 46; before P1-41/P1-42 and the `ac5-gate-1` record (`httpkey.py` and `packrt/` are hashed).
+
+## P1-50 · 5d fix round and Python f-string constants — `tdd-engineer`
+
+**One serialized unit, one normalizer bump.** The 5d gates (`docs/reviews/connected-code-graph-p1-5d-49.md` "P1-05 5d diff gate" F1-F7;
+`docs/reviews/connected-code-graph-p1-5d-49-ml.md` B1, M1, M2, m1-m3) and the Python f-string defect both change what the normalizer
+writes, so they land together: `NORMALIZER_VERSION` `"0.7"` and one delta `0.7` in `tests/slice/test_normalize_equivalence.py`.
+Before the qa rebuild (coordination checklist item 4), after 5d (`69789943`), before 49b's (2) measurement and P1-41/P1-42.
+Gate: `analyst` re-gate, then the `data-scientist` re-audit (bar below). **`extract.sc` is unchanged only if the Part B check
+(step (c)) shows Joern's f-string pieces are always raw text.** If it forces a raw flag on the piece, the order becomes: script
+change, re-pin `extract.sc.sha256`, regenerate the `fixed-*.facts` and the `rt` table, then Part A's figures (the live `rt` pins
+and the draw file's `extractScriptSha256` move with it).
+
+### Part A: the 5d fix round (`cpg/extractors/joern/normalize/assemble_bundle.py:_self_rule`, tests, `cpg/extractors/joern/README.md`)
+
+**The `self` rule counts definers in the whole unit, not among Joern's candidates.** Condition (ii) is: the unit's symbol table
+`S` holds exactly one class method named `name` (a method whose parent is a type, any class), it is the enclosing method's own
+class's, and it is among the site's Joern candidates; (i) and (iii) are unchanged. Counting over the candidates held vacuously
+wherever Joern had already narrowed the call to the base method (`WorkflowExecutor._drive_loop` calling `self._execute_step`,
+overridden by two in-unit test doubles). Chosen over base-class data in `extract.sc` because it needs no extract change, no re-pinned
+script hash and no base-name resolution (a Python base is often a short imported name), and it never confirms what another
+definer in the unit could override. A test-double override counts as an override.
+**Figures (their one home):** of the 511 sites the first build confirmed, 379 stay `confirmed` (74%) and 132 become `possible`/`name-match`
+(26%: 117 Joern-narrowed in `fcs`, 15 elsewhere), status only, candidates listed, 0.47% of the 27,804 formerly `confirmed`
+Python call edges; 131 of the 132 are correct confirmations lost to an unrelated same-name class. Per unit the 379 are: claude 9,
+falkor-chat/server 147, mcp-monitor 7, salesperson 17, model-bench 22, skills 11, decision-models 166. Limits, reported not
+fixed: a subclass in another unit, an instance attribute shadowing the method, same-name classes unrelated by inheritance
+(class-aware retention needs base-class data: the P2 item with the SCIP upgrade, owner `architect`; a fail-closed subclass test by
+name over the staged source is a possible cheaper P2 route).
+
+**Acceptance, derived independently of `assemble`.** The expectation of `test_the_self_rule_confirms_the_ast_references...` and of the
+overlay is written by Python `ast` over the oracle's stage tree (pinned at the oracle commit, as the pinned-stage test requires),
+never from `assemble` output: the `self.m()` calls in a method whose class defines `m` by `def`/`async def` in its body, where no
+other class anywhere in the unit's stage files (tests included) does, restricted to the sites the type rule demotes and whose facts
+list that method among `in`. A disagreement in either direction fails and lists the ids. The hand-listed snapshot
+`selfByJoernNarrowing` and its readers (`test_overlay_5d.py`, `test_normalize_equivalence.py`) are deleted. Rows: the other definer
+{subclass, unrelated class, superclass} x {present in `in`, absent from `in` (Joern narrowed to the base method)}, plus one live
+golden with a real Joern-narrowed `self.m()` and an in-unit override (recorded with the Joern version).
+
+**Draw and re-audit.** `tests/data/p1_05_5d_self_audit_draw.json` is regenerated from the bundles rebuilt at normalizer `0.7`, at the
+pinned oracle commit: population ids sorted, `random.Random(20261119).sample(population, 30)`, the same seed over the *new*
+population (the previous `drawn` list stays in the file under `previous`, reported beside the new one). The `data-scientist`
+re-audit passes on: **30 of 30 correct** by hand against the source at the pinned commit, **and** the `ast` census over every site of
+the new population finds no other definer of the name in the unit (0 hits; `a118e830a3fd791d5a6b2c9e6f2cf705` absent); the
+population size and the number of drawn sites that were Joern-narrowed are reported (a size more than 10% off 379 is explained).
+Any miss fails the rule (narrowed or removed, never a lower bar). The Wilson bound (0.886 at 30/30) is a floor over the in-unit
+population only; the census is reported beside the hand audit; the test report says the population list comes from the draw file
+and which normalizer built the bundles.
+
+**Typed receivers with a short type name stay demoted: a counted limit.** Joern gives `rt` as the bare annotation name (`Campaign`,
+`Fx`) when the annotated class is imported but not resolved, so `target == rt + sep + name` fails: 339 sites, 334 in
+`decision-models`, about 9.5% of the demotions and 1.2% of the 27,804. Accepting a short `rt` equal to the target's class name
+would be a second `confirmed`-producing rule without an audit, and it wrongly confirms when the annotation names a same-named class
+of another unit; the cost it avoids is status only, and `merge_scip` `name_linked` re-confirms a site whose SCIP target agrees
+(P1-15). Stated in `cpg/extractors/joern/README.md`; a planted row (an annotated parameter of a sibling-module class) pins it as a
+limit. **Reversal (a stakeholder item, owner `teco`, read from the P1-15 evidence run, which reports it):** if more than 10% of
+these short-`rt` sites (34 of 339) are still `possible` after `merge_scip`, the rescue rule is reopened with its own audit; the
+10% is the architect's proposal and the stakeholder may change it.
+
+**Tests and pins.** JS/TS type rule: rows over `type_backed("javascript", ...)` and a JS `assemble` fixture, one per cell: member
+typed to the base (confirmed, separator `:`), `ANY` base (demoted), module-typed `this` (demoted by the type rule, `self` rule
+not applied), bare parameter (demoted), bare `LOCAL` (kept); expected values written from the `jssrc2cpg` probe, not from the
+function; the mutant `MEMBER_SEP = {"python": ".", "javascript": "."}` turns a row red. Receiver tag: the live test
+`test_the_ported_extractor_reproduces_the_slices_raw_facts[fcs]` asserts (a) for every id in `overlay_5d.rt_table(tag)` the live
+`rt` equals the table, and (b) the live run's `rt`-bearing facts equal a pinned count and a pinned sha256 of the sorted `(id, rt)`
+list for the unit (the live run carries `rt` on every dynamic call with targets, 8,721 in `falkor-chat/server`, far beyond the 1,479
+listed, so (b) is what makes a wrong receiver base on a currently backed site visible); the `recvTag` mutant `arg(r, 1)` ->
+`arg(r, 2)`, run through a copy of `extract.sc` and never in place, turns it red. Pinned literals that go red and are re-derived,
+not edited to pass, each with the independent count that supports it: `1479` and `117` in `test_overlay_5d.py`; `(264, 147, 117)`
+(the `self`-rule test) and `(1216, 3)` (`fcs_touched`, `sp_touched`) in `test_normalize_equivalence.py`.
+**`merge_scip` disagreement count:** `MergeResult.counts` gains `disagree_partial_kept` (a site with a `name_linked` entry that keeps
+a type-backed target and whose SCIP target is outside `J` stays `confirmed`, where the same disagreement with no entry is
+demoted); owner the P1-15 `merge_scip` step (`tdd-engineer`), pinned by a case in `tests/test_scip_merge_name_linked.py`, reported
+by the evidence run.
+
+### Part B: constant text of Python f-strings
+
+**Defect.** `normalize.core.Resolver.lit` runs `ast.literal_eval` on the Joern piece `c`; for a Python f-string the pieces of the
+`formatString` operator carry the *unquoted* text (`tests/golden/projection/facts.python.jsonl`: `{"c":"guard path ","o":"lit"}`), so
+every constant piece becomes `{"unknown": "runtime-built"}`: 1,834 of 1,835 Python `template` value sets in the stored bundles have no
+`const` (`load_append.py`'s `f"/threads/{thread_id}/messages"` is three unknowns).
+**Check first (reported; each is a golden row whose expected value is written from the probe, not from `Resolver`):** run the shipped
+`extract.sc` through live Joern over one scratch Python file whose f-strings cover `f"/a/{x}"`, `f"it's {x}"`, `f"{a}'b'{c}"`,
+`f"{a}1{b}"`, `f"{{lit}}{x}"`, `f"a\n{x}"`, an implicitly concatenated `"p" f"{x}"`, a nested format spec and an empty piece; record the
+raw `c` of every piece (in particular whether `{{` arrives as `{{` or `{`, and where pieces split). **Change:** in `Resolver.element`,
+a `lit` child of a `fmt` in a Python file is `{"const": <c>}`, `c` taken as raw text and not parsed, if the check shows Joern never
+quotes f-string pieces; if it quotes some, parse-first is kept for the pieces shown quoted and the rule is stated from the data, or
+`extract.sc` gains a raw flag on the piece. The normalizer does not merge adjacent `const` pieces; escape sequences stay source text
+(irrelevant to URL keys). The empty-piece filter, the depth cap, JavaScript/TypeScript templates (backtick regex), `concat`, every
+non-f-string literal and every record kind except `valueSet` and `constant` values holding a Python template **must not change**.
+
+**Independent reference (in the tests, never importing the normalizer).** For each Python `JoinedStr` in the stage trees: its pieces
+with each run of adjacent constant text merged into one `const` whose text is the raw source segment (`ast.get_source_segment` on
+the `Constant` nodes, exact on Python 3.12 where `ast` merges adjacent text and Joern splits it at implicit concatenation and at
+`{{`/`}}`), and each `FormattedValue` as one non-const piece. The compared side is the stored/rebuilt template element with its
+adjacent `const` pieces merged by the test. The `{{`/`}}` convention follows the probe. Template elements are matched to a `JoinedStr`
+through the stored records: `(file, call line, argument path)` for a `valueSet`, the qname for a `constant`. A disagreement in either
+direction fails and lists the ids; a class of difference is admitted only by name in the test, with its probe row.
+
+**Measured effect.** (1) Census over the rebuilt bundles: Python `template` value sets with at least one `const` piece (1 of 1,835
+today) against the reference's count, disagreements listed. (2) The delta `0.7` edits the stored Python template elements in
+`fcs`/`sp` to the reference's pieces, listed by id, with every other record byte-identical
+(`test_whole_bundle_records_are_the_same_multiset_per_type` stays green for the other types). (3) Done-condition (2) of P1-49: the
+8-script count before (at most about 3, an estimate) and after (expected 8 of 8), a miss reported with its cause and never tuned
+past; the fixture rows with f-string URLs (`LNK-13`, `LNK-14`, `LNK-11`, `AC6-EX-4`) are re-derived by `qa-engineer` on the rebuild.
+(4) Provider and mount keys: the number of provider facts and mount prefixes (`run_packs` over the rebuilt bundles) whose key or
+prefix changes because an f-string now carries constants, by kind; none may become `confirmed` that was not (a provider or mount
+holding an f-string stays unresolved, the mount `unresolved-part` rule and the provider `drop` mode).
+
+### Interactions between the two parts (each pinned by a test)
+1. Disjoint output: the `self` rule edits `callsite` `targets`/`resolution`/`status`/`reason`; Part B edits only `valueSet` and
+   `constant` values. Callsite ids are `(symbol, name, ordinal)` and hash no value, so the population ids are the same with or
+   without Part B: a test builds `fcs`/`sp` with Part A only and with both and asserts the callsite records and id sets equal,
+   which is what lets the draw be made once.
+2. The newly `possible` sites have no `targets`, so they leave `callers_of`, and a wrapper reached only through them is not lifted
+   (the P1-49 name-linked-caller limit). None of P1-49's 8 dev wrappers is called through `self.` or an overridden method (bare
+   same-module calls), so done-condition (2) is unaffected; the count is re-run after the bump.
+3. Part B turns an all-unknown template into one with constants, never the reverse; rule 4's transparency test already treated
+   `\x01\x01...` as non-transparent, so no lifted fact changes class because of it. P1-49's figures are taken after both parts.
+4. One version: the delta's `apply` composes the two edit sets over disjoint fields;
+   `test_each_delta_pins_its_version_and_the_last_one_is_the_normalizers_current_version` holds with `"0.7"`.
+
+### Done when (on the ten Python units rebuilt at the pinned oracle commit; the figures are the analyst's scratch rebuild, the implementer re-derives them independently, a mismatch is investigated and never tuned)
+1. `selfResolvedSites` = **379**, per unit as stated above, equal to the `ast` single-definer set over the oracle stage trees computed
+   without importing `assemble`, every disagreement listed by id; `a118e830a3fd791d5a6b2c9e6f2cf705` absent.
+2. `nameLinkCounts` = (3,694 demoted, 379 self); against the rt-stripped baseline 3,686 `confirmed`->`possible` and 8 narrowed.
+3. A scratch mutant restoring (ii) to count over the candidates turns the Joern-narrowed row, the live probe and the census red;
+   the JS `MEMBER_SEP` and `recvTag` `arg(r, 2)` mutants (through a copy) turn their rows red.
+4. Part B: every Python template's constant pieces equal the reference over `fcs`/`sp` and the census; the callsite records and id
+   sets are equal with Part A only and with both.
+5. The 8-script count is reported (expected 8 of 8; a miss with its cause).
+6. The whole `cpg` suite and `-m "slice and live"` run in one invocation, the known failures named; the draw file regenerated and
+   handed to the `data-scientist` (bar above).
+
+**Order inside the unit.** (a) the independent references and the JS/TS, receiver-tag and literal tests, red; (b) the `_self_rule`
+change; (c) the Part B live check, then the `Resolver.element` change, goldens regenerated; (d) the delta `0.7`, the pinned
+literals, the regenerated draw file; (e) the full run of Done when 6.
 
 ## P1-17 · linker — `tdd-engineer`
 
