@@ -55,9 +55,12 @@ same Docker volume and Redis port):
 
 **A — Docker Compose** (`compose.yaml`): FalkorDB + the server together.
 ```bash
-docker compose up --build     # FalkorDB :6379/:3000 + server at :8000
-docker compose down           # stop — NEVER `down -v` (the volume is shared, persistent data)
+docker compose --env-file config/falkordb.env up --build   # FalkorDB :6379/:3000 + server at :8000
+docker compose --env-file config/falkordb.env down         # stop — NEVER `down -v` (the volume is shared, persistent data)
 ```
+Run these from `falkor-chat/`, and pass `--env-file config/falkordb.env` to every compose command
+(`ps` and `logs` too): that file holds this deployment's FalkorDB settings, and without it compose
+refuses to run rather than start FalkorDB on the image's defaults.
 Notable details baked into the compose file:
 - The FalkorDB image's actual data directory is `/var/lib/falkordb/data`, **not** `/data` —
   mounting at `/data` silently persists nothing.
