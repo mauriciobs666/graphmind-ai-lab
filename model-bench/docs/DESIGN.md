@@ -103,8 +103,13 @@ The CLI is `python -m modelbench` (`modelbench/__main__.py` → `cli.main`), lau
 | `4` | Invalid pack: a `validate` failure, a pack load error, an unmet `environment.requires`, a `callSurface` the catalog `type` contradicts, a tool-calling ineligible model, a candidate refusal (§7), an off-pin `--request-timeout` on a decision-point pack; or, **after the record is already stored**, a `tool-caller` conversation censored by a tool-dispatch failure. |
 | `5` | Fingerprint incomplete, or `host.json` absent, invalid or stale; or `residentModelsAtEnd` not capturable after three retries. |
 
-There is no score-driven exit code. An uncaught exception exits `1` (§2.8 names the one
-shipped case).
+There is no score-driven exit code. An uncaught exception exits `1`: §2.8 names one shipped
+case, and a timeout on `run`'s start-of-run `residency()`/`catalog()` read (§3.2 step 4) is
+another — it raises `LMStudioUnreachable` (§4.2), which `run`'s CLI handler does not catch, so it
+is a traceback with exit `1`, unlike the probe and warm-up failures that exit `3`.
+
+The exit-`5` message for an uncapturable `residentModelsAtEnd` says the transcript is retained at
+`results/transcripts/<runId>.jsonl`, a file no run writes (§3.8).
 
 ### 2.3 `compare`
 

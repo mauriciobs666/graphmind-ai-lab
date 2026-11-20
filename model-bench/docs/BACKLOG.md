@@ -18,61 +18,47 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   *better* one on recall (plan §3.8.1; the report prints this as a standing honesty line). Lifting
   the ceiling means new queries, several with |R| ≥ 3, each human-verified per FR-19 — new golden
   data, which is why it is not in first delivery.
-- **`tools/exec.py`'s `order_by` sort raises an uncaught `TypeError` on a `None`-valued sort key;
-  the fix is deferred to the next deliberate `packVersion` bump of `nlq-structured-query`.** No
-  shipped golden item reaches it (every `order_by` item sorts on a never-null `Product.price`), but
-  a sparse property in `tables.json`'s catalog half would. The file lives inside the content-hashed
-  pack (`packs/nlq-structured-query/tools/exec.py`), so any edit changes the pack's `contentHash`
-  (`8f975842`) and unpairs future runs from the 18 recorded `1.2.0` runs — hence the stakeholder's
-  deferral. The fix orders nulls the way FalkorDB does (last ASC, first DESC — live-verified,
-  including the `WITH DISTINCT … ORDER BY` shape `querygen.compile` emits for an order key outside
-  the projection), not by raising `SchemaViolationError`: `compile_and_execute` never raises past
-  validation. The spec already exists —
-  `tests/test_tools_exec.py::test_order_by_a_sparse_property_places_nulls_the_way_falkordb_does`,
-  `xfail(strict=True, raises=TypeError)` — and its marker comes off with the fix. A later test with
-  tied keys or several nulls compares each tie group as a set, not a sequence: FalkorDB's order
-  among ties is not mirrored between ASC and DESC (`docs/reviews/s4-gate-followups.md`, Pass 1 —
-  FX1, N2).
+- **`tools/exec.py`'s `order_by` sort raises an uncaught `TypeError` on a `None`-valued sort key**
+  (DESIGN §6.4). No shipped golden item reaches it (every `order_by` item sorts on a never-null
+  `Product.price`), but a sparse property in `tables.json`'s catalog half would. The fix is deferred
+  to the next deliberate `packVersion` bump of `nlq-structured-query`: the file sits inside the
+  content-hashed pack, so any edit changes `contentHash` (`8f975842`) and unpairs future runs from
+  the 18 recorded `1.2.0` runs. It orders nulls the way FalkorDB does (last ASC, first DESC;
+  live-verified, including the `WITH DISTINCT … ORDER BY` shape `querygen.compile` emits) and never
+  raises `SchemaViolationError` — `compile_and_execute` does not raise past validation. The spec
+  is `tests/test_tools_exec.py::test_order_by_a_sparse_property_places_nulls_the_way_falkordb_does`,
+  `xfail(strict=True, raises=TypeError)`; the marker comes off with the fix. A test with tied keys
+  or several nulls compares each tie group as a set: FalkorDB's order among ties is not mirrored
+  between ASC and DESC (`docs/reviews/s4-gate-followups.md`).
 - **`report.py`'s lucky-pass labelling (†/‡) covers the descriptive k/n cells only.** If a pack
-  ever makes an `exactMatchBy*` metric a verdict metric, everything downstream of it goes
-  unlabelled — `compare_report`'s verdict text, its Holm row, `rank_report`'s reference-anchored
-  family and the `<!-- rank-report -->` marker (which `scripts/consolidate_sweep_reports.py` carries
-  into a sweep consolidation) — exactly where discordant pairs made of lucky passes matter most. Not
-  reachable by any shipped pack (`nlq-structured-query` declares only `layer1ExactMatchRate` as
-  verdict and headline). Whoever ships such a pack either labels those sections (one line under the
-  heading reusing the † footnote) or accepts the limit knowingly
-  (`docs/reviews/s4-gate-followups.md`, Pass 1 — FX2, F2). Optional polish in the same file: a
-  headline-only `rank_report` never names a stored-vs-placed `luckyPassCount` disagreement (suffix
-  the value in `_render_scorer_counts` with `‡`; Pass 2, N3), and
-  `_LUCKY_PASS_DISAGREEMENT_FOOTNOTE` is worded for one arm though it can list several (Pass 2,
-  N4).
-- **`results.Outcome`'s `Literal` (`results.py:38`, `["pass", "fail", "n_a", "parse_failure"]`) has
-  been missing `"unrunnable"` since S4.** `classification.score_item`/`extraction.score_item` both
-  already construct `ItemResult(outcome="unrunnable", ...)` on a `no_response` withholding
-  (`classification.py:218-221`, `extraction.py:216-221`) — a real, shipped, already-gated value the
-  type annotation does not admit. Uncaught because this repo runs no type checker in CI (no
-  `mypy`/`pyright` config anywhere in the tree). Found independently while verifying the S7 spec
-  (`docs/plans/small-model-benchmarking-s7-spec.md`), whose own `grounding.py` design correctly
-  mirrors this same precedent rather than inventing a fresh one — not this spec's defect to fix.
-  Widening the `Literal` is a one-line change but not a no-judgment one: it needs a sweep of every
-  `match`/`if`-chain over `Outcome` (at least `report.py`, `results.py`'s own aggregation helpers)
-  to confirm none silently assumes only four members before the fifth is added to the type.
+  ever makes an `exactMatchBy*` metric a verdict metric, everything downstream goes unlabelled:
+  `compare_report`'s verdict text and Holm row, `rank_report`'s reference-anchored family, and the
+  `<!-- rank-report -->` marker that `scripts/consolidate_sweep_reports.py` carries into a sweep
+  consolidation. No shipped pack reaches it (`nlq-structured-query`'s only verdict and headline
+  metric is `layer1ExactMatchRate`). Whoever ships such a pack labels those sections (one line under
+  the heading reusing the † footnote) or accepts the limit knowingly. Two polish items in the same
+  file: a headline-only `rank_report` never names a stored-vs-placed `luckyPassCount` disagreement
+  (suffix the value in `_render_scorer_counts` with `‡`), and
+  `_LUCKY_PASS_DISAGREEMENT_FOOTNOTE` is worded for one arm though `{arms}` can list several
+  (`docs/reviews/s4-gate-followups.md`).
+- **`results.Outcome` (`results.py:38`) omits `"unrunnable"`.** Every scorer builds
+  `ItemResult(outcome="unrunnable", …)` on a no-response call (`classification.py`, `extraction.py`,
+  `grounding.py`, `retrieval.py`, `agreement.py`, `toolcalls.py`, `runner.py`), and DESIGN §6.1 lists
+  it as an outcome, but the `Literal` admits only `pass`/`fail`/`n_a`/`parse_failure`. No type checker
+  runs in this repo (no `mypy`/`pyright` config), so nothing flags it. Widening is one line, but first
+  sweep every `match`/`if` chain over `Outcome` (at least `report.py` and `results.py`'s aggregation
+  helpers) for one that silently assumes four members.
 
-- **`checklist_pass`'s `mustContain`/`mustNotContain` containment is plain, canonicalized (case/
-  whitespace-only) substring matching, which fails on ordinary morphological paraphrase** — split
-  out of the S7 live-run defect (`docs/test-reports/small-model-benchmarking-s7-report.md`, "Defect
-  — `_ABSTENTION_MARKERS` does not recognize...", mechanism 2) as explicitly out of scope for the
-  `_ABSTENTION_MARKERS` widening fix, per a `data-scientist` consult that scoped the two mechanisms
-  separately. Confirmed live on `cr-11`/`cr-17` (`packs/chat-responder-grounded-answers/
-  items.jsonl`): `"4 retries" in "4 retry attempts"` is `False` (different stems, not a whitespace
-  issue) and `"30 minutes" in "30-minute"`/`"8 hours" in "8-hour"` are both `False` (a tokenization-
-  boundary artifact — the hyphen splits what plain substring containment treats as one token).
-  Word-boundary tokenization alone does not fix either cited example — a real fix needs stemming or
-  hand-rolled normalization, itself a real design task, not a one-line change: it needs its own
-  held-out fixture set to bound how many new false positives a widened containment check
-  introduces, the same way the `_ABSTENTION_MARKERS` widening needed the hedge-then-answer
-  adversarial guard. Scope creep for this zero-runtime-dependency component if folded into a
-  smaller fix; a `data-scientist`-scoped design task on its own.
+- **`checklist_pass`'s `mustContain`/`mustNotContain` check is plain, canonicalized (case/whitespace)
+  substring matching, so ordinary morphological paraphrase fails it** (`scoring/grounding.py`;
+  DESIGN §6.5). Live on `cr-11`/`cr-17` of `packs/chat-responder-grounded-answers/items.jsonl`:
+  `"4 retries" in "4 retry attempts"` and `"30 minutes" in "30-minute"` are both `False` (different
+  stems; a hyphen splitting one token). Word-boundary tokenization alone fixes neither; a real fix
+  needs stemming or hand-rolled normalization, with its own held-out fixture set to bound the new
+  false positives (as the `_ABSTENTION_MARKERS` widening needed its hedge-then-answer guard). A
+  `data-scientist`-scoped design task, not a one-line change, and scope creep for a
+  zero-runtime-dependency component if folded into a smaller fix
+  (`docs/test-reports/small-model-benchmarking-s7-report.md`, mechanism 2).
 
 - **`report.py` prints no per-script breakdown for `tool-caller`, only pooled turn-level exploratory
   metrics and the one per-conversation verdict metric.** Named in the S6 QA pass's feedback
@@ -84,103 +70,70 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   actioned, by the S6 QA pass (`docs/test-reports/small-model-benchmarking-s6-report.md`) — worth a
   dedicated root-cause pass only if `plaintext` `historyReplay` is ever considered for real use with
   this model.
-- **No paired significance test exists for a turn-pooled exploratory metric** (e.g. the
-  duplicate-instruction rate) — `report.py` has no interval for a metric whose analysis unit is a
-  turn rather than the role's own conversation/item unit, so such a metric can only be reasoned about
-  conceptually, never measured directly. Named as a coverage gap by the S6 QA pass
-  (`docs/test-reports/small-model-benchmarking-s6-report.md`), not actioned there.
+- **No paired significance test exists for a turn-pooled exploratory metric** (e.g.
+  `duplicateWithinTurn`/`duplicateCrossTurn`): `report.py` has no interval for a metric whose analysis
+  unit is a turn rather than the role's conversation/item unit (DESIGN §10 prints it without one), so
+  such a metric can be reasoned about but not measured
+  (`docs/test-reports/small-model-benchmarking-s6-report.md`).
 
-- **`validate_pack` still has one axis that crashes instead of reporting when a declared data file is
-  not yet authored.** `_answerability_stamp_problems` (`packs.py`, the `nlq-generator`-only
-  `"answerable"` check) iterates `pack.iter_items()` unguarded, so a manifest that declares
-  `data.items` before `items.jsonl` exists makes `validate_pack` raise `FileNotFoundError` — out of
-  both `cli.py` callers, `validate` and `run`'s pre-flight — instead of returning a problem string,
-  breaking the shape its own docstring states (`[]` means valid, matching `Fingerprint.validate()`). Reproduced 2026-09-18 on a copy of the shipped
-  `packs/nlq-structured-query` with `items.jsonl` removed. The two sibling axes that read a
-  data file are guarded — `_row_count_identity_problems` from the start, `_clean_through_turn_h_problems`
-  since S6, when it had this identical defect (`try/except (OSError, json.JSONDecodeError)` → one
-  problem string, pinned by a `tests/test_packs.py` case); the fix here is the same shape, plus its
-  mirror test. Low risk: no shipped pack hits it, only a pack
-  mid-authoring.
+- **`validate_pack` raises instead of reporting when a declared data file is not yet authored.**
+  `_answerability_stamp_problems` (`packs.py`, the `nlq-generator`-only `"answerable"` check) iterates
+  `pack.iter_items()` unguarded, so a manifest declaring `data.items` before `items.jsonl` exists
+  makes `validate_pack` raise `FileNotFoundError` out of both `cli.py` callers (`validate` and
+  `run`'s pre-flight), breaking its own contract that `[]` means valid and anything else is a problem
+  string. Reproduced on a copy of `packs/nlq-structured-query` with `items.jsonl` removed. The two
+  sibling axes that read a data file are guarded (`_row_count_identity_problems`,
+  `_clean_through_turn_h_problems`: `try/except (OSError, json.JSONDecodeError)` → one problem
+  string, pinned in `tests/test_packs.py`); the fix is the same shape plus its mirror test. Low risk:
+  only a pack mid-authoring hits it.
 
-- **`stats.verdict()`'s "is better than" wording assumes every verdict metric's own raw rate is the
-  desired outcome — untrue for `falseAdvanceRate`/`falseSuspendRate`.** `modelbench/scoring/
-  classification.py:209-210,259` stores the error itself as the metric's own "success": for a
-  `clear_suspend` item, `advanced=True` IS the false-advance event, and
-  `counts["falseAdvanceRate"] = int(advanced)`; symmetrically, `counts["falseSuspendRate"] =
-  int(not advanced)` on a `clear_advance` item IS the false-suspend event. So a model's own
-  `BinaryMetric.rate` for either metric is the rate of the *undesired* event — lower is better —
-  while `stats.verdict()`'s generic winner selection (`stats.py:1320`, `winner, loser = (a_label,
-  b_label) if diff >= 0 else (b_label, a_label)`) and the `report.py` text built from it are
-  polarity-blind: a distinguishable guard-judge verdict on either metric would print "X is better
-  than Y" when X in fact has the *higher* error rate. **Read-verified by tracing both files; never
-  yet observed live** — every shipped `reports/guard-judge-*.md` was checked and none has reached a
-  distinguishable verdict on either metric, so this has never surfaced in a rendered report. Full
-  mechanism, and a scoped design that avoids the defect in new code without fixing it here:
-  `docs/plans/small-model-catalog-sweep.md` §2.4 and §6.
+- **`stats.verdict()`'s "is better than" wording assumes a higher raw rate is the better outcome —
+  untrue for `falseAdvanceRate`/`falseSuspendRate`.** `classification.score_item` stores the error
+  itself as the metric's success (`counts["falseAdvanceRate"] = int(advanced)` on a `clear_suspend`
+  item; `counts["falseSuspendRate"] = int(not advanced)` on a `clear_advance` one, documented at
+  `classification.py:509-512`), so lower is better, while `stats.verdict`'s winner selection
+  (`stats.py:1400-1405`, `diff >= 0`) is polarity-blind and `compare_report` prints its text
+  unmodified (`report.py:3134`). A distinguishable guard-judge verdict on either metric would print
+  "X is better than Y" when X has the higher error rate. `rank_report` already corrects for it
+  (`_LOWER_IS_BETTER`, `_polarity_corrected`). Read-verified, never observed live: no shipped
+  `reports/guard-judge-*.md` has a distinguishable verdict on either metric. Mechanism and a scoped
+  fix: `docs/plans/small-model-catalog-sweep.md` §2.4 and §6.
 
-- **`report.rank_report()`'s reference-not-found error message is oddly worded, not wrong.**
-  `report.py:1362-1368`: when `--reference` names a model key with no stored run, the raised
-  `ValueError` reads `"reference model {reference!r} has no stored, consistent run for this
-  pack"`, with `" and session"` appended — but that suffix's condition is `if runs`, i.e. it
-  appends whenever the pack has *any* other stored run at all, not when a `--session` filter was
-  actually the reason the reference wasn't found. Reads backwards: a reader would expect the
-  session clause to appear only when a `--session` argument was actually passed and is plausibly
-  why the reference is missing, not merely because *some* runs exist. **Confirmed by reading the
-  code; not a live bug** — the message is still factually accurate either way, just confusingly
-  phrased. Flagged during Unit B's code-gate review of `docs/plans/small-model-catalog-sweep.md`
-  (`docs/reviews/small-model-catalog-sweep-impl.md`, "Unit B Implementation Review"). Worth a
-  one-line reword (tie the suffix to whether `session` was actually passed to `rank_report`, not
-  to whether `runs` is non-empty) the next time this function is touched.
+- **`report.rank_report()`'s reference-not-found `ValueError` appends `" and session"` whenever any
+  other run is stored** (`report.py:1843-1846`, `+ (" and session" if runs else "")`), not only when
+  a `--session` filter hid the reference. Accurate but misleading wording, not a live bug. A
+  one-line fix needs the CLI's `session` threaded into `rank_report` (it has no such parameter;
+  `cli._select_rank_arms` applies the filter) or the suffix dropped; do it the next time this
+  function is touched.
 
-- **`report.rank_report()`'s zero-`n` exclusion banner double-counts a run's items when two
-  verdict metrics on the same run both have `scoreable={}` items — the same overcount the banner
-  exists to prevent, triggered by a different scorer path than the one that motivated it.**
-  `_attempted_for_metric` (`report.py`, Defect-1 fix) counts an item toward `metric`'s attempted
-  total when it either declares `metric` in `scoreable` or declares nothing at all
-  (`scoreable == {}`) — the second clause is what lets it correctly read `nlq-structured-query`'s
-  real parse-failure shape (a received-but-unparseable response, whose `scoreable` is genuinely
-  `{}`, not `{metric: False}`) without regressing to "0 items attempted." But `scoreable == {}` is
-  also exactly what every scorer in the package emits on a **no-response** item — `classification.py:
-  239-244`'s `score_item`: `if result is None: return ItemResult(..., scoreable={}, counts={},
-  ...)`, returned *before* the tier→metric mapping (`_METRIC_BY_TIER`) is ever consulted, so a
-  timed-out/unrunnable item carries no record of which verdict metric its tier would have scored.
-  `extraction.py`, `retrieval.py`, and `grounding.py` all emit the identical `scoreable={}` shape
-  on their own no-response path. For guard-judge — the only shipped pack with two verdict metrics
-  sharing one run's `items` list — a run whose items from **both** tiers time out (a total or
-  partial outage, not a parse failure) makes `_attempted_for_metric` count every one of those
-  empty items toward **both** `falseAdvanceRate`'s and `falseSuspendRate`'s own banners: reproduced
-  directly (40 `falseAdvanceRate`-tier + 30 `falseSuspendRate`-tier items, all `scoreable={}`,
-  mirroring `classification.py`'s own no-response `ItemResult` exactly) — both banners read "70
-  item(s) attempted" where the true split is 40/30, the identical overcount shape Defect 1's fix
-  exists to close. **Read-verified by tracing the real scorer code and reproducing against a
-  fixture built from its own no-response `ItemResult` shape; never yet observed live** — every
-  stored guard-judge run in the current sweep (`results/runs/guard-judge-understanding-*.json`,
-  17 files) was checked and none carries a single `scoreable == {}` item, so this has not produced
-  a wrong number in any rendered report to date.
+- **`rank_report()`'s zero-`n` exclusion banner double-counts items when two verdict metrics share a
+  run and both have `scoreable={}` items.** `_attempted_for_metric` (`report.py`) counts an item
+  toward `metric` when it declares `metric` **or** declares nothing (`scoreable == {}`; the second
+  clause is what lets it read `nlq-structured-query`'s real parse-failure shape). But `{}` is also
+  every scorer's **no-response** shape (`classification.py:586-596` returns before the tier→metric
+  map is consulted). For guard-judge, the only pack with two verdict metrics on one `items` list, a
+  run whose items from both tiers time out prints "70 item(s) attempted" under **both**
+  `falseAdvanceRate`'s and `falseSuspendRate`'s banners where the true split is 40/30. Reproduced
+  with a fixture built from `classification.py`'s own no-response `ItemResult`; never observed live
+  (none of the 19 stored `guard-judge-understanding-*` runs has an empty-`scoreable` item).
+  The fix is not to guess which tier an empty item belonged to (that is not in the stored record,
+  and inventing it breaks "declared, never inferred", `AGENTS.md`): once more than one verdict
+  metric shares a run's items and an ambiguous count exists, the banner prints the items that
+  explicitly declared `metric` plus a separate, named count of items that recorded no response for
+  any metric and cannot be attributed to it
+  (`docs/reviews/small-model-catalog-sweep-impl.md`, Defect 1 fix, verification round 2).
 
-  The fix is not "guess which tier an empty item belonged to" — that information is not in the
-  stored record (a no-response `ItemResult` carries no `detail`/tier field, per
-  `classification.py:241-248`), and inventing a split would itself violate the "declared, never
-  inferred" rule this component holds everywhere else (`AGENTS.md`'s load-bearing invariants) —
-  the exact rule the empty-scoreable-item design already leans on for every other case. The honest
-  shape is to make the banner say what it actually knows once more than one verdict metric shares
-  a run's items and an ambiguous item count exists: the number of items that explicitly declared
-  `metric`, plus a separate, named count of items that recorded no response for *any* metric in
-  this run and cannot be attributed to `metric` specifically — never a single confident total that
-  silently assumes an even (or any particular) split. Full mechanism, reproduction, and the
-  precedent this follows: `docs/reviews/small-model-catalog-sweep-impl.md`, "Verification round 2
-  — 2026-09-20" under the Defect 1 fix section.
-
-- **The `nlq-structured-query` pack no longer mirrors falkor-chat's production parse (filed
-  2026-10-22 from `falkor-chat/docs/reviews/salesperson-single-model.md` P5-4).** Since
-  falkor-chat `7f3ad0e5`, `QueryGraphDataTool` parses with `querygen.merge_duplicate_keys`
-  (repeated list keys merged, conflicting scalar rejected) and fills an absent `returns` via
-  `querygen.default_returns`. The pack's `tools/exec.py` (`returns` check and plain `json.loads`)
-  still rejects a missing `returns` and keeps last-wins, so it under-scores a model that repeats
-  `filters` or omits `returns` (ministral on `nlq-12`). Decide between a pack version bump that
-  copies the two normalizations, or a `PROVENANCE.md` note that the pack scores the stricter
-  pre-K-066 contract. Copy, don't import: the pack must not read from `falkor-chat/` at runtime.
+- **The `nlq-structured-query` pack no longer mirrors falkor-chat's production parse** (filed from
+  `falkor-chat/docs/reviews/salesperson-single-model.md` P5-4). Since falkor-chat `7f3ad0e5`,
+  `QueryGraphDataTool` merges repeated list keys (conflicting scalars rejected) via
+  `querygen.merge_duplicate_keys` and fills an absent `returns` via `querygen.default_returns`. Here,
+  `tools/exec.py` still rejects a missing `returns` and the model JSON is parsed last-wins by
+  `scoring/extraction.py` through `classification.extract_own_line_json_object` — **outside the
+  content-hashed pack**, so the repeated-key half needs a scorer edit as well as a pack bump. The
+  pack under-scores a model that repeats `filters` or omits `returns` (ministral on `nlq-12`).
+  Decide between a pack version bump (plus that scorer change) that copies both normalizations, or
+  a `PROVENANCE.md` note that the pack scores the stricter pre-K-066 contract. Copy, don't import:
+  nothing under `modelbench/` or the pack may read from `falkor-chat/` at runtime.
 - **An LM Studio outage met by an item's own call is not re-probed** (typed-decision-models plan4
   R-21). A server that dies mid-call surfaces as `LMStudioCallTimeout` or `LMStudioCallFailed`
   (`LMStudio._raw_post` maps a refused connection to the latter, `status=None`), so the item is
@@ -193,8 +146,7 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
 
 ### Defects the live spec recorded
 
-Found while writing `docs/DESIGN.md` (`docs/reviews/model-bench-live-spec-impl.md`); each is
-documented there as current behavior until fixed.
+Current behavior, each stated in the live spec (`docs/DESIGN.md`) until fixed.
 
 - `run --reference` is accepted and ignored; nothing stores it.
 - The exit-5 message names `results/transcripts/<runId>.jsonl`, which no run writes.
@@ -202,4 +154,4 @@ documented there as current behavior until fixed.
 - `validate --strict` raises `NotImplementedError` (exit 1 with a traceback) instead of refusing.
 - A timeout from LM Studio during `run`'s start-of-run residency check or catalog read (`residency()`, `catalog()`) raises `LMStudioUnreachable`, which `cli` does not catch: a traceback with exit 1 where the other probes exit 3 (analyst Pass 2, `model-bench/docs/reviews/small-model-benchmarking-manual.md`, read from code, not reproduced).
 
-- **Done when:** each is fixed or removed, with the spec section updated in the same change.
+Done when a defect is fixed or removed, with the spec section updated in the same change.
