@@ -86,3 +86,46 @@ Import gate satisfied, so the *untyped* seed (`resolution: unresolved`, `callee:
 ### Open questions
 
 - None that change scope. m1's architect ruling and M1's variable name are the only decisions.
+
+## P1-51b diff gate
+
+**Scope.** Commit `b843e458` (`lift.py`, schema boolean, `wrapperSite: true` on 7 liftings, `tests/test_packrt_wrapper_site.py`, two harness edits) against its parent `b843e458~1`, against P1-51 part B and Done-when (a)-(e) (plan), and my plan gate Passes 1-2. Read through `git archive <sha>` into scratch only (live tree untouched, no FalkorDB, no full suite: scratch has no git repo, so `tests/test_contact.py` cannot collect). CPG: considered, not relevant — the subject is the `ccg` pack runtime and stored bundles.
+
+**Verdict: approve with suggestions.** No blocker. One major (the root-only judgment call is unpinned by any test), three minors. Condition before the `ac5-gate-1` record: M1 pinned, and Done-when (a)'s store-method count (qa-engineer, after refresh) still owed.
+
+### Ran vs read
+- **Ran (my instruments, not the delegate's `m.py`):** `ac5.py` (links over the 3 stored AC-5 bundles), `ten.py` + `a51b_links.py` (all 10 stored Python bundles, `run_packs` + `link`, parent vs commit), `a51b_mut.sh` (14 mutants of `lift.py` on a scratch copy against `test_packrt_wrapper_site.py` + `test_pack_python_http_client.py`), `a51b_topo.py` (synthetic topology), a root-only census over every value set of the 10 bundles; the 8 pack/runtime/linker test files (2,481 passed, 2 failed, 8 skipped; both failures red on the parent: `can_tell_a_killed_leaf` and the schema package-data glob); the leaf-harness tests (4 passed).
+- **Read:** the diff, the whole new test file, `lift_role`/`chain_of`/`run_lifting`, the plan text.
+- **Not run:** store-method AC-5 (needs FalkorDB), `-m "slice and live"` (Done-when (e)), the full 15,979-test suite, the slow `CCG_LEAF_MUTATION=1` run.
+
+### Measurements (recomputed)
+- **AC-5, bundle method, any status:** parent **6/8** (misses `GET /documents/{}` `_poll_until_terminal` and `GET /shop/api/messages` `_assistant_rows_since`, no link) → **8/8**, item by item equal to the plan's gold (links 488 → 252). The two new hits are `possible`/`partial-key` at sites 289 and 366. **Confirmed-only 3/8 both before and after** (health x2, `POST /documents`): consistent with Done-when (a), because P1-49 Done-when (2) defines the hit as "a `CONSUMES http` linking to the gold provider, **at any status**". The store-method half of (a) is unrun, so (a) is not yet fully met.
+- **Ten-unit diff:** removed exactly `language_salience_probe.py:397 GET /0`; added exactly `seed_nlq_eval_corpus.py:289 GET /documents/{?}`, `language_salience_probe.py:366 GET /shop/api/messages`, `:424 GET /shop/api/state`, `load_demo.py:284 POST /shop/api/presenter/session` (all `possible`/`partial-key`): equals plan (b). Providers 91 (identical lists), mounts 3, confirmed consumers 103 and identical, consumers 128 → 131, lifted 73 → 66. The 7 removed lifted leaves are the plan's 7 items at 5 sites (377, 397 x2, 438 x2, 468, `routing_smoke.py:58`); 4 further lifted items change leaf flag only. Keyless sites across http links: my definition (`consumer_key is None`) gives 1403 → 1098, a different base than the delegate's 366 → 61 but the same delta of 305. (d): the gold-5 link of `run_participant` no longer carries sites 397 and 438 (only 384).
+
+### Rule axis by axis (read, with the synthetic runs)
+Scan from `chain_of(L)[1:]` (the leaf excluded) ✓; read before the `urlLike` filter and `resolved` test ✓ (`sites` is computed before the loop); first informative slot via the BFS tree's single predecessor (`chain_of` and `_slot_descendants_of` walk the same first predecessor) ✓; leaf dropped, so `_unknown_lifted` has nothing to re-create (pinned through `link()`) ✓; X promoted once for 2 leaves (pinned) ✓; verbs come from `X`'s own `chain_of(X)` and a passed-through `method` gives `*` (pinned, 4 cases) ✓; query-only X stays `confirmed` ✓ (pinned). Fix-vs-fix: typed seeds x wrapperSite are covered (`typed wrapper site` positives; each of the 7 `wrapperSite: false` leaf flips is killed, verified); 5d name-linked callers and Part B constants share the same chain, no interaction found. Promoted X is never itself dropped (it has a slot descendant, so it is not in the scanned leaf set).
+
+### Findings
+#### M1 (major, verified): the root-only decision is pinned by no test
+`_informative` reads `path.split("/")[1:]` with `seg != CONSUMER`, so `/`, `\x01/` and a bare origin (`http://localhost:1234`, key `GET /`) are informative. Mutant `seg not in (CONSUMER, "")` (root-only is not informative) **survives** all 47 tests of the two files; `SHAPES` has no root or origin-only shape. On stored data the choice is inert for the ten units (the mutant gives byte-identical `ten.py` output and link counts), but a census of all 85,163 alternatives of the 10 bundles finds 633 informative, **76 of them root-only** (`/` 28, `http://localhost:1234` 28, `http://127.0.0.1:8000` 6, `\x01/` 3, other bare origins). Judgment: the literal reading is right for `/` and `\x01/` (a request to `GET /` is a resource request); a bare origin constant (`http://host:1234`) names no resource and is the questionable member. The plan text ("a segment other than `{?}`") does not decide it. Fix (tdd-engineer, before `ac5-gate-1`, `packrt/` is hashed): add `root` (`/`), `rootorigin` (`\x01/`) and `origin_only` (`http://h:1`) to `SHAPES` with the chosen expected flag, so the grid pins it either way; if bare origins should not count, exclude them in `_informative`, and have the architect say so in the plan (one sentence, since the plan owns the definition).
+
+#### m1 (minor, verified): the "reverse flow order" survivor is not equivalent
+Topology: `def f(x, y): get(x + y)`, `def g(u): f("/documents/" + u, u)`, caller `h(): g("/other")`. Parameter `u` feeds two arguments of one call, so `g`'s parameter node is discovered from `(c,a0)` or `(c,a1)` by flow order. Run on the commit: consumers `{c: GET /documents/{?}}` only; with `sorted(..., reverse=True)` on the flow loop in `lift_role`: `{c, h1: GET /other}`, and the 136 tests of `test_packrt_{wrapper_site,run,lift_options}` + the pack file stay green. So the outcome depends on the data-record id order (content hashes in real bundles), a pinned limit of the same family as the plan's "a parameter that feeds two slots belongs to the first one reached", but the shipped test (`g1`/`g2` two seeds) covers only the seed-order case. Fix: add this two-argument topology as a second pinned-limit test (or state the limit in the docstring); no engine change needed.
+
+#### m2 (minor, verified): README and spec rows do not name `wrapperSite`
+`cpg/README.md` (the `ccg/packrt/` and `packs/python-http-client/` rows) holds 0 mentions; the commit touches no doc besides the pack header and the `run_lifting` docstring (both correct). Plan puts `wrapperSite` in the spec-close list (§1.6 vocabulary, §12.1), so the spec is not due now; the README row (the always-read orientation) is. `packFormat` stays 1 and the schema change is one optional boolean beside `ownSite`/`urlLike`: consistent.
+
+#### m3 (minor, process): "reference-model test committed red first" (c) and `-m "slice and live"` (e) are not evidenced
+Test and engine are in one commit, so red-first cannot be shown from history; my `gate off` and `do not drop leaves` mutants stand in (red without the engine behaviour). The ledger records full-suite figures but no slice/live run for (e); I did not run it.
+
+### Reference model, mutants (check 4)
+- **Independence:** read: the model's only inputs are the hand-written `SHAPES` table (url-like, informative, key path, possible-by-itself per shape); the test imports `run_packs`/`link`/`pack_errors` and record builders, not `httpkey` or `lift.py`; it does re-implement the same chain scan, so its independence is the table, not the algorithm.
+- **Grid meaning:** `test_the_positive_control...` asserts >100 cells move with `wrapperSite` (delegate: 391); `gate off` dies in the first test run. Gaps: all chains are linear (the two non-linear shapes are m1 and one two-seed pin), and no root shape (M1).
+- **My 14 mutants of `lift.py`:** 13 killed (scan `[0:]`, scan `[2:]`, segments `[2:]`, role `consumer`→`provider`, `partition(...)[2]`→`[0]` (the last three are silent-argument mutants), no `is_url_like`, `all` for `any`, scan all slots instead of leaves, last-instead-of-first, no drop, no promote, gate off, gate always on); 1 survived: the root-only mutant (M1).
+- **Harness:** 155 → 162 leaves reproduced by an independent walk; `(81, 81, 0)` asserted and green; all seven `wrapperSite: false` flips die behaviourally.
+
+### What's solid
+The rule matches the plan on every axis I traced; `urlLike` is correctly not flipped on `py-request` (test pins the gate's B1 reason); measured effect is exactly the predicted one with providers, mounts and every confirmed consumer unchanged; the linker emits no keyless fact for a dropped leaf.
+
+### Open
+Store-method AC-5 count (qa-engineer after refresh); the root/origin decision (M1, architect one sentence). No scope question.
