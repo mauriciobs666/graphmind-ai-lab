@@ -16,15 +16,21 @@ comparison (and the JS unit, `salesperson`) is the second dispatch.
 """
 from __future__ import annotations
 
+import atexit
 import collections
+import copy
 import hashlib
 import json
 import os
+import shutil
 import stat
+import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
 
+import overlay_5d
 from ccg import atrest, bundle, ids
 from ccg.units import Unit
 from extractors.joern import run
@@ -144,10 +150,24 @@ UNITS = {"fcs": (FCS_ROOT, "python", FCS_BUNDLE, FCS_BUNDLE_SHA), "sp": (SP_ROOT
 EXEMPT = ("builtAt", "sandboxAuditIds")
 
 
+_OVERLAID: dict[str, Path] = {}
+
+
+def overlaid(tag: str) -> Path:
+    """The oracle's facts file of ``tag`` with the 5d overlay (`tests/overlay_5d.py`): the hand-listed `rt` values and export-block
+    `const` facts added, nothing else. The oracle itself is never rewritten (D9); the copy lives in a temporary directory."""
+    if tag not in _OVERLAID:
+        d = Path(tempfile.mkdtemp(prefix="ccg-5d-overlay-"))
+        atexit.register(shutil.rmtree, d, ignore_errors=True)
+        src = sorted(need(S14A / tag / "cpg").glob("*.facts.jsonl"))[0]
+        _OVERLAID[tag] = overlay_5d.overlaid_facts(src, tag, d / f"{tag}.facts.jsonl")
+    return _OVERLAID[tag]
+
+
 def raw_of(tag: str, commit: str, audit_ids) -> run.RawFacts:
     root, lang = UNITS[tag][:2]
     cpg = need(S14A / tag / "cpg")
-    facts = sorted(cpg.glob("*.facts.jsonl"))
+    facts = [overlaid(tag)]
     astgen = sorted(cpg.glob("*.astgen"))
     unit = Unit(ids.unit_id(REPO_ID, root, lang), REPO_ID, root, lang)
     return run.RawFacts(unit, commit, facts[0], tuple(audit_ids), need(S14A / tag / "stage"), cpg,
@@ -333,6 +353,72 @@ def _import_before_constant(header, records):
     return touched
 
 
+# P1-05 5d: a name-linked call is not `confirmed` (assemble's type rule and `self` rule, NORMALIZER_VERSION "0.6"). The stored bundles hold
+# no `rt`, so the expected edit is written here from independent inputs and `assemble` is fed the stored facts plus the hand-listed `rt`
+# table (`tests/overlay_5d.py`), never the other way round. Per listed call site (`p1_05_5d_extras.json`): the type-backed targets
+# (`kept`, derived from the Joern fullNames) survive; with none, the site keeps exactly the one class method among its stored targets
+# when the `self` rule applies (the `ast` reference over the oracle's stage tree below, plus the hand-listed `selfByJoernNarrowing`),
+# else it is `unresolved`/`possible`/`name-match` with no targets. `salesperson` has no such site (`jssrc2cpg` demoted nothing there)
+# but gains the constant records of its export-block constants (`constRecords`), `counts.constant` raised by their number.
+PINNED_ORACLE = "defca60ff16534aa12a74e35856de9be98bfc710"           # the commit the oracle's stage trees were built at
+
+
+def reference_self_sites() -> collections.Counter:
+    """The independent reference for the `self` rule, read from the oracle's stage tree (the sources at `PINNED_ORACLE`), never the
+    working tree: a source edited since the oracle was built must not move it."""
+    return overlay_5d.ast_self_sites(need(S14A / "fcs" / "stage"), FCS_ROOT)
+
+
+def expected_site_edits(records: list[dict], tag: str) -> dict[str, list[str] | None]:
+    """call-site id -> the expected final target symbol ids ([] = demoted), for every listed site, from the stored ``records``."""
+    syms = {r["id"]: r for r in records if r["type"] == "symbol"}
+    calls = {r["id"]: r for r in records if r["type"] == "callsite"}
+    strict = collections.Counter(reference_self_sites()) if tag == "fcs" else collections.Counter()
+    known = set(overlay_5d.extras()["units"][tag].get("selfByJoernNarrowing", []))
+    out = {}
+    for s in sorted(overlay_5d.sites(tag), key=lambda s: s["site"]):
+        rec = calls[s["site"]]
+        stored = [t["symbolId"] for t in rec["targets"]]
+        key = (syms[rec["symbolId"]]["path"], rec["line"], rec["calleeName"])
+        is_self = s["site"] in known
+        if not is_self and strict[key] > 0:
+            strict[key] -= 1
+            is_self = True
+        if s["kept"]:
+            out[s["site"]] = list(s["kept"])
+        elif is_self:
+            cm = [t for t in stored if syms[t]["kind"] == "method" and syms[syms[t]["parentId"]]["kind"] == "type"]
+            assert len(cm) == 1, (s["site"], cm)
+            out[s["site"]] = cm
+        else:
+            out[s["site"]] = []
+    return out
+
+
+@delta("p1-05-5d-name-linked", "0.6")
+def _name_linked(header, records):
+    tag = UNIT_TAG_OF_ROOT[header["unit"]["rootPath"]]
+    touched = 0
+    calls = {r["id"]: r for r in records if r["type"] == "callsite"}
+    for site, final in expected_site_edits(records, tag).items():
+        rec = calls[site]
+        if [t["symbolId"] for t in rec["targets"]] == final:
+            continue                                   # a `self`-rule site whose one stored target is the class method: unchanged
+        if final:
+            rec["targets"] = [t for t in rec["targets"] if t["symbolId"] in final]
+        else:
+            rec.update(resolution="unresolved", targets=[], status="possible", reason="name-match")
+        touched += 1
+    new = overlay_5d.extras()["units"][tag]["constRecords"]
+    if new:
+        assert not {r["id"] for r in new} & {r["id"] for r in records}
+        records.extend(copy.deepcopy(new))
+        records.sort(key=bundle._sort_key)
+        header["counts"]["constant"] += len(new)
+        touched += len(new)
+    return touched
+
+
 def apply_deltas(lines: list[bytes], deltas=None) -> tuple[list[bytes], dict[str, int]]:
     """``lines`` (a stored bundle, header first) through ``deltas`` (default: ``DELTAS``); returns the expected canonical
     lines and, per delta name, how many records it touched."""
@@ -438,6 +524,7 @@ def test_the_lambda_decorator_delta_removes_exactly_3_records_all_of_falkor_chat
     assert (fcs_touched["drop-lambda-decorators"], sp_touched["drop-lambda-decorators"]) == (3, 0)
     assert (fcs_touched["p1-06-mask-cond-code"], sp_touched["p1-06-mask-cond-code"]) == (41, 2)
     assert (fcs_touched["p1-08-skipped-files"], sp_touched["p1-08-skipped-files"]) == (0, 33)
+    assert (fcs_touched["p1-05-5d-name-linked"], sp_touched["p1-05-5d-name-linked"]) == (1216, 3)
     assert "skippedFiles" not in json.loads(fcs[0]) and len(json.loads(sp[0])["skippedFiles"]) == 33
     assert json.loads(fcs[0])["counts"]["decorator"] == 210 == json.loads(stored_lines("fcs")[0])["counts"]["decorator"] - 3
     assert sum(json.loads(x)["type"] == "decorator" for x in fcs[1:]) == 210
@@ -467,6 +554,107 @@ def test_ownedregions_changes_nothing_on_the_slice_bundles(written):
     tag, data, _ = written
     for raw in (*stored_lines(tag), *data.split(b"\n")[:-1]):
         assert b"ownedRegions" not in raw
+
+
+# -- 5d: the name-link rule against independent references --------------------------------------------------------------------
+@pytest.fixture(scope="module")
+def fcs_built(tmp_path_factory):
+    """(written records by id, the assemble report) of `falkor-chat/server` built from the overlaid stored facts."""
+    header = json.loads(stored_lines("fcs")[0])
+    work = tmp_path_factory.mktemp("work5d")
+    os.chmod(work, 0o700)
+    raw = raw_of("fcs", header["builtCommit"], header["sandboxAuditIds"])
+    report: dict = {}
+    path = assemble_bundle.build_bundle(raw.unit, raw, REPO, header["builtCommit"], system="slice", root=work,
+                                        built_at=header["builtAt"], extract_script=SLICE_SCRIPT, report=report)
+    recs = [json.loads(x) for x in path.read_bytes().split(b"\n")[:-1]][1:]
+    return recs, report
+
+
+@pytest.mark.slice
+def test_the_reference_reads_the_oracles_stage_tree_pinned_at_the_oracle_commit_not_the_working_tree():
+    """Done-condition 1: the `ast` reference's sources are the stage the oracle was built from, and that stage is byte-identical to the
+    git blobs at the oracle commit (so an edit of the working tree since cannot move the reference)."""
+    stage = need(S14A / "fcs" / "stage")
+    if subprocess.run(["git", "-C", str(REPO), "cat-file", "-e", PINNED_ORACLE + "^{commit}"], capture_output=True).returncode != 0:
+        pytest.skip(f"the oracle commit {PINNED_ORACLE} is not in this clone (UNRUN, not green)")
+    files = sorted(stage.rglob("*.py"))
+    assert len(files) > 50
+    for f in files:
+        blob = subprocess.run(["git", "-C", str(REPO), "show", f"{PINNED_ORACLE}:{FCS_ROOT}/{f.relative_to(stage).as_posix()}"],
+                              capture_output=True, check=True).stdout
+        assert f.read_bytes() == blob, f
+    seen = {}
+    real = overlay_5d.ast_self_sites
+    overlay_5d.ast_self_sites = lambda st, root, **kw: seen.setdefault("stage", Path(st)) and real(st, root, **kw)
+    try:
+        reference_self_sites()
+    finally:
+        overlay_5d.ast_self_sites = real
+    assert seen["stage"] == stage and seen["stage"] != REPO / FCS_ROOT          # the oracle's stage, not the working tree
+
+
+@pytest.mark.slice
+def test_the_self_rule_confirms_the_ast_references_sites_and_lists_every_further_one(fcs_built):
+    """Done-condition 2. The strict `ast` reference (a `self.m()` in a method of the class that defines `m`, no other class of the unit
+    defining `m`) must be a subset of what `assemble` confirms by the `self` rule; every further confirmed site is LISTED, and the
+    list is the hand-written `selfByJoernNarrowing` (Joern's own type recovery had already narrowed the site to the enclosing class's
+    method, so the in-set held one class method although another class names it). Nothing is excluded silently: a disagreement in
+    either direction fails with its ids."""
+    recs, report = fcs_built
+    syms = {r["id"]: r for r in recs if r["type"] == "symbol"}
+    calls = {r["id"]: r for r in recs if r["type"] == "callsite"}
+    confirmed = sorted(s["site"] for s in overlay_5d.sites("fcs") if not s["kept"] and calls[s["site"]]["status"] == "confirmed")
+    key = lambda cid: (syms[calls[cid]["symbolId"]]["path"], calls[cid]["line"], calls[cid]["calleeName"])
+    strict, loose = reference_self_sites(), overlay_5d.ast_self_sites(S14A / "fcs" / "stage", FCS_ROOT, strict=False)
+    left = collections.Counter(strict)
+    further = []
+    for cid in confirmed:
+        k = key(cid)
+        if left[k] > 0:
+            left[k] -= 1
+        else:
+            further.append(cid)
+    assert +left == collections.Counter(), f"the reference lists self sites that assemble did not confirm: {sorted(+left)}"
+    assert further == sorted(overlay_5d.extras()["units"]["fcs"]["selfByJoernNarrowing"]), f"unlisted disagreement: {further}"
+    assert not (collections.Counter(map(key, confirmed)) - loose), "a confirmed site lies outside even the loose reference"
+    assert report["nameLinkCounts"]["selfResolved"] == len(confirmed)
+    assert (len(confirmed), sum(strict.values()), len(further)) == (264, 147, 117)
+
+
+@pytest.mark.slice
+def test_every_listed_site_has_exactly_the_expected_nameLinked_entry_and_no_other_site_has_one(fcs_built):
+    recs, report = fcs_built
+    stored = {r["id"]: r for r in map(json.loads, stored_lines("fcs")[1:]) if r["type"] == "callsite"}
+    want = {}
+    for site, final in expected_site_edits([json.loads(x) for x in stored_lines("fcs")[1:]], "fcs").items():
+        dropped = sorted(t["symbolId"] for t in stored[site]["targets"] if t["symbolId"] not in final)
+        if dropped:
+            want[site] = dropped
+    got = {cid: sorted(t["symbolId"] for t in ts) for cid, ts in report["nameLinked"].items()}
+    assert got == want
+    assert report["nameLinkCounts"]["nameLinkedDemoted"] == len(want) == 1216
+
+
+@pytest.mark.slice
+def test_without_the_overlay_the_stored_facts_demote_nothing(tmp_path):
+    """A facts file without `rt` is never demoted (an old facts file leaves every site as it was): the stored bundle, byte for byte."""
+    header = json.loads(stored_lines("fcs")[0])
+    cpg = need(S14A / "fcs" / "cpg")
+    raw = run.RawFacts(Unit(ids.unit_id(REPO_ID, FCS_ROOT, "python"), REPO_ID, FCS_ROOT, "python"), header["builtCommit"],
+                       sorted(cpg.glob("*.facts.jsonl"))[0], tuple(header["sandboxAuditIds"]), need(S14A / "fcs" / "stage"), cpg,
+                       None, cpg / "none", 0)
+    os.chmod(tmp_path, 0o700)
+    report: dict = {}
+    path = assemble_bundle.build_bundle(raw.unit, raw, REPO, header["builtCommit"], system="slice", root=tmp_path,
+                                        built_at=header["builtAt"], extract_script=SLICE_SCRIPT, report=report)
+    got = path.read_bytes().split(b"\n")[:-1]
+    deltas_before_5d = [d for d in DELTAS if d[1] != "0.6"]
+    want = apply_deltas(stored_lines("fcs"), deltas_before_5d)[0]
+    gh, wh = json.loads(got[0]), json.loads(want[0])
+    gh["tools"].pop("normalizerVersion"), wh["tools"].pop("normalizerVersion")
+    assert gh == wh and got[1:] == want[1:]
+    assert report["nameLinked"] == {} and report["nameLinkCounts"] == {"nameLinkedDemoted": 0, "selfResolved": 0}
 
 
 # -- 5b live tier: two real Joern runs of one stage ------------------------------------------------------------------

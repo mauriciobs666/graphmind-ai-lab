@@ -30,7 +30,7 @@ from .mask import mask_cond_code
 
 #: The slice profile's header identity. A later step that changes output renames or re-versions it (the stamp reads it).
 NORMALIZER = "ccg-slice-normalize"
-NORMALIZER_VERSION = "0.5"     # bumped with each registered delta of tests/slice/test_normalize_equivalence.py (the last delta pins the same literal)
+NORMALIZER_VERSION = "0.6"     # bumped with each registered delta of tests/slice/test_normalize_equivalence.py (the last delta pins the same literal)
 JOERN_VERSION = "v4.0.579"
 DEFAULT_VENDORED = ["_vendor", "node_modules", "third-party", "third_party", "vendor", "vendored"]
 
@@ -80,6 +80,46 @@ def locate_callees(B: Builder, file: str, calls: list[dict]):
 def _astral_before(B: Builder, file: str, pos: tuple[int, int]) -> bool:
     """A character above U+FFFF before the callee on its line: an indexer's UTF-16 columns then differ from ours."""
     return any(ord(ch) > 0xFFFF for ch in B.src.lines(file)[pos[0] - 1][:pos[1]])
+
+
+# -- name-linked calls (5d) --------------------------------------------------------------------
+#: the separator between a type's fullName and a member's, per frontend (probe: python ``a.py:<module>.K.meth``, javascript ``a.ts::program:K:meth``)
+MEMBER_SEP = {"python": ".", "javascript": ":"}
+#: the ``rt`` of a bare-identifier call is the label of what the identifier refers to; a parameter backs nothing
+RT_LOCAL, RT_PARAMETER = "LOCAL", "METHOD_PARAMETER_IN"
+
+
+def type_backed(lang: str, c: dict, target_full: str) -> bool:
+    """Is Joern's target ``target_full`` of call fact ``c`` a typed resolution rather than a name link (5d)?
+    No ``rt`` (a static call, an old facts file): yes, never demoted. A bare-identifier call (``rt`` a refsTo label): a ``LOCAL`` is
+    a direct reference and keeps its targets, a parameter backs nothing. A member call (``rt`` the base's type): only a method of
+    exactly that type, ``rt`` + separator + the member name (a class instantiated through a module attribute names its body)."""
+    rt = c.get("rt")
+    if rt is None or rt == RT_LOCAL:
+        return True
+    if rt == RT_PARAMETER:
+        return False
+    if target_full.endswith(".<body>") and lang == "python":
+        target_full = target_full[: -len(".<body>")]
+    return target_full == rt + MEMBER_SEP[lang] + c["name"]
+
+
+def _self_rule(c: dict, s, name: str, tgt: dict, S: dict, recv_name: dict) -> str | None:
+    """The `self` rule (5d, Python only): the symbol id of the one method a demoted ``self.m()`` site dispatches to, or None.
+    All hold: (i) the receiver (arg 0, no name) is the name ``self`` and that name is the enclosing method's own receiver
+    parameter (a staticmethod or a nested function has none); (ii) among the site's candidates exactly one is a method of any
+    class, and its class is the enclosing method's class; (iii) its name is the callee's. A subclass of the unit overriding
+    the method is a second class-method candidate, an inherited method fails (ii): both stay name-linked."""
+    recv = next((a["e"] for a in c["args"] if int(a["i"]) == 0 and not a["an"]), None)
+    if not (recv and recv.get("o") == "name" and recv.get("n") == "self" and recv_name.get(s.sid) == "self"):
+        return None
+    methods = [k for k in tgt if S[k].kind == "method" and S[k].parent is not None and S[k].parent.is_type]
+    if len(methods) != 1:
+        return None
+    cand = S[methods[0]]
+    if s.parent is None or cand.parent.sid != s.parent.sid or cand.base != name:
+        return None
+    return methods[0]
 
 
 # -- G-4, ordering ---------------------------------------------------------------------------
@@ -137,6 +177,11 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
 
     ``facts`` is ``core.load_facts``' result, ``stage`` the staged unit, ``astgen_dir`` the Babel ASTs (JS/TS; ``None``
     for Python), ``repo`` the source repository whose history ``lastChanged*`` reads, ``commit`` the built commit.
+    **Name links (5d).** A call fact tagged ``rt`` (``extract.sc``) keeps a Joern target only if it is type-backed (``type_backed``); the
+    rest go to ``report["nameLinked"]`` (call-site id -> ``[{"symbolId", "qname"}]``) for ``merge_scip``'s ``name_linked``, a site left
+    with none is ``unresolved``/``possible``/``name-match``, and ``_self_rule`` restores a python ``self.m()`` (its ids:
+    ``report["selfResolvedSites"]``). ``report["nameLinkCounts"]`` holds ``nameLinkedDemoted`` (sites that lost a target) and
+    ``selfResolved``; they are not header ``counts``, whose keys the bundle schema closes.
     ``builtAt`` (exempt from determinism, spec3 §8.5) defaults to now. ``skipped`` is ``header.skippedFiles`` (P1-08, repo-relative
     paths, computed by ``build_bundle``): written exactly when non-empty, and each listed path is dropped from the files."""
     if not blame_mod.is_commit_id(commit):
@@ -215,6 +260,7 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
 
     # params
     params_by = {}
+    recv_name = {}                                        # symbol id -> the name of its receiver parameter (index -1; python methods)
     pfacts = defaultdict(list)
     for p in facts["p"]:
         pfacts[p["m"]].append(p)
@@ -225,6 +271,8 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
         out = python.py_params(B, s, ps) if lang == "python" else javascript.js_params(ps)
         params_by[s.sid] = {}
         for index, name, p in out:
+            if index == -1:
+                recv_name[s.sid] = name
             pid = ids.point_id(s.sid, "param", index)
             params_by[s.sid][int(p["i"])] = (index, pid)
             records.append({"type": "param", "id": pid, "symbolId": s.sid, "index": index, "name": name,
@@ -268,6 +316,8 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
         if s and (c["name"] or c["name"] == "<operator>.new"):
             calls_by_scope[s.sid].append(c)
     cs_info = {}
+    name_linked: dict[str, list[dict]] = {}              # callSiteId -> the Joern targets 5d dropped (not type-backed), for merge_scip
+    self_sites: list[str] = []                           # callSiteIds the `self` rule confirmed (the acceptance draw's population)
     synthetic = Counter()
     # a class instantiation (`Cls(...)`) resolves to the class's constructor; a redefined ``__init__`` is the last one
     init_of_class: dict[str, tuple[int, str]] = {}
@@ -287,7 +337,7 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
         for name, grp in keyed.items():
             grp.sort(key=lambda c: (pos[c["id"]], len(c["code"]), int(c["id"])))
             for k, c in enumerate(grp):
-                tgt = {}
+                tgt, backed = {}, {}
                 for t in c["in"]:
                     ts = m2s.get(t["id"])
                     if ts is None:
@@ -298,8 +348,20 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
                             continue
                         tsid = init_of_class[ts.sid][1]
                     tgt[tsid] = S[tsid].qname
-                targets = [{"symbolId": k2, "qname": v} for k2, v in sorted(tgt.items())]
+                    backed[tsid] = backed.get(tsid, False) or type_backed(lang, c, t["full"])
+                keep = {k2 for k2, b in backed.items() if b}
+                by_self = False
+                if not keep and tgt and lang == "python":
+                    only = _self_rule(c, s, name, tgt, S, recv_name)
+                    if only:
+                        keep, by_self = {only}, True
+                targets = [{"symbolId": k2, "qname": v} for k2, v in sorted(tgt.items()) if k2 in keep]
                 cid = ids.callsite_id(sid, name, k)
+                dropped = [{"symbolId": k2, "qname": v} for k2, v in sorted(tgt.items()) if k2 not in keep]
+                if dropped:
+                    name_linked[cid] = dropped
+                if by_self:
+                    self_sites.append(cid)
                 cs_info[c["id"]] = (cid, sid, pos[c["id"]])
                 kind = "new" if c["name"] == "<operator>.new" else ("super" if name == "super" else "call")
                 rec = {"type": "callsite", "id": cid, "symbolId": sid, "calleeName": name, "ordinal": k,
@@ -314,6 +376,9 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
                     else:
                         rec.update(resolution="unresolved", targets=[], status="possible", reason="name-match")
                 records.append(rec)
+    report["nameLinked"] = name_linked
+    report["selfResolvedSites"] = sorted(self_sites)
+    report["nameLinkCounts"] = {"nameLinkedDemoted": len(name_linked), "selfResolved": len(self_sites)}
     report["syntheticCallsDropped"] = {"total": sum(synthetic.values()), "byName": dict(synthetic.most_common(12))}
     # P1-15: where each call site's callee identifier sits, for merging an indexer's references (merge_scip.positions_from_bundle)
     report["callsitePositions"] = {cid: [S[sid].file, pos[0], pos[1], _astral_before(B, S[sid].file, pos)]

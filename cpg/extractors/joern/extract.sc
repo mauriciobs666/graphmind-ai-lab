@@ -156,6 +156,20 @@ import scala.collection.mutable.ArrayBuffer
     }
   }
 
+  // ---- receiver tag `rt` (5d) of a DYNAMIC_DISPATCH call: what lets the normalizer tell a typed resolution from a name link ----
+  // Joern's NaiveCallLinker links such a call to every method of that name. A member call `p.m(x)` has the access `p.m` as its
+  // receiver: `rt` is the typeFullName of the access's base (its first argument; "ANY" when untyped). A bare-identifier call `f(x)`
+  // has the identifier as its receiver: `rt` is the label of the declaration it refers to (`METHOD_PARAMETER_IN`, `LOCAL`), because
+  // a same-module function, a nested def and a parameter all have type ANY. No `rt`: a static call or any other receiver shape.
+  def recvTag(c: Call): Option[String] =
+    if (c.dispatchType != "DYNAMIC_DISPATCH") None
+    else c.receiver.l.headOption match {
+      case Some(r: Call) if isOp(r) && opName(r) == "fieldAccess" =>
+        arg(r, 1).map(b => Some(sp(b, "TYPE_FULL_NAME")).filter(_.nonEmpty).getOrElse("ANY"))
+      case Some(i: Identifier) => i._refOut.l.headOption.map(_.label)
+      case _ => None
+    }
+
   // ---- the projection ----
   // Which calls are call sites: non-operator calls, plus `<operator>.new` (TS), minus decorator plumbing.
   def isCallSite(c: Call): Boolean =
@@ -371,15 +385,23 @@ import scala.collection.mutable.ArrayBuffer
           ujson.Obj("i" -> a.argumentIndex, "an" -> a.argumentName.getOrElse(""), "f" -> ujson.Arr.from(fs), "e" -> ex(ee, 0))
         }
       }
-      emit(ujson.Obj("k" -> "cs", "m" -> m.id, "id" -> c.id, "name" -> c.name, "mfn" -> c.methodFullName,
+      val csFact = ujson.Obj("k" -> "cs", "m" -> m.id, "id" -> c.id, "name" -> c.name, "mfn" -> c.methodFullName,
         "l" -> line(c), "c" -> col(c), "code" -> code(c).take(2000), "dt" -> c.dispatchType,
         "in" -> ujson.Arr.from(inRepo.sortBy(_.id).map(x => ujson.Obj("id" -> x.id, "full" -> x.fullName))),
-        "out" -> ujson.Arr.from(outRepo), "args" -> ujson.Arr.from(args)))
+        "out" -> ujson.Arr.from(outRepo), "args" -> ujson.Arr.from(args))
+      recvTag(c).foreach(t => csFact("rt") = t)
+      emit(csFact)
     }
 
     // module / type level constants: direct block children `NAME = <rhs>`
     if (m.name == "<module>" || m.name == ":program" || m.name == "<body>") {
-      val tops = kids(m.block).collect { case a: Call if isOp(a) && isAssign(a) => a }
+      // jssrc2cpg writes `export const X = v` as a BLOCK child of `:program` holding `const X = v` and `exports.X = X` (5d): the
+      // assignment children of such a block are module constants too (the `exports.X` one has no Identifier target and is skipped)
+      val exported: List[Call] =
+        if (lang != "javascript") Nil
+        else kids(m.block).collect { case b: Block if code(b).startsWith("export") => b }
+          .flatMap(b => kids(b).collect { case a: Call if isOp(a) && isAssign(a) => a })
+      val tops = kids(m.block).collect { case a: Call if isOp(a) && isAssign(a) => a } ++ exported
       tops.foreach { a =>
         (arg(a, 1), arg(a, 2)) match {
           case (Some(t: Identifier), Some(rhs)) if decoChain(rhs).isEmpty && !t.name.startsWith("tmp") && !t.name.startsWith("_tmp_") =>

@@ -68,6 +68,33 @@ Python and TS/JS only. Goldens: `tests/golden/projection/*.json` (`tests/test_pr
 - Not fixed: a call through a local alias (`write = repo.a if f else repo.b; write(x)`): Joern emits no `REACHING_DEF` into the callee
   identifier; a computed dict KEY is not reached either (the value is).
 
+## Name-linked calls and export constants (`extract.sc` + `normalize/assemble_bundle.py`, P1-05 5d)
+
+Joern links a `DYNAMIC_DISPATCH` call to every method of that name, whatever the receiver, so a call's own attributes cannot tell a name
+link from a typed resolution. `extract.sc` therefore tags each such `cs` fact with **`rt`**: for a member call `p.m(x)` the `typeFullName` of
+the access's base (`ANY` when untyped); for a bare-identifier call `f(x)` the label of the declaration the identifier refers to
+(`METHOD_PARAMETER_IN` or `LOCAL`). A static call, or a receiver of any other shape, carries no `rt`.
+
+`assemble` keeps a Joern target `confirmed`/`resolved-call` only if it is type-backed (`type_backed`): a `LOCAL` bare call keeps its targets
+(a same-module function, a nested def, an imported or aliased name, a constructor, a builtin; limit: a rebinding `g = f; g()` is `LOCAL`
+too); a parameter backs nothing; a member call keeps a target whose `fullName` is `rt` + the frontend's separator (`.` python, `:`
+javascript) + the member name; a fact without `rt` is never demoted. The targets dropped go to `report["nameLinked"]` (call-site id -> symbol
+list, for `merge_scip`'s `name_linked`), counted in `report["nameLinkCounts"]`; a site left with none is `unresolved`/`possible`/`name-match`.
+**The `self` rule** (python): a demoted `self.m()` whose receiver is the enclosing method's own receiver parameter, and whose candidates hold
+exactly one class method, the enclosing class's own, is `confirmed` to it (`report["selfResolvedSites"]` lists the ids). `cls`, `this`, a
+nested function, a staticmethod, an inherited method and a same-unit override are not restored. Probe notes and the rows: `tests/test_normalize_name_linked.py`.
+
+Measured on the stored `falkor-chat/server` unit: 1,479 sites have a target `rt` does not back, 1,216 end up changed, 264 are restored by the
+`self` rule; `salesperson` (javascript) has none (`jssrc2cpg` does tag `p: any` calls `ANY`, no such site occurs in that unit).
+
+**Export-block constants.** `jssrc2cpg` writes `export const X = v` as a `BLOCK` child of `:program` (`const X = v` and `exports.X = X`);
+the module-constant scan reads the assignment children of such blocks (JS/TS, `Identifier` targets only), so an imported exported constant
+resolves through a `ref` instead of an `importRef`. Not read: `export let A = 1, B = 2` and destructuring exports (nested blocks).
+
+**Oracle overlay.** The S14a oracle and stored bundles are not regenerated: the slice tests overlay `tests/data/p1_05_5d_extras.json`
+(`tests/overlay_5d.py`: the hand-listed `rt` table and export-constant facts) and `NORMALIZER_VERSION` `0.6` has its delta in
+`tests/slice/test_normalize_equivalence.py`.
+
 ### Regenerating the recorded facts
 
 Three artifacts record `extract.sc`'s output and are tied to the script by `sha256(extract.sc)`; a script edit turns their tests red until
@@ -78,3 +105,4 @@ they are regenerated and re-stamped (all runs bounded: `JAVA_OPTS=-Xmx1500m`, `t
   compares them (`CCG_PROJ_LIVE=1` runs exactly that); then `sha256sum extract.sc > tests/golden/projection/extract.sc.sha256`.
 - `.ccg-work/p1-09/fixed-{fcs,sp}.facts.jsonl` (gitignored): `joern --script extract.sc --param cpgFile=<slice cpg.bin under
   .ccg-work/vertical-slice/s14a/<tag>/cpg> --param out=<file> --param lang=python|javascript`, and write the hash to `<file>.sha256`.
+  Since 5d these files carry `rt` and the export-block `const` facts (the equivalence tests overlay them, see above).

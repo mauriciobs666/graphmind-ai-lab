@@ -28,6 +28,7 @@ from pathlib import Path
 
 import pytest
 
+import overlay_5d
 from ccg import atrest, ids
 from ccg.units import Unit
 from extractors.joern import run
@@ -67,9 +68,11 @@ def need_commit() -> None:
         pytest.skip(f"the pinned commit {PINNED} is not in this clone (UNRUN, not green)")
 
 
-def canonical(path: Path, skip: tuple[str, ...] = ()) -> tuple[list[str], dict]:
+def canonical(path: Path, skip: tuple[str, ...] = (), overlay: str | None = None) -> tuple[list[str], dict]:
     """(sorted canonical JSON of every record but `stats`, the stats counts). The timings and histogram are dropped; records of the
-    kinds in `skip` are dropped too (P1-09: `d` and `cb` are governed by the subset rules of `slice/test_projection_not_regressed.py`)."""
+    kinds in `skip` are dropped too (P1-09: `d` and `cb` are governed by the subset rules of `slice/test_projection_not_regressed.py`).
+    `overlay` is a unit tag of the 5d overlay (`tests/overlay_5d.py`): the live script's `rt` on `cs` facts and the hand-listed
+    export-block `const` facts are removed first, so what is compared is the oracle's own content."""
     recs, stats = [], None
     for line in Path(path).read_text(encoding="utf-8").splitlines():
         o = json.loads(line)
@@ -77,9 +80,11 @@ def canonical(path: Path, skip: tuple[str, ...] = ()) -> tuple[list[str], dict]:
             assert stats is None, "two stats records"
             stats = {k: int(o[k]) for k in COUNT_KEYS}
         elif o["k"] not in skip:
-            recs.append(json.dumps(o, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+            recs.append(o)
     assert stats is not None, "no stats record"
-    return sorted(recs), stats
+    if overlay is not None:
+        recs = overlay_5d.strip(recs, overlay)
+    return sorted(json.dumps(o, sort_keys=True, separators=(",", ":"), ensure_ascii=False) for o in recs), stats
 
 
 #: P1-09 exemptions: the projection kinds, and the one count that derives from them (`cdgRaw` counts raw CDG edges and stays equal).
@@ -99,6 +104,11 @@ REPLACED_SLICE_LINES = [
     "  def usePositions(e: Expression, fields: List[String]): List[(List[String], Expression)] = e match {",
     "      objFields(b) match {",
     "        case Some(fs) if fs.nonEmpty => fs.flatMap { case (k, v) => usePositions(v, fields :+ k) }",
+    # P1-05 5d (in slice order): the `cs` emission now builds the fact first (`rt` is added to it), and the module-constant scan also
+    # reads the export-declaration blocks of a JS/TS program. Every other `cs` / `const` line survives verbatim.
+    '      emit(ujson.Obj("k" -> "cs", "m" -> m.id, "id" -> c.id, "name" -> c.name, "mfn" -> c.methodFullName,',
+    '        "out" -> ujson.Arr.from(outRepo), "args" -> ujson.Arr.from(args)))',
+    '      val tops = kids(m.block).collect { case a: Call if isOp(a) && isAssign(a) => a }',
     '        usePositions(a, Nil).foreach { case (fs, ee) => emitData("cs", c.id, head, fs, ee) }',
     '        usePositions(e, Nil).foreach { case (fs, ee) => emitData("r", r.id, "ret", fs, ee) }',
     '              emit(ujson.Obj("k" -> "cb", "m" -> m.id, "pk" -> pk, "pid" -> pid, "cond" -> k.id))',
@@ -232,9 +242,9 @@ def test_the_ported_astgen_body_is_the_slices_unchanged():
 
 @pytest.mark.slice
 def test_the_ported_extract_body_differs_from_the_slices_only_in_the_projection_lines():
-    """P1-09: `extract.sc` is the slice's plus the projection fix. The slice lines it no longer contains are exactly the 14 above
-    (the projection: `defsOf`, `objFields`, `usePositions` and its two callers, the `cb` emission, the stats line); every other slice
-    line survives verbatim, so an edit to the fact kinds `m p c r cs const deco t f` shows up here."""
+    """P1-09: `extract.sc` is the slice's plus the projection fix. The slice lines it no longer contains are exactly the 17 above
+    (14 of the projection: `defsOf`, `objFields`, `usePositions` and its two callers, the `cb` emission, the stats line; 3 of 5d: the
+    `cs` emission that gains `rt`, the constant scan that reads export blocks); every other slice line survives verbatim, so an edit to the fact kinds `m p c r cs const deco t f` shows up here."""
     slice_file = SPIKE / "extract.sc"
     if not slice_file.is_file():
         pytest.skip(f"{slice_file} absent (UNRUN, not green)")
@@ -267,12 +277,82 @@ def test_the_fixed_projection_keeps_every_non_projection_fact_of_the_slice(tag):
     stamp = fixed.with_name(fixed.name + ".sha256")
     assert stamp.is_file() and stamp.read_text().strip() == hashlib.sha256(run.EXTRACT_SC.read_bytes()).hexdigest(), \
         f"{fixed.name} was not produced by the current extract.sc: regenerate it (extractors/joern/README.md)"
-    got, got_stats = canonical(fixed, PROJECTION_KINDS)
+    got, got_stats = canonical(fixed, PROJECTION_KINDS, overlay=tag)
     want, want_stats = canonical(oracle(tag), PROJECTION_KINDS)
     assert got == want and len(got) > 0
     keep = [k for k in COUNT_KEYS if k != PROJECTION_COUNT]
     assert {k: got_stats[k] for k in keep} == {k: want_stats[k] for k in keep} == {k: SLICE[tag][3][k] for k in keep}
     assert got_stats[PROJECTION_COUNT] > want_stats[PROJECTION_COUNT]
+
+
+# --- the 5d overlay: `rt` on `cs` facts and the export-block `const` facts (`tests/overlay_5d.py`) ----------------------------
+
+
+def _write(tmp_path, name, records):
+    return _facts(tmp_path, name, records + [STATS])
+
+
+CS = {"k": "cs", "id": "10", "m": "1", "name": "f", "dt": "DYNAMIC_DISPATCH", "in": [], "out": [], "args": []}
+
+
+def test_the_overlay_removes_rt_from_cs_facts_and_nothing_else(tmp_path):
+    live = _write(tmp_path, "live", [dict(CS, rt="ANY")])
+    assert canonical(live, overlay="fcs") == canonical(_write(tmp_path, "oracle", [CS]))
+
+
+@pytest.mark.parametrize("change", [
+    lambda c: dict(c, name="g"), lambda c: dict(c, dt="STATIC_DISPATCH"), lambda c: dict(c, **{"in": [{"id": "2", "full": "x"}]}),
+], ids=["name", "dispatch", "in"])
+def test_the_overlay_still_sees_any_other_difference_in_a_cs_fact(tmp_path, change):
+    live = _write(tmp_path, "live", [change(dict(CS, rt="ANY"))])
+    assert canonical(live, overlay="fcs") != canonical(_write(tmp_path, "oracle", [CS]))
+
+
+def test_the_overlay_removes_exactly_the_listed_const_facts(tmp_path):
+    listed = overlay_5d.extras()["units"]["sp"]["constFacts"]
+    assert len(listed) == 8
+    other = {"k": "const", "m": "1", "name": "NOT_LISTED", "l": 1, "e": {"o": "lit", "c": "1"}}
+    live = _write(tmp_path, "live", [dict(f) for f in listed] + [other])
+    assert canonical(live, overlay="sp") == canonical(_write(tmp_path, "oracle", [other]))          # an unlisted const is a difference left in
+    assert canonical(live, overlay="sp") != canonical(_write(tmp_path, "empty", []))
+
+
+def test_a_listed_const_fact_that_the_live_facts_lack_is_an_error_not_a_pass(tmp_path):
+    listed = overlay_5d.extras()["units"]["sp"]["constFacts"]
+    live = _write(tmp_path, "live", [dict(f) for f in listed[:-1]])
+    with pytest.raises(AssertionError, match="listed const facts missing"):
+        canonical(live, overlay="sp")
+
+
+def test_a_listed_const_fact_is_removed_once_so_a_duplicate_stays_a_difference(tmp_path):
+    f = overlay_5d.extras()["units"]["sp"]["constFacts"][0]
+    live = _write(tmp_path, "live", [dict(x) for x in overlay_5d.extras()["units"]["sp"]["constFacts"]] + [dict(f)])
+    assert canonical(live, overlay="sp") != canonical(_write(tmp_path, "empty", []))
+
+
+def test_without_the_overlay_an_rt_is_a_difference(tmp_path):
+    assert canonical(_write(tmp_path, "a", [dict(CS, rt="ANY")])) != canonical(_write(tmp_path, "b", [CS]))
+
+
+@pytest.mark.slice
+@pytest.mark.parametrize("tag", sorted(SLICE))
+def test_the_hand_listed_rt_of_every_site_is_what_the_live_script_wrote(tag):
+    """The table that feeds `assemble` (`tests/data/p1_05_5d_extras.json`) against the facts of the fixed script run on the stored
+    CPG (`.ccg-work/p1-09/fixed-<tag>.facts.jsonl`): same fact ids, same `rt`, and every listed `const` fact is there."""
+    fixed = FIXED / f"fixed-{tag}.facts.jsonl"
+    if not fixed.is_file():
+        pytest.skip(f"fixed-projection facts absent: {fixed} (UNRUN, not green)")
+    stamp = fixed.with_name(fixed.name + ".sha256")
+    assert stamp.is_file() and stamp.read_text().strip() == hashlib.sha256(run.EXTRACT_SC.read_bytes()).hexdigest(), \
+        f"{fixed.name} was not produced by the current extract.sc: regenerate it (extractors/joern/README.md)"
+    recs = [json.loads(l) for l in fixed.read_text(encoding="utf-8").splitlines()]
+    live = overlay_5d.rt_of(recs)
+    assert {o["dt"] for o in recs if o["k"] == "cs" and "rt" in o} == {"DYNAMIC_DISPATCH"}      # a static call carries no `rt`
+    table = overlay_5d.rt_table(tag)
+    assert {k: live.get(k) for k in table} == table
+    assert (len(table) > 0) == (tag == "fcs")                  # `salesperson`: no name-linked site, so no rt is needed
+    consts = {json.dumps(r, sort_keys=True) for r in recs if r["k"] == "const"}
+    assert all(json.dumps(f, sort_keys=True) in consts for f in overlay_5d.extras()["units"][tag]["constFacts"])
 
 
 # --- tier 2: Docker -----------------------------------------------------------------------------------------------
@@ -288,7 +368,7 @@ def test_the_ported_extractor_reproduces_the_slices_raw_facts(tag, tmp_path, mon
     area = tmp_path / ".ccg-work"
     area.mkdir()
     rf = run.extract_unit(REPO, unit_of(tag), [unit_of(tag)], PINNED, area / tag, area=area)
-    got, got_stats = canonical(rf.facts, PROJECTION_KINDS)
+    got, got_stats = canonical(rf.facts, PROJECTION_KINDS, overlay=tag)
     want, want_stats = canonical(expected, PROJECTION_KINDS)
     assert {k: v for k, v in got_stats.items() if k != PROJECTION_COUNT} == {k: v for k, v in want_stats.items() if k != PROJECTION_COUNT}
     assert want_stats == SLICE[tag][3]

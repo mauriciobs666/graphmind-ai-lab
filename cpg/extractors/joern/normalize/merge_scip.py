@@ -100,11 +100,18 @@ def _candidate(target: dict) -> dict:
 
 
 def merge_scip(callsites: Sequence[dict], positions: Mapping[str, tuple[str, int, int]], scip: ScipIndex,
-               known: Mapping[str, str], *, prefix: str, lang: str, astral: Collection[str] = frozenset()) -> MergeResult:
+               known: Mapping[str, str], *, prefix: str, lang: str, astral: Collection[str] = frozenset(),
+               name_linked: Mapping[str, Sequence[dict]] | None = None) -> MergeResult:
     """Apply the rule to ``callsites`` (not mutated). ``positions`` maps ``callSiteId`` to its callee identifier's
     ``(file relative to the indexed directory, 1-based line, 0-based column)``; ``prefix`` is the unit's repo-relative
     root (``""``/``"."`` for a root unit), which turns an indexed-relative file into a bundle qname. ``astral`` holds the
-    ids of sites whose line has a character above U+FFFF before the callee: they are left alone (``astral_skipped``)."""
+    ids of sites whose line has a character above U+FFFF before the callee: they are left alone (``astral_skipped``).
+
+    ``name_linked`` is ``assemble``'s ``report["nameLinked"]`` (P1-05 5d): the Joern targets of a site that were name links
+    and are not in the record. For a site with an entry, ``J`` is the record's ``targets`` plus the entry. ``S`` in ``J``:
+    ``S`` is the target (``confirmed``/``resolved-call``), the other members candidates. ``S`` not in ``J``, or SCIP external:
+    the record stays as 5d left it (demoted, or its type-backed targets); the disagreement is counted and its candidates
+    reported as for any other site. No entry (or ``None``): as before."""
     res = MergeResult([])
     sited = set(positions.values())
     for rec in callsites:
@@ -120,6 +127,9 @@ def merge_scip(callsites: Sequence[dict], positions: Mapping[str, tuple[str, int
             continue
         in_corpus = {r[1]: r for r in (_resolve(t, known, prefix, lang, res.counts) for t in refs) if r is not None}
         joern = {t["symbolId"]: t for t in rec.get("targets", [])} if rec.get("resolution") == "resolved" else {}
+        entry = (name_linked or {}).get(rec["id"])
+        if entry:
+            joern.update({t["symbolId"]: t for t in entry})
         if len(in_corpus) > 1:
             res.callsites.append(rec)
             res.counts["ambiguous"] += 1
@@ -144,10 +154,11 @@ def merge_scip(callsites: Sequence[dict], positions: Mapping[str, tuple[str, int
             cands = {**joern, sid: {"symbolId": sid, "qname": q}}
         else:
             cands = joern
-        out.update(resolution="unresolved", targets=[], status=CANDIDATE_STATUS, reason=DISAGREE_SITE_REASON)
+        if not entry:
+            out.update(resolution="unresolved", targets=[], status=CANDIDATE_STATUS, reason=DISAGREE_SITE_REASON)
         res.candidates[rec["id"]] = [_candidate(t) for _k, t in sorted(cands.items())]
         res.counts["disagree"] += 1
-        res.callsites.append(out)
+        res.callsites.append(out if not entry else rec)
     for pos, targets in sorted(scip.refs.items()):
         if pos in sited:
             continue
