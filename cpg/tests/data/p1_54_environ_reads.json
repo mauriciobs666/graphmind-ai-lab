@@ -1,0 +1,1064 @@
+{
+ "jobs": {
+  "callsites": [
+   {
+    "callKind": "call",
+    "calleeName": "get",
+    "externalTarget": "os.py:<module>.<member>(environ).get",
+    "id": "8a20b016ae379fd5fcd1ebf9a080e96e",
+    "line": 6,
+    "ordinal": 0,
+    "reason": "name-match",
+    "resolution": "external",
+    "status": "possible",
+    "symbolId": "747492cfc668e9c8292681c431221300",
+    "targets": [],
+    "type": "callsite"
+   }
+  ],
+  "data": [],
+  "symbolId": "747492cfc668e9c8292681c431221300",
+  "valueSets": [
+   {
+    "arg": "a0",
+    "callSiteId": "8a20b016ae379fd5fcd1ebf9a080e96e",
+    "id": "2594318c5e9628579065534655647d6a",
+    "type": "valueSet",
+    "values": [
+     {
+      "const": "FX_JOB_URL"
+     }
+    ]
+   },
+   {
+    "arg": "a1",
+    "callSiteId": "8a20b016ae379fd5fcd1ebf9a080e96e",
+    "id": "f45b6d48487f8da6b244532347ebd133",
+    "type": "valueSet",
+    "values": [
+     {
+      "const": "http://localhost:8300"
+     }
+    ]
+   }
+  ]
+ },
+ "shapes": {
+  "shape_a": {
+   "callsites": [
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "os.py:<module>.<member>(environ).get",
+     "id": "8f6d5831742fe450b94b013c0caa2b3e",
+     "line": 9,
+     "ordinal": 1,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "2d3db032aa5ff40d12830c8064c95ca9",
+     "targets": [],
+     "type": "callsite"
+    },
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "requests.py:<module>.get",
+     "id": "91e27b9c60429fde0bce9a53af570e5d",
+     "line": 9,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "2d3db032aa5ff40d12830c8064c95ca9",
+     "targets": [],
+     "type": "callsite"
+    }
+   ],
+   "data": [
+    {
+     "def": "8f6d5831742fe450b94b013c0caa2b3e",
+     "fromPath": "r",
+     "id": "4ddebba68d1d188f60223aa0c27b2e38",
+     "reason": "intra-flow",
+     "status": "confirmed",
+     "toPath": "a0",
+     "type": "data",
+     "use": "91e27b9c60429fde0bce9a53af570e5d"
+    }
+   ],
+   "symbolId": "2d3db032aa5ff40d12830c8064c95ca9",
+   "valueSets": [
+    {
+     "arg": "kw.timeout",
+     "callSiteId": "91e27b9c60429fde0bce9a53af570e5d",
+     "id": "83fb766aae956b2ad224d53cea45981f",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": 5
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "8f6d5831742fe450b94b013c0caa2b3e",
+     "id": "c9dac621b6c73494e86b119548dea28e",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "FX_PEER_BASE"
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "91e27b9c60429fde0bce9a53af570e5d",
+     "id": "db4975507f9d63838b7019cc9f0bb68b",
+     "type": "valueSet",
+     "values": [
+      {
+       "concat": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/api/health"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "arg": "a1",
+     "callSiteId": "8f6d5831742fe450b94b013c0caa2b3e",
+     "id": "eecb8173280beb037d9963c6dcef39f8",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": ""
+      }
+     ]
+    }
+   ]
+  },
+  "shape_b": {
+   "callsites": [
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "os.py:<module>.<member>(environ).get",
+     "id": "73785191224e6b0970da3c0991c0f842",
+     "line": 13,
+     "ordinal": 1,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "b36df337ec7f736277d0e8ca6b721811",
+     "targets": [],
+     "type": "callsite"
+    },
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "requests.py:<module>.get",
+     "id": "ed5d50976fdf01c34afbf8dc09c0477f",
+     "line": 13,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "b36df337ec7f736277d0e8ca6b721811",
+     "targets": [],
+     "type": "callsite"
+    }
+   ],
+   "data": [
+    {
+     "def": "73785191224e6b0970da3c0991c0f842",
+     "fromPath": "r",
+     "id": "0d5492a55163aca8ef6743225f7a32ae",
+     "reason": "intra-flow",
+     "status": "confirmed",
+     "toPath": "a0",
+     "type": "data",
+     "use": "ed5d50976fdf01c34afbf8dc09c0477f"
+    }
+   ],
+   "symbolId": "b36df337ec7f736277d0e8ca6b721811",
+   "valueSets": [
+    {
+     "arg": "kw.timeout",
+     "callSiteId": "ed5d50976fdf01c34afbf8dc09c0477f",
+     "id": "142ababe53d95ca512228ffd69e0a94e",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": 5
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "73785191224e6b0970da3c0991c0f842",
+     "id": "dd1955597dea2f150ec8d7ccaf64d41d",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "FX_PEER_BASE"
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "ed5d50976fdf01c34afbf8dc09c0477f",
+     "id": "df9f827f5eba688dfd3f27b33947d2eb",
+     "type": "valueSet",
+     "values": [
+      {
+       "template": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/api/health"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "arg": "a1",
+     "callSiteId": "73785191224e6b0970da3c0991c0f842",
+     "id": "f41de3bc052cd3177eb9a3aab4d65be2",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": ""
+      }
+     ]
+    }
+   ]
+  },
+  "shape_c": {
+   "callsites": [
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "os.py:<module>.<member>(environ).get",
+     "id": "c37ada1737a90bd55f4f76c32737a6f0",
+     "line": 17,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "bca056c80c8121a3ddbeab41e1522054",
+     "targets": [],
+     "type": "callsite"
+    },
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "requests.py:<module>.get",
+     "id": "ce7baa9a2eb3233f327b694ae13978ab",
+     "line": 18,
+     "ordinal": 1,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "bca056c80c8121a3ddbeab41e1522054",
+     "targets": [],
+     "type": "callsite"
+    }
+   ],
+   "data": [
+    {
+     "def": "c37ada1737a90bd55f4f76c32737a6f0",
+     "fromPath": "r",
+     "id": "05d4514471d0a8b7e08d2d4af46bd09c",
+     "reason": "intra-flow",
+     "status": "confirmed",
+     "toPath": "a0",
+     "type": "data",
+     "use": "ce7baa9a2eb3233f327b694ae13978ab"
+    }
+   ],
+   "symbolId": "bca056c80c8121a3ddbeab41e1522054",
+   "valueSets": [
+    {
+     "arg": "kw.timeout",
+     "callSiteId": "ce7baa9a2eb3233f327b694ae13978ab",
+     "id": "085ae98461a3e5e1e849e785308abd5c",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": 5
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "ce7baa9a2eb3233f327b694ae13978ab",
+     "id": "473800e9268f63c725c071aa34744e46",
+     "type": "valueSet",
+     "values": [
+      {
+       "concat": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/api/health"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "arg": "a1",
+     "callSiteId": "c37ada1737a90bd55f4f76c32737a6f0",
+     "id": "649fba70d76224e38370c3ee29e18ff3",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": ""
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "c37ada1737a90bd55f4f76c32737a6f0",
+     "id": "b7f26e0f8d6954d7e9d14e2eb106dcd8",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "FX_PEER_BASE"
+      }
+     ]
+    }
+   ]
+  },
+  "shape_d": {
+   "callsites": [
+    {
+     "callKind": "call",
+     "calleeName": "getenv",
+     "externalTarget": "os.py:<module>.getenv",
+     "id": "bacae65e87f61d42cef864eb90c1864f",
+     "line": 22,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "49cef7f513ca98559fc5573fa9ed9d60",
+     "targets": [],
+     "type": "callsite"
+    },
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "requests.py:<module>.get",
+     "id": "d47635274bc6a550d73716484022a12a",
+     "line": 22,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "49cef7f513ca98559fc5573fa9ed9d60",
+     "targets": [],
+     "type": "callsite"
+    }
+   ],
+   "data": [
+    {
+     "def": "bacae65e87f61d42cef864eb90c1864f",
+     "fromPath": "r",
+     "id": "5249fd52c53bcd324cfaaf1419d251f2",
+     "reason": "intra-flow",
+     "status": "confirmed",
+     "toPath": "a0",
+     "type": "data",
+     "use": "d47635274bc6a550d73716484022a12a"
+    }
+   ],
+   "symbolId": "49cef7f513ca98559fc5573fa9ed9d60",
+   "valueSets": [
+    {
+     "arg": "a0",
+     "callSiteId": "d47635274bc6a550d73716484022a12a",
+     "id": "4aa9116300465cdafc2782ba40fd7359",
+     "type": "valueSet",
+     "values": [
+      {
+       "concat": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/api/health"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "arg": "kw.timeout",
+     "callSiteId": "d47635274bc6a550d73716484022a12a",
+     "id": "96a2143d72fe096c6146820f7a0c3d85",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": 5
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "bacae65e87f61d42cef864eb90c1864f",
+     "id": "c74e6828ce00133257401586d6f60b67",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "FX_PEER_BASE"
+      }
+     ]
+    },
+    {
+     "arg": "a1",
+     "callSiteId": "bacae65e87f61d42cef864eb90c1864f",
+     "id": "fb1d86c621d9ab4d442b4f59b2dff363",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": ""
+      }
+     ]
+    }
+   ]
+  },
+  "shape_e": {
+   "callsites": [
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "requests.py:<module>.get",
+     "id": "6832daf215b785a72b45dd7828aa37e4",
+     "line": 27,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "25020aee50fbe72713d898d7e17cc384",
+     "targets": [],
+     "type": "callsite"
+    },
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "__builtin.dict.get",
+     "id": "db4abb8968ac2ced31e6e3ec45907855",
+     "line": 27,
+     "ordinal": 1,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "25020aee50fbe72713d898d7e17cc384",
+     "targets": [],
+     "type": "callsite"
+    }
+   ],
+   "data": [
+    {
+     "def": "db4abb8968ac2ced31e6e3ec45907855",
+     "fromPath": "r",
+     "id": "8ec35f1d3a5406e79a7bd31cf0e95eba",
+     "reason": "intra-flow",
+     "status": "confirmed",
+     "toPath": "a0",
+     "type": "data",
+     "use": "6832daf215b785a72b45dd7828aa37e4"
+    }
+   ],
+   "symbolId": "25020aee50fbe72713d898d7e17cc384",
+   "valueSets": [
+    {
+     "arg": "a0",
+     "callSiteId": "db4abb8968ac2ced31e6e3ec45907855",
+     "id": "54b30d246b1f00a9aacc7556ed1fb32e",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "FX_PEER_BASE"
+      }
+     ]
+    },
+    {
+     "arg": "kw.timeout",
+     "callSiteId": "6832daf215b785a72b45dd7828aa37e4",
+     "id": "b6684cda222bc89859ba16c9297ba992",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": 5
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "6832daf215b785a72b45dd7828aa37e4",
+     "id": "bb40a64efc77c798f363f47fd1391bde",
+     "type": "valueSet",
+     "values": [
+      {
+       "concat": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/api/health"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "arg": "a1",
+     "callSiteId": "db4abb8968ac2ced31e6e3ec45907855",
+     "id": "fa8d59505f9c2b241a04a5fbe6b0d3c7",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": ""
+      }
+     ]
+    }
+   ]
+  },
+  "shape_f": {
+   "callsites": [
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "requests.py:<module>.get",
+     "id": "5b82f6219c11892eb0d3035e12564b64",
+     "line": 31,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "fad0fa0d8c16403a1db95982a86fe068",
+     "targets": [],
+     "type": "callsite"
+    },
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "os.py:<module>.<member>(environ).get",
+     "id": "fd1072b7e4d3acab01ee6a926aed6c66",
+     "line": 31,
+     "ordinal": 1,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "fad0fa0d8c16403a1db95982a86fe068",
+     "targets": [],
+     "type": "callsite"
+    }
+   ],
+   "data": [
+    {
+     "def": "fd1072b7e4d3acab01ee6a926aed6c66",
+     "fromPath": "r",
+     "id": "d69b93dcd581fcc9243a0127a20ba753",
+     "reason": "intra-flow",
+     "status": "confirmed",
+     "toPath": "a0",
+     "type": "data",
+     "use": "5b82f6219c11892eb0d3035e12564b64"
+    }
+   ],
+   "symbolId": "fad0fa0d8c16403a1db95982a86fe068",
+   "valueSets": [
+    {
+     "arg": "a1",
+     "callSiteId": "fd1072b7e4d3acab01ee6a926aed6c66",
+     "id": "08a9c8caee08a0782ae36010fea02f4f",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "http://localhost:8300"
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "fd1072b7e4d3acab01ee6a926aed6c66",
+     "id": "0a226c12b42451ef39683e6cc6e40122",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "FX_PEER_BASE"
+      }
+     ]
+    },
+    {
+     "arg": "kw.timeout",
+     "callSiteId": "5b82f6219c11892eb0d3035e12564b64",
+     "id": "2f8d5f489bcc1607459165dec205df55",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": 5
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "5b82f6219c11892eb0d3035e12564b64",
+     "id": "7db68b372cae45d27c2bc77f4a051f7b",
+     "type": "valueSet",
+     "values": [
+      {
+       "concat": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/api/health"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "shape_g": {
+   "callsites": [
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "requests.py:<module>.get",
+     "id": "7ead4eddb01521b2ca91c2dd9336c10f",
+     "line": 35,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "3d552e824f35108b3df077039c3a3c1c",
+     "targets": [],
+     "type": "callsite"
+    },
+    {
+     "callKind": "call",
+     "calleeName": "rstrip",
+     "externalTarget": "os.py:<module>.<member>(environ).get.rstrip",
+     "id": "9ed74519def1597a9c0c746aee99d812",
+     "line": 35,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "3d552e824f35108b3df077039c3a3c1c",
+     "targets": [],
+     "type": "callsite"
+    },
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "os.py:<module>.<member>(environ).get",
+     "id": "f491432c716ce9f6a508d945c066403c",
+     "line": 35,
+     "ordinal": 1,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "3d552e824f35108b3df077039c3a3c1c",
+     "targets": [],
+     "type": "callsite"
+    }
+   ],
+   "data": [
+    {
+     "def": "f491432c716ce9f6a508d945c066403c",
+     "fromPath": "r",
+     "id": "2410d3e83fd21cf36f2a0583210d5a20",
+     "reason": "intra-flow",
+     "status": "confirmed",
+     "toPath": "recv",
+     "type": "data",
+     "use": "9ed74519def1597a9c0c746aee99d812"
+    },
+    {
+     "def": "9ed74519def1597a9c0c746aee99d812",
+     "fromPath": "r",
+     "id": "92d2487037cf7fc37031866790c839a3",
+     "reason": "intra-flow",
+     "status": "confirmed",
+     "toPath": "a0",
+     "type": "data",
+     "use": "7ead4eddb01521b2ca91c2dd9336c10f"
+    }
+   ],
+   "symbolId": "3d552e824f35108b3df077039c3a3c1c",
+   "valueSets": [
+    {
+     "arg": "a0",
+     "callSiteId": "9ed74519def1597a9c0c746aee99d812",
+     "id": "0acbd0a71742c88233d53586069d41fe",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "/"
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "7ead4eddb01521b2ca91c2dd9336c10f",
+     "id": "38844d6030e08822ec6c45c25f7e2b6e",
+     "type": "valueSet",
+     "values": [
+      {
+       "concat": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/api/health"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "f491432c716ce9f6a508d945c066403c",
+     "id": "39ad2445584dfcc0de1292e768e1a71e",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "FX_PEER_BASE"
+      }
+     ]
+    },
+    {
+     "arg": "kw.timeout",
+     "callSiteId": "7ead4eddb01521b2ca91c2dd9336c10f",
+     "id": "40d5ca0959860c15588944c9d6554b6e",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": 5
+      }
+     ]
+    },
+    {
+     "arg": "a1",
+     "callSiteId": "f491432c716ce9f6a508d945c066403c",
+     "id": "5ab9ea1adbc3cf3b52898b8a2e0d7529",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": ""
+      }
+     ]
+    }
+   ]
+  },
+  "shape_h": {
+   "callsites": [
+    {
+     "callKind": "call",
+     "calleeName": "setdefault",
+     "externalTarget": "os.py:<module>.<member>(environ).setdefault",
+     "id": "b72473f05666c34293af72c376bc9ca0",
+     "line": 39,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "f7341ea2c9933c89fd943e03b8a66db9",
+     "targets": [],
+     "type": "callsite"
+    },
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "requests.py:<module>.get",
+     "id": "fad1424b543c8fbddc349dfe164df195",
+     "line": 39,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "f7341ea2c9933c89fd943e03b8a66db9",
+     "targets": [],
+     "type": "callsite"
+    }
+   ],
+   "data": [
+    {
+     "def": "b72473f05666c34293af72c376bc9ca0",
+     "fromPath": "r",
+     "id": "64aede9a0bc96cf79f0dbe43858eb534",
+     "reason": "intra-flow",
+     "status": "confirmed",
+     "toPath": "a0",
+     "type": "data",
+     "use": "fad1424b543c8fbddc349dfe164df195"
+    }
+   ],
+   "symbolId": "f7341ea2c9933c89fd943e03b8a66db9",
+   "valueSets": [
+    {
+     "arg": "kw.timeout",
+     "callSiteId": "fad1424b543c8fbddc349dfe164df195",
+     "id": "0d369f7d9ac450a1e3d797b2edf5f80c",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": 5
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "fad1424b543c8fbddc349dfe164df195",
+     "id": "3596f281e24ef6ccaee1b58d09f2a6f9",
+     "type": "valueSet",
+     "values": [
+      {
+       "concat": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/api/health"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "arg": "a1",
+     "callSiteId": "b72473f05666c34293af72c376bc9ca0",
+     "id": "3b4469d77c5eddda6a5246547ab66021",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "http://localhost:8300"
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "b72473f05666c34293af72c376bc9ca0",
+     "id": "ec8a4d57b77a66158243b9783914f99c",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "FX_PEER_BASE"
+      }
+     ]
+    }
+   ]
+  },
+  "shape_i": {
+   "callsites": [
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "requests.py:<module>.get",
+     "id": "2b1a583b336bd42929afaa6360d48d6f",
+     "line": 43,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "2ddba224eb4162fbba45fa3a4a23210b",
+     "targets": [],
+     "type": "callsite"
+    },
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "os.py:<module>.environ.get",
+     "id": "eb0c684749e527fccab6207d3214569f",
+     "line": 43,
+     "ordinal": 1,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "2ddba224eb4162fbba45fa3a4a23210b",
+     "targets": [],
+     "type": "callsite"
+    }
+   ],
+   "data": [
+    {
+     "def": "eb0c684749e527fccab6207d3214569f",
+     "fromPath": "r",
+     "id": "d8444794f6e4785846a46990c699cbfe",
+     "reason": "intra-flow",
+     "status": "confirmed",
+     "toPath": "a0",
+     "type": "data",
+     "use": "2b1a583b336bd42929afaa6360d48d6f"
+    }
+   ],
+   "symbolId": "2ddba224eb4162fbba45fa3a4a23210b",
+   "valueSets": [
+    {
+     "arg": "a1",
+     "callSiteId": "eb0c684749e527fccab6207d3214569f",
+     "id": "27866bcd0cb6082c1badfbddb1dc2a80",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": ""
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "2b1a583b336bd42929afaa6360d48d6f",
+     "id": "31986e73e4606221ba0dab51e78b45da",
+     "type": "valueSet",
+     "values": [
+      {
+       "concat": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/api/health"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "arg": "kw.timeout",
+     "callSiteId": "2b1a583b336bd42929afaa6360d48d6f",
+     "id": "4c0d44f59aba29088014ea8675c8a211",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": 5
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "eb0c684749e527fccab6207d3214569f",
+     "id": "b303691ad12c884a3b90931a71c6b3de",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "FX_PEER_BASE"
+      }
+     ]
+    }
+   ]
+  },
+  "shape_j": {
+   "callsites": [
+    {
+     "callKind": "call",
+     "calleeName": "getenv",
+     "externalTarget": "os.py:<module>.getenv",
+     "id": "5ad590e6c710034e3dbba40fe186a337",
+     "line": 47,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "7318ffa9b9779edae68a06393e4e0e53",
+     "targets": [],
+     "type": "callsite"
+    },
+    {
+     "callKind": "call",
+     "calleeName": "get",
+     "externalTarget": "requests.py:<module>.get",
+     "id": "ce8f488db449350c4836db347c5f02c0",
+     "line": 47,
+     "ordinal": 0,
+     "reason": "name-match",
+     "resolution": "external",
+     "status": "possible",
+     "symbolId": "7318ffa9b9779edae68a06393e4e0e53",
+     "targets": [],
+     "type": "callsite"
+    }
+   ],
+   "data": [
+    {
+     "def": "5ad590e6c710034e3dbba40fe186a337",
+     "fromPath": "r",
+     "id": "40ca1c58539c0cb444d171cb5c649331",
+     "reason": "intra-flow",
+     "status": "confirmed",
+     "toPath": "a0",
+     "type": "data",
+     "use": "ce8f488db449350c4836db347c5f02c0"
+    }
+   ],
+   "symbolId": "7318ffa9b9779edae68a06393e4e0e53",
+   "valueSets": [
+    {
+     "arg": "a1",
+     "callSiteId": "5ad590e6c710034e3dbba40fe186a337",
+     "id": "531f123369db45e75123cf4de27d0f94",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": ""
+      }
+     ]
+    },
+    {
+     "arg": "kw.timeout",
+     "callSiteId": "ce8f488db449350c4836db347c5f02c0",
+     "id": "a024ce966eaa36b5a16ca7ccab08d6b6",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": 5
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "5ad590e6c710034e3dbba40fe186a337",
+     "id": "cd13ed92205b0c93a1aa8059a57e97e2",
+     "type": "valueSet",
+     "values": [
+      {
+       "const": "FX_PEER_BASE"
+      }
+     ]
+    },
+    {
+     "arg": "a0",
+     "callSiteId": "ce8f488db449350c4836db347c5f02c0",
+     "id": "d3bbef9a97144788543cc2c7922ea3a4",
+     "type": "valueSet",
+     "values": [
+      {
+       "concat": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/api/health"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "source": "real extractor output (Joern, ccg.build over the fixture system at a scratch commit) with fx-svc clients/peer.py rewritten to shapes a-j (os.environ.get, f-string, local, os.getenv, dict.get, non-empty default, .rstrip chain, .setdefault, from-import environ.get and getenv); jobs = fx-svc/clients/jobs.py as committed"
+}

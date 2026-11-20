@@ -9,7 +9,7 @@ units the site's *URL or launch chain* selects, and with what chain of ``BOUND_B
 drops the host and port, the leaf keeps them). (b) A pack's ``urlBindings`` ``callsite`` source (``scope`` file or unit) for the pack's
 ``kinds``. (c) A pack's ``urlBindings`` ``config`` source: an ``mcpServers.<server>.url`` entry binds a prompt mention
 ``mcp__<server>__<tool>`` of that server, which names its server and so takes no ``callsite`` URL source (the file's client URL is another server's). (d) A consumer that reads an environment variable (a Python ``os.environ.get``/``getenv``
-call flowing into its URL slot): the variable's default text, and the URL a Compose ``services.<svc>.environment.<VAR>`` entry sets
+call flowing into its URL slot, recognised by its exact ``externalTarget``, ``_ENV_READ_TARGETS``): the variable's default text, and the URL a Compose ``services.<svc>.environment.<VAR>`` entry sets
 (behaviour (5)). No other form of environment read is in any bundle record (a JavaScript ``import.meta.env.X`` leaves no trace),
 so a consumer reading one is left unbound, which is the unbound outcome, not an error.
 
@@ -79,7 +79,18 @@ _SERVICE_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _SERVER_OF = re.compile(r"mcpServers\.([^.\[]+)\.")
 _COMPOSE_ENV = re.compile(r"services\.([^.\[]+)\.environment\.([^.\[]+)")
 _COMPOSE_SERVICE = re.compile(r"services\.([^.\[]+)\.")
-_ENV_READS = ("environ.get", "getenv")
+#: The ``externalTarget`` strings that are a read of an environment variable, matched exactly (never the ``calleeName``, which is the bare
+#: member ``get`` for ``os.environ.get``, and never a suffix or glob: ``dict.get`` and every chained member such as ``...(environ).get.rstrip``
+#: or ``.setdefault`` are other targets). ``os.getenv`` and ``from os import getenv`` share one target. All three are observed on real
+#: Joern output: ``tests/data/p1_54_environ_reads.json``.
+_ENV_READ_TARGETS = frozenset({"os.py:<module>.<member>(environ).get", "os.py:<module>.environ.get", "os.py:<module>.getenv"})
+
+
+def _is_env_read(callsite: dict) -> bool:
+    """Whether a callsite record is a read of an environment variable: its ``externalTarget`` is exactly one of the table's."""
+    return callsite.get("externalTarget") in _ENV_READ_TARGETS
+
+
 _PATHISH = re.compile(r"[A-Za-z0-9._/~+-]+")
 _PROJECT_DIR = re.compile(r"^\$\{?CLAUDE_PROJECT_DIR\}?/")
 
@@ -513,7 +524,7 @@ class Binder:
                 continue
             for d, _ in c.flows_into(item["siteId"], item["urlPath"]):
                 cs = c.callsites.get(d["def"])
-                if cs is None or not cs["calleeName"].endswith(_ENV_READS):
+                if cs is None or not _is_env_read(cs):
                     continue
                 for var in c.arg_alternatives(cs, "a0") or ():
                     for text in c.arg_alternatives(cs, "a1") or ():

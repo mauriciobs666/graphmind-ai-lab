@@ -35,6 +35,13 @@ def consumer(site="s1", kind="http", anchor="C", key="GET /api/x", server=None):
             "reason": "key-match", "hops": [], "server": server}
 
 
+#: The environment-read callsite as the extractor writes it (observed on real bundles, ``tests/data/p1_54_environ_reads.json``): the bare
+#: member as ``calleeName``, the dotted path only in ``externalTarget``.
+def env_read(cid, owner, *, getenv=False):
+    return call(cid, owner, "getenv" if getenv else "get", resolution="external",
+                external="os.py:<module>.getenv" if getenv else "os.py:<module>.<member>(environ).get")
+
+
 PORTS_8200 = [launch_fact("L3", "scripts/start.sh", "env-default", envVar="AGENT_TEAM_PORT", default="8200", origin="env-default"),
               launch_fact("L4", "scripts/start.sh", "command", command="uvicorn", args=["app:app"])]
 
@@ -405,7 +412,7 @@ def test_the_service_port_must_be_one_the_service_publishes_or_exposes():
 def test_a_default_url_read_from_the_environment_binds_through_the_compose_port_fact_lnk_15():
     facts, bundles = compose_world(url="")
     facts.lifted[:] = [url_lifted("s1", "C", "\x00/job/trigger")]
-    web = unit_bundle("web", repo="fx-web", records=[*sym_in("C", "web", path="clients/jobs.py"), call("env1", "C", "os.environ.get"),
+    web = unit_bundle("web", repo="fx-web", records=[*sym_in("C", "web", path="clients/jobs.py"), env_read("env1", "C"),
                                                     vs("env1", "a0", "FX_JOB_URL"), vs("env1", "a1", "http://localhost:8300"),
                                                     data("s1", "env1", "a0", "r")])
     bundles[2] = web
@@ -422,7 +429,7 @@ def test_a_url_the_compose_file_sets_for_the_environment_variable_binds_the_read
     facts.lifted[:] = [url_lifted("s1", "C", "\x00/api/x")]
     env = config_entry("E1", "deploy/compose.yaml", "services.web.environment.FX_PEER_BASE", bind="http://api:8000")
     bundles[0] += [env]
-    bundles[2] = unit_bundle("web", repo="fx-web", records=[*sym_in("C", "web", path="clients/p.py"), call("env1", "C", "os.getenv"),
+    bundles[2] = unit_bundle("web", repo="fx-web", records=[*sym_in("C", "web", path="clients/p.py"), env_read("env1", "C", getenv=True),
                                                           vs("env1", "a0", "FX_PEER_BASE"), data("s1", "env1", "a0", "r")])
     got, _ = run_link(facts, bundles)
     link = one(got)
@@ -433,7 +440,7 @@ def test_an_environment_read_of_another_variable_does_not_pick_up_a_compose_valu
     facts, bundles = compose_world(url="")
     facts.lifted[:] = [url_lifted("s1", "C", "\x00/api/x")]
     bundles[0] += [config_entry("E1", "deploy/compose.yaml", "services.web.environment.FX_PEER_BASE", bind="http://api:8000")]
-    bundles[2] = unit_bundle("web", repo="fx-web", records=[*sym_in("C", "web"), call("env1", "C", "os.getenv"), vs("env1", "a0", "OTHER_VAR"),
+    bundles[2] = unit_bundle("web", repo="fx-web", records=[*sym_in("C", "web"), env_read("env1", "C", getenv=True), vs("env1", "a0", "OTHER_VAR"),
                                                           data("s1", "env1", "a0", "r")])
     assert make_binder(facts, bundles).bind(consumer()) is None
 
@@ -867,7 +874,7 @@ def test_an_n1_without_a_build_context_the_command_launch_unit_binds():
 def env_world():
     facts, bundles = compose_world(url="", consumer_key="GET /api/x")
     facts.lifted[:] = [url_lifted("s1", "C", "\x00/api/x")]
-    bundles[2] = unit_bundle("web", repo="fx-web", records=[*sym_in("C", "web", path="clients/p.py"), call("env1", "C", "os.getenv"),
+    bundles[2] = unit_bundle("web", repo="fx-web", records=[*sym_in("C", "web", path="clients/p.py"), env_read("env1", "C", getenv=True),
                                                           vs("env1", "a0", "FX_PEER_BASE"), data("s1", "env1", "a0", "r")])
     return facts, bundles
 
