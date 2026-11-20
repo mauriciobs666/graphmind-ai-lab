@@ -6,73 +6,153 @@
 
 ## Active
 
-| ID | Added | Priority | Status | Summary |
-|-------|------------|----------|--------|---------|
-| K-001 | 2026-05-31 | high | 🔵 | Periodically re-verify the documented standards against live official docs (these ecosystems change fast). |
-| K-002 | 2026-05-31 | medium | 🔵 | Add a worked "port an agent across tools" reference example (Claude subagent ↔ OpenCode agent ↔ Kiro steering) — now skill material, candidate for the `agent-maintenance` bundle. |
-| K-003 | 2026-05-31 | low | 🔵 | Track additional agentic tools as they mature (e.g. Codex CLI, Cursor, Gemini CLI) where they share the open AGENTS.md / Agent Skills standards. |
-| K-005 | 2026-06-07 | high | 🔵 | Automate doc-drift detection: a scheduled routine that re-fetches the canonical docs, diffs vs. stored snapshots, and files a kaizen item on change. |
-| K-008 | 2026-06-07 | low | 🔵 | Dog-food the frontmatter cobb teaches: evaluate adding `memory: project` for a persistent cross-session drift/verified-date store (distinct from kaizen). |
-| K-014 | 2026-07-25 | medium | 🔵 | Skills outside cobb's two have **no kaizen home**: `skills/` carries no `kaizen/` dirs and `skills/README.md` routes only `agent-maintenance`/`agent-standards` changes to cobb's history — so edits to `cpg-analysis`, `joern-cpg`, etc. land with no per-artifact log. Three skills now cover three different "owner" shapes — cobb's own machinery (`agent-maintenance`/`agent-standards`), `graph-dba`-driven (`cpg-analysis`, `joern-cpg`), and nobody's (`python-web-quirks`) — and **all three landed in an owning agent's history** by by-example precedent. That is converging evidence that "owner-agent's history" already *is* the convention; the work is writing it into `skills/README.md` + `claude/AGENTS.md` where a new skill author would find it, not deciding it. |
-| K-009 | 2026-06-20 | medium | 🔵 | Add a CI/script guard that every component `AGENTS.md` has a sibling `CLAUDE.md` = `@AGENTS.md` stub (so Claude Code never silently misses context — it reads `CLAUDE.md`, not `AGENTS.md`). Fold into the K-005 drift job. *(Sibling shipped 2026-07-09: `claude/scripts/audit-team.sh` covers the agent-collection invariants — the `@AGENTS.md`-stub check could join it.)* |
-| K-017 | 2026-08-20 | low | 🔵 | Item 4 of the "Broader team-verbosity reduction" diagnosis (surfaced 2026-08-19; items 1-3 delivered, see `history.md`): prune hedge-stacking once a rule has structural backup (a hook, a routing table) instead of three defensive clauses. No specific instances identified yet — start with a scan across the agent prompts for hedge-stacked clauses backed by real harness enforcement (a `PreToolUse` hook, a routing table) and trim each to one clean statement. |
-| K-020 | 2026-09-06 | medium | 🔵 | `cypher-mcp/server.py:881`'s FalkorDB-unreachable message advises `docker start falkordb-dev`, which cannot work — no launch path in this repo leaves a stopped container by that name. Out of cobb's write remit (component code); route to an implementer via `teco`. |
-| K-021 | 2026-09-07 | medium | 🔵 | Validate `entryId` **shape** in the `cypher-mcp` producer-write authorizer — a malformed or colliding id is load-bearing for the curator-clear path. Content validation deliberately **not** proposed. |
-| K-022 | 2026-09-08 | high | 🔵 | The **wrong-rather-than-absent** defect class now has **eight** instances — three values, **four prose**, and one **executable** (a test oracle that certified the wiring while structurally unable to see a wiring defect). The 2026-09-08 tombstone sequence isolates the mechanism: three certifications written in the same act as the fix they certify, **all three since corrected** — a retraction launders credibility onto whatever sits next to it. Two candidates were named for where the rule should live. **The first is now settled and shipped elsewhere:** U38 (2026-09-09) promoted *verify the reason, not just the rule* into `claude/analyst/review-techniques.md` as a **review-methodology** section, not an `agent-maintenance` §7 lint check — §7's scope is one *prompt/skill/steering artifact* over seven prompt-authoring dimensions, and the instance that produced the rule is a `references/` document read by a reviewer. **The mutation standard is now settled too:** U43 (2026-09-10) promoted *the mutant to specify is the design the plan rejected* into `teco.md`'s briefing bullet — the rule already existed in `tdd-engineer.md:41` and reached `coder` (which carries no mutation rule at all) through nothing but the brief. **What remains is only the still-open question of whether *a tombstone certifies nothing* is a third rule or a restatement of the first. Decide at the next certification pass. |
-| K-024 | 2026-09-08 | medium | 🔵 | Two documents outside cobb's remit still describe the `:CpgBuildInfo` marker as it was before K-023. **The debt changed kind, not size** — do NOT add the five hand-authored keys to any schema table: the stamp never writes them, and after the map form they are not even named in the code. `docs/plans/cpg-agent-adoption-graph.md` §1.1 owes (a) the **eight** properties the stamp writes, (b) full 40-char OIDs rather than "short SHA", (c) the correction that its code block documents the superseded `SET b.X = …` write semantics, and (d) the schema-level fact this arc established — **the marker's property set is closed by construction**, so `:CpgBuildInfo` cannot be extended by any writer other than the stamp (**`architect`**; per the doc convention an executed-against plan takes a successor or a header pointer, not an edit). `docs/manuals/graph-ontology.md` needs the same shape update plus gate finding **P4-3** — its FAQ classifies on the `PROVENANCE` literal alone and never on `MARKER_ORIGIN`, so a hand-authored marker reads as a pipeline stamp to a manual-only reader (**`tico`**). Both route via `teco`; neither is cobb's to write. |
-| K-025 | 2026-09-09 | high | 🔵 | A `MENTIONS` tag writes an obligation into a queue with no consumer: a distillation unit is scoped `MATCH (a:Agent {agentId})-[:PRODUCED]->(e)`, which by construction cannot see a `MENTIONS`-only node. 11 such nodes accumulated across 7 agents and 2 passes; **six** of those agents were recorded "closed out, 0/0" while still holding an unrouted edge. Two candidate fixes — scope a unit by *either* edge kind, or stop letting the tag imply a promotion. |
-| K-026 | 2026-09-09 | medium | 🔵 | `python-web-quirks` carries **two** `TestClient` **behaviour** sections (teardown task-cancellation; the default `raise_server_exceptions=True` re-raising into the caller), deliberately unmerged because the mechanisms, consequences and fixes differ. They are bound by a shared opening line naming the class. **On the third such entry, promote that line to a parent heading with sub-sections — do not add a third flat sibling.** The count is **still two**: U38 (2026-09-09) added a third section touching `TestClient` — the `httpx`→`httpx2` transport deprecation, which warns on *both* pinned starlette versions — and it is a **version-rot rider on the pair**, carrying no `TestClient` mechanism of its own, so the trigger did not fire. It was **retitled** to lead with the migration rather than the class precisely so a header scan cannot read it as a third sibling and defeat this count. |
-| K-029 | 2026-09-09 | high | 🔵 | **Nothing audits a skill's frontmatter — that it parses, fits the 1,536-char listing budget, and names the right audience. One missing check, not three** (consolidates K-027 + K-028 + U36's parse finding; no content dropped). The three are the same gap seen three ways, and the budget is what makes the other two moot: `python-web-quirks`' description is **4,584 chars**, so U35's audience fix sits ~3,000 chars past the cut and reaches no router. Carries a remediation (that description) and a check (`audit-team.sh`), plus the instrument caveat that strict YAML is the **wrong** parser to audit with. |
-| K-031 | 2026-09-10 | medium | 🔵 | **Shared-working-tree commit knowledge is fragmented by *audience*, not by topic — and the split leaks.** Five statements now cover it: `claude/AGENTS.md`'s atomicity paragraph (index race, path-limited remedy, and — U44 — the unconditional index-ignored rule), its universal interactive-mode grant, `teco.md`'s grant bullet (path-limited form + the U43 disjointness condition), `teco.md`'s new holding-cost bullet (U44), and `teco.md`'s grant-scoping bullet. **Within a `teco` session the set is coherent** — the two `teco.md` bullets are adjacent and cite `claude/AGENTS.md` twice by section title. **For every other agent it is not:** `claude/AGENTS.md` grants all twelve agents path-limited committing into this shared tree and gives them the index race, but the two facts that bound the grant — *path-limiting protects nobody where the paths are not disjoint*, and *holding a shared file out has a rising cost with no natural end* — exist **only** in `teco`'s prompt, and nothing in `claude/AGENTS.md` points at them. Recommended home: the `claude/AGENTS.md` atomicity paragraph, because the grant that creates the hazard is already stated there for everyone. **Cost, and why it is not free either way:** moving prose *into* the always-loaded context file makes eleven other agents pay tokens for it every session (~+100 w on a file already 53 past its smell, forcing the K-032 trim first), while leaving it in `teco.md` keeps the cost narrow and leaves the other agents granted-but-uninformed. The deciding question is empirical and unmeasured: **how often does a non-`teco` agent actually commit into this tree under the interactive-mode grant?** Measure that before moving anything. Not performed in U44 by instruction. |
-| K-033 | 2026-09-13 | medium | 🔵 | **Corrected 2026-09-16** (`docs/reviews/commit-granularity.md` finding): the original word-count claim materially understated the 2026-09-13 growth. Independently re-measured (`git show 320f682^:<path> \| wc -w` vs. `git show 320f682:<path> \| wc -w`): `claude/AGENTS.md` **2,783→3,074 (+291**, not the originally-claimed +33 — ~9x), `teco.md` **10,765→10,899 (+134**, not ~450), `tico.md` **5,623→5,809 (+186**, close to the originally-claimed ~250). `claude/AGENTS.md` now sits 574 words over root `AGENTS.md`'s own ~2,500-word smell line — a real, not marginal, overage. Priority raised low→medium on the corrected figures. |
-| K-032 | 2026-09-10 | low | 🔵 | **`claude/AGENTS.md`'s roster enumerates each agent's knowledge-base *topics*, duplicating `claude/README.md`, and the two have now measurably diverged.** `AGENTS.md:37-41` lists `guard-testing-techniques.md` as *coverage probe vs. mutation test, the two axes of a hand-written resolver, the docstring-states-more-than-the-body defect*; `README.md`'s parallel entry carries those **plus** the probe/oracle split U43 added. **The divergence is not the defect — the enumeration is.** A context file is always loaded in full, `README.md` is the catalog of record, and no agent routes to another agent's knowledge base (routing runs on the injected `description`), so the topic lists buy nothing and create a standing two-place update duty on the copy that rots unnoticed. **Recommended fix: do not add the missing topic — delete the enumerations**, leaving the roster to name each KB and point at `README.md` (~35 words back on a file 53 past its smell, and it retires the duty). Same judgement applies to the six other roster entries carrying topic lists. **Deliberately not fixed silently in U44**; U44 likewise added no `README.md` entry because it created **zero** new sections anywhere. Carries the K-031 dependency: this trim is what makes room for that consolidation. |
-| K-053 | 2026-09-20 | low | 🔵 | `agent-maintenance` §5 doesn't warn a reviewer that `0 PRODUCED`/live `MENTIONS` on a post-M8 node can be a correctly-functioning kept-open state, not a write-path defect |
-| K-055 | 2026-10-14 | medium | 🔵 | Follow-ups K-054 left open: (a) MCP auto-connect needs the server healthy within the client's ~7s retry window, and `start_agent_team.sh`'s unconditional `pip install -e` makes a cold start miss it; (b) other agents also depend on `ws:agent-team`; (c) `freshness.md`'s `Consumer:` line doesn't name the start-time report. |
-| K-056 | 2026-10-20 | medium | 🔵 | Identifier-leak cleanup delivered (U1–U3, `claude/docs/plans/identifier-leak-cleanup-coordination.md`; `audit-team.sh` check 7 and the full audit pass 2026-11-09). Still open: (a) the **upstream** fix — specialists keep pasting absolute paths/command output into deliverables, so the durable fix is brief/prompt guidance to write repo-relative paths; (b) flip the coordination doc's `Status:` (still `active`) to `archived` via `teco`. |
-| K-057 | 2026-10-20 | medium | 🔵 | **The end-user team manual `claude/docs/manuals/agent-team.md` is not in `claude/AGENTS.md`'s add/edit/rename/remove update rule** (source, `kaizen/{plan,history}.md`, `README.md` catalog, roster), so team changes never prompt a manual update: it went stale from 2026-08-20 to 2026-10-20 (wrong commit authority, missing `security-expert`, paused units, tico consults/coordination, `ws:agent-team`) until tico rewrote it (commit `44dada09`). Fix: add a "flag `tico` when the change alters user-visible team behavior (roster, who-calls-whom, approvals, commit authority, tracking)" clause to the rule — flag rather than edit, since manuals are tico-owned — and consider an `audit-team.sh` check that every roster agent name appears in the manual. |
-| K-058 | 2026-10-20 | high | 🔵 | **Narrowed to the KB prerequisite of `claude/docs/plans/coordination-graph.md`; S2 delivered (record: `kaizen/history.md` 2026-11-20 S2 entries), the ongoing-freshness half is that plan's S6/S8a.** Open, for S6's first `kb-sync`/`kb-reconcile`, not hand-fixed: (1) **`falkordb-quirks.md`** (committed in `6aeefcf5`, since edited again by another session): S6's first run on it waits for its 4 `<!-- kb-split: bullets -->` markers (cobb adds them once the file is committed), because unmarked its 84 hand-split claims would be replaced by 5 whole-section documents; its sync and 4 claims matching no section (`c10f097d`, `424a70a2`, `b275e16e`, `24baa610`) wait with it. (2) **5 sections with no claim:** teco "A standing commit grant…", review-techniques ×3 ("Mutation-testing a small pure module…", "A document's own prose summary of a count…", "Verifying a mutation-tested checker…"), lm-studio "A live-run report's provenance…" (its drifted claim `35964b75` is stored under an older title). (3) **Drifted claims** (file text changed since ingest): review-techniques 11, lm-studio 3 unplaced plus 8 whitespace-only, teco 1 whitespace-only, plan-authoring "Reconciling a diverging delegated note…" 1 (`c0bf904a`), qa-testing-techniques "model-bench attest/run — non-interactive re-attestation…" 1 (`781c055d`, `check_content_loss.py` NOT_FOUND). (4) **Bullet claim text:** the S1a convention is that a bullet claim's text includes its list marker; `frontend-quirks.md`'s 6 stored claims match it, the 17 claims of `falkordb-reference.md`'s three marked headings were stored without and S6's first sync re-ingests them (append-before-delete keeps it safe). Raw evidence: `ws:agent-team` doc `92e938a3c14b4d0890fc8cafa15b8623`. |
-| K-059 | 2026-10-30 | low | 🔵 | `audit-team.sh` checks 2/3 print the expanded `$HOME` path in their PASS lines (`deployed (/home/<user>/.claude/agents/…)`), so pasting audit output into a review or kaizen file re-creates the leak check 7 then flags. Check 7 now prints `path:line` only; print `~/.claude/agents/…` (or `$HOME/…` literally) in checks 2/3 too. |
-| K-060 | 2026-10-31 | low | 🔵 | **`agent-maintenance` §5's "New claim" step writes its manifest entry only *after* `ingest_document`**, so an interruption between the two leaves no `"pending"` entry, and recovery never examines that claim. A rerun can then ingest a second, untracked copy. The gap predates the title-length work and has nothing to do with titles. It was found while fixing review F5 (`claude/docs/reviews/capture-title-limit.md`). Possible fix: write the entry (recorded `title`, `verified: "pending"`, no `documentId`) before the ingest, and let the pending-at-start recovery treat a missing id as its `None` branch, whose title sweep already resolves cases (a) and (b). |
-| K-063 | 2026-11-06 | low | 🔵 | Raw-learnings distillation is closed: 0 raw `Fact:` entries in `ws:agent-team` are unswept apart from `d88545b5` (the Mermaid check, closed: `kaizen/history.md` 2026-11-09); every swept id is under a `_dispositioned_raw_distillation{3,4,5,6}` manifest key in `claude/cobb/scripts/kb-claim-manifest.json` (re-run the §5 step 1 query to confirm). Open: (1) the user's delete of the dispositioned raw documents, none cited by id in a repo document except the distillation 5 reports naming `98a4de01`; `480ef825`, `a1d388f4`, `a93905a6` are cited by model-bench fixtures and plans and must stay. (2) 5 entries of distillation 3 lost attribution (`u1`); which client writes without `produced_by` is unknown. (3) `skills/python-web-quirks/SKILL.md` `description:` is 973 characters, within the 1024 limit in `skills/README.md` (rewritten to its triggers in `3fcb171c`); nothing left to do. (4) `2885564b` is documented (`falkor-chat/docs/SERVER.md` line 430, `DESIGN.md` line 638); only `DESIGN.md` line 501 is silent, an optional cross-reference. (5) The user's delete of the superseded KB claims `fd27e4a9` and `9bdc41de` (replaced by `d9efef15`, `424a70a2`; `docs/reviews/team-learnings-followups-sweep.md`). (6) Of the six failed raw documents from distillation 4, three lack chunk embeddings (`4b9c6680`, `15de3552`, `2cc6debd`) and cannot be re-embedded without a falkor-chat repair path (backlog K-102); the other three are fully embedded and need a root cause. |
-| GAL-I02-K0001 | 2026-11-10 | low | 🔵 | Capture `38cd49cddb004207a5c7abd10181a4eb` (architect; BackgroundTasks runs one request's tasks sequentially) is deleted by the user at H1 of `docs/plans/python-web-quirks-kb.md`, so its promotion text is recorded here first (S7, Q1). Its gap statement (the skill covers the 40/100-token bound but not per-request serialization) is already closed: promoted per `docs/reviews/team-learnings-distillation3-sweep.md` row 11 and carried verbatim by `skills/python-web-quirks/SKILL.md` §889 ("The bounded-pool entry above is about *total* parallelism; this is the per-request half.", verified 2026-11-06) and by `claude/knowledge/python-web-quirks.md`; the promotion text is that section, no new text. Open: (1) the user's delete of the capture at H1 (full list and rulings: `docs/plans/python-web-quirks-kb-captures.md`). (2) Optional, small: the skill's mutation-copy section (§990) omits the cwd condition from capture `6ce4a2321bcb44989d382e2c762edd0f`: `PYTHONPATH=<copy>` is overridden when the cwd is the real package directory. |
-| K-019 | 2026-08-21 | **high — filed upstream** | 🔵 | **Systemic, now confirmed matcher-agnostic too. `PreToolUse` "ask" hooks do not reliably pause execution in this session under Auto Mode, on either `Bash` or `Write`/`Edit`, regardless of hook source or execution context.** Four independent, isolated live tests, 2026-08-21, Claude Code 2.1.238, all under Auto Mode: (1) `graph-dba`'s own frontmatter `Bash` hook, Task-dispatched with `subagent_type` explicitly correct — didn't fire. (2) The identical guard mirrored as a session-wide `.claude/settings.local.json` `Bash` hook, run from `cobb`'s own **main session** — didn't fire. (3) Same test repeated after the user explicitly reloaded hook config via `/hooks` (visibly listed as registered, `[Local] Bash — 1 hook`) — still didn't fire. (4) **`cobb`'s own frontmatter `Write`/`Edit` hook** (`guard-cobb-topic-writes.sh`) — a `Write` to a path plainly outside cobb's allowlist (`docs/_hook_test_k019_scratch.md`) went through with zero interruption; re-fed the exact real payload to the script directly afterward and confirmed it correctly returns `ask` for that path. **Every test used a real, disposable payload (scratch graph or scratch file, immediately cleaned up) and independently pipe-test-confirmed correct hook logic** — ruling out `subagent_type` omission, stale config, hook-not-registered, and matcher-specific quirks as explanations. **Working hypothesis:** Auto Mode's classifier layer silently resolves/overrides a correctly-emitted `ask` decision before a human ever sees it, across both tool matchers tested. **Filed upstream 2026-08-21** via `/feedback` (user-submitted, confirmed "Feedback / bug report submitted") with the 3-test Bash repro; the 4th (Write/Edit) test landed after filing, not yet included in a follow-up report. **Practical consequence, effective immediately: every "harness-enforced" Guardrails claim across every guarded agent in this team — all three destructive-ops guards, all eight doc-write allow-list guards, the one broad-write deny-list guard — is currently unverified, and actively disconfirmed on the two mechanisms tested, under Auto Mode, in every execution context tried.** Not yet tested: the Write/Edit + Task-dispatched-subagent combination specifically (all 4 tests covered 3 of the 4 matcher×context cells) — very likely shares the gap given the pattern, not confirmed. **Next steps:** (1) monitor for an Anthropic response to the filed report; (2) treat this as the standing state of the team's enforcement model — Auto Mode being off is the only known workaround, untested/not decided; (3) fill the last untested cell (Write/Edit, subagent-dispatched) if a clean answer is ever needed before Anthropic responds. |
+### K-014 — Skills outside cobb's two have no kaizen home
+
+- **Status:** 🔵 proposed
+- **Priority:** medium
+- **Added:** 2026-07-25
+
+Skills outside cobb's two have **no kaizen home**: `skills/` carries no `kaizen/` dirs and `skills/README.md` routes only `agent-maintenance`/`agent-standards` changes to cobb's history — so edits to `cpg-analysis`, `joern-cpg`, etc. land with no per-artifact log. Three skills now cover three different "owner" shapes — cobb's own machinery (`agent-maintenance`/`agent-standards`), `graph-dba`-driven (`cpg-analysis`, `joern-cpg`), and nobody's (`python-web-quirks`) — and **all three landed in an owning agent's history** by by-example precedent. That is converging evidence that "owner-agent's history" already *is* the convention; the work is writing it into `skills/README.md` + `claude/AGENTS.md` where a new skill author would find it, not deciding it.
+
+### K-009 — Add a CI/script guard that every component `AGENTS.md` has a sibling `CLAUDE.md` =
+
+- **Status:** 🔵 proposed
+- **Priority:** medium
+- **Added:** 2026-06-20
+
+Add a CI/script guard that every component `AGENTS.md` has a sibling `CLAUDE.md` = `@AGENTS.md` stub (so Claude Code never silently misses context — it reads `CLAUDE.md`, not `AGENTS.md`). Fold into the K-005 drift job. *(Sibling shipped 2026-07-09: `claude/scripts/audit-team.sh` covers the agent-collection invariants — the `@AGENTS.md`-stub check could join it.)*
+
+### K-017 — Item 4 of the "Broader team-verbosity reduction" diagnosis
+
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Added:** 2026-08-20
+
+Item 4 of the "Broader team-verbosity reduction" diagnosis (surfaced 2026-08-19; items 1-3 delivered, see `history.md`): prune hedge-stacking once a rule has structural backup (a hook, a routing table) instead of three defensive clauses. No specific instances identified yet — start with a scan across the agent prompts for hedge-stacked clauses backed by real harness enforcement (a `PreToolUse` hook, a routing table) and trim each to one clean statement.
+
+### K-056 — Identifier-leak cleanup delivered
+
+- **Status:** 🔵 proposed
+- **Priority:** medium
+- **Added:** 2026-10-20
+
+Identifier-leak cleanup delivered (U1–U3, `claude/docs/plans/identifier-leak-cleanup-coordination.md`; `audit-team.sh` check 7 and the full audit pass 2026-11-09). Still open: (a) the **upstream** fix — specialists keep pasting absolute paths/command output into deliverables, so the durable fix is brief/prompt guidance to write repo-relative paths; (b) flip the coordination doc's `Status:` (still `active`) to `archived` via `teco`.
+
+### K-057 — The end-user team manual `claude/docs/manuals/agent-team.md` is not in
+
+- **Status:** 🔵 proposed
+- **Priority:** medium
+- **Added:** 2026-10-20
+
+**The end-user team manual `claude/docs/manuals/agent-team.md` is not in `claude/AGENTS.md`'s add/edit/rename/remove update rule** (source, `kaizen/{plan,history}.md`, `README.md` catalog, roster), so team changes never prompt a manual update: it went stale from 2026-08-20 to 2026-10-20 (wrong commit authority, missing `security-expert`, paused units, tico consults/coordination, `ws:agent-team`) until tico rewrote it (commit `44dada09`). Fix: add a "flag `tico` when the change alters user-visible team behavior (roster, who-calls-whom, approvals, commit authority, tracking)" clause to the rule — flag rather than edit, since manuals are tico-owned — and consider an `audit-team.sh` check that every roster agent name appears in the manual.
+
+### K-058 — Narrowed to the KB prerequisite of `claude/docs/plans/coordination-graph.md`
+
+- **Status:** 🔵 proposed
+- **Priority:** high
+- **Added:** 2026-10-20
+
+**Narrowed to the KB prerequisite of `claude/docs/plans/coordination-graph.md`; S2 delivered (record: `kaizen/history.md` 2026-11-20 S2 entries), the ongoing-freshness half is that plan's S6/S8a.** Open, for S6's first `kb-sync`/`kb-reconcile`, not hand-fixed: (1) **`falkordb-quirks.md`** (committed in `6aeefcf5`, since edited again by another session): S6's first run on it waits for its 4 `<!-- kb-split: bullets -->` markers (cobb adds them once the file is committed), because unmarked its 84 hand-split claims would be replaced by 5 whole-section documents; its sync and 4 claims matching no section (`c10f097d`, `424a70a2`, `b275e16e`, `24baa610`) wait with it. (2) **5 sections with no claim:** teco "A standing commit grant…", review-techniques ×3 ("Mutation-testing a small pure module…", "A document's own prose summary of a count…", "Verifying a mutation-tested checker…"), lm-studio "A live-run report's provenance…" (its drifted claim `35964b75` is stored under an older title). (3) **Drifted claims** (file text changed since ingest): review-techniques 11, lm-studio 3 unplaced plus 8 whitespace-only, teco 1 whitespace-only, plan-authoring "Reconciling a diverging delegated note…" 1 (`c0bf904a`), qa-testing-techniques "model-bench attest/run — non-interactive re-attestation…" 1 (`781c055d`, `check_content_loss.py` NOT_FOUND). (4) **Bullet claim text:** the S1a convention is that a bullet claim's text includes its list marker; `frontend-quirks.md`'s 6 stored claims match it, the 17 claims of `falkordb-reference.md`'s three marked headings were stored without and S6's first sync re-ingests them (append-before-delete keeps it safe). Raw evidence: `ws:agent-team` doc `92e938a3c14b4d0890fc8cafa15b8623`.
+
+### K-059 — `audit-team.sh` checks 2/3 print the expanded `$HOME` path in their PASS lines
+
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Added:** 2026-10-30
+
+`audit-team.sh` checks 2/3 print the expanded `$HOME` path in their PASS lines (`deployed (/home/<user>/.claude/agents/…)`), so pasting audit output into a review or kaizen file re-creates the leak check 7 then flags. Check 7 now prints `path:line` only; print `~/.claude/agents/…` (or `$HOME/…` literally) in checks 2/3 too.
+
+### K-060 — `agent-maintenance` §5's "New claim" step writes its manifest entry only *after*
+
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Added:** 2026-10-31
+
+**`agent-maintenance` §5's "New claim" step writes its manifest entry only *after* `ingest_document`**, so an interruption between the two leaves no `"pending"` entry, and recovery never examines that claim. A rerun can then ingest a second, untracked copy. The gap predates the title-length work and has nothing to do with titles. It was found while fixing review F5 (`claude/docs/reviews/capture-title-limit.md`). Possible fix: write the entry (recorded `title`, `verified: "pending"`, no `documentId`) before the ingest, and let the pending-at-start recovery treat a missing id as its `None` branch, whose title sweep already resolves cases (a) and (b).
+
+### K-063 — Raw-learnings distillation is closed
+
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Added:** 2026-11-06
+
+Raw-learnings distillation is closed: 0 raw `Fact:` entries in `ws:agent-team` are unswept apart from `d88545b5` (the Mermaid check, closed: `kaizen/history.md` 2026-11-09); every swept id is under a `_dispositioned_raw_distillation{3,4,5,6}` manifest key in `claude/cobb/scripts/kb-claim-manifest.json` (re-run the §5 step 1 query to confirm). Open: (1) the user's delete of the dispositioned raw documents, none cited by id in a repo document except the distillation 5 reports naming `98a4de01`; `480ef825`, `a1d388f4`, `a93905a6` are cited by model-bench fixtures and plans and must stay. (2) 5 entries of distillation 3 lost attribution (`u1`); which client writes without `produced_by` is unknown. (3) `skills/python-web-quirks/SKILL.md` `description:` is 973 characters, within the 1024 limit in `skills/README.md` (rewritten to its triggers in `3fcb171c`); nothing left to do. (4) `2885564b` is documented (`falkor-chat/docs/SERVER.md` line 430, `DESIGN.md` line 638); only `DESIGN.md` line 501 is silent, an optional cross-reference. (5) The user's delete of the superseded KB claims `fd27e4a9` and `9bdc41de` (replaced by `d9efef15`, `424a70a2`; `docs/reviews/team-learnings-followups-sweep.md`). (6) Of the six failed raw documents from distillation 4, three lack chunk embeddings (`4b9c6680`, `15de3552`, `2cc6debd`) and cannot be re-embedded without a falkor-chat repair path (backlog K-102); the other three are fully embedded and need a root cause.
+
+### GAL-I02-K0001 — Capture `38cd49cddb004207a5c7abd10181a4eb`
+
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Added:** 2026-11-10
+
+Capture `38cd49cddb004207a5c7abd10181a4eb` (architect; BackgroundTasks runs one request's tasks sequentially) is deleted by the user at H1 of `docs/plans/python-web-quirks-kb.md`, so its promotion text is recorded here first (S7, Q1). Its gap statement (the skill covers the 40/100-token bound but not per-request serialization) is already closed: promoted per `docs/reviews/team-learnings-distillation3-sweep.md` row 11 and carried verbatim by `skills/python-web-quirks/SKILL.md` §889 ("The bounded-pool entry above is about *total* parallelism; this is the per-request half.", verified 2026-11-06) and by `claude/knowledge/python-web-quirks.md`; the promotion text is that section, no new text. Open: (1) the user's delete of the capture at H1 (full list and rulings: `docs/plans/python-web-quirks-kb-captures.md`). (2) Optional, small: the skill's mutation-copy section (§990) omits the cwd condition from capture `6ce4a2321bcb44989d382e2c762edd0f`: `PYTHONPATH=<copy>` is overridden when the cwd is the real package directory.
+
+### K-019 — Systemic, now confirmed matcher-agnostic too
+
+- **Status:** 🔵 proposed
+- **Priority:** high — filed upstream
+- **Added:** 2026-08-21
+
+**Systemic, now confirmed matcher-agnostic too. `PreToolUse` "ask" hooks do not reliably pause execution in this session under Auto Mode, on either `Bash` or `Write`/`Edit`, regardless of hook source or execution context.** Four independent, isolated live tests, 2026-08-21, Claude Code 2.1.238, all under Auto Mode: (1) `graph-dba`'s own frontmatter `Bash` hook, Task-dispatched with `subagent_type` explicitly correct — didn't fire. (2) The identical guard mirrored as a session-wide `.claude/settings.local.json` `Bash` hook, run from `cobb`'s own **main session** — didn't fire. (3) Same test repeated after the user explicitly reloaded hook config via `/hooks` (visibly listed as registered, `[Local] Bash — 1 hook`) — still didn't fire. (4) **`cobb`'s own frontmatter `Write`/`Edit` hook** (`guard-cobb-topic-writes.sh`) — a `Write` to a path plainly outside cobb's allowlist (`docs/_hook_test_k019_scratch.md`) went through with zero interruption; re-fed the exact real payload to the script directly afterward and confirmed it correctly returns `ask` for that path. **Every test used a real, disposable payload (scratch graph or scratch file, immediately cleaned up) and independently pipe-test-confirmed correct hook logic** — ruling out `subagent_type` omission, stale config, hook-not-registered, and matcher-specific quirks as explanations. **Working hypothesis:** Auto Mode's classifier layer silently resolves/overrides a correctly-emitted `ask` decision before a human ever sees it, across both tool matchers tested. **Filed upstream 2026-08-21** via `/feedback` (user-submitted, confirmed "Feedback / bug report submitted") with the 3-test Bash repro; the 4th (Write/Edit) test landed after filing, not yet included in a follow-up report. **Practical consequence, effective immediately: every "harness-enforced" Guardrails claim across every guarded agent in this team — all three destructive-ops guards, all eight doc-write allow-list guards, the one broad-write deny-list guard — is currently unverified, and actively disconfirmed on the two mechanisms tested, under Auto Mode, in every execution context tried.** Not yet tested: the Write/Edit + Task-dispatched-subagent combination specifically (all 4 tests covered 3 of the 4 matcher×context cells) — very likely shares the gap given the pattern, not confirmed. **Next steps:** (1) monitor for an Anthropic response to the filed report; (2) treat this as the standing state of the team's enforcement model — Auto Mode being off is the only known workaround, untested/not decided; (3) fill the last untested cell (Write/Edit, subagent-dispatched) if a clean answer is ever needed before Anthropic responds.
+
 
 ### K-001 — Re-verify standards against live docs
+
+- **Added:** 2026-05-31
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** Frontmatter fields, directory paths, and inclusion modes for Claude Code, Kiro, and OpenCode shift between releases. Stale specifics would make Cobb produce broken artifacts.
 - **Proposed change:** On a cadence (or whenever a user reports a mismatch), fetch kiro.dev/docs, opencode.ai/docs, code.claude.com/docs, platform.claude.com/docs and reconcile the "Standards you know cold" section. Log diffs in history.md.
 - **Notes:** Baseline verified 2026-05-31 at creation. Subagent context-loading + frontmatter re-verified 2026-06-07 against code.claude.com/docs/en/sub-agents. **Kiro + OpenCode re-verified 2026-06-07** (kiro.dev/docs/steering, opencode.ai/docs/agents+rules) during the K-007 skill extraction — caught real OpenCode drift (`mode: all` default, new `disable`/`color`/`top_p`/`steps` fields, granular permission keys, AGENTS.md precedence). All current specifics now live in the `agent-standards` skill with per-file `Verified:` stamps. **2026-06-20:** Claude Code **subagents** re-verified against code.claude.com/docs/en/sub-agents (tool inheritance + withheld-tools list, expanded frontmatter, discovery/scopes, agent teams + background agents) — claude-code.md stamp bumped to 2026-06-20. Claude Code **Skills/Memory/Hooks/MCP/SDK** still on the 2026-05-31 baseline — next refresh target. **Kiro** docs re-read 2026-06-20 (agents/subagents, steering, specs, hooks). NB: the old "does `inclusion: always` steering reach a subagent" dispute is **not** resolved by a doc re-read — docs affirm it, but it's field-disputed and needs a runtime test on the install. Specs/Hooks confirmed *not* reaching subagents. **OpenCode** re-verified 2026-06-20 (agents/permissions/rules — caught the `tools`→`permission` deprecation; subagent nesting documented; flagged the parent-context divergence vs Claude). **All three tools' agent/subagent surfaces now current as of 2026-06-20.** **2026-07-25:** Claude Code **MCP** fully re-verified against `code.claude.com/docs/en/mcp` and rewritten from a 3-line stub into a full section (scopes/approval + untrusted-workspace gate, `.mcp.json` shape, `${VAR}`-only expansion + the `CLAUDE_PROJECT_DIR`-in-the-server's-env trap, tool naming, the four timeout layers, **tool search on by default** + `alwaysLoad` + server `instructions`, **output limits and the persist-to-disk/file-reference behaviour**, stdio non-reconnection, and how MCP meets subagent `tools:` allowlists); **OpenCode** MCP + Skills sections added/re-verified against `opencode.ai/docs/{mcp-servers,skills}`. Remaining stale: Claude Code Skills/Memory/Hooks/SDK (2026-05-31); Kiro MCP not re-checked since 2026-06-20.
 
+> Summary: Periodically re-verify the documented standards against live official docs (these ecosystems change fast).
+
 ### K-002 — Worked cross-tool porting example
+
+- **Added:** 2026-05-31
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Rationale:** Porting between tools is a common request; a canonical example would make answers faster and more consistent.
 - **Proposed change:** Add a reference walkthrough mapping a Claude Code subagent's frontmatter/body to an OpenCode markdown agent and to Kiro steering, noting what each tool drops or renames.
 - **Notes:** Could live as a skill rather than bloat the agent prompt.
 
+> Summary: Add a worked "port an agent across tools" reference example (Claude subagent ↔ OpenCode agent ↔ Kiro steering) — now skill material, candidate for the `agent-maintenance` bundle.
+
 ### K-003 — Broaden tool coverage
+
+- **Added:** 2026-05-31
 - **Status:** 🔵 proposed
 - **Priority:** low
 - **Rationale:** The open AGENTS.md and Agent Skills standards are adopted by more tools than the core three.
 - **Proposed change:** Add concise coverage of Codex CLI, Cursor, Gemini CLI, Copilot where they intersect the open standards, clearly flagged as secondary.
 - **Notes:** Keep the big-three depth primary; don't dilute.
 
+> Summary: Track additional agentic tools as they mature (e.g. Codex CLI, Cursor, Gemini CLI) where they share the open AGENTS.md / Agent Skills standards.
+
 ### K-005 — Automate doc-drift detection
+
+- **Added:** 2026-06-07
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** K-001 (manual re-verify) relies on someone remembering. A frozen prompt silently rots between checks. Determinism beats hope: a harness-run job that diffs the official docs and surfaces changes is the real safeguard.
 - **Proposed change:** A scheduled agent (Claude Code `/schedule` cron routine, or local cron) that, per tool, fetches the canonical pages (code.claude.com/docs, opencode.ai/docs, kiro.dev/docs, platform.claude.com/docs), diffs the relevant sections against a stored `sources/` snapshot (last-verified date + section excerpt/hash), and on change appends an item to this plan + pings the user. Keeps perishable specifics out of the always-on prompt and re-checked on a cadence.
 - **Notes:** Surfaced 2026-06-07 — user asked "how do we ensure the info won't drift?" Pairs with the new "Drift-resistance" principle (timestamp + verify volatile facts). Offered to build it; awaiting go-ahead.
 
+> Summary: Automate doc-drift detection: a scheduled routine that re-fetches the canonical docs, diffs vs. stored snapshots, and files a kaizen item on change.
+
 ### K-008 — Dog-food the frontmatter cobb teaches
+
+- **Added:** 2026-06-07
 - **Status:** 🔵 proposed
 - **Priority:** low
 - **Rationale:** Cobb runs on `name`/`description`/`model` only, yet teaches a rich field set (`memory`, `disallowedTools`, `permissionMode`, `skills`, `isolation`, `effort`). A `memory: project` store (auto-injected `MEMORY.md`) would give cobb persistent cross-session knowledge of drift findings / verified-dates / gotchas — distinct from kaizen (human change-log, not auto-injected into the prompt).
 - **Proposed change:** Evaluate adding `memory: project`. Leave the `agent-maintenance` skill on-demand (do NOT pin via `skills:` — pinning defeats leanness; the on-demand choice is deliberate).
 - **Notes:** Surfaced 2026-06-07 self-review.
 
+> Summary: Dog-food the frontmatter cobb teaches: evaluate adding `memory: project` for a persistent cross-session drift/verified-date store (distinct from kaizen).
+
 ### K-020 — Correct the cypher MCP server's FalkorDB-unreachable advice
+
+- **Added:** 2026-09-06
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Rationale:** `cypher-mcp/server.py:878-882` tells the agent that hits a connection failure to
@@ -93,7 +173,11 @@
   (archived documents are not amended), and `cypher-mcp/README.md` already points at the script,
   never at `docker start`.
 
+> Summary: `cypher-mcp/server.py:881`'s FalkorDB-unreachable message advises `docker start falkordb-dev`, which cannot work — no launch path in this repo leaves a stopped container by that name. Out of cobb's write remit (component code); route to an implementer via `teco`.
+
 ### K-021 — the producer-write authorizer validates Cypher shape but not `entryId` shape
+
+- **Added:** 2026-09-07
 - **Status:** 🔵 proposed · **Priority:** medium
 - **Trigger:** the 2026-09-07 chunk-B distillation of `teco` (U17) found
   `9f2b6c07-3e51-4a88-b174-c6d90e melhor` in `kaizen_team` — `fact`, `evidence` and `context` all
@@ -102,6 +186,9 @@
   The `cypher-mcp` write authorizer validates the *Cypher shape* of a producer-write (the
   `MERGE (:Agent)` + `CREATE (…)-[:PRODUCED]->(…:KaizenEntry)` form, with a matching `agentId`) and
   nothing about the values written.
+
+> Summary: Validate `entryId` **shape** in the `cypher-mcp` producer-write authorizer — a malformed or colliding id is load-bearing for the curator-clear path. Content validation deliberately **not** proposed.
+
 - **The call (cobb's, made at U17): guard the id, not the content.** Two different risks, only one
   worth machinery.
   - **`entryId` — yes.** Every curator operation in `agent-maintenance` §5 is keyed on `entryId`:
@@ -145,6 +232,8 @@
   `teco`. Filed, not implemented; U17 was scoped to distillation only.
 
 ### K-022 — The "wrong rather than absent" defect class may have outgrown per-agent guardrails
+
+- **Added:** 2026-09-08
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** The same defect shape has now surfaced **nine** times across different agents and
@@ -227,7 +316,11 @@
   `docs/reviews/salesperson-ui-impl.md` Passes 17-18, and `kaizen_team` entry
   `3b351bb5-a8a1-4006-8aa6-bdb3ef1c6448`.
 
+> Summary: The **wrong-rather-than-absent** defect class now has **eight** instances — three values, **four prose**, and one **executable** (a test oracle that certified the wiring while structurally unable to see a wiring defect). The 2026-09-08 tombstone sequence isolates the mechanism: three certifications written in the same act as the fix they certify, **all three since corrected** — a retraction launders credibility onto whatever sits next to it. Two candidates were named for where the rule should live. **The first is now settled and shipped elsewhere:** U38 (2026-09-09) promoted *verify the reason, not just the rule* into `claude/analyst/review-techniques.md` as a **review-methodology** section, not an `agent-maintenance` §7 lint check — §7's scope is one *prompt/skill/steering artifact* over seven prompt-authoring dimensions, and the instance that produced the rule is a `references/` document read by a reviewer. **The mutation standard is now settled too:** U43 (2026-09-10) promoted *the mutant to specify is the design the plan rejected* into `teco.md`'s briefing bullet — the rule already existed in `tdd-engineer.md:41` and reached `coder` (which carries no mutation rule at all) through nothing but the brief. **What remains is only the still-open question of whether *a tombstone certifies nothing* is a third rule or a restatement of the first. Decide at the next certification pass.
+
 ### K-024 — Two out-of-remit documents still describe the pre-K-023 marker
+
+- **Added:** 2026-09-08
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Rationale:** K-023 landed in three mechanisms over one day (see `history.md`, U45→U47), ending
@@ -265,11 +358,18 @@
   pairwise-consistency constraint that has held through this chain applies: `freshness.md` and the
   manual must end up describing the same set of marker shapes.
 
+> Summary: Two documents outside cobb's remit still describe the `:CpgBuildInfo` marker as it was before K-023. **The debt changed kind, not size** — do NOT add the five hand-authored keys to any schema table: the stamp never writes them, and after the map form they are not even named in the code. `docs/plans/cpg-agent-adoption-graph.md` §1.1 owes (a) the **eight** properties the stamp writes, (b) full 40-char OIDs rather than "short SHA", (c) the correction that its code block documents the superseded `SET b.X = …` write semantics, and (d) the schema-level fact this arc established — **the marker's property set is closed by construction**, so `:CpgBuildInfo` cannot be extended by any writer other than the stamp (**`architect`**; per the doc convention an executed-against plan takes a successor or a header pointer, not an edit). `docs/manuals/graph-ontology.md` needs the same shape update plus gate finding **P4-3** — its FAQ classifies on the `PROVENANCE` literal alone and never on `MARKER_ORIGIN`, so a hand-authored marker reads as a pipeline stamp to a manual-only reader (**`tico`**). Both route via `teco`; neither is cobb's to write.
+
 ### K-025 — A `MENTIONS` tag creates an obligation no pass is shaped to drain
+
+- **Added:** 2026-09-09
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Origin:** U31 (`claude/docs/plans/kaizen-distillation2-coordination.md`), 2026-09-09 — see
   `history.md`. The unit's whole population, 11 nodes, was produced by this gap.
+
+> Summary: A `MENTIONS` tag writes an obligation into a queue with no consumer: a distillation unit is scoped `MATCH (a:Agent {agentId})-[:PRODUCED]->(e)`, which by construction cannot see a `MENTIONS`-only node. 11 such nodes accumulated across 7 agents and 2 passes; **six** of those agents were recorded "closed out, 0/0" while still holding an unrouted edge. Two candidate fixes — scope a unit by *either* edge kind, or stop letting the tag imply a promotion.
+
 - **The defect, precisely.** When `cobb` tags an entry `MENTIONS → <other agent>` and resolves its
   `PRODUCED` edge, the node survives **by design**, carrying the half of the fact that belongs to
   the second agent. `teco`'s U18b states the intent: *"each survives with its `MENTIONS` edge …
@@ -293,10 +393,15 @@
   node. The gap is in **scoping**, not in the clear.
 
 ### K-026 — `python-web-quirks` now has two `TestClient` sections; at a third, they need a parent, not a fourth sibling
+
+- **Added:** 2026-09-09
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Origin:** U35 (`claude/docs/plans/kaizen-distillation2-coordination.md`), 2026-09-09 — see
   `history.md`.
+
+> Summary: `python-web-quirks` carries **two** `TestClient` **behaviour** sections (teardown task-cancellation; the default `raise_server_exceptions=True` re-raising into the caller), deliberately unmerged because the mechanisms, consequences and fixes differ. They are bound by a shared opening line naming the class. **On the third such entry, promote that line to a parent heading with sub-sections — do not add a third flat sibling.** The count is **still two**: U38 (2026-09-09) added a third section touching `TestClient` — the `httpx`→`httpx2` transport deprecation, which warns on *both* pinned starlette versions — and it is a **version-rot rider on the pair**, carrying no `TestClient` mechanism of its own, so the trigger did not fire. It was **retitled** to lead with the migration rather than the class precisely so a header scan cannot read it as a third sibling and defeat this count.
+
 - **The risk.** The skill now carries two sections on `starlette.testclient.TestClient` — teardown
   cancelling every still-running task, and the default `raise_server_exceptions=True` re-raising
   into the caller. They were deliberately **not** merged: different mechanisms, different
@@ -311,11 +416,16 @@
 - **Cheap check:** `grep -c '^## .*TestClient' skills/python-web-quirks/SKILL.md` — currently 2.
 
 ### K-029 — Nothing audits a skill's frontmatter: that it parses, fits the listing budget, and names the right audience
+
+- **Added:** 2026-09-09
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Origin:** U35 (the audience list, the budget) and U36 (the parse, the consolidation),
   2026-09-09. **Consolidates and closes K-027 and K-028** — no content was dropped; those two IDs
   are retired and never reused (`history.md`, 2026-09-09).
+
+> Summary: **Nothing audits a skill's frontmatter — that it parses, fits the 1,536-char listing budget, and names the right audience. One missing check, not three** (consolidates K-027 + K-028 + U36's parse finding; no content dropped). The three are the same gap seen three ways, and the budget is what makes the other two moot: `python-web-quirks`' description is **4,584 chars**, so U35's audience fix sits ~3,000 chars past the cut and reaches no router. Carries a remediation (that description) and a check (`audit-team.sh`), plus the instrument caveat that strict YAML is the **wrong** parser to audit with.
+
 - **Why one item and not three.** All three are the same missing check on the same six lines of
   YAML, and they are not independent: the budget is what makes the other two moot. U35 corrected
   `python-web-quirks`' audience clause in all four places it is stated — and that clause sits at
@@ -546,6 +656,7 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
 
 ### K-031 — Shared-tree commit rules are split by audience, and the half that bounds the grant is teco-only
 
+- **Added:** 2026-09-10
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Rationale:** U44 was asked to judge whether four (now five) statements about committing in a
@@ -582,8 +693,11 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
   decision that the universal grant is rare enough to ignore. Depends on: K-032. Related: K-030
   (the same "no knowledge base" pressure, from the other side).
 
+> Summary: **Shared-working-tree commit knowledge is fragmented by *audience*, not by topic — and the split leaks.** Five statements now cover it: `claude/AGENTS.md`'s atomicity paragraph (index race, path-limited remedy, and — U44 — the unconditional index-ignored rule), its universal interactive-mode grant, `teco.md`'s grant bullet (path-limited form + the U43 disjointness condition), `teco.md`'s new holding-cost bullet (U44), and `teco.md`'s grant-scoping bullet. **Within a `teco` session the set is coherent** — the two `teco.md` bullets are adjacent and cite `claude/AGENTS.md` twice by section title. **For every other agent it is not:** `claude/AGENTS.md` grants all twelve agents path-limited committing into this shared tree and gives them the index race, but the two facts that bound the grant — *path-limiting protects nobody where the paths are not disjoint*, and *holding a shared file out has a rising cost with no natural end* — exist **only** in `teco`'s prompt, and nothing in `claude/AGENTS.md` points at them. Recommended home: the `claude/AGENTS.md` atomicity paragraph, because the grant that creates the hazard is already stated there for everyone. **Cost, and why it is not free either way:** moving prose *into* the always-loaded context file makes eleven other agents pay tokens for it every session (~+100 w on a file already 53 past its smell, forcing the K-032 trim first), while leaving it in `teco.md` keeps the cost narrow and leaves the other agents granted-but-uninformed. The deciding question is empirical and unmeasured: **how often does a non-`teco` agent actually commit into this tree under the interactive-mode grant?** Measure that before moving anything. Not performed in U44 by instruction.
+
 ### K-033 — 2026-09-13 changes widened the `claude/AGENTS.md` overage K-031/K-032 already flagged, by roughly 9x the figure first logged
 
+- **Added:** 2026-09-13
 - **Status:** 🔵 proposed
 - **Priority:** medium (raised 2026-09-16 from low — see below)
 - **Rationale:** K-031/K-032 already note `claude/AGENTS.md` sat ~53 words past the root
@@ -613,8 +727,11 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
   complete change; not blocking anything on its own. Correction logged in `history.md`,
   2026-09-16.
 
+> Summary: **Corrected 2026-09-16** (`docs/reviews/commit-granularity.md` finding): the original word-count claim materially understated the 2026-09-13 growth. Independently re-measured (`git show 320f682^:<path> | wc -w` vs. `git show 320f682:<path> | wc -w`): `claude/AGENTS.md` **2,783→3,074 (+291**, not the originally-claimed +33 — ~9x), `teco.md` **10,765→10,899 (+134**, not ~450), `tico.md` **5,623→5,809 (+186**, close to the originally-claimed ~250). `claude/AGENTS.md` now sits 574 words over root `AGENTS.md`'s own ~2,500-word smell line — a real, not marginal, overage. Priority raised low→medium on the corrected figures.
+
 ### K-032 — The `claude/AGENTS.md` roster enumerates knowledge-base topics that `README.md` already owns
 
+- **Added:** 2026-09-10
 - **Status:** 🔵 proposed
 - **Priority:** low
 - **Rationale:** The roster's per-agent parentheticals list each knowledge base's *topics*. So does
@@ -632,6 +749,8 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
   `data-scientist`, `graph-dba`, `devops`, and `tico`'s consult-roster clause); the same reasoning
   covers all of them, and it is one edit, not seven follow-ups. K-031 depends on the headroom this
   frees.
+
+> Summary: **`claude/AGENTS.md`'s roster enumerates each agent's knowledge-base *topics*, duplicating `claude/README.md`, and the two have now measurably diverged.** `AGENTS.md:37-41` lists `guard-testing-techniques.md` as *coverage probe vs. mutation test, the two axes of a hand-written resolver, the docstring-states-more-than-the-body defect*; `README.md`'s parallel entry carries those **plus** the probe/oracle split U43 added. **The divergence is not the defect — the enumeration is.** A context file is always loaded in full, `README.md` is the catalog of record, and no agent routes to another agent's knowledge base (routing runs on the injected `description`), so the topic lists buy nothing and create a standing two-place update duty on the copy that rots unnoticed. **Recommended fix: do not add the missing topic — delete the enumerations**, leaving the roster to name each KB and point at `README.md` (~35 words back on a file 53 past its smell, and it retires the duty). Same judgement applies to the six other roster entries carrying topic lists. **Deliberately not fixed silently in U44**; U44 likewise added no `README.md` entry because it created **zero** new sections anywhere. Carries the K-031 dependency: this trim is what makes room for that consolidation.
 
 ### K-052 — A mid-session `tools:` frontmatter edit doesn't reach a subagent spawned later in the same session
 
@@ -679,6 +798,7 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
 
 ### K-053 — Warn a future reviewer before "write-path defect" becomes the reflex read of a partial-edge node
 
+- **Added:** 2026-09-20
 - **Status:** 🔵 proposed
 - **Priority:** low
 - **Origin:** U10 (`claude/docs/plans/kaizen-distillation3-coordination.md`), 2026-09-20 — see
@@ -699,8 +819,11 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
 - **Notes:** low-priority documentation polish, not a defect fix — no `cypher-mcp` backlog item
   was warranted this time (contrast K-020/K-021, both confirmed against live code).
 
+> Summary: `agent-maintenance` §5 doesn't warn a reviewer that `0 PRODUCED`/live `MENTIONS` on a post-M8 node can be a correctly-functioning kept-open state, not a write-path defect
+
 ### K-055 — Follow-ups left open by K-054 (environment auto-bring-up)
 
+- **Added:** 2026-10-14
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Origin:** K-054 delivery and its analyst review, 2026-10-14 (`history.md`;
@@ -723,3 +846,5 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
 - **Notes:** a delegated `teco` is covered: step 1 runs the same script by hand in both modes.
   A stdio MCP shim in `.mcp.json` that waits for the server stays rejected, because it changes
   the transport for every agent and tool.
+
+> Summary: Follow-ups K-054 left open: (a) MCP auto-connect needs the server healthy within the client's ~7s retry window, and `start_agent_team.sh`'s unconditional `pip install -e` makes a cold start miss it; (b) other agents also depend on `ws:agent-team`; (c) `freshness.md`'s `Consumer:` line doesn't name the start-time report.
