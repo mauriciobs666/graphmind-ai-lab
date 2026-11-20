@@ -296,3 +296,142 @@ No prunes proposed.
 past 326 s, and that runtime and the plan are what `writes_probe.txt` records. The traceback at
 the top of `writes_probe.txt` is my builder's Cypher error, which I fixed before the `reset_all`
 runs, not an engine finding.
+
+## Pass 2
+
+> 2026-11-20 · against `6aeefcf5` (the note's first commit; the Pass 1 text was never committed).
+> New probes are in `graph-config-defaults-evidence/analyst/pass2/`. They ran in throwaway
+> containers `analyst-k098-p2` and `analyst-k098-rb` (ports 16595–16596, both removed). Nothing ran
+> on `falkordb-dev` or `ws:test`.
+
+**Verdict: needs changes, narrowly.** One major and three minors remain. All four were produced by
+the revision's own fixes: the rollback path, the deferred query unit, and the `--env-file`
+requirement. Stopping condition, which is falsifiable: Pass 3 approves if
+1. the rollback branch rehearsed with a planted wrong-data start ends with an inventory diff of 0
+   against `inventory-before.txt`;
+2. the rollback names a pinned sha;
+3. P2-m1, P2-m2 and P2-m3 are applied or explicitly deferred.
+
+Pass 3 re-checks only those items. A finding that is not caused by those edits does not reopen the
+gate.
+
+CPG: considered, not relevant — engine config and query memory, measured on a live engine; no call-graph question.
+
+### Dispositions
+
+- **B1 — fixed, split out.** §4.3 is now a pointer to §8. §8 states the permanent-wipe fact, the
+  five-flag gate with its positive control, and backup-first (`:490-518`). Commissioning check, run
+  over §1–§7: the AOF/`maxmemory` content left in the body is live values (§2), one pointer for the
+  in-flight memory product (§3.1 `:145`) and the §6 hand-over line. None of it commissions the work.
+- **M1 — fixed by a design change** (the cap stays, the query is bounded). Verified by execution,
+  below.
+- **M2 — mostly fixed.** The dry run on `FALKORDB_VOLUME`, `SAVE` + `LASTSAVE`, `stop -t 300` with
+  the log captured, and the inventory with a positive control are all present and rehearsed
+  (`graph-dba-r2/restart_rehearsal.txt`, read). What remains is P2-M1.
+- **m1 — fixed.** `FALKORDB_THREAD_COUNT` plus one env file now feed both entry points.
+  `proto_arg_checks.txt` (read) shows the override changing one token, a full override passing as-is,
+  a missing file failing, and compose rendering the same string.
+- **m2 — fixed.** §3.1 `:125-127` cites the live ingest path and `reset_all`.
+- **m3 — fixed.** The coverage table carries the clustered latencies; the timeout bites between 10k
+  and 100k depth.
+- **m4 — moved** to §8, facts 4 and 5.
+- **m5 — fixed.** 320 on `falkordb-dev`, derived from Σ pools; 128 for a single-process production
+  instance.
+- **m6 — fixed.** §6 now lists the DESIGN §9 row, §10 Observability and QUERIES §18.7. Step 2 names
+  README and AGENTS.
+- **n1 — fixed.** §2 corrects the OMP default, §3.2 notes the noise, §3.1 states the 1.3 factor, and
+  §7 cites the durable path.
+
+### The new `hybrid_search` design (§3.1), verified by execution
+
+I ran the note's text verbatim (both variants) against the current `Repository.hybrid_search`. The
+test graphs are my Pass 1 shapes rebuilt with `threadId`, plus `ws:r5`. `ws:r5` has 10 seeds; 5 of
+them mention a 1k-fan-in entity and 5 mention nothing; two share an identical embedding (a planted
+tie); and there is one channel. Results are in `pass2/compare.jsonl`, `order.txt` and
+`bisect_bounded.jsonl`.
+
+| Case | Current | Bounded at 64 MiB | Same seeds / scores / `relatedContext` per seed (texts and ids) |
+|---|---|---|---|
+| 10 seeds × 100k-fan-in hub (`ws:r2`; Pass 1 min. cap 68.7 MiB) | 0.37 s, needs cap 0 | **passes**, 16 ms, min. cap **546 KiB** | yes |
+| 10 seeds at depth 100k + 50k hub, unscoped and scoped (`ws:r1`) | 14.6 / 13.6 s | passes, 15 / 9 ms, 546 KiB | yes |
+| mixed mentions + planted tie, unscoped and scoped (`ws:r5`) | 4 ms | 3 ms | yes |
+
+The order differs **only among exactly tied scores**. In every case, the bounded output equals the
+current output re-sorted by `(score, msgId)`. The current query is stable against itself
+(`order.txt`). At `limit` 3 and 5 the top results are identical; a tie that straddles the `limit`
+boundary would be the only case where the returned set can differ. The design is sound, and the
+note's equivalence claim holds as stated. The `threadId` precondition is the note's own, and
+`live_threadid_check.txt` covers it.
+
+### New findings
+
+#### P2-M1 (major, produced by the fix) — the rollback branch can overwrite the last good RDB
+
+Step 4.8 rolls back "if step 6 fails or step 7 differs" with `docker stop -t 300 falkordb-dev`.
+When step 7 differs, the new instance holds the wrong data in memory, and `docker stop` writes that
+data over `dump.rdb`. Step 5 calls that file "the last good state". **Verified**
+(`pass2/rollback_overwrite_probe.txt`): I planted a 600-of-1,000 state in memory, ran
+`docker stop`, and the restart came up with 600. The rehearsal drilled only the *failed-start*
+branch (`restart_rehearsal.txt` §8), where nothing is loaded and nothing gets overwritten.
+
+Three gaps sit next to it:
+- The rollback cites `git show HEAD:`. Once the devops edit is committed, that is the *edited*
+  script. The pre-edit sha today is `2769a99c`
+  (`git log -1 -- falkor-chat/scripts/start_falkordb.sh`); re-check it at apply time.
+- Step 2 quiesces only the three servers. `falkordb-dev` also serves `cypher-mcp` containers
+  (three were up in `docker_ps.txt`), test suites and other agents' sessions. Any write between
+  steps 3 and 4 produces a false "differs" and triggers the rollback.
+- Nothing restarts what step 2 stopped.
+
+**Fix:**
+1. After the step-5 stop, copy `dump.rdb` out through a container, e.g.
+   `docker run --rm -v falkordb-data:/d -v <dir>:/b alpine cp -a /d/dump.rdb /b/`.
+2. On the "differs" branch, stop with `redis-cli SHUTDOWN NOSAVE`, restore the copy the same way,
+   then start with the rollback args.
+3. Verified: this sequence restored 1,000 of 1,000 after the planted bad state.
+4. Pin the sha, quiesce every client of the instance, and add a final step that restarts the
+   servers and runs `verify_workflows.sh`/`verify_catalog.sh`.
+5. Rehearse the "differs" branch with the planted state. That rehearsal is Pass 3's condition 1.
+
+#### P2-m1 (minor, produced by the fix) — the 64 MiB interim depends on an untracked ordering
+
+§3.1 makes the query unit "a prerequisite of K-093's writer". But the unit is only follow-up 1, a
+candidate, and `BACKLOG.md` `### K-093` (`:883-898`) says nothing about it. K-093's implementer
+reads K-093, not this note. **Fix:** at K-098's close, file the unit as an item, and add a
+dependency line to K-093 ("blocked by <unit>: the 64 MiB cap fails the current expansion at
+k × fan-in ≈ 950k").
+
+#### P2-m2 (minor, produced by the fix) — `--env-file` is required by every compose command
+
+**Verified:** without `--env-file`, even `docker compose ps` fails to interpolate (run against the
+prototype with a distinct project name). Step 3 says to update "the usage comment" to the
+`--env-file` form. But the header's `docker compose down` line (`compose.yaml:4`) and README's
+compose block (`falkor-chat/README.md:103-104`) also need it, and the README block is not in
+Step 2's list. **Fix:** name all three places in Step 3.
+
+#### P2-m3 (minor) — growth-stops check
+
+The note grew from 4,191 to 4,926 words (+735). The Pass 1 text is not in git, so the split below
+is estimated from my Pass 1 reading against today's section counts.
+- **New scope:** the query-change unit and the coverage probe (§3.1, about +450), and the
+  per-deployment env-file mechanism (§5, Steps 1–3).
+- **Rework:** the restart procedure (§5 Step 4) answers M2. Its growth is warranted, because the
+  steps it adds did not exist before.
+- **No disposition text.** I grepped for review, finding and Pass references: no finding IDs, no
+  resolution table.
+- **The one growth that should go:** §8 (518 words) is another item's backlog body parked in this
+  plan. Once it is filed in `BACKLOG.md`, its facts have two homes. They are also already in
+  `claude/graph-dba/falkordb-quirks.md` (added in `6aeefcf5`). **Fix:** file §8 as the persistence
+  item and replace it with a one-line pointer (−~500 words). Drop the dated sentence at `:476`
+  ("The stakeholder split this out … on 2026-11-20"); that is history.
+
+### Proposed REVIEW.md lines (Pass 2)
+
+This **amends** the Pass 1 proposal for root `REVIEW.md` (the shared-service restart line, from
+M2), which has not been applied yet. Source: P2-M1. Replace it with:
+- A plan step that restarts a shared stateful service has five parts. It verifies before the stop
+  that the state was saved. It copies the saved state out. It records an inventory of every graph or
+  key before the stop and compares it after the restart. It names a rollback that cannot persist
+  the wrong state over the copy. Its rehearsal covers the branch where the restart succeeds with
+  wrong data, not only the branch where it fails to start. A verify step that checks one workspace
+  is a bound, not proof.
