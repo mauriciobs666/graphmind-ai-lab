@@ -1,9 +1,10 @@
 """Command functions for the KB mirror subcommands (`kb-sync`, `kb-status`, `kb-reconcile`, `kb-finish`).
 
-Exit codes: 0 everything settled, 2 an update is not complete (a section pending, refused or failed: the hook
-turns this into its "say so" message), 1 the command itself could not run. The mirror graph goes through
-`store.connect` (ephemeral targets only, unchanged); falkor-chat is reached by REST (`kbsync.KbHttp`) and its
-graph by read-only queries on `$COORDGRAPH_KB_GRAPH` through the same connection. Imports no `wilib`.
+Exit codes, the same for all four commands: 0 everything settled, 2 not complete (a section pending, refused or
+failed, or for `kb-status` anything flagged: the hook turns this into its "say so" message), 1 the command itself
+could not run. The mirror graph goes through `store.connect` (ephemeral targets only) and falkor-chat's REST
+endpoint must be a loopback, non-shared one too (`store.require_ephemeral_kb_url`); its graph is read by read-only
+queries on `$COORDGRAPH_KB_GRAPH` through the same connection. Imports no `wilib`.
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ def _build(args):
 
 
 def _engine(cfg: Config, db, graph) -> kbsync.KbSync:
+    store.require_ephemeral_kb_url(cfg.kb_url)  # the mirror is ephemeral-only: so must its falkor-chat be
     http = kbsync.KbHttp(cfg.kb_url, cfg.kb_http_timeout_s)
     return kbsync.KbSync(graph, http, kbsync.Observer(db.select_graph(cfg.kb_graph)), budget_s=cfg.kb_budget_s)
 
@@ -85,11 +87,14 @@ def kb_sync_cmd(args) -> int:
         outcomes = [o for o in problems if not wanted or o.path in wanted]
         unknown = wanted - {d.path for d in docs}
         outcomes += [kbsync.KbOutcome(p, "(file)", "failed", "not a registered KB file") for p in sorted(unknown)]
-        for doc in docs:
-            if not wanted or doc.path in wanted:
-                outcomes += engine.sync_file(doc, ctx, rows)
     except Exception as exc:  # noqa: BLE001 - a refused or unreachable endpoint is one clear line
         return _fail("kb-sync", exc)
+    for doc in docs:
+        if not wanted or doc.path in wanted:
+            try:
+                outcomes += engine.sync_file(doc, ctx, rows)
+            except Exception as exc:  # noqa: BLE001 - one file's unforeseen error must not lose the others' outcomes
+                outcomes.append(kbsync.KbOutcome(doc.path, "(file)", "failed", f"{type(exc).__name__}: {exc}"))
     code = _report(outcomes, "kb-sync", getattr(args, "verbose", False))
     if code and getattr(args, "detach_finish", False) and any(o.status == "pending" for o in outcomes):
         detach_finish(cfg)
@@ -113,7 +118,7 @@ def kb_status_cmd(args) -> int:
         print(p.render())
     for line in report.lines:
         print(line.render())
-    return 0 if report.clean and not problems else 1
+    return 0 if report.clean and not problems else 2
 
 
 def kb_reconcile_cmd(args) -> int:

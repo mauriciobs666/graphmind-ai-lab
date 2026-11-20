@@ -283,20 +283,34 @@ class Context:
     owners: dict[str, tuple[str, str, str]]  # claim hash -> (key, path, heading)
     vanished_ids: set[str]  # document ids of sections no longer in any registered file
     mapped_ids: set[str]  # every id some section maps (documentIds + pendingDocumentIds)
+    released_ids: set[str] = field(default_factory=set)  # ids a live section maps whose claim its file text dropped
 
     @classmethod
     def build(cls, docs: Iterable[KbDoc], rows: list[dict]) -> Context:
         docs = list(docs)
         live = _live_keys(docs)
+        wanted: dict[str, set[str]] = {}  # live key -> claim hashes its file text carries now
+        for d in docs:
+            for s in d.sections:
+                try:
+                    wanted.setdefault(section_key(d.path, s), set()).update(c.claim_hash for c in s.claims)
+                except KeyHygieneError:
+                    continue
         owners: dict[str, tuple[str, str, str]] = {}
         vanished: set[str] = set()
         mapped: set[str] = set()
+        released: set[str] = set()
         for row in rows:
             ids = [*(row.get("documentIds") or []), *(row.get("pendingDocumentIds") or [])]
             mapped.update(ids)
             if row["key"] in live:
-                for h in row.get("claimHashes") or []:
-                    owners.setdefault(h, (row["key"], row.get("path", ""), row.get("heading", "")))
+                # the file wins over the old mapping: a claim the section's text no longer carries is not owned
+                # by it, so headings exchanging claims in one edit do not each block the other
+                for i, h in zip(row.get("documentIds") or [], row.get("claimHashes") or [], strict=False):
+                    if h in wanted[row["key"]]:
+                        owners.setdefault(h, (row["key"], row.get("path", ""), row.get("heading", "")))
+                    else:
+                        released.add(i)
             else:
                 vanished.update(row.get("documentIds") or [])
                 vanished.update(row.get("pendingDocumentIds") or [])
@@ -308,7 +322,7 @@ class Context:
                     continue
                 for c in s.claims:
                     owners.setdefault(c.claim_hash, (key, d.path, s.heading))
-        return cls(live, owners, vanished, mapped)
+        return cls(live, owners, vanished, mapped, released)
 
     def update(self, key: str, path: str, heading: str, hashes: list[str]) -> None:
         """After a swap: the section owns exactly `hashes` now."""
@@ -392,6 +406,11 @@ class KbSync:
         if not self._fenced(RENEW, key, token, ttlMs=self.ttl_ms):
             raise LeaseLost("lease expired or taken over before a falkor-chat call")
 
+    def _delete(self, key: str, token: str, document_id: str) -> None:
+        """One falkor-chat DELETE, each under its own renew (L1): N deletes may outlast the lease's TTL."""
+        self._renew(key, token)
+        self.http.delete_document(document_id)
+
     def _release(self, key: str, token: str) -> None:
         try:
             self._fenced(RELEASE, key, token)
@@ -430,10 +449,12 @@ class KbSync:
 
     def _sync_locked(self, key, token, path, section, ctx, force, bad_ids, out) -> KbOutcome:
         row, _ = self._read(key)
+        if row.get("pendingDocumentIds") and row.get("pendingSectionHash") == section.section_hash \
+                and row.get("pendingMode") == section.mode:  # the same edit, still in flight: `finish` owns it
+            return out("pending", "this exact text is already submitted and embedding; left to `kb-finish`")
         if row.get("pendingDocumentIds"):  # cancel-on-re-edit: delete before clearing (note 6.4)
-            self._renew(key, token)
             for document_id in row["pendingDocumentIds"]:
-                self.http.delete_document(document_id)
+                self._delete(key, token, document_id)
             if not self._fenced(CANCEL, key, token):
                 raise LeaseLost("lease lost clearing a cancelled submission")
             for name in ("pendingDocumentIds", "pendingClaimHashes", "pendingClaimTitles", "pendingKeepHashes",
@@ -479,12 +500,13 @@ class KbSync:
 
     def _check_receipt(self, key, token, receipt, claim, row, ctx) -> str | None:
         """The receipt backstop (m8, P4-m1): falkor-chat auto-supersedes a current document with the same
-        normalised text. Acceptable victims: this section's own old documents, a vanished section's, or an
+        normalised text. Acceptable victims: this section's own old documents, a vanished section's, one whose
+        section's file text no longer carries that claim (headings exchanging claims), or an
         unmapped `kb-mirror` document of this very text (our own POST whose answer we never saw)."""
         if not receipt.get("autoSuperseded"):
             return None
         victim = receipt.get("supersededDocumentId")
-        if victim in (row.get("documentIds") or []) or victim in ctx.vanished_ids:
+        if victim in (row.get("documentIds") or []) or victim in ctx.vanished_ids or victim in ctx.released_ids:
             return None
         digest, producer = self.observer.describe(victim) if victim else (None, None)
         _, mapped = self._mapped_ids()
@@ -500,9 +522,8 @@ class KbSync:
 
     def _abort(self, key, token, posted, out, reason) -> KbOutcome:
         """Delete every document this run submitted, clear the pending fields; old claim stays served."""
-        self._renew(key, token)
         for document_id, _, _ in posted:
-            self.http.delete_document(document_id)
+            self._delete(key, token, document_id)
         if not self._fenced(GIVE_UP, key, token):
             raise LeaseLost("lease lost giving up")
         return out("failed", reason)
@@ -523,9 +544,8 @@ class KbSync:
 
     def _swap(self, key, token, path, section, plan: Plan, posted, row) -> None:
         """L3: renew, delete the old ids, then the fenced swap with the release folded in."""
-        self._renew(key, token)
         for document_id in plan.remove:
-            self.http.delete_document(document_id)
+            self._delete(key, token, document_id)
         by_hash = {h: (i, t) for i, h, t in plan.keep}
         by_hash.update({h: (i, t) for i, h, t in posted})
         wanted = [c.claim_hash for c in section.claims]
@@ -563,10 +583,9 @@ class KbSync:
             return KbOutcome(path, heading, "pending", "section lease is held by another actor; retry in 30 s")
         try:
             current, _ = self._read(key)
-            self._renew(key, token)
             ids = [*(current.get("documentIds") or []), *(current.get("pendingDocumentIds") or [])]
             for document_id in ids:
-                self.http.delete_document(document_id)
+                self._delete(key, token, document_id)
             if not self._fenced(REMOVE, key, token):
                 raise LeaseLost("lease lost dropping the record")
             return KbOutcome(path, heading, "removed", f"{len(ids)} document(s) deleted")
@@ -615,9 +634,8 @@ class KbSync:
             seen = [obs.get(i) for i in ids]
             bad = any(o is None or not o.exists or o.failed for o in seen)
             if ids and not bad and all(o.ready for o in seen):
-                self._renew(key, token)
                 for document_id in self._stale_ids(row):
-                    self.http.delete_document(document_id)
+                    self._delete(key, token, document_id)
                 wanted_keep = set(row.get("pendingKeepHashes") or [])
                 titles_old = list(row.get("claimTitles") or [])
                 titles_old += [""] * (len(row.get("documentIds") or []) - len(titles_old))
@@ -634,9 +652,8 @@ class KbSync:
                     raise LeaseLost("lease lost during the swap")
                 return out("synced", f"{len(ids)} submitted document(s) now searchable")
             if bad or capped:
-                self._renew(key, token)
                 for document_id in ids:
-                    self.http.delete_document(document_id)
+                    self._delete(key, token, document_id)
                 if not self._fenced(GIVE_UP, key, token):
                     raise LeaseLost("lease lost giving up")
                 return out("failed", "a submitted document failed or the cap passed; the old claim stays "

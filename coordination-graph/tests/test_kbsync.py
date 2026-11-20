@@ -204,6 +204,35 @@ def test_a_re_edit_of_a_pending_section_cancels_the_pending_submission_first():
     assert old not in chat.docs and stale_pending not in chat.docs
 
 
+def test_an_unchanged_re_sync_of_a_pending_section_leaves_it_to_finish():
+    """F2: the in-flight submission is not cancelled and re-POSTed, and `pendingSince` (the cap's clock) is kept."""
+    engine, mirror, chat, clock = make_engine()
+    doc, old, _ = edited_pending(engine, mirror, chat)
+    before = dict(row(mirror, doc, "Alpha"))
+    chat.calls.clear()
+    clock.sleep(5)
+    out, doc = sync(engine, mirror, ONE.replace("body.", "body v2."))
+    assert out["Alpha"].status == "pending" and "kb-finish" in out["Alpha"].detail
+    assert chat.calls == []  # no cancel, no re-POST
+    r = row(mirror, doc, "Alpha")
+    assert r["pendingDocumentIds"] == before["pendingDocumentIds"] and r["pendingSince"] == before["pendingSince"]
+    assert "leaseToken" not in r
+    chat.release_embeds()
+    assert [o.status for o in engine.finish(once=True)] == ["synced"] and old not in chat.docs
+
+
+def test_a_pending_section_re_synced_in_another_mode_is_still_cancelled():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, BULLETS)
+    chat.hold_new = True
+    sync(engine, mirror, BULLETS.replace("- two fact", "- two fact v2"))
+    pending = row(mirror, doc, "Facts")["pendingDocumentIds"]
+    chat.hold_new = False
+    chat.calls.clear()
+    out, _ = sync(engine, mirror, BULLETS.replace("<!-- kb-split: bullets -->\n", "").replace("- two fact", "- two fact v2"))
+    assert out["Facts"].status == "synced" and set(pending) <= set(chat.deletes())
+
+
 def test_a_held_lease_reports_pending_at_once_and_other_sections_proceed():
     engine, mirror, chat, _ = make_engine()
     d = kb(TWO)
@@ -253,6 +282,83 @@ def test_a_lease_lost_during_the_swap_deletes_report_pending_not_synced():
     assert out["Alpha"].status == "pending" and "swap" in out["Alpha"].detail
 
 
+# --- L1: renew before EVERY falkor-chat call, deletes included (review S6 F5) -------------------
+
+def watch_deletes(mirror, chat):
+    """Record each DELETE in the mirror's statement log, so its position relative to a RENEW is checkable."""
+    chat.on_delete = lambda _id: mirror.log.append("DEL")
+
+
+def assert_renew_per_delete(mirror, deletes):
+    positions = [i for i, n in enumerate(mirror.log) if n == "DEL"]
+    assert len(positions) == deletes
+    assert all(mirror.log[i - 1] == "RENEW" for i in positions), mirror.log
+
+
+THREE = "# T\n\n## Facts\n<!-- kb-split: bullets -->\n\n- a1\n- b2\n- c3\n"
+THREE_V2 = THREE.replace("a1", "a1x").replace("b2", "b2x").replace("c3", "c3x")
+
+
+def test_the_swap_renews_before_each_old_id_delete():
+    engine, mirror, chat, _ = make_engine()
+    sync(engine, mirror, THREE)
+    watch_deletes(mirror, chat)
+    mirror.log.clear()
+    out, _ = sync(engine, mirror, THREE.replace("<!-- kb-split: bullets -->\n", ""))
+    assert out["Facts"].status == "synced"
+    assert_renew_per_delete(mirror, 3)
+
+
+def test_cancel_on_re_edit_renews_before_each_pending_delete():
+    engine, mirror, chat, _ = make_engine()
+    sync(engine, mirror, THREE)
+    chat.hold_new = True
+    sync(engine, mirror, THREE_V2)
+    chat.hold_new = False
+    watch_deletes(mirror, chat)
+    mirror.log.clear()
+    out, _ = sync(engine, mirror, THREE_V2.replace("a1x", "a1y").replace("b2x", "b2y").replace("c3x", "c3y"))
+    assert out["Facts"].status == "synced"
+    assert_renew_per_delete(mirror, 3 + 3)  # three cancelled, three old swapped out
+
+
+def test_abort_renews_before_each_delete_of_its_own_submissions():
+    engine, mirror, chat, _ = make_engine()
+    chat.during_post = lambda: chat.failed.update(chat.docs)
+    watch_deletes(mirror, chat)
+    out, _ = sync(engine, mirror, THREE)
+    assert out["Facts"].status == "failed"
+    assert_renew_per_delete(mirror, 3)
+
+
+def test_removing_a_section_renews_before_each_delete():
+    engine, mirror, chat, _ = make_engine()
+    sync(engine, mirror, THREE)
+    watch_deletes(mirror, chat)
+    mirror.log.clear()
+    out, _ = sync(engine, mirror, "# T\n")
+    assert [o.status for o in out.values()] == ["removed"]
+    assert_renew_per_delete(mirror, 3)
+
+
+def test_finish_renews_before_each_stale_delete_and_each_give_up_delete():
+    engine, mirror, chat, clock = make_engine()
+    sync(engine, mirror, THREE)
+    chat.hold_new = True
+    sync(engine, mirror, THREE_V2)
+    chat.release_embeds()
+    watch_deletes(mirror, chat)
+    mirror.log.clear()
+    assert [o.status for o in engine.finish(once=True)] == ["synced"]
+    assert_renew_per_delete(mirror, 3)
+    chat.hold_new = True
+    sync(engine, mirror, THREE_V2.replace("a1x", "a1y").replace("b2x", "b2y").replace("c3x", "c3y"))
+    mirror.log.clear()
+    mirror.now += engine.cap_ms + 1  # past the cap: give up, deleting the three pending documents
+    assert [o.status for o in engine.finish(once=True)] == ["failed"]
+    assert_renew_per_delete(mirror, 3)
+
+
 # --- duplicate claims, receipts -----------------------------------------------------------------
 
 DUP = "# T\n\n## Alpha\n\nSame claim.\n\n## Beta\n\nsame   CLAIM.\n"
@@ -275,6 +381,30 @@ def test_a_new_heading_duplicating_an_already_mapped_claim_is_refused_naming_the
     out, _ = sync(engine, mirror, ONE + "\n## Gamma\n\nalpha body.\n")
     assert out["Gamma"].status == "refused" and "'Alpha'" in out["Gamma"].detail
     assert out["Alpha"].status == "unchanged" and chat.posts() == ["Alpha"]
+
+
+def test_two_headings_exchanging_their_claims_in_one_edit_both_sync():
+    """F4: each claim still belongs, by the old mapping, to the other heading; neither may be refused for good."""
+    engine, mirror, chat, _ = make_engine()
+    sync(engine, mirror, "# T\n\n## One\n\nFirst.\n\n## Two\n\nSecond.\n")
+    out, doc = sync(engine, mirror, "# T\n\n## One\n\nSecond.\n\n## Two\n\nFirst.\n")
+    assert {h: o.status for h, o in out.items()} == {"One": "synced", "Two": "synced"}
+    assert sorted(d["text"] for d in chat.current()) == ["First.", "Second."] and len(chat.docs) == 2
+    for heading, text in (("One", "Second."), ("Two", "First.")):
+        [i] = row(mirror, doc, heading)["documentIds"]
+        assert chat.docs[i]["text"] == text and chat.docs[i]["current"]
+    again, _ = sync(engine, mirror, "# T\n\n## One\n\nSecond.\n\n## Two\n\nFirst.\n")
+    assert {o.status for o in again.values()} == {"unchanged"}
+
+
+def test_a_heading_taking_a_claim_another_heading_still_wants_is_refused_and_supersedes_nothing():
+    """The guard the F4 change must keep: the claim is still in the other heading's file text."""
+    engine, mirror, chat, _ = make_engine()
+    sync(engine, mirror, TWO)
+    before = {d["id"] for d in chat.current()}
+    out, _ = sync(engine, mirror, TWO.replace("Beta body.", "Alpha body."))
+    assert out["Beta"].status == "refused" and "'Alpha'" in out["Beta"].detail
+    assert {d["id"] for d in chat.current()} == before and chat.posts() == ["Alpha", "Beta"]
 
 
 def test_a_claim_already_mapped_in_another_file_is_refused_even_when_this_file_is_registered_first():
@@ -442,6 +572,47 @@ def test_reconcile_does_not_adopt_a_partial_match_and_adopts_nothing_twice():
     assert "Facts" not in {s["heading"] for s in mirror.sections.values()} or "documentIds" not in next(
         iter(mirror.sections.values()))
     assert a in chat.docs
+
+
+def test_reconcile_never_maps_one_stored_document_to_two_sections():
+    """F3a: the `mapped_ids` guard in `_adopt`: two sections cannot both own a document, or one's sync would
+    delete the other's claim."""
+    engine, mirror, chat, _ = make_engine()
+    stored = chat.plant("Same claim.", producer="cobb")
+    doc = kb(DUP)
+    results = {o.heading: o for o in engine.reconcile([doc])}
+    assert results["Alpha"].status == "adopted" and results["Beta"].status == "unadopted"
+    owners = [s["heading"] for s in mirror.sections.values() if stored in s.get("documentIds", [])]
+    assert owners == ["Alpha"]
+
+
+def test_reconcile_does_not_adopt_a_document_another_section_already_maps():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    mapped = row(mirror, doc, "Alpha")["documentIds"][0]
+    two = kb(ONE + "\n## Gamma\n\nalpha body.\n")
+    results = {o.heading: o for o in engine.reconcile([two]) if o.heading in ("Alpha", "Gamma")}
+    assert results["Gamma"].status == "unadopted"
+    assert [s["heading"] for s in mirror.sections.values() if mapped in s.get("documentIds", [])] == ["Alpha"]
+
+
+def test_a_receipt_superseding_another_sections_pending_twin_is_refused_and_that_document_survives():
+    """F3b: `victim not in mapped`. The twin is a `kb-mirror` document of the claim's own text, but another
+    live section maps it as a *pending* submission (its claim hashes are not in the owners map), so deleting it
+    would destroy that section's in-flight write. Reachable with no other guard in the way."""
+    engine, mirror, chat, _ = make_engine()
+    other = "# T\n\n## Other\n\nOther v1.\n"
+    sync(engine, mirror, other)
+    chat.hold_new = True
+    sync(engine, mirror, other.replace("v1", "v2"))
+    [pending] = next(s for s in mirror.sections.values() if s["heading"] == "Other")["pendingDocumentIds"]
+    chat.hold_new = False
+    doc = kb(other.replace("v1", "v3") + "\n## Beta\n\nOther v2.\n")
+    rows, _ = engine.read_all()
+    beta = next(s for s in doc.sections if s.heading == "Beta")
+    out = engine.sync_section(P, beta, Context.build([doc], rows))
+    assert out.status == "failed" and pending in out.detail
+    assert pending in chat.docs  # not deleted as a "twin"
 
 
 def test_marker_stripped_claims_are_adopted_then_reingested_under_append_before_delete():

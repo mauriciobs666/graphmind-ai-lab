@@ -27,12 +27,14 @@ import os
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 from .keys import MAX_KEY_BYTES, KeyHygieneError, norm_value, safe_key
 
 SCHEMA_VERSION = 4  # the graph note version the DDL below implements
 POLL_TIMEOUT_S = 5.0
 SHARED_PORTS = frozenset({6379, 6390, 3000})
+SHARED_KB_PORTS = frozenset({8200})  # the real falkor-chat (`COORDGRAPH_KB_URL`'s default)
 EPHEMERAL_ENV = "COORDGRAPH_EPHEMERAL_PORT"
 
 # note section 4.2. UNIQUE entries get their supporting RANGE index first (index before constraint).
@@ -107,6 +109,23 @@ def require_ephemeral(host: str, port: int, env: Mapping[str, str] | None = None
     if declared != str(port):
         raise RefusedEndpoint(
             f"refusing FalkorDB port {port}: set {EPHEMERAL_ENV}={port} to confirm it is an ephemeral instance"
+        )
+
+
+def require_ephemeral_kb_url(url: str) -> None:
+    """Refuse a falkor-chat REST endpoint that could be the shared one.
+
+    The mirror graph is ephemeral-only (`require_ephemeral`), so a KB sync that POSTs to the shared
+    falkor-chat would write real documents while observing an unrelated, empty graph. The two endpoints are
+    named together: loopback host, and not a shared falkor-chat port (the unset default is one).
+    """
+    parts = urlsplit(url)
+    if parts.hostname not in ("localhost", "127.0.0.1", "::1"):
+        raise RefusedEndpoint(f"refusing non-loopback falkor-chat host {parts.hostname!r} for an ephemeral mirror")
+    if parts.port in SHARED_KB_PORTS:
+        raise RefusedEndpoint(
+            f"refusing falkor-chat port {parts.port} (the shared instance, and the default when "
+            "COORDGRAPH_KB_URL is unset): point COORDGRAPH_KB_URL at the scratch falkor-chat of this ephemeral run"
         )
 
 

@@ -160,7 +160,7 @@ def test_detach_finish_starts_a_session_leader_with_no_inherited_pipes(tmp_path)
 def test_kb_status_exit_codes_and_output(repo, capsys):
     root, mirror, chat = repo
     (root / "coordination-graph" / "kb-files.txt").write_text("kb/a.md\n")
-    assert cli.main(["kb-status"]) == 1  # unmirrored
+    assert cli.main(["kb-status"]) == 2  # unmirrored: "not complete", as for every kb-* command
     assert "unmirrored\tkb/a.md § Alpha" in capsys.readouterr().out
     cli.main(["kb-sync"])
     capsys.readouterr()
@@ -168,8 +168,34 @@ def test_kb_status_exit_codes_and_output(repo, capsys):
     out = capsys.readouterr().out
     assert out.startswith("KB mirror: last sync 19") or out.startswith("KB mirror: last sync 1970")
     (root / "kb" / "a.md").write_text(ONE.replace("body.", "edited."))
-    assert cli.main(["kb-status", "--ids", chat.current()[0]["id"]]) == 1
+    assert cli.main(["kb-status", "--ids", chat.current()[0]["id"]]) == 2
     assert "stale\tkb/a.md § Alpha\tstale — read `kb/a.md` § `Alpha`" in capsys.readouterr().out
+
+
+def test_kb_status_exits_1_only_when_it_could_not_run(repo, monkeypatch, capsys):
+    monkeypatch.setattr(commands_kb.kbsync.KbSync,
+                        "read_all", lambda self: (_ for _ in ()).throw(RuntimeError("graph gone")))
+    assert cli.main(["kb-status"]) == 1
+    assert "graph gone" in capsys.readouterr().err
+
+
+def test_an_unforeseen_error_in_one_file_loses_only_that_files_outcomes(repo, monkeypatch, capsys):
+    """F6: the isolation lesson of S3: one file's crash is a `failed` outcome, the other file still syncs."""
+    root, mirror, chat = repo
+    (root / "kb" / "b.md").write_text("# T\n\n## Beta\n\nBeta body.\n")
+    (root / "coordination-graph" / "kb-files.txt").write_text("kb/a.md\nkb/b.md\n")
+    real = commands_kb.kbsync.KbSync.sync_file
+
+    def flaky(self, doc, ctx, rows):
+        if doc.path == "kb/a.md":
+            raise RuntimeError("boom")
+        return real(self, doc, ctx, rows)
+
+    monkeypatch.setattr(commands_kb.kbsync.KbSync, "sync_file", flaky)
+    assert cli.main(["kb-sync"]) == 2
+    out = capsys.readouterr().out
+    assert "failed\tkb/a.md" in out and "boom" in out and "synced\tkb/b.md § Beta" in out
+    assert chat.posts() == ["Beta"]
 
 
 def test_kb_reconcile_exit_codes(repo, capsys):
@@ -202,3 +228,42 @@ def test_the_kb_commands_refuse_a_shared_falkordb_port_without_connecting(monkey
 def test_a_sync_never_needs_wilib_and_the_engine_imports_no_sync_incompatible_module():
     assert "wilib" not in vars(kbsync) and "identity" not in vars(kbsync)
     assert "wilib" not in vars(commands_kb) and "identity" not in vars(commands_kb)
+
+
+# --- F1: the falkor-chat endpoint is named together with the ephemeral FalkorDB ---------------------
+
+@pytest.fixture
+def real_engine(monkeypatch, tmp_path):
+    """The real `_engine` over a mirror that connected (as it always does) through the ephemeral override."""
+    monkeypatch.setenv("COORDGRAPH_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("COORDGRAPH_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("COORDGRAPH_FALKORDB_PORT", "16399")
+    monkeypatch.setenv("COORDGRAPH_EPHEMERAL_PORT", "16399")
+    monkeypatch.delenv("COORDGRAPH_KB_URL", raising=False)
+    made = []
+
+    def no_request(*a, **kw):
+        made.append(a)
+        raise AssertionError("a KbHttp was built for a refused endpoint")
+
+    monkeypatch.setattr(commands_kb.kbsync, "KbHttp", no_request)
+    monkeypatch.setattr(commands_kb, "_build", lambda args: (Config.from_env(), tmp_path, None, None))
+    return made
+
+
+@pytest.mark.parametrize("url", [None, "http://localhost:8200", "http://127.0.0.1:8200/",
+                                 "http://falkor-chat.example:9000", "http://10.0.0.5:9000"])
+def test_an_ephemeral_mirror_refuses_an_unset_or_shared_falkor_chat_url_before_any_request(
+        real_engine, monkeypatch, capsys, url):
+    if url:
+        monkeypatch.setenv("COORDGRAPH_KB_URL", url)
+    for cmd in ("kb-sync", "kb-status", "kb-reconcile", "kb-finish"):
+        assert cli.main([cmd]) == 1
+        assert "refusing" in capsys.readouterr().err
+    assert real_engine == []
+
+
+def test_an_ephemeral_mirror_accepts_a_loopback_scratch_falkor_chat(monkeypatch):
+    monkeypatch.setenv("COORDGRAPH_KB_URL", "http://127.0.0.1:18200")
+    cfg = Config.from_env()
+    commands_kb._engine(cfg, type("Db", (), {"select_graph": lambda s, k: None})(), None)

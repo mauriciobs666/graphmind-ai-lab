@@ -76,6 +76,15 @@ seed_agent_team.sh` gains the `kb-mirror` row.
   `HAS_CHUNK`, `INGESTED_BY`, `Chunk.embedding`, `Document.currentVersion`, `textNormalizedHash`; falkor-chat's
   normaliser equals ours; the seeded roster carries `kb-mirror`).
 
+S6 gate fixes (`claude/docs/reviews/coordination-graph-impl.md` `## S6`, F1-F6; F7 skipped): the ephemeral mirror now
+also refuses a falkor-chat URL that is non-loopback or on the shared port 8200 (the unset default), in
+`store.require_ephemeral_kb_url`, called by `_engine` before any request; an unchanged re-sync of a pending section
+is left to `kb-finish` (no cancel, `pendingSince` kept); the claims file text wins over the old mapping, and a
+receipt superseding a document whose section no longer carries that claim is accepted, so two headings exchanging
+claims in one edit both sync; each delete renews the lease; `kb-status` exits 2 when anything is flagged (1 is only
+"could not run", as the other `kb-*` commands), and one file's unforeseen error in `kb-sync` is that file's `failed`
+outcome. New tests pin the `_adopt` and twin-check guards (survivors of the gate's mutation run).
+
 ## 2026-11-20 — S3: store, sync, rebuild, drift, query (S3a `683eb212`, S3b)
 
 Delivered base-plan step S3 (`claude/docs/plans/coordination-graph.md` §3.1-§3.3, §4; graph note v4
