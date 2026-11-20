@@ -77,6 +77,152 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 - **Not a pack (D10):** Compose mappings and the `.mcp.json` launch chain are linker code (P1-17).
 - **Gate:** `analyst`; mutation check on the literal/dynamic split.
 
+## P1-49 · `python-http-client` consumer pack and the unknown-origin key rule — `tdd-engineer`
+
+Two dispatches: **49a (tests only, `qa-engineer`)** authors and commits the red coverage table below; **49b
+(`tdd-engineer`)** implements to it. Needs 16, 17, 46 and P1-05 **5d** (a call on an untyped receiver whose name matches an
+in-repo method is Joern-linked, hence `resolved`, which a `resolution: [external, unresolved]` seed never sees until 5d
+demotes it). Decision D13 (stakeholder, Q-F): P1 builds this pack. No pack seeds a Python HTTP call.
+
+**Done when:** (1) the fixture rows `LNK-08`, `LNK-11`, `LNK-13`, `LNK-14`, `LNK-37`, `TW-2`, `AC6-EX-4` and `DF-3`'s `requeue`
+item are asserted at P1 in the forms the key rule below gives; (2) on the dev gold `cpg/eval/dev/ac5-http.jsonl`, each of the 8 items whose impacted element is a Python script has a `CONSUMES http`
+linking to the gold provider, at any status, by the path below; the count is reported, a miss is reported with its cause and
+never tuned past; dev items only, no held-out file read (the exposure path-set rule, `-p1-ml.md`). Paths (the wrapper calls
+are bare same-module calls, kept by 5d's `refsTo` rule, so `callers_of` carries them):
+`falkor-chat/scripts/load_append.py::{main,_worker}` call `httpx.Client(...)` methods directly: seeded at the call, no lifting,
+key is the path (`/threads/{?}/messages` for a parameter segment), the parameter `base_url` only feeds `urlBindings`;
+`falkor-chat/scripts/seed_nlq_eval_corpus.py::{main,_check_server_reachable,_poll_until_terminal}` call `_http_json(method, path)`,
+whose `Request(url, ...)` is seeded and lifted through `path` (and `method`) to each caller's argument; the wrapper composes
+`url = f"{BASE_URL}{path}"` in a local before the call, so the seed slot is the bare local and rule 4's limit applies (the
+lifted fact is `confirmed`/`lifted-role`);
+`salesperson/scripts/load_demo.py::run_participant` and `language_salience_probe.py::{run_participant,_assistant_rows_since}` call
+`http_json(method, url)`, whose seed slot is the bare parameter `url`; lifted to the caller's `f"{base_url}/shop/api/..."`
+(`\x01/shop/api/...`, `base_url` a parameter: rule 2 drops the origin, `possible`). If the lifting fixpoint does not
+carry a template that mixes a parameter with another unresolved piece, that is returned to the architect as a finding before
+any engine change; (3) the analyst plan-gate stopping conditions: the coverage table below
+is asserted cell by cell with its cause-axis rows committed in 49a before 49b starts; 5d's oracle mechanism is the one stated
+there; 5d's rule is the one stated there over both receiver shapes with its probe table.
+
+**Pack.** Files: `cpg/packs/python-http-client/{pack.yaml,negatives.yaml}`, `cpg/tests/test_pack_python_http_client.py`, the
+leaf-harness registration in `cpg/tests/test_rule_pack_leaf_mutation.py`, `SERVED` in `cpg/tests/test_packrt_generic.py` (by
+hand, or the pack is unguarded). Shapes, each `scope.imports` gated: `requests.<verb>(url)` and `httpx.<verb>(url)`;
+`httpx.Client(base_url=...)` then `<client>.<verb>(path)` (`base_url` is a `urlBindings` `callsite` source,
+`arg: kw.base_url`, `scope: file`; the key is the path alone, a base path prefix is not joined); `urllib.request.Request(url,
+method=...)` and a literal `urlopen(str)`. A wrapper such as `http_json(method, url)` is carried by the existing
+lifting fixpoint (spec §1.6) when the call reaching it is kept by 5d (a type-backed member call, or a bare call of a `LOCAL`). Verbs: one lifting per verb, `bareDefault` the
+verb; `Request` uses companion `kw.method`, `bareDefault: GET` (`data=` without `method=` stays `GET`: pinned limit). Not
+covered: `requests.request`, `Session`, `aiohttp`, `http.client`. **Probe first (reported):** the `externalTarget` and
+`resolution` each shape gets on the fixtures and the 8 gold scripts; seed by `externalTarget` glob where it exists, by callee
+plus import gate otherwise. If the negatives show a `dict.get` over-match cannot be kept out, or the format cannot express a
+per-verb seed or an absent companion `arg`, that is returned to the architect as a finding before any engine change.
+
+**Wrapper reached through a name-linked caller (decided).** `packrt/extract.py:Corpus.callers_of` is built from `targets`
+only, so a wrapper called through an untyped receiver (`self._get(path)`, an untyped parameter) has no caller edge after 5d:
+its URL role is not lifted, and the consumer is the wrapper's own site, `possible`/`partial-key`. This is the honest status
+and a pinned known limit, not fixed in P1; a P2 backlog item (owner `architect`) gives lifting the `nameLinked` candidates
+as weakened callers. Tests: a wrapper called through `self.` and through an untyped parameter (not lifted, `possible`);
+the same wrapper through a constructor-typed receiver (lifted, as the fixtures' `ApiClient`); the 8-script count of (2)
+detects any recall cost.
+
+**Unknown-origin key rule (the contract is unchanged: a `confirmed` fact needs every slot its key uses resolved, N-17).**
+`Corpus.alternatives` (`packrt/extract.py`) marks an unresolved piece by element kind. `\x00` (`UNKNOWN`): an `importRef`
+(an imported name the resolver could not map to an in-corpus constant), a `ref` cycle or depth cap: a name that should
+resolve. `\x01` (`UNKNOWN_VALUE`, new, `httpkey.py`): an `unknown` element (parameter, environment read, field read, call
+result), a `ref` whose constant has no `constant` record, the `MAX_ALTERNATIVES` cap: a value not statically known. A `ref` is in-corpus by
+construction (the resolver emits one only for a name it found), so a `ref` without a record is a constant the normalizer
+does not record: a call-valued one (correctly `\x01`), or an imported in-corpus name whose target is not a recorded constant
+(multiply assigned, an export form 5d's scan does not cover).
+
+**Cost of `\x01` for an unrecorded constant: precision and recall, not recall only.** If that constant was a leading path
+prefix (`API_PREFIX`), rule 2 drops its segment: the key `GET /health` (i) can match an unrelated `/health` provider as a
+false `possible` link, and (ii) no longer matches the real `/api/health`, which the `{?}` segment form matched. No P1
+mechanism separates the case (the bundle cannot say why a constant has no record); the false links enter P1-36's
+possible-precision measurement like any `possible` link.
+
+**Two predicates, both in `ccg/packrt/httpkey.py`.** `is_wholly_unresolved(piece: str) -> bool`: the piece is exactly one
+marker (`\x00` or `\x01`): an *alternative* of a value set that is unknown as a whole. `has_unresolved(s: str) -> bool`: either
+marker occurs anywhere in `s`: a *string under construction* that is partly unknown. `\x01\x01` (two adjacent unknown pieces)
+is `has_unresolved` and not wholly unresolved, as `\x00\x00` is today. For a consumer `http` URL, `httpkey.split_url(url) ->
+(path, origin_dropped)` and `httpkey.normalize_key_parts(raw, form) -> NormalizedKey(key, origin_dropped, unresolved_in_path)`
+(a `NamedTuple`; `normalize_key` and `url_path_of` stay as thin wrappers returning `.key` and `.path`):
+1. *Authority position* (after `scheme://` or `//`, up to the first `/`, `?`, `#` or the end): a piece with either marker there
+   is the host; it is dropped from the key, as a known host is; `origin_dropped` is true (a known host leaves it false).
+2. *No scheme*: a leading run of `\x01` (one piece or several adjacent) immediately followed by `/` is the origin and is
+   dropped, `origin_dropped` true. Every other position keeps today's behaviour, the segment holding the marker becomes `{?}`: a leading `\x00` (a
+   path-prefix constant that failed to resolve must not lose its segment, or the real provider stops matching), a partial
+   segment (`\x01api/x`, `a\x01/b`, `\x01:8000/x`), a sole piece (`\x01`), `\x01?q`, mid-path, trailing.
+3. *Status of a direct or caller-side key* (`packrt/run.py:_one`; the old `"{?}" in key` test is replaced): `confirmed` only if
+   `unresolved_in_path` and `origin_dropped` are both false; otherwise `possible`/`partial-key`. `unresolved_in_path` is
+   `has_unresolved` of the path *after* the origin drop and *after* cutting the query and fragment: an unresolved piece
+   there is not a key slot (the key is verb and path), so it stays `confirmed`, as today; an unresolved origin is not in the
+   key either but decides which service answers, so it forfeits `confirmed`. `lift.py`'s `partialAlternatives` tests
+   whole alternatives only, so a query-only unknown is decided in `_one` for a lifted fact exactly as for a direct one.
+4. *A lifted fact* (`packrt/lift.py:run_lifting`): the caller's key comes from the leaf slot alone, so it is the URL only if every
+   slot below the leaf on the lifting chain, the seed's own slot included, is **transparent**: it has no value set, or every
+   alternative is wholly unresolved (the bare parameter). The first non-transparent slot (consumer side first) is recorded as
+   the item's `opaqueSlot` (`{siteId, arg}`, also `evidence.opaqueSlot`) and the item is `possible`/`partial-key`: a seed
+   slot `self.base + path` or `f"{BASE}{path}"` holds a piece the caller's slot cannot see, and a known sibling (`"/api" + path`)
+   would put a wrong path in the key. **Limit, pinned by a named test:** a wrapper that composes the URL in a local before
+   the seed call (`url = f"{BASE_URL}{path}"; Request(url)`) leaves the seed slot a bare `point-derived` unknown, which the
+   bundle cannot tell from the parameter (`data` records and the `unknown` reasons carry no whole-versus-part
+   information), so that lifted fact stays `confirmed`/`lifted-role`; telling them apart needs a bundle value-set element
+   for a derived local plus the extractor read of local initializers, a P2 item (owner `architect`).
+
+Base-unknown is therefore never `confirmed` wherever the bundle shows the base: a direct site (rules 1-3), a caller-side
+template (rules 1-3), a seed or intermediate slot with a sibling (rule 4). `binding-confirmed` (O-9: confirmed and
+bound) needs the base known: the fixture rows whose base is a parameter, `self.<field>` or environment read (`LNK-13`,
+`LNK-11`, `LNK-14`, `AC6-EX-4`) are asserted `possible`/`partial-key` with their path key at P1 (`LNK-11` by rule 4: its seed slot is
+`self.base + path`; `confirmed`/`binding-confirmed` is the P2 environment binding, `-p0-compose-binding.md`); `LNK-08`, `TW-2`,
+`LNK-37` have constant bases and stay `confirmed`. `qa-engineer` verifies each against the rebuilt graph.
+Cite `-rule-pack-spec.md` §1.4 and this step in the `httpkey.py` docstring.
+
+**Marker sweep (49b; the grep is run verbatim from `cpg/` and its output attached to the report).**
+`grep -rn 'UNKNOWN\|\\x00' ccg extractors --include=*.py | grep -v '^ccg/tests'`. Every hit that compares with the literal
+`UNKNOWN` moves to one of the two predicates; each site has the tests named here, each with a `\x01`-only and a mixed alternative:
+
+| Site | Predicate | Test |
+|---|---|---|
+| `extract.py:Corpus.alternatives` (emits) | n/a | element-kind matrix: `unknown` and `ref` without a record and the alternatives cap give `\x01`; `importRef`, a `ref` cycle and the depth cap give `\x00` |
+| `lift.py:_verbs_at` (verb alternative) | whole | verb slot `[\x01]` is partial and falls to `unknown`; `[GET, \x01]` gives `GET`, partial |
+| `lift.py:run_lifting`, `resolved` | whole | caller slot `\x01/shop/api/session` is resolved (the analyst's case: `load_demo` and `language_salience_probe` keep `GET /shop/api/session`, `possible`); `[\x01]` is not; `\x01\x01` is |
+| `lift.py:run_lifting`, both `partialAlternatives` | whole (list membership) | `[/a, \x01]` partial; `["/a?q=\x01"]` is not (decided in `_one`) |
+| `lift.py` opaque-slot test (new, rule 4) | whole | the rule 4 tests below |
+| `run.py:_apply`, the `url` list | whole | `[\x01/shop/api/session, \x01]` leaves `[\x01/shop/api/session]` |
+| `run.py:_one`, `unresolved` | has | a mount prefix holding `\x01` or `\x00` drops the fact with the `unresolved-part` diagnostic; a query-only unknown keeps `unresolved` non-empty and the fact `confirmed` |
+| `launch.py:launch_facts`, the `mountPaths` loop | has | a path holding either marker emits no `mountPath` fact; a clean one does |
+| `mount.py:MountIndex.facts` (`resolved`, the stored prefix) | has | prefixes `[\x01/api]` and `[\x00/api]` give `possible`/`partial-key` and a stored `{?}/api`, never a raw marker |
+| `httpkey.py:normalize_path` | has | a segment `\x01`, `a\x01b` or `\x00` becomes `{?}` |
+| `httpkey.py:split_url` (was `url_path_of`) | has, by position | rules 1-2, the spot rows below |
+
+`ccg/linker/bind.py` (the `"\x00" not in text` tests) acts on *binding text*, a different channel that never holds a
+value-set marker, and `ccg/linker/matchers.py` reads the post-normalization `{?}` segment: **no change** to either, pinned by a test that
+a bind value with `\x01` is not treated specially. The other `\x00` hits (`valuehash`, `atrest`, `anchors`,
+shell/markdown/config/scip extractors) are NUL screening of unrelated text: no change.
+
+**Coverage tests (49a, red first, committed before 49b).** (1) A reference model written in the test from rules 1-3 (never
+importing the code under test) generates the expected key and status over the live cells of position x scheme x remainder x
+count x cause (cells that cannot occur are not generated; the cause axis is meaningful only for a leading whole segment
+without a scheme, and the test asserts that), checked against the code; (2) a hand-written spot set of about 20 rows,
+including `\x01`, `\x01\x01/x`, `\x00/x`, `\x01api/x`, `a\x01/b`, `\x01:8000/x`, `\x01?q=1`, `http://\x01/a`, `//\x00/a`,
+`/x/\x01/y`, the sole `\x01`, with the cause-axis rows (parameter, environment read, `importRef`, ref miss) among them; (3) an
+end-to-end test: one path in two units, a consumer with an unknown base, the link is `possible`/`partial-key` to both;
+(4) **rule 4, the seed-sibling experiment as the test:** over `tests/test_packrt_run.py:fetch_chain()` add a value set on the seed
+slot (`fe`, `a0`) of `concat[unknown, unknown]` (`f"{BASE_URL}{path}"`, `self.base + path`), of `template[unknown, unknown]`
+and of `concat[const "http://h", unknown]`: each gives `GET /api/x` `possible`/`partial-key` with `evidence.opaqueSlot` =
+`fe`/`a0` (today all three are `confirmed`/`lifted-role`); the unchanged `fetch_chain()` and a seed slot of the bare
+`[unknown]` stay `confirmed`; a two-hop chain whose middle slot is `concat[const, unknown]` is `possible`; the caller-side
+template `concat[unknown, const "/api/x"]` gives `GET /api/x` `possible` by rule 2; the named limit test (a seed slot bare,
+the composition in a local) stays `confirmed`; (5) query-only unknown, direct (`requests.get(f"/items?q={q}")`) and lifted
+through a transparent wrapper: both `confirmed`; an origin drop, direct and lifted: both `possible`; (6) the per-site tests of the
+table; (7) the existing `tests/test_packrt_*`, `test_linker_link.py`, `slice/test_packrt_conformance.py`,
+`slice/test_linker_conformance.py` stay green (the 11 `fetch` consumers of `s14a`: every slot on each lifting chain is
+transparent, measured, so rule 4 moves none). Negatives (49b): `dict.get("x")`, `os.environ.get`, a string or comment naming
+`requests.get`, `urlopen` of a non-URL object; `validate_pack`; the mutation check on the verb, the import gate, the marker
+split, the two predicates, the opaque-slot test and the status downgrade.
+
+**Gate:** `analyst` (plan and code); no `data-scientist` note (no method choice; recall is P1-37's measure, already gated).
+**Sequencing:** after 5d and 46; before P1-41/P1-42 and the `ac5-gate-1` record (`httpkey.py` and `packrt/` are hashed).
+
 ## P1-17 · linker — `tdd-engineer`
 
 - **Files:** `cpg/ccg/linker/__init__.py`, `matchers.py` (`exact`, `path-template`, `glob`/`prefix`, `regex`),

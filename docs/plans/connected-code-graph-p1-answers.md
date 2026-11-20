@@ -195,7 +195,8 @@ Stakeholder decision 2026-11-19 (`-answer-spec2.md` §5): V-both ships. **Needs:
   twice and across rebuilds from the same commits; (4) the **flow-fallback measurement, on development flow items only**
   (`cpg/eval/dev/ac5-flow.jsonl`), on the snapshot built at `EVAL_COMMIT` (where the dev items' locators were
   validated): the share of those items that each of the four walks of `-p1-ml.md` §3.5
-  (as-built, V-flow, V-both, V-union) lists, by language and signature, with the unlisted items' ids and the burden
+  (as-built, V-flow, V-both, V-union) lists **at any status** (`possible` included; stated in advance, so a call edge that
+  `-p1-extraction.md` 5d demotes from `confirmed` to `possible`/`name-match` does not change what "listed" counts), by language and signature, with the unlisted items' ids and the burden
   per anchor; the rule there picked V-both (`safeClaim` false: 9 of 28 listed, no walk at n/n;
   `cpg/eval/results/ccg-p1-flow-fallback-v1.json`; reading in `docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md`), which P1-23d and P1-39d ship at `algorithm.version` `1.2`
   (`-answer-spec2.md` §1.2); the measurement is done and nothing in this unit waits on a pick; the `ccg-p1-flow-fallback-v1` record was committed before it ran; it runs on a throwaway instance (index §8); (5) **the fold's inputs** (P1-23 (3)): the builder

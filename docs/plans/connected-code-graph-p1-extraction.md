@@ -212,13 +212,111 @@ delta list below; the order is 5c, P1-06, P1-08, and P1-09 does not edit the fil
   bound that the check makes unreachable. Latent (no P1 frontend sets `owned`): a small `tdd-engineer` addition to `assemble`
   with a synthetic test (beyond-file, inverted and negative regions each raise), landing before the first frontend that sets it.
 
+### 5d · name-linked calls and exported constants — `tdd-engineer`
+
+Needs 05 (5a–5c), 09 (delivered). Lands before P1-49 and before the `ccg-prereg-v1` record (`extract.sc` is hashed; the
+P1-09 commit it follows has landed, so 5d re-derives `P1_09_SP_EXTRAS` and re-pins `extract.sc.sha256` in its own commit).
+
+**Rule.** Joern's `NaiveCallLinker` links a `DYNAMIC_DISPATCH` call to every method of that name in the cpg, whatever the
+receiver; a unique name also fills `methodFullName`, so the call's own attributes cannot tell a name link from a typed
+resolution. A site's Joern targets are `confirmed`/`resolved-call` only if each is **type-backed**, over both receiver shapes:
+- *Member call* (`p.m(x)`: the receiver is the access `p.m`, its base is the access's first argument): `rt` is the base's
+  `typeFullName`; a target is type-backed iff its `fullName` is `rt` plus the member name (the separator is the
+  frontend's, fixed by the probe). Untyped (`ANY`), builtin-typed and module-typed bases (`self` in Python; `this` in TS,
+  whose base type is the module) back nothing (the `self` rule below restores one case).
+- *Bare-identifier call* (`f(x)`: the receiver is the identifier): decided by what the identifier **refers to**, not its
+  type (`ANY` for a same-module function, a nested def, a parameter alike; a constructor's type is the class, its target
+  `K.__init__`): `rt` is the identifier's `refsTo` label (`METHOD_PARAMETER_IN` or `LOCAL`). A parameter backs nothing
+  (`cb(1)`, which Joern links to a module function `cb` by name); a `LOCAL` (module function, nested def, imported or
+  aliased name, constructor, builtin) is a direct reference and keeps its targets. Limit: a local rebinding of a module
+  name (`cb2 = f; cb2()`) is `LOCAL` and stays `confirmed`.
+- Static calls (`dt != DYNAMIC_DISPATCH`: `fetch`, imports) carry no `rt` and are unchanged. **A fact without `rt` is never
+  demoted** (an old facts file leaves every site as it was).
+Targets that are not type-backed are dropped; a site left with none is emitted `resolution: unresolved`, `targets: []`,
+`possible`/`name-match` (the bundle schema ties `targets` >= 1 to `confirmed`; the read-time `CALLS_NAME` hop lists the
+candidates). Limits, stated not fixed: a base typed to the wrong in-repo type (TS parameter `cb` typed as the module
+function `cb`) stays `confirmed`; an inherited method called on a subclass-typed base is demoted.
+
+**Measured exposure** (`docs/reviews/connected-code-graph-p1-5d-ml.md`: the repo's ten Python units, bundles at `8377c32`):
+the rule demotes 3,172 call sites, 11.4% of the 27,804 `confirmed` Python call edges (20.6% of the non-test ones); `self.m()` is
+553 of them (17.4%), `cls.m()` is 0 (the 658 `cls.__init__` sites are synthetic constructor lowering); the bare-identifier
+shape demotes 0 under the `refsTo` rule. The planted fixtures contain no `self`/`cls` call to a fixture-defined name, so
+they cannot detect the rule below in either direction; its evidence is the audit under Tests.
+
+**The `self` rule (Python only; `cls`, TS/JS `this` and every other base keep the demotion).** After the type rule, a
+demoted member-call site is `confirmed`/`resolved-call` again, targeting one symbol, when all hold: (i) the receiver
+(`args` entry `i: 0`, no name; the fact already carries it as `{"o":"name","n":"self"}`) is the name `self` and that name
+is the enclosing method's receiver parameter (`python.py_params`: index `-1`, so a `staticmethod` or a nested function
+never qualifies); (ii) among the site's Joern candidates (the `in` targets that map to bundle symbols) exactly one is a
+method of any class, and its parent class is the enclosing method's own class; (iii) its name is the callee's. The
+candidates that are not class methods (a module function of the same name, which attribute lookup on `self` cannot
+reach) are dropped into `report["nameLinked"]` like any demoted target. Needs only `assemble`'s scope table and facts the
+stored bundles already hold; no `extract.sc` or schema change. A subclass override inside the unit is a second
+class-method candidate, so (ii) fails and the site stays `possible`/`name-match`; an inherited method (the enclosing
+class does not define the name) fails (ii) too. Limits, reported not fixed: a subclass in another unit overriding the
+method, an instance attribute shadowing it, and a class-aware extension that also keeps the sites whose name several
+classes define (the measured upper bound: 524 of the 557 `self.m()` sites, 94%, against 375, 67%, for the unique-name
+rule) need base-class data that neither the facts nor the normalizer carry; that extension is a P2 item with the SCIP
+upgrade (owner `architect`). The rule's eligibility is reported as measured, not thresholded.
+
+**`self` rule acceptance (owner `data-scientist`, an independent gate after the unit lands; the implementer does not run
+it).** On the repo's rebuilt Python bundles, list every call site the rule confirmed, sort by call-site id, draw 30 with
+`random.Random(20261119).sample` and hand-check each target against the source (is it the method the call dispatches
+to, including subclass and mixin cases). Pre-stated: 30 of 30 correct passes (Wilson 95% lower bound 0.886); any miss
+fails the rule, which is then narrowed or removed, never accepted at a lower bar. The drawn ids, the verdicts and the
+eligibility count go in the unit's test report. Development data only: no held-out file is read.
+
+**Probe table first (reported and asserted as golden rows; a row that demotes a legitimate direct call is a stop-and-return
+finding).** Python and `jssrc2cpg`: member calls on an untyped parameter (unique and ambiguous name), TS `this.m()`,
+a constructor-assigned local (`x = C(); x.m()`, alone and in a function with other assignments: Joern types it in some
+shapes and leaves it `ANY` in others, 633 sites in the measured repo, 16 outside tests; the `ANY` shape is demoted and
+reported as a limit, not a stop), `self.m()` per the `self` rule's cases, interface-typed and `any` parameters (TS), a
+subclass-typed base calling an inherited method;
+bare calls of a module function, a nested def, an imported and an aliased function, a constructor, a builtin (`len`), a
+parameter `cb`, a shadowing local, a TS imported function and a TS parameter. If `jssrc2cpg` demotes nothing, TS name links stay `confirmed`
+and are reported as a limit: the `name-match` plants of p1.md §5 are Python rows, so c1/AC-25 are unaffected.
+
+**Files.** `cpg/extractors/joern/extract.sc` (each `cs` fact gains `rt`: the base's `typeFullName` for a member call, the identifier's `refsTo` label for a bare-identifier call, absent otherwise; the module-constant
+scan descends into an export-declaration `BLOCK`'s assignment children, `Identifier` targets only: in `jssrc2cpg` an
+`export const X = v` is a `BLOCK` child of `:program`, so no `constant` record exists and an imported exported constant
+stays an `importRef`); `normalize/assemble_bundle.py:assemble` (the type rule and the `self` rule in the targets branch; the
+demoted Joern target sets in `report["nameLinked"]`, `counts["nameLinkedDemoted"]` and `counts["selfResolved"]`).
+
+**Oracle and stored bundles (decided: overlay, the P1-09 precedent).** The S14a oracle and stored bundles are not
+regenerated (D9). (1) `tests/slice/test_extract_equivalence.py` compares after removing the `rt` key from `cs` facts and the
+export-constant records, hand-listed per unit in `tests/data/p1_05_5d_extras.json`; (2) `test_normalize_equivalence.py`
+feeds `assemble` the stored facts plus a hand-listed id-to-`rt` table from a live Joern run (recorded with the Joern
+version; units `fcs` and `sp`), and the `0.6` delta's `apply` edits exactly those ids' stored records (demotion, except the
+`self`-rule sites, which keep their targets narrowed to the one method) and adds the `sp` export-constant records. The
+`self`-rule sites are listed by an independent reference in the test: Python `ast` over the stored unit's sources (a
+`self.m()` call in a method whose class defines `m`, no other class in the unit defining `m`), never importing `assemble`;
+expected (hand-derived edit) and actual (real `assemble` path) are computed independently.
+The extract-script golden hash is re-pinned.
+
+**`merge_scip` (P1-15's gated deliverable; owner `tdd-engineer`, gates `analyst` and `data-scientist`, whose "fixed, never
+tuned" rule defines `J`).** The shipped signature keeps every parameter and gains one keyword:
+`merge_scip(callsites, positions, scip, known, *, prefix, lang, astral=frozenset(), name_linked: Mapping[str, Sequence[dict]] | None = None)`.
+For a site with an entry, `J` is the surviving bundle `targets` plus the entry (a partially demoted site keeps its type-backed
+targets in `targets`; the dropped ones are in the entry). Tests pin, over a demoted site: `S in J` (S confirmed
+`resolved-call`), `S not in J` (the site stays as 5d left it: demoted, or its type-backed targets), no entry (as before).
+The P1-15 section cites this; M0/M1 Joern-alone figures are computed from `nameLinked` plus the surviving targets.
+
+**Tests (red first).** (1) Python goldens over the probe table's Python rows; (2) a fact without `rt` stays `confirmed`;
+(3) `nameLinked` content and the `merge_scip` rows above; (4) a TS golden: an exported constant imported by another file
+resolves through a `ref`; (5) the `self` rule, each a golden over a synthetic class set: `self.m()` with `m` unique to the
+enclosing class is `confirmed` to `C.m` (a same-named module function is dropped into `nameLinked`); the same with a subclass
+`class B(C)` overriding `m` in the unit is `possible`/`name-match` (the pinned override test); a subclass-typed call of an
+inherited method and `self.m()` where `C` does not define `m` stay `possible`; `cls.m()` in a `classmethod`, `self.m()` in a
+nested function, a `staticmethod` whose first parameter is named `self`, and `self.x.m()` stay `possible`; (6) the overlay
+tests above and delta `0.6`. `NORMALIZER_VERSION` becomes `"0.6"`.
+
 **The delta list** (`tests/slice/test_normalize_equivalence.py`; P1-05 (2) states the rule). Whichever of 5c and P1-06
 lands first creates it. The stored header carries `tools.normalizerVersion` `"0.1"`, so each delta is
 `(version_literal, apply)`: it pins its own literal (never read from `NORMALIZER_VERSION`), `apply` edits the records and
 `counts`, and the expected header takes the last applied literal; a test asserts the **last** delta's literal equals
 `NORMALIZER_VERSION`, so a bump without a delta, or a delta without a bump, fails. A step bumps if it changes output code
 even when the stored bundles do not change (its delta then edits no record). Versions follow landing order; the planned
-order gives 5c `0.2`, P1-06 `0.3`, P1-08 `0.4`.
+order gives 5c `0.2`, P1-06 `0.3`, P1-08 `0.4`, P1-41 `0.5` (the import-precedence fix of `Resolver.element`; `tests/data/p1_41_import_precedence.json` is its delta), 5d `0.6`.
 
 ## P1-06 · `Cond.code` literal masking (F-9) — `graph-dba`
 
@@ -554,7 +652,7 @@ its output to the bundle as a **resolution source**, never as a new schema eleme
   timeout that sends TERM to the runner, the outer bound, which must exceed the runner's `SBX_INDEXER_WALL_S` by the margin `-egress-spec4.md` §1 states, treating runner exit 124 as a timeout failure and cancelling its timer on normal exit; the runner and its `indexer` entries are P1-48b's, not this step's), `cpg/extractors/joern/normalize/merge_scip.py` (merge
   rule from the note: a SCIP-resolved target upgrades a name-match site to `confirmed`/`resolved-call`; a
   disagreement with Joern leaves the site with no target, `possible`/`name-match` (the schema's `callsite.reason` has no `resolution-unverified`, and the format is not changed); candidates are
-  never dropped in the pipeline, as **name candidates**: the assembler gives every site whose `calleeName` is not `<dynamic>` a `CALLS_NAME`→`Name`, and `Name`→`RESOLVES_TO` every symbol of that `(lang, name)` (`spikes/vertical-slice/load.py:build_rows`, graph note §6.1 item 6), so a disagreeing site with no `CALLS` edge surfaces Joern's target and the SCIP target at read time as `possible`/`name-match` (`-p1-graph.md` `name_in`: `count(x) > 0` is false). **`resolution-unverified` is not used for them**: the registry scopes it to a candidate of a *resolved* site (the agree-with-extra-Joern-targets case); the registry is not widened. Joern's *confirmed* target is thereby demoted to `name-match` on a disagreement: that is the rule's cost, reported (`counts["disagree"]`, and M2 states the share of Joern targets so demoted). **The assembler does not consume `MergeResult.candidates`**: it is a merge-time report. The pin is a P1-18 test in `test_assemble_rows.py`: a call site with no targets and `calleeName` X has `CALLS_NAME` to `Name(X)` and `RESOLVES_TO` every symbol named X; the P1-15 evidence run reads `candidates` for M1/M2. Limit, reported not fixed: a candidate whose symbol name differs from `calleeName` (an aliased import) has no `Name` edge, so the evidence run counts such candidates. **SCIP-only references** (`MergeResult.scip_only`: no Joern call site, so no call-site id can be minted) are **dropped from the bundle in P1** and counted in the evidence record; minting call sites from SCIP is a P2 item (owner `architect`, it needs an extractor/bundle decision). **Constructor mapping:** a SCIP type target maps to `<qname>.__init__` (python) or `<qname>.<init>` (javascript/TypeScript: the normalizer names a constructor `<init>`, `normalize/javascript.py`; the real bundle holds `web/a.ts::Box.<init>`); the TypeScript form is verified by `cpg/tests/test_scip_merge.py::test_constructor_mapping_real_bundle` (coder, in the P1-15 step), run over a stored real javascript bundle containing classes: every class with an explicit constructor resolves to its `<init>` symbol, and a class without one is counted as `ctor_unmapped` (it is not synthesised). Until that test is green the `<init>` row is unverified and the TS measures are reported as such. **Call-site positions (`callSiteId → (file, line, col)`):** P1-15 owns the builder, `positions_from_bundle` in `cpg/extractors/joern/normalize/merge_scip.py`, fed by `assemble_bundle.py`'s `cs_info` (it already holds each site's `pos` from `locate_callees`: line and column, no file); the file is the enclosing symbol's `path` made relative to the indexed directory (the unit root), since a bundle `callsite` carries `line` only. Columns are **code points** (verified for BMP text on both real tools; `position_encodings` is empty for both); a line holding a character above U+FFFF before the callee leaves its site unmerged and counted (`astral_skipped`), because UTF-16 offsets would differ and are unverified. Tests in `test_scip_merge.py`: a built positions map on a stored bundle matches the SCIP positions of a real-tool golden (`café()` case), and an astral-character fixture is skipped, `cpg/tests/test_scip_merge.py`, `cpg/tests/test_scip_parse.py`.
+  never dropped in the pipeline (where 5d demoted a Joern name link, `J` is `report["nameLinked"]`, passed as `merge_scip`'s `name_linked`: 5d), as **name candidates**: the assembler gives every site whose `calleeName` is not `<dynamic>` a `CALLS_NAME`→`Name`, and `Name`→`RESOLVES_TO` every symbol of that `(lang, name)` (`spikes/vertical-slice/load.py:build_rows`, graph note §6.1 item 6), so a disagreeing site with no `CALLS` edge surfaces Joern's target and the SCIP target at read time as `possible`/`name-match` (`-p1-graph.md` `name_in`: `count(x) > 0` is false). **`resolution-unverified` is not used for them**: the registry scopes it to a candidate of a *resolved* site (the agree-with-extra-Joern-targets case); the registry is not widened. Joern's *confirmed* target is thereby demoted to `name-match` on a disagreement: that is the rule's cost, reported (`counts["disagree"]`, and M2 states the share of Joern targets so demoted). **The assembler does not consume `MergeResult.candidates`**: it is a merge-time report. The pin is a P1-18 test in `test_assemble_rows.py`: a call site with no targets and `calleeName` X has `CALLS_NAME` to `Name(X)` and `RESOLVES_TO` every symbol named X; the P1-15 evidence run reads `candidates` for M1/M2. Limit, reported not fixed: a candidate whose symbol name differs from `calleeName` (an aliased import) has no `Name` edge, so the evidence run counts such candidates. **SCIP-only references** (`MergeResult.scip_only`: no Joern call site, so no call-site id can be minted) are **dropped from the bundle in P1** and counted in the evidence record; minting call sites from SCIP is a P2 item (owner `architect`, it needs an extractor/bundle decision). **Constructor mapping:** a SCIP type target maps to `<qname>.__init__` (python) or `<qname>.<init>` (javascript/TypeScript: the normalizer names a constructor `<init>`, `normalize/javascript.py`; the real bundle holds `web/a.ts::Box.<init>`); the TypeScript form is verified by `cpg/tests/test_scip_merge.py::test_constructor_mapping_real_bundle` (coder, in the P1-15 step), run over a stored real javascript bundle containing classes: every class with an explicit constructor resolves to its `<init>` symbol, and a class without one is counted as `ctor_unmapped` (it is not synthesised). Until that test is green the `<init>` row is unverified and the TS measures are reported as such. **Call-site positions (`callSiteId → (file, line, col)`):** P1-15 owns the builder, `positions_from_bundle` in `cpg/extractors/joern/normalize/merge_scip.py`, fed by `assemble_bundle.py`'s `cs_info` (it already holds each site's `pos` from `locate_callees`: line and column, no file); the file is the enclosing symbol's `path` made relative to the indexed directory (the unit root), since a bundle `callsite` carries `line` only. Columns are **code points** (verified for BMP text on both real tools; `position_encodings` is empty for both); a line holding a character above U+FFFF before the callee leaves its site unmerged and counted (`astral_skipped`), because UTF-16 offsets would differ and are unverified. Tests in `test_scip_merge.py`: a built positions map on a stored bundle matches the SCIP positions of a real-tool golden (`café()` case), and an astral-character fixture is skipped, `cpg/tests/test_scip_merge.py`, `cpg/tests/test_scip_parse.py`.
 - **Operator provisioning contract (the handoff for "not run: dependencies not provisioned").** Convention, no manifest change:
   the operator places, per unit, `<CCG_PROVISION_DIR>/<system>/<unitId>/` (`CCG_PROVISION_DIR` default `~/.local/share/ccg/provision`,
   outside every system's repositories, never written by `cpg/`, and deliberately separate from `~/.config/ccg`, which holds the HMAC keys and ACL credentials and is off-limits to delegates and the sandbox; the README section says so too), holding `node_modules/` (`scip-typescript`) or the venv directory
