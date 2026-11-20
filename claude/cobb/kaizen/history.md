@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-11-20 — coordination-graph S5: `coordination-graph` skill, plan template, catalog row
+
+- **What:** new `skills/coordination-graph/SKILL.md` (+ `references/backlog-format.md`, `references/ids-and-units.md`): wrapper defined once, built-vs-planned table (built: `lint`/`migrate`/`facts`/`history-coverage`; store, views, `propose`, `kb-*`, hook marked planned), the five never-bend rules, item grammar, delivery-heading convention checked against `history.py`, milestone `started`, fact tokens, unit lookup with exact-key precedence, registry-unavailable mode. `agent-maintenance` §1 `plan.md` template switched from summary table to the `###` field block (parking-lot ideas as items). Catalog row in `skills/README.md`.
+- **Why:** `claude/docs/plans/coordination-graph.md` §4 S5, `coordination-graph3.md` §5 S5.
+- **Plan items:** — (not done here, left for S9: the history-heading delivery duty in `agent-maintenance`, teco/tico prompts, root `AGENTS.md`; the Claude Code `~/.claude/skills/` symlink is a machine step).
+
 ## 2026-11-20 — coordination-graph S1c: cobb guard allowlist widened
 
 - **What:** `claude/cobb/hooks/guard-cobb-topic-writes.sh` allowlist gains (each doubled bare + `*/`-prefixed): `skills/coordination-graph/*`, `skills/agent-kb-retrieval/*`, `claude/scripts/audit-team.sh`, `claude/cobb/scripts/*`, `coordination-graph/kb-files.txt`; header comment documents why. `claude/scripts/*` as a whole (incl. `guard-doc-writes.sh`) deliberately stays out. Verified by piping synthetic Write PreToolUse JSON (relative and absolute paths): all five new paths -> `allow`; `claude/scripts/guard-doc-writes.sh` and `docs/BACKLOG.md` -> still `ask`.

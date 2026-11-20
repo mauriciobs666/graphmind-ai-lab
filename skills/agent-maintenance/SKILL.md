@@ -84,22 +84,24 @@ update. Keep entries concise.
 
 ## Active
 
-| ID | Added | Priority | Status | Summary |
-|------|------------|----------|--------|---------|
-| K-001 | YYYY-MM-DD | high/med/low | 🔵 | … |
+### {ID} — {title}
 
-### K-001 — {title}
-- **Status:** 🔵 proposed
-- **Priority:** medium
+- **Status:** 🔵 proposed — filed YYYY-MM-DD
+- **Priority:** high|medium|low
+- **Depends on:** {refs | none}
+- **Touches:** {file:/graph:/fact: entries | none}
 - **Rationale:** why this matters
 - **Proposed change:** what to do concretely
 - **Notes:** open questions, links
 
 ## Parking lot / ideas
-- {half-formed ideas not yet prioritized}
+
+### {ID} — {half-formed idea}
+
+- **Status:** 🔵 proposed — parked YYYY-MM-DD
 ```
 
-In a project with the work-items registry, cite a kaizen entry by its full scheme ID (`skills/work-items/SKILL.md`); allocate a new one with `wi new K`, never by hand-numbering the next `K-00N`.
+In a project with the work-items registry, cite a kaizen entry by its full scheme ID (`skills/work-items/SKILL.md`); allocate a new one with `wi new K`, never by hand-numbering the next `K-00N`. Items are `###` headings with a field block (no summary table, parking-lot ideas included); `Priority`/`Depends on`/`Touches` are recorded only when established — an absent field means "not recorded", `none` means "recorded empty". Grammar and conventions: `skills/coordination-graph/SKILL.md`.
 
 ### `history.md` template
 
