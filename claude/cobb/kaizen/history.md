@@ -2,6 +2,21 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-11-20 — coordination-graph S2 gate fixes (`claude/docs/reviews/coordination-graph-s2.md`)
+- **What:** M1: ingested the 3 never-synced sections of keyed files by the §5 new-claim procedure (`produced_by=cobb`, title = heading, text = section body): ops-quirks "ingest_document auto-supersedes…" `493e42d4`, qa-testing-techniques "Parse-checking Mermaid…" `1f92add0`, test-design-techniques "hand-built rejected alternative…" `8a1de3df`; each observed `ready`, text byte-equal to the section (graph text vs file; `get_document` on `1f92add0` checked by eye), chunks embedded, manifest entries added with `verified: true`; `check_content_loss.py --live` 0 findings on the three files' new claims. No deletion. K-058 rewritten (5 claim-less sections, drifted list, `falkordb-quirks.md` waits for its markers, bullet-marker convention; delivery narrative trimmed). m2: checker docstring corrected (both marker shapes are stored). m3: `drop_split_marker` limited to a section's first non-blank line, selftest added (26/26). m4: `kb-files.txt` records why `python-web-quirks.md` is excluded. Found, not in the review: qa-testing-techniques claim `781c055d` is NOT_FOUND against its section (drift), added to K-058.
+- **Why:** analyst S2 gate, approve with suggestions.
+- **Plan items:** K-058.
+
+## 2026-11-20 — coordination-graph S5 gate fixes (`claude/docs/reviews/coordination-graph-s5.md`)
+- **What:** Judged F1-F8 against the code (`identity._feature_need`, `ledger.status_token`) and fixed in `skills/coordination-graph/` (SKILL.md, `ids-and-units.md`, `backlog-format.md`) and `skills/agent-maintenance/SKILL.md`: feature `Needs` met needs at least one unit (F1); status aliases apply in every ledger (F2); `migrate --apply` row carries the S4 guard rails (F3); planner behaviour and the "ledger edit done" rule marked as dependent on unbuilt S7b/S8 (F4); `query` relabelled S3 (F5); template legend `✅ delivered`, step 2 "active items", `wi new K --home <agent>` (F6); examples marked illustrative and the orphan "Or drop the dependent's ref." removed (F7). F8's duplication left as is (copies agree; a pointer-only SKILL.md is a larger rewrite). Description 743 chars, unchanged.
+- **Why:** analyst S5 gate, approve with suggestions.
+- **Plan items:** none.
+
+## 2026-11-20 — coordination-graph S2: KB prerequisite (narrowed K-058)
+- **What:** Recovered heading→documentIds for the 5 unkeyed KB files into `claude/cobb/scripts/kb-claim-manifest.json` (`_s2_heading_mapping_2026_11_20`, read-only evidence). Reconciled the 5 permanently-failed ids (gone from `ws:agent-team`; each claim re-ingested earlier, ready, byte-equal to its section) by repointing the manifest entries and clearing the stale failure notes. Wrote `coordination-graph/kb-files.txt` (13 files). Added `<!-- kb-split: bullets -->` under 6 headings (`falkordb-reference.md` ×3, `frontend-quirks.md` ×3) and taught `check_content_loss.py` `load_sections` to drop that directive line (selftest 25/25; both files 0 findings). Rewrote K-058 in place. No `ws:agent-team` write or delete: the teco stale claim and devops missing claim were already fixed; `falkordb-quirks.md` and the 4 never-synced sections were left for `kb-sync`.
+- **Why:** plan §4 S2; the mapping must exist before S6/S8a seed the mirror.
+- **Plan items:** K-058 narrowed.
+
 ## 2026-11-20 — coordination-graph S5: `coordination-graph` skill, plan template, catalog row
 
 - **What:** new `skills/coordination-graph/SKILL.md` (+ `references/backlog-format.md`, `references/ids-and-units.md`): wrapper defined once, built-vs-planned table (built: `lint`/`migrate`/`facts`/`history-coverage`; store, views, `propose`, `kb-*`, hook marked planned), the five never-bend rules, item grammar, delivery-heading convention checked against `history.py`, milestone `started`, fact tokens, unit lookup with exact-key precedence, registry-unavailable mode. `agent-maintenance` §1 `plan.md` template switched from summary table to the `###` field block (parking-lot ideas as items). Catalog row in `skills/README.md`.

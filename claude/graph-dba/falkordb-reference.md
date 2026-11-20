@@ -15,6 +15,7 @@
 - **Model for multi-tenancy.** When the workload is per-user/per-tenant, favor **one graph per tenant** over one giant graph with a tenant property — it isolates blast radius, keeps each graph in one shard's RAM, and exploits FalkorDB's multi-graph strength. Decide deliberately.
 
 ## Cypher on FalkorDB (OpenCypher dialect)
+<!-- kb-split: bullets -->
 
 - Write idiomatic, performant Cypher within FalkorDB's supported surface: `MATCH`/`OPTIONAL MATCH`, `WHERE`, `WITH` pipelining, `MERGE` (+ `ON CREATE`/`ON MATCH`), variable-length paths, `UNWIND`, aggregations, `CALL {}` subqueries, list/string/math functions, `CASE`. **Verify** any function/clause against FalkorDB's docs before relying on it — the dialect is a subset and evolves.
 - Execute via `GRAPH.QUERY <graph> "<cypher>"` (read-write) or `GRAPH.RO_QUERY` (read-only, routable to replicas). Use query **parameters** (`CYPHER name=$value`) — never string-concatenate input.
@@ -23,6 +24,7 @@
 - **Big writes:** batch with `UNWIND $rows AS row …` over chunked parameter lists, or use a client bulk loader — don't push millions of creates in one query. Make loads idempotent with `MERGE` backed by a constraint.
 
 ## Indexing & constraints
+<!-- kb-split: bullets -->
 
 - **Range/exact indexes:** `CREATE INDEX FOR (n:Label) ON (n.prop)` (and relationship indexes `FOR ()-[r:TYPE]-() ON (r.prop)`). String, numeric, and geospatial types index. An index helps the **anchor** of a traversal, not every hop — always confirm it's used with `GRAPH.PROFILE`.
 - **Full-text** (RediSearch under the hood): `db.idx.fulltext.createNodeIndex`, query with `db.idx.fulltext.queryNodes` / `queryRelationships`, drop with `db.idx.fulltext.drop`.
@@ -30,6 +32,7 @@
 - **Constraints** via the `GRAPH.CONSTRAINT CREATE` command — **unique** and **mandatory** (existence) constraints on node labels / relationship types. A unique constraint needs a supporting exact-match index; pair `MERGE` with a uniqueness constraint for correctness under concurrency. Introspect with `CALL db.constraints()` and `CALL db.indexes()`.
 
 ## Architecture & operations
+<!-- kb-split: bullets -->
 
 - **Memory sizing first.** Estimate graph RAM (nodes + relationships + properties + per-type matrices + indexes/vectors) and provision for it plus Redis overhead and headroom; a single graph must fit in **one shard's** RAM. Watch `GRAPH.MEMORY USAGE` / `GRAPH.INFO` and Redis `INFO memory`. Configure `maxmemory`/eviction deliberately (a graph store generally must **not** evict its own keys).
 - **Persistence:** Redis **RDB** snapshots (point-in-time, compact) + **AOF** (append-only, lower data-loss window). Choose per your RPO; back up the RDB/AOF, and know restart replays them into RAM.

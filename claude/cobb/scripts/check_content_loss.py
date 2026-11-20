@@ -21,8 +21,10 @@ contiguous substring of it (a paragraph-/subsection-boundary split, e.g.
 `guard-testing-techniques.md`'s heading 1 -> 4 claims) — internal line wraps, bold markers, code
 spans and all, character-for-character. The one exception is a bulleted heading split one claim
 per bullet (`falkordb-reference.md`, `frontend-quirks.md`, `ops-quirks.md`'s style): there, the
-claim text is the bullet's content with its leading `- `/`* `/`N. ` list marker stripped — the
-marker itself is legitimately consumed by the split, not lost content.
+claim text is the bullet with or without its leading `- `/`* `/`N. ` list marker (both shapes are
+stored: the 17 `falkordb-reference.md` bullet claims without, `frontend-quirks.md`'s with; the
+coordination-graph parser's convention is WITH the marker). The checker tries both, so a stripped
+marker is not lost content.
 
 So the check is: for each claim, **locate** its `text` as an exact substring of the source body
 (trying the bare text first, then the text prefixed by each list-marker shape) rather than
@@ -414,9 +416,27 @@ def check_partition(body: str, claims: list[Claim], fetch) -> Report:
 # --------------------------------------------------------------------------------------------
 
 
+_SPLIT_MARKER_LINE = re.compile(r"[ \t]*<!--\s*kb-split:\s*\w+\s*-->[ \t]*")
+
+
+def drop_split_marker(body: str) -> str:
+    """Drop a `<!-- kb-split: ... -->` directive that is the section's first non-blank line, the
+    same position `parse_kb` treats as a directive (coordination-graph plan 3.5); a marker
+    anywhere else (a code block documenting the syntax) is content and stays."""
+    lines = body.split("\n")
+    for i, line in enumerate(lines):
+        if line.strip():
+            if _SPLIT_MARKER_LINE.fullmatch(line):
+                del lines[i]
+            break
+    return "\n".join(lines)
+
+
 def load_sections(path: Path) -> dict[str, str]:
+    """Section bodies by heading, with the first-line kb-split directive dropped (it is a parse
+    directive for the mirror, not claim content, so it must not surface as an unclaimed gap)."""
     text = path.read_text(encoding="utf-8")
-    return dict(fsc.parse_sections(text))
+    return {h: drop_split_marker(b) for h, b in fsc.parse_sections(text)}
 
 
 def combined_body(sections: dict[str, str], headings: list[str] | None) -> str:

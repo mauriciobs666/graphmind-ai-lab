@@ -1,0 +1,18 @@
+# KB registry (coordination-graph plan 3.5): on-demand knowledge-base files mirrored one document per `##` heading
+# (or per bullet under `<!-- kb-split: bullets -->`) into ws:agent-team. cobb-maintained; one repo-relative path per line.
+# Excluded on purpose: claude/knowledge/python-web-quirks.md - unit-format copy (unit header + body per claim),
+# mirrored by claude/cobb/scripts/pwq_kb.py; parse_kb would never hash-match its sections.
+# Add a path here when a promotion creates a KB file; remove it when the file is retired.
+claude/analyst/review-techniques.md
+claude/architect/plan-authoring-techniques.md
+claude/data-scientist/lm-studio-model-notes.md
+claude/data-scientist/statistical-method-techniques.md
+claude/devops/ops-quirks.md
+claude/frontend-engineer/frontend-quirks.md
+claude/graph-dba/falkordb-quirks.md
+claude/graph-dba/falkordb-reference.md
+claude/qa-engineer/qa-testing-techniques.md
+claude/tdd-engineer/estimator-test-fixtures.md
+claude/tdd-engineer/guard-testing-techniques.md
+claude/tdd-engineer/test-design-techniques.md
+claude/teco/coordination-techniques.md

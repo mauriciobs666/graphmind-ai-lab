@@ -16,6 +16,7 @@
 ---
 
 ## TypeScript & build tooling
+<!-- kb-split: bullets -->
 
 - **`UseQueryResult`/`UseMutationResult` (TanStack Query v5) are discriminated unions, not plain
   object types.** `interface X extends UseQueryResult<T,E> { extra: … }` fails `tsc` with
@@ -60,6 +61,7 @@
   route instead.
 
 ## Testing — React Testing Library / Vitest
+<!-- kb-split: bullets -->
 
 - **A heading and a button/CTA inside it sharing identical `t()`-translated copy makes
   `screen.getByText`/`getByRole` ambiguous** (multiple-match failure) in RTL tests. Split heading
@@ -104,6 +106,7 @@
   `h-full` measured 177px against the wrapper's actual 787px.
 
 ## i18next
+<!-- kb-split: bullets -->
 
 - **`useTranslation()`/`t()` works in a Vitest render with no `<I18nextProvider>` wrapper**, as
   long as the module that calls `i18next.use(initReactI18next).init(...)` (the app singleton, e.g.

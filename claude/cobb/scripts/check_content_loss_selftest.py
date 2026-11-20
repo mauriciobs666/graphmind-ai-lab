@@ -845,6 +845,30 @@ def check_pwq_f4_pin_tie_does_not_apply_to_the_copy_as_source() -> None:
     assert rc == 0, f"--source-format copy has no pinned source file to tie:\n{out}"
 
 
+def check_split_marker_drop_is_first_nonblank_line_only() -> None:
+    """`load_sections` drops a `<!-- kb-split: bullets -->` line only where the mirror parser reads
+    it (the section's first non-blank line); a marker inside a code block stays content. Without
+    the drop, the marker surfaces as an UNACCOUNTED gap."""
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "kb.md"
+        src.write_text(
+            "## Marked\n<!-- kb-split: bullets -->\n\n- alpha claim\n- beta claim\n\n"
+            "## Documents the syntax\n\nUse this:\n\n```\n<!-- kb-split: bullets -->\n```\n",
+            encoding="utf-8",
+        )
+        secs = ccl.load_sections(src)
+    marked, doc = secs["Marked"], secs["Documents the syntax"]
+    assert "kb-split" not in marked, f"first-line marker not dropped: {marked!r}"
+    assert "<!-- kb-split: bullets -->" in doc, f"fenced marker wrongly dropped: {doc!r}"
+    claims = [ccl.Claim(document_id="a"), ccl.Claim(document_id="b")]
+    texts = {"a": "alpha claim", "b": "beta claim"}
+    fetch = lambda k: {"title": k, "text": texts[k]}  # noqa: E731
+    assert ccl.check_partition(marked, claims, fetch).clean, "marker-dropped section should be clean"
+    raw = "<!-- kb-split: bullets -->\n\n- alpha claim\n- beta claim"
+    rep = ccl.check_partition(raw, claims, fetch)
+    assert not rep.clean, "an undropped marker must surface as a gap (the drop is load-bearing)"
+
+
 CHECKS = [
     ("baseline (uncorrupted fixture) reports clean on all three heading shapes", check_baseline_clean),
     ("mutation (a): dropped bullet -> UNACCOUNTED gap", check_mutation_dropped_bullet),
@@ -871,6 +895,7 @@ CHECKS = [
     ("[pwq F4] live fetch counts only the current version (pwq mode); old mode unchanged", check_pwq_f4_live_fetch_counts_only_the_current_version),
     ("[pwq F4] a source differing from manifest.pin refuses; --allow-unpinned skips; bad pin refuses", check_pwq_f4_source_must_match_the_manifest_pin),
     ("[pwq F4] --source-format copy has no pin tie", check_pwq_f4_pin_tie_does_not_apply_to_the_copy_as_source),
+    ("[S2 m3] kb-split marker dropped only as a section's first non-blank line; fenced one stays", check_split_marker_drop_is_first_nonblank_line_only),
 ]
 
 
