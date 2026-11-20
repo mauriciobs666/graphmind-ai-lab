@@ -1,0 +1,13 @@
+Labels added: 100
+Nodes created: 100
+pause: OK
+write via GRAPH.QUERY exit=124 after 4.006368031s (124 = held by pause)
+read via GRAPH.RO_QUERY: 100
+read via GRAPH.QUERY (no write clause):  exit=0 4.003669380s
+SAVE while paused: OK
+count after pause window (write must not have landed yet): 100
+docker stop while paused took 1s
+1:M 20 Nov 2026 22:35:27.150 * DB saved on disk
+1:M 20 Nov 2026 22:35:27.380 * DB saved on disk
+1:M 20 Nov 2026 22:35:27.380 # Redis is now ready to exit, bye bye...
+0

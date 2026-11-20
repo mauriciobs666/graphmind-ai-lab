@@ -1,0 +1,51 @@
+## 0. 'live' on the image's own args, three graphs
+## 2. quiesce: CLIENT LIST shows only this shell; then pause writes for steps 3-5
+clients: 1
+pause: OK
+## 3. inventory before
+cpg_x nodes=40000 edges=20000 indexes=1
+ws:a nodes=40000 edges=20000 indexes=1
+ws:b nodes=40000 edges=20000 indexes=1
+## 4. save
+OK
+LASTSAVE advanced=yes
+## 5. stop, log kept
+2
+# Redis is now ready to exit, bye bye...
+## 5b. copy dump.rdb aside
+live d88472f6b406901b backup d88472f6b406901b
+## 6. start, edited script
+Module args:             THREAD_COUNT 8 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000
+## 6x. PLANT wrong data in the new instance
+Nodes deleted: 7000
+Labels added: 1
+BGSAVE (stands for the auto-save 'save 60 10000' persisting the wrong state): Background saving started
+dump.rdb now 5bbdf515259a886f vs backup d88472f6b406901b
+## 7. inventory after: must differ
+2c2
+< ws:a nodes=40000 edges=20000 indexes=1
+---
+> ws:a nodes=33000 edges=13000 indexes=1
+3a4
+> ws:planted nodes=1 edges=0 indexes=0
+diff exit=1 (want 1: differs -> rollback)
+## 8a. rollback: SHUTDOWN NOSAVE, restore copy, start on old args (edited script)
+container gone
+restored: live d88472f6b406901b
+args: MAX_QUEUED_QUERIES 25 OMP_THREAD_COUNT 8
+rollback A inventory diff exit=0 (want 0)
+## 8b. second wrong-data start; rollback via docker kill (redis-cli unusable) + PINNED pre-edit script 2769a99c
+Nodes deleted: 7000
+Labels added: 1
+BGSAVE (stands for the auto-save 'save 60 10000' persisting the wrong state): Background saving started
+dump.rdb now a92e8f5e04fdab8d vs backup d88472f6b406901b
+container gone (SIGKILL, no save)
+restored: live d88472f6b406901b
+2769a99c == HEAD (pre-edit) for start_falkordb.sh
+2
+0
+args: MAX_QUEUED_QUERIES 25 OMP_THREAD_COUNT 8
+rollback B inventory diff exit=0 (want 0)
+positive control exit=1 (want 1)
+## cleanup
+rehearsal containers removed

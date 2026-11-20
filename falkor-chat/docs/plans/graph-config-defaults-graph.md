@@ -142,7 +142,8 @@ Its latency also fails the 5 s RAG timeout long before memory matters. The bound
 (`create_document`, 4.5 MiB) and still stops runaways early.
 
 Worst-case query memory in flight is `THREAD_COUNT` × 64 MiB, which is 512 MiB at 8 threads. It
-must fit inside `maxmemory` together with the data, so it is sized with the persistence item (§8).
+must fit inside `maxmemory` together with the data, so it is sized with the persistence item
+(GAL-I02-K0004).
 The capacity report's 1.3 headroom factor multiplies per-workspace RAM inside `maxmemory`; it is not
 a separate reserve for this.
 
@@ -299,8 +300,7 @@ The env-file string replaces the image's own `FALKORDB_ARGS` (§2), so these mus
 
 ### 4.3 Redis `maxmemory` and AOF
 
-Out of scope: a separate item, with its own backup-first runbook and gate. Its ready-to-file body
-is in §8.
+Out of scope: filed as GAL-I02-K0004 (§8).
 
 ## 5. The change: config edits for `devops`, restart procedure for the runbook
 
@@ -353,19 +353,26 @@ with no override fails before `docker run`.
       FALKORDB_ARGS: "THREAD_COUNT ${FALKORDB_THREAD_COUNT:?run docker compose --env-file config/falkordb.env} ${FALKORDB_MODULE_ARGS:?run docker compose --env-file config/falkordb.env}"
 ```
 `docker compose --env-file config/falkordb.env config` renders the same string as the script.
-Without `--env-file`, compose refuses with the message above, so it can never start on the image's
-defaults by accident. Update the usage comment at the top of `compose.yaml` to the `--env-file`
-form.
+Without `--env-file`, every compose command refuses with the message above, `ps` and `down`
+included, so compose can never start on the image's defaults by accident. Part of this unit's
+done-condition: the `up` and `down` lines in `compose.yaml`'s header (`:3-4`) and in
+`falkor-chat/README.md`'s compose block (`:103-104`) carry `--env-file config/falkordb.env`.
 
 **Step 4 — restart procedure** (for the stakeholder-run runbook to quote; the load-time keys need
-one restart of `falkordb-dev`). Validated end to end on a throwaway (`graph-dba-r2/restart_rehearsal.txt`).
+one restart of `falkordb-dev`). Rehearsed end to end on a throwaway, both rollback branches with a
+planted wrong-data start (`graph-dba-r3/rollback_rehearsal.txt`).
 1. **Dry run, never on the live volume.** In a terminal (foreground, so the start log is on screen
    even though the container is `--rm`):
    `D=$(mktemp -d) && chmod a+rwx "$D" && FALKORDB_VOLUME="$D" FALKORDB_PORT=16399 FALKORDB_WEB_PORT=13099 FALKORDB_CONTAINER_NAME=falkordb-dryrun ./scripts/start_falkordb.sh`.
    In a second terminal, check that `redis-cli -p 16399 MODULE LIST` shows the args string and
    `redis-cli -p 16399 GRAPH.CONFIG GET '*'` shows each value. Then press Ctrl+C.
-2. **Quiesce.** Stop the falkor-chat servers (`:8000`, `:8100`, `:8200`) so graph contents cannot
-   move between the two inventories.
+2. **Quiesce every client**, or a stray write shows up as a false "differs" in step 7. Stop the
+   falkor-chat servers (`:8000`, `:8100`, `:8200`), any test suite or `load_test.sh` run, other
+   agents' sessions, and the `cypher-mcp` containers
+   (`docker ps --format '{{.Names}} {{.Image}}' | awk '$2 ~ /^cypher-mcp:/ {print $1}' | xargs -r docker stop`).
+   `redis-cli CLIENT LIST` must then print one line, its own. Then freeze writes until the stop:
+   `redis-cli CLIENT PAUSE 1800000 WRITE`. It holds every `GRAPH.QUERY`, reads included, while the
+   `GRAPH.RO_QUERY` inventory, `SAVE` and the shutdown save still run (`graph-dba-r3/pause_probe.txt`).
 3. **Inventory before** (read-only):
    ```bash
    inv() { redis-cli GRAPH.LIST | sort | while read -r g; do
@@ -383,7 +390,9 @@ one restart of `falkordb-dev`). Validated end to end on a throwaway (`graph-dba-
    out (483 MB used against 54 MB RSS) and Redis writes its RDB again on SIGTERM. A grace that
    expires sends SIGKILL mid-save. Use at least 10× the `SAVE` time from step 4. `stop.log` must end
    with `DB saved on disk` and `Redis is now ready to exit`. If it does not, do not start the new
-   container. The step-4 RDB is the last good state.
+   container. Then copy the last good state aside, with the pinned image so nothing is pulled:
+   `B=$(mktemp -d ~/k098-backup.XXXX) && docker run --rm -v falkordb-data:/d -v "$B":/b --entrypoint cp falkordb/falkordb:v4.18.11 -a /d/dump.rdb /b/`.
+   Keep `$B` until step 7 passes.
 6. **Start:** `./scripts/start_falkordb.sh -d`, then wait for `redis-cli PING` to answer `PONG`.
 7. **Inventory after:** wait until every graph answers 0 to `CALL db.indexes() YIELD status WHERE
    status <> 'OPERATIONAL' RETURN count(status)`, then run `inv >
@@ -391,11 +400,23 @@ one restart of `falkordb-dev`). Validated end to end on a throwaway (`graph-dba-
    nothing and exit 0. Positive control: the same `diff` against `inventory-before.txt` plus one
    appended fake line (`k098_control nodes=1 edges=0 indexes=0`) must exit 1. Then check
    `GRAPH.CONFIG GET '*'` against Step 1's values.
-8. **Rollback**, if step 6 fails or step 7 differs:
-   `docker stop -t 300 falkordb-dev 2>/dev/null; FALKORDB_ARGS="MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000" ./scripts/start_falkordb.sh -d`.
-   These are the image's own args, with the live volume. If the edited script itself is at fault,
-   run the pre-edit script instead: `git show HEAD:falkor-chat/scripts/start_falkordb.sh >
-   /tmp/start_falkordb.prev.sh && bash /tmp/start_falkordb.prev.sh -d`.
+8. **Rollback**, if step 6 fails or step 7 differs. Never `docker stop` here: a SIGTERM writes
+   whatever the new instance holds over `dump.rdb`, and an auto-save may already have done so
+   (`analyst/pass2/rollback_overwrite_probe.txt`). So exit without saving, then restore the copy:
+   ```bash
+   redis-cli SHUTDOWN NOSAVE || docker kill falkordb-dev    # SIGKILL if it does not answer
+   docker run --rm -v falkordb-data:/d -v "$B":/b --entrypoint cp falkordb/falkordb:v4.18.11 -a /b/dump.rdb /d/dump.rdb
+   FALKORDB_ARGS="MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000" ./scripts/start_falkordb.sh -d
+   ```
+   These are the image's own args. If the edited script itself is at fault, start with the pre-edit
+   script, pinned at `2769a99c`, the last commit before the edit (before step 1, check that
+   `git log --format=%h -- falkor-chat/scripts/start_falkordb.sh` lists it right after the edit's
+   commit; `HEAD` is the edited script once that is committed):
+   `git show 2769a99c:falkor-chat/scripts/start_falkordb.sh > /tmp/start_falkordb.prev.sh && bash /tmp/start_falkordb.prev.sh -d`.
+   Then re-run step 7's inventory and `diff`, which must exit 0.
+9. **Resume.** Restart what step 2 stopped, the way it was started, then run
+   `./scripts/verify_workflows.sh` and `./scripts/verify_catalog.sh`. The step-2 pause ends with
+   the old process.
 
 **Going live early with the two runtime keys** (`GRAPH.CONFIG SET QUERY_MEM_CAPACITY 67108864`,
 `MAX_QUEUED_QUERIES 320`) needs no restart. The cap would then also cover the `cpg_*`, `ws:eval`
@@ -434,11 +455,11 @@ covered. The query error names the cause, and the cap can be raised live.
 - **DESIGN §13, the open-question sentence.** "…and a pre-production review of the live
   `GRAPH.CONFIG` defaults (`THREAD_COUNT 4`, …, `ASYNC_DELETE 1`)" moves to the resolved list as one
   line ("live `GRAPH.CONFIG` values decided, §10"). The stale 4/4 snapshot goes. DESIGN §10's
-  persistence bullet moves with the persistence item (§8).
+  persistence bullet moves with GAL-I02-K0004.
 
 **Follow-ups outside K-098** (candidates for the backlog owner):
-1. The `hybrid_search` query unit (§3.1). It is a prerequisite of K-093's writer, and urgent on its
-   own once any thread passes about 10k messages.
+1. The `hybrid_search` query unit (§3.1). K-093's body records that it blocks K-093's writer; it is
+   urgent on its own once any thread passes about 10k messages.
 2. `repository.read_thread` has no `LIMIT`, so `RESULTSET_SIZE` silently truncates threads longer
    than 10,000 messages.
 3. Under a burst, a queued read can run long after its client's 10 s socket timeout has abandoned
@@ -466,6 +487,8 @@ note are relative to it.
   - the restart rehearsal: `rehearse_restart.sh` → `restart_rehearsal.txt`, `rh_stop.log`,
     `rh_inventory-*.txt`;
   - `shared_untouched_check_r2.txt`.
+- **`graph-dba-r3/`**: the rollback rehearsal (`rehearse_rollback.sh` → `rollback_rehearsal.txt`,
+  `r3_inventory-*.txt`), the write-pause and `maxmemory` probes, and `shared_untouched_check_r3.txt`.
 - **`analyst/`**: the reviewer's own probes, cited where this note relies on them.
 
 Every container this work started (`k098-gdba-*`) has been removed. Against `falkordb-dev` it ran
@@ -473,51 +496,4 @@ only reads.
 
 ## 8. Hand-off: persistence item
 
-Ready-to-file body. The stakeholder split this out of K-098 on 2026-11-20. Facts are cited by
-evidence file under `falkor-chat/docs/reviews/graph-config-defaults-evidence/`.
-
-> **Why it exists.** DESIGN §10 states "RDB snapshots + AOF" and "set `maxmemory` deliberately and
-> do not evict the graph's own keys". The live `falkordb-dev` runs neither: `appendonly no` (RDB
-> `save 3600 1 300 100 60 10000` only), and `maxmemory 0`. Both changes can lose every graph on the
-> instance if they are done in the wrong order.
-- **Owner:** `devops` (runbook, applying it), with `graph-dba` (values, gate conditions). The
-  stakeholder runs the runbook.
-- **Scope:** enable AOF (`appendfsync everysec`, RPO about 1 s) and set `maxmemory` with
-  `noeviction` on `falkordb-dev`, then in `start_falkordb.sh`/`compose.yaml` via `REDIS_ARGS`; set
-  host `vm.overcommit_memory = 1`. Rewrite DESIGN §10's persistence bullet to what ships, or to
-  "AOF off" if it is declined.
-- **Facts the runbook must respect (verified on this image, Redis 8.6.3):**
-  1. **A first start with `--appendonly yes` over an RDB-only data dir comes up empty.** Redis
-     writes a fresh, empty AOF base and ignores `dump.rdb` (`aof_enable_probe.txt`). **One clean
-     stop then writes the empty dataset over `dump.rdb`, so a restart without the flag is empty
-     too.** Nothing can be recovered (`analyst/aof_trap_probe.txt`).
-  2. **The safe order is:** `CONFIG SET appendonly yes` on the running instance, which rewrites the
-     AOF from memory; wait until the rewrite has *run*; then add the flag and restart. Verified:
-     1,000 of 1,000 nodes survived (`aof_safe_path_probe.txt`).
-  3. **"Rewrite done" flags can read done before any rewrite ran.** Behind an in-progress BGSAVE,
-     Redis only schedules the rewrite: `aof_rewrite_scheduled:1`, `aof_rewrites:0`, while
-     `aof_rewrite_in_progress:0` and `aof_last_bgrewrite_status:ok` already look finished
-     (`analyst/aof_scheduled_rewrite_probe.txt`; re-verified, flags flipped about 3 s later,
-     `graph-dba-r2/aof_scheduled_rewrite_reverify.txt`). `falkordb-dev` saves often (`save … 60 10000`).
-  4. **Above `maxmemory` with `noeviction`, every `GRAPH.QUERY` is refused, reads included**
-     (`OOM command not allowed`). Only `GRAPH.RO_QUERY` and `GRAPH.DELETE` still run
-     (`analyst/maxmemory_denyoom_probe.txt`). Every falkor-chat write, and any read sent through
-     `query()`, fails at the limit.
-  5. `falkordb-dev` has no container memory limit (`HostConfig.Memory=0`). It shares a 5.8 GB VM
-     with the `ccg-falkordb` containers, so "a share of the container's limit" is undefined until a
-     limit is set. Size `maxmemory` against the VM's free RAM after the other residents.
-  6. Every start logs `WARNING Memory overcommit must be enabled!`. Without it, the BGSAVE or
-     AOF-rewrite fork can fail under memory pressure.
-- **Done-condition:**
-  - **Backup first:** copy the volume with the instance stopped or just after `SAVE`, e.g.
-    `docker run --rm -v falkordb-data:/d -v <dir>:/b alpine cp -a /d /b`, and keep it until the
-    restart has passed its inventory check.
-  - **Gate the restart on all of:** `aof_rewrite_scheduled:0`, `aof_rewrite_in_progress:0`,
-    `aof_rewrites` ≥ 1 (or `aof_last_rewrite_time_sec` ≠ -1), `aof_last_bgrewrite_status:ok`, and
-    `appendonlydir/appendonly.aof.manifest` present. The gate's positive control is fact 3's state:
-    `BGSAVE`, then `CONFIG SET appendonly yes`, on a throwaway. The gate must stay red there.
-  - **Inventory:** use §5's per-graph inventory before and after the restart, never a one-workspace
-    check.
-  - DESIGN §10's persistence bullet is updated to the shipped state.
-- **Risks/RAM:** an AOF rewrite forks and transiently needs up to the dataset's size again. The
-  `maxmemory` value has to leave room for it.
+Filed as `falkor-chat/docs/BACKLOG.md` `### GAL-I02-K0004`.

@@ -74,6 +74,35 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   graph's note (with a monkeypatched `_fail_budget` probe note, as the K-096 tests do); a test that
   a drive fault still propagates; a storefront turn test asserting the logged `error`.
 
+### GAL-I02-K0004 — Turn on AOF and a deliberate `maxmemory` for FalkorDB without losing the data (🔵 proposed — split out of K-098, `docs/plans/graph-config-defaults-graph.md` §8)
+
+> DESIGN §10 states "RDB snapshots + AOF" and a deliberate `maxmemory` that never evicts graph
+> keys. `falkordb-dev` runs neither: `appendonly no` (RDB `save 3600 1 300 100 60 10000` only) and
+> `maxmemory 0`. Done in the wrong order, either change can lose every graph on the instance.
+- **Owner:** `devops` (runbook, applying it) with `graph-dba` (values, gate conditions); the
+  stakeholder runs the runbook.
+- **Scope:** AOF on (`appendfsync everysec`, RPO about 1 s) and `maxmemory` with `noeviction` on
+  `falkordb-dev`, then made durable in `start_falkordb.sh`/`compose.yaml` via `REDIS_ARGS`; host
+  `vm.overcommit_memory = 1` (every start logs `Memory overcommit must be enabled!`, and the
+  BGSAVE/AOF-rewrite fork can fail without it). `maxmemory` must fit the data, K-098's in-flight
+  query memory (`THREAD_COUNT` × `QUERY_MEM_CAPACITY`, 512 MiB at 8 threads) and an AOF rewrite's
+  fork, which transiently needs up to the dataset's size again. `falkordb-dev` has no container
+  memory limit and shares a 5.8 GB VM with the `ccg-falkordb` containers, so size it against the
+  VM's free RAM after them.
+- **Constraints, verified on this image:** the three Redis 8.6.3 persistence entries in
+  `claude/graph-dba/falkordb-quirks.md` (Ops): enabling AOF by start flag over an RDB-only dir
+  comes up empty and then overwrites `dump.rdb`, so the safe order is `CONFIG SET appendonly yes`
+  live and restart only after the rewrite has run, and the "rewrite done" flags lie behind a
+  BGSAVE; above `maxmemory`, `GRAPH.QUERY` is refused even for reads; a SIGTERM stop persists
+  whatever is in memory. Evidence: `docs/reviews/graph-config-defaults-evidence/`.
+- **Done when:** the volume is copied aside before any restart and kept until the inventory check
+  passes; the restart is gated on `aof_rewrite_scheduled:0`, `aof_rewrite_in_progress:0`,
+  `aof_rewrites` ≥ 1, `aof_last_bgrewrite_status:ok` and `appendonlydir/appendonly.aof.manifest`
+  present, with the gate shown red on a throwaway in the BGSAVE-then-`CONFIG SET` state; the
+  restart follows the save/copy/inventory/rollback procedure of
+  `docs/plans/graph-config-defaults-graph.md` §5 Step 4, every graph's inventory diffing to 0; and
+  DESIGN §10's persistence bullet states what shipped (or "AOF off" if declined).
+
 ### K-082 — Storefront demo: optional long-conversation KV stress rerun (🔵 proposed — carried from K-066, closed 2026-10-22)
 
 > The demo runs on `ministral-3-3b` (`-c 8192 --gpu max`) plus the 0.6B embedder, and
@@ -890,7 +919,10 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > dormant.
 - **The decision:** build the writer (entity extraction over messages: per-message LLM calls and
   entity fan-out RAM, so a `data-scientist` and `graph-dba` call first), or drop the expansion and
-  the edge from the schema and the response. Either is a change to a live-spec contract.
+  the edge from the schema and the response. Either is a change to a live-spec contract. Building
+  it is blocked by K-098's bounded-`hybrid_search` query unit
+  (`docs/plans/graph-config-defaults-graph.md` §3.1): under the 64 MiB `QUERY_MEM_CAPACITY` the
+  current expansion fails at k × fan-in ≈ 950k.
 - **Owner:** `architect` for the decision; then `tdd-engineer`.
 - **Done-condition:** `relatedContext` is either populated from real `MENTIONS` edges or removed,
   with DESIGN §5.1/§8 and QUERIES §6 updated at close.

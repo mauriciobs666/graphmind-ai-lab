@@ -1,0 +1,10 @@
+Labels added: 200000
+used_memory: used_memory:24189808
+OK
+OK
+GRAPH.QUERY read : OOM command not allowed when used memory > 'maxmemory'.
+GRAPH.QUERY write: OOM command not allowed when used memory > 'maxmemory'.
+GRAPH.RO_QUERY   : 200000
+GRAPH.EXPLAIN    : OOM command not allowed when used memory > 'maxmemory'.
+GRAPH.DELETE     : OK
+0
