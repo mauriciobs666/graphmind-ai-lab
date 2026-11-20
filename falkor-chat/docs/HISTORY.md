@@ -5,6 +5,79 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-20 — K-097 closed: a `ctxVersion` compare-and-swap on `POST /workflow-runs/{runId}/input` and the timer sweep
+
+- **Cause.** `resume_run_with_ctx` (QUERIES §12.13) compared only `status`. Once the winning
+  submitter's drive re-parked the run, `waiting` matched again, so a slower `/input` submitter, or a
+  sweep tick whose merge was built on the pre-resume `ctx`, overwrote the winner's input and got
+  200. That is an ABA, worse than the R-1 lost update DESIGN §6.2 had accepted. It was reproduced
+  against the shipped code (`docs/reviews/workflow-input-cas-evidence/aba_harness.py`):
+  - case A2: the trail fired `approval → provision` on `decision == 'approve'`, but the run's `ctx`
+    said `reject`;
+  - case A3: an accepted key was erased.
+
+  Design note: `docs/plans/workflow-input-cas-graph.md`. Plan review:
+  `docs/reviews/workflow-input-cas.md` (Pass 1 and Pass 2, approve with suggestions).
+- **What (commit `7cff155b`).** `WorkflowRun` gains an integer `ctxVersion`, read everywhere as
+  `coalesce(r.ctxVersion, 0)`. Runs are created without it, and existing runs need no backfill.
+  - `get_run` projects it in the same query as `ctx`.
+  - `resume_run_with_ctx(..., ctx_version)` (keyword-only, required) compares it and bumps it, in
+    the one CAS that also writes the merged ctx.
+  - `resume_run` (chat/trigger) and `fail_run` bump it. The start queries, `suspend_run`,
+    `complete_run` and `record_step_and_advance` leave it unchanged.
+  - `executor.resume` raises `ValueError` when it gets a ctx but no version.
+  - `submit_workflow_input` passes the version from the same `get_run` whose `ctx` it merged
+    onto. `sweep_due_workflow_runs` passes the version from its step 5.1 read; its `atStepKey`
+    check is kept.
+  - A version miss behaves like a status miss: `None`, nothing written, then 409 on `/input` or
+    `raced` in the sweep.
+  - New `server/tests/test_workflow_input_cas.py` covers both ABA shapes, a chat resume in the gap,
+    the sweep's read-to-CAS gap, a no-race sweep, where the version moves, and the executor guard.
+    Two of its tests inject a concurrent re-park between the read and the CAS, one for `/input`
+    and one for the sweep. They are the tests that kill the mutant that re-reads the version
+    just before the CAS.
+  - `scripts/test_queries.sh` gains the versioned §12.13 cases (including the ABA replay) and bump
+    assertions for §12.4 and §12.5.
+- **Public contract addition.** `GET /workflow-runs/{runId}` returns a new `ctxVersion` key. The
+  route passes §12.7 straight through, and SERVER.md defers the route's shape to §12.7, so this
+  entry is the only place the addition is named. No request shape changed. A client-supplied
+  `If-Match`/expected version on `/input` is out of scope.
+- **Verified.** At the commit: server suite `3710 passed`, `test_queries.sh` `486/486`. After the
+  change, the ABA harness's A2 and A3 cases return 409 with the winner's `ctx` intact (run on a
+  throwaway key, deleted afterwards). Gate and close check: `docs/reviews/workflow-input-cas-impl.md`.
+  - The gate approved with suggestions; F1 (the sweep's version-binding test) and F3/N1 (docstrings)
+    are closed in the commit.
+  - § Close check approved with suggestions. Every §12 Cypher block matches `repository.py`, and
+    every close-list item is done. C1 notes the bump set is stated in several spec places, all
+    consistent; deduplicating it is left to the next ordinary revision.
+- **Also landed (commit `8d629cad`, F2).** `scripts/test_queries.sh`'s assertion helpers and 22
+  further sites now read from here-strings, not `echo | grep -q` under `pipefail`. The old form
+  could SIGPIPE: a false red in `assert_contains`, or a false pass in `assert_not_contains`. Gate:
+  the same review's `## U11 gate`, approved.
+- **Spec (commit `89306a90`).** `docs/DESIGN.md` §6.2:
+  - the property list and a `ctxVersion` run-model bullet;
+  - "Who writes the run `ctx`" rewritten;
+  - the R-1 blockquote replaced by "A stale read is refused, not merged";
+  - "Timer release…" and the design-rule blockquote.
+
+  `docs/QUERIES.md` §12:
+  - the model block and the status-move contract;
+  - §12.4, §12.5 `fail_run` and §12.7 (one term each, with notes);
+  - §12.13 (Cypher, zero-row contract, PROFILE, indexes/RAM).
+
+  `docs/SERVER.md` is unchanged.
+- **`REVIEW.md`.** `falkor-chat/REVIEW.md` `## Always check` gains two lines:
+  - a change to an assertion helper in `scripts/test_queries.sh` re-runs
+    `docs/reviews/test-queries-sigpipe-evidence/probe.sh` and reports `TOTAL wrong verdicts`
+    (0 required) together with one planted helper mutant that makes it non-zero;
+  - a value a compare-and-set checks is pinned by a test that injects a concurrent writer between
+    the read it came from and the CAS, ahead of any later read the code could substitute.
+- **Operator note: restart every server process together.** The servers are the `:8200`
+  agent-team server, the `start_demo.sh` storefront uvicorn and any `start_server.sh` uvicorn.
+  While old and new code share an instance, behaviour falls back to the old status-only CAS in
+  both directions: an old-code winner does not bump, and an old-code submitter does not compare.
+  That is never worse than before, and nothing persists past the restart.
+
 ## 2026-11-20 — K-096 closed: a step-budget failure reports its reason and the graph's ctx on both REST routes
 
 - **Cause.** `executor._fail_budget` stamps the run `failed` with a `step budget exceeded` note and
