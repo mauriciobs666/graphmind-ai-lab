@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-11-20 — coordination-graph S1c: cobb guard allowlist widened
+
+- **What:** `claude/cobb/hooks/guard-cobb-topic-writes.sh` allowlist gains (each doubled bare + `*/`-prefixed): `skills/coordination-graph/*`, `skills/agent-kb-retrieval/*`, `claude/scripts/audit-team.sh`, `claude/cobb/scripts/*`, `coordination-graph/kb-files.txt`; header comment documents why. `claude/scripts/*` as a whole (incl. `guard-doc-writes.sh`) deliberately stays out. Verified by piping synthetic Write PreToolUse JSON (relative and absolute paths): all five new paths -> `allow`; `claude/scripts/guard-doc-writes.sh` and `docs/BACKLOG.md` -> still `ask`.
+- **Why:** `claude/docs/plans/coordination-graph.md` §4 S1c / review M7: cobb authors these artifacts and each write otherwise escalated.
+- **Plan items:** —
+
 
 ## 2026-11-10 — python-web-quirks-kb S15b1/S15b2: discovery pointer, grants, audit check 12
 
