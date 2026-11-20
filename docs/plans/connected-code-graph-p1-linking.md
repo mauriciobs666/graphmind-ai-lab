@@ -609,10 +609,13 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
 - **53c (`tdd-engineer`, serial after 53b; it regenerates the same pinned SHAs and family counts):** the AC-6 example-config floor at P1
   (2: AC6-EX-1, AC6-EX-4) counts instances whose P1 form carries the `example-config` reason, not manifest rows gated P1. EX-4 does not
   today: `fx-svc/clients/peer.py` reads `os.environ["FX_PEER_BASE"]`, and `bind.py` reads only `environ.get`/`getenv` (`_ENV_READS`), so
-  its link is `possible`/`partial-key`. Edit `peer.py` to `os.environ.get("FX_PEER_BASE", "")`, drop EX-4's `p1Form` from the manifest
-  (its `reason: example-config` is then the P1 form) and keep the Compose-example binding as is. Done: the pin's Link tier asserts EX-4
-  `possible`/`example-config` through the example Compose chain; if the binding does not take, the floor is 1 and the question returns
-  to the stakeholder (accept 1, or restore AC6-EX-2 at P1 with JS environment records).
+  its link is `possible`/`partial-key`. Edit `peer.py` to `os.environ.get("FX_PEER_BASE", "")` **and** `deploy/compose.example.yaml`'s `FX_PEER_BASE` to `http://api:8000`:
+  `example-config` is the reason of a link whose only binding chain runs through a file with `role: example` (the chain is weakened,
+  `bind.py` `weaken`; requirements decision S21: example configs are *possible callers*), so the example must point at something the
+  binder resolves (service `api` is declared in the primary `compose.yaml`, unit `svc`, the row's true target); the placeholder host
+  `peer.example.internal` resolves to nothing and yields an unbound `partial-key`, a different AC-6 shape. Drop EX-4's `p1Form` from
+  the manifest (its `reason: example-config` is the P1 form) and adjust its `item` text. Done: the pin's Link tier asserts EX-4
+  `possible`/`example-config` through the example Compose chain, and no test pins the old host string (none found by grep).
 
 ## P1-17 · linker — `tdd-engineer`
 
