@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1)
 
-*2026-11-20: P1-51 and P1-52 added (post-P1-50 report D1, D2, AC-5 wrapper items); P1-49's typed-verb, wrapper-leaf and Done-when (2) text revised in place.*
+*2026-11-20: P1-51, P1-52 and P1-53 added (post-P1-50 report D1, D2, AC-5 wrapper items; D3 RCA R1-R6); P1-49's typed-verb, wrapper-leaf and Done-when (2) text revised in place.*
 
 Part of `docs/plans/connected-code-graph-p1.md` (decisions D1–D11, obligation walk §4, step index §7). Contracts:
 packs `docs/plans/connected-code-graph-rule-pack-spec.md`, graph `-graph.md` + `-p0-graph.md` (model v1, DDL,
@@ -557,9 +557,10 @@ rule `match: {lifted: {lifting: ts-call-tool}}`, `extract: {tool: {lifted: url}}
 "{tool}"}}]`. Observed in the fixture build: the SDK's `c.callTool({...})` calls (`client.ts` lines 19, 24, 29) are `unresolved`
 `name-match`, the wrapper call in `Admin.tsx:4` is `resolved` to the wrapper (so not seeded, and the wrapper is lifted through
 `p0` to `a0.name`), and `client.ts` imports `@modelcontextprotocol/sdk/client/index.js`. `TOOL_LIST_ORDERS` crosses files by the
-existing TS constant resolution (as `API_PREFIX`). The `urlBindings` source (`new StreamableHTTPClientTransport(new URL(<lit>))`,
-for LNK-02/12's server pick) is attempted in the same unit; if format v1.5 cannot express it, it is reported and the binding half
-waits for the binding RCA's fix.
+existing TS constant resolution (as `API_PREFIX`). The pack also declares a `urlBindings` source (`{callsite: {callee: URL}, arg: a0,
+scope: file}`, the `new URL("http://localhost:8200/mcp")` of `connect`): without it LNK-12 stays unbound and links to both `reindex`
+providers (NC-5), which P1-53 rules out; if format v1.5 cannot express it the unit reports that and LNK-12 moves to P2 with
+LNK-18 (Q-CENSUS).
 - **Files:** the two pack files; `tests/test_pack_ts_mcp_client.py`; `SERVED` in `tests/test_packrt_generic.py` and the leaf-harness
   registration; `DEFAULT_PACKS` in `ccg/refresh.py` (8 to 9; grep the tests that pin the pack count and the store's `Pack` count).
   Same shape and size as P1-46 (one pack, one test file, registrations); no `lift.py`, `run.py` or schema edit.
@@ -567,8 +568,78 @@ waits for the binding RCA's fix.
   `reindex` (LNK-12, the wrapper lifted from `onReindex`); the first test probes that `a0.name` object-literal values resolve (the one
   unverified clause); negatives: an unrelated `callTool` in a file without the SDK import, `callTool` of a non-string name;
   **no regression:** the proving repository's pack facts are equal before and after (0 TS importers, observed by grep).
-- **If the stakeholder re-gates instead:** this section is deleted, the three rows move to P2 in the fixtures test plan and `-p1.md`,
-  and §6's P1 floors for the three shapes change (see the question in the hand-off); no P1 code changes.
+- **If the stakeholder re-gates instead (Q-TSMCP option B):** this section is deleted, the three rows move to P2 in the fixtures test
+  plan and `-p1.md`, and §6's P1 floors for the three shapes change; no P1 code changes.
+
+## P1-53 · fixture conformance to the P1 binding contract (defect D3) — 53a `qa-engineer`, 53b `tdd-engineer`
+
+Cause: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.md` (R1-R6) and the QA report section E. The RCA's finding stands, checked
+against P1-17 and `ccg/linker/bind.py`: **D3 is not a Binder defect.** The fixture rows were derived by reading, and several expect
+what the P1-17 contract (and AC-6) rule out; where the contract is the better design the rows change, where the fixture is not the
+shape the contract supports the fixture changes. 53a lands first (red), 53b makes it green; 53a also owns the manifest/test-plan text.
+
+**Rulings (premise, decision).**
+- **R1, LNK-45.** The row expects `confirmed`/`binding-confirmed`; P1-17 (7) and (9) make a prompt mention `possible`/`prompt-mention`
+  (`link.py:_causes`, pinned by `tests/test_linker_bind.py` `test_br_1...`), and AC-6 requires a prompt that names a tool never be
+  shown as confirmed. The row is wrong, the contract right. **Decision:** `possible`/`prompt-mention` with the `BOUND_BY` chain
+  (ord 0 `.mcp.json @mcpServers.fx-svc-exec`, then the `scripts/Dockerfile` command entry of R2); the chain is the P1 assertion. The
+  fixtures plan §7 moves LNK-45 from the `mcp_tool` confirmed to the possible cell.
+- **R2, LNK-21/22/45 chain.** P1-17 (6) and `bind.py:_launch_chains` bind a server through its `command` entry and the `Dockerfile` beside
+  the script (script hop lexical, not stored); no extractor emits a script's `exec python -m ...` and `targetArg` is `module-attr`
+  only; the fixture has its Dockerfile in `deploy/`, not beside `scripts/run-mcp.sh`. Shell launch facts stay P2 (the P1-17 ruling),
+  so the contract stands and the fixture conforms. **Decision:** add `fx-svc/scripts/Dockerfile` (the shape of the real
+  `cypher-mcp/Dockerfile` beside `docker-run.sh`) with `CMD ["uvicorn", "mcp.server:app", "--host", "127.0.0.1", "--port", "8200"]`
+  (module path unit-relative, resolves to `mcp/server.py`): it gives the chain for LNK-21/45, a `launchUnit` for `svc`, and the 8200
+  port fact of unit `svc` that LNK-12's URL binding needs. Rejected: moving LNK-21/45 to P2 (the supported launch chain would have no
+  fixture row at P1); a shell-`exec` extractor (scope growth against P1-17 (6)). `launch` rows (LNK-21, LNK-22) are not stored `Link`s
+  at P1: they are asserted as Binder outcomes over real extractor records (unit set and `BOUND_BY` entries), the precedent of LNK-15's
+  context check in P1T-09.
+- **R3, LNK-16.** The second :8000 listener is `fx-job/scripts/dev.sh` (`exec uvicorn ...`), a shell launch: unreachable by the same
+  contract. **Decision:** keep the row at P1 and give `fx-job` a Compose listener, `fx-job/deploy/compose.dev.yaml` (service `job-dev`,
+  `build.context: ..`, port `8000:8000`), so loopback :8000 is claimed by units `svc` and `job` and the link is `possible`/`port-shared`
+  to `job:job/trigger_server.py::status`; `dev.sh` stays as the narrative. It must not touch LNK-13/14/15/22 (service hosts
+  `api`/`job` and port 8300 are unchanged; the pin test asserts them). If the Compose extractor does not take the file, LNK-16 moves
+  to P2 (a census change, then Q-CENSUS again); `port-shared` stays covered synthetically by `test_linker_bind.py`.
+- **R4, LNK-19 and NC-5.** No path binds a shell consumer by URL (`export MCP_URL=...` is read by nothing; P1-46: "neither the pack
+  format nor the shell extractor changes"). **Decision:** the P1 form of LNK-19 is `confirmed`/`key-match` to **both** `reindex`
+  providers, unbound (the `Bindings` docstring's rule for an unbound site); NC-5 at P1 asserts LNK-12 (bound through P1-52's URL source
+  and R2's 8200 fact: one provider, `svc`) and LNK-20 (both), and LNK-19's one-provider half is P2 with a shell URL source (owner
+  `architect`, with the shell launch facts). Known cost, not fixed here: an unbound confirmed link to a second same-named tool is a false
+  `confirmed`; P1-36 reports the count of unbound `mcp_tool`/`http` links whose key has providers in more than one unit.
+- **R5, fx-svc Dockerfile module.** `packrt/launch.py:_launched_unit` matches `module.replace(".", "/") + ".py"` as a path suffix;
+  `fx_svc.api.app` is a `package-dir` name no path has. **Decision:** edit `fx-svc/deploy/Dockerfile` to `api.app:create_app` (unit-relative,
+  as the fixtures' imports are, plan §4 line 121); `package-dir` resolution is a P2 item (owner `architect`). Verified by the RCA's
+  mutation (a second `launchUnit` and port 8000, no link change).
+- **R6, the pin.** `cpg/tests/test_fixture_binding_offline.py` (offline, no Joern, no store): the config and shell bundles of
+  `fx-svc`/`fx-job` through `run_packs` + `Binder` + `link`, asserted from the manifest rows, never from Binder output: the
+  `launchUnit` set; `_launch_chains` for servers `fx-svc` and `fx-svc-exec`; LNK-45 `(status, reason)` and `BOUND_BY` ids; LNK-22 and
+  LNK-15's context; LNK-16's `port-shared`; LNK-19's provider count (2) and LNK-12's (1, once P1-52 lands). Authored red by `qa-engineer`
+  (53a) before any fixture edit. Mutants that must go red: delete `scripts/Dockerfile`; change a CMD module path; flip LNK-45 to
+  `confirmed`; drop `compose.dev.yaml`.
+- **Open items.** LNK-14's base is the config value `base_url` (`job.yaml`); no Binder input reads a config value, so at P1 it is
+  `possible`/`partial-key` (P1-49 rule 3; the P1T-09 text already says so): not a fourth mismatch, only the stale manifest form.
+  **AC6-EX-2** needs the JS `import.meta.env.VITE_REPORTS_BASE` name, which no record carries (P1-17 decision (f), deferred to P2 by the
+  stakeholder 2026-11-11): its `example-config` reason is unreachable at P1. **LNK-18** has neither side at P1: no pack emits a
+  provider for `mcp.run(..., path="/mcp")` and no pack has a consumer for the TS transport constructor.
+
+**Rows.** Stay at P1, form unchanged: LNK-22 (Compose chain verified working), LNK-21 (after R2), LNK-16 (after R3). Stay at P1, form
+corrected in the manifests and `-p1.md`: LNK-45 (R1), LNK-19 (R4), LNK-13 and LNK-14 `possible`/`partial-key`, LNK-11 `possible`/
+`partial-key`, AC6-EX-4 `possible`/`example-config` (the QA report's owed `p1Form` for LNK-11/13/14/AC6-EX-4, and the fixtures plan rows
+LNK-11/13/14), LNK-12 `binding-confirmed` (needs P1-52 option A). **Move to P2, pending Q-CENSUS:** LNK-18 and AC6-EX-2, taking the P1
+census from 89 to 87 (84 if Q-TSMCP is B). `fx-svc` gains no Python symbol from the new files, but the materialized SHAs change:
+`test_f7_materialized_shas_equal_the_pinned_shas`, the pinned SHAs and the family counts are regenerated in 53b.
+- **53a (`qa-engineer`):** the pin test (red); the manifest `p1Form` and fixtures-plan/`-p1.md` row text for R1, R4 and the owed
+  LNK-11/13/14/AC6-EX-4 forms; no fixture tree edit. Done: red for the stated reasons, `tests/test_fixtures.py` consistency green.
+- **53b (`tdd-engineer`):** `fx-svc/scripts/Dockerfile`, `fx-svc/deploy/Dockerfile` (R5), `fx-job/deploy/compose.dev.yaml`, pinned SHAs;
+  the pin test green with every mutant red; the fixture build re-run offline gives `launchUnit` for `svc` and `job`, LNK-16 `port-shared`,
+  LNK-45 with its chain, NC-5 as ruled. Must not regress: LNK-13/14/15/22 and the AC6-EX-1/4 rows, `UNIT_FLOORS` (68, 67), the walk rows.
+
+**Q-CENSUS (stakeholder).** LNK-18 and AC6-EX-2 are unreachable at P1 under the stakeholder-approved contract (shell launch facts and
+JS env names are P2; no pack covers the TS transport). Options: (A, recommended) move both to P2: the P1 census becomes 87, the AC-6
+example-config floor at P1 holds 2 instances (EX-1, EX-4) instead of 3, the one-unit-8000-and-8200 behaviour stays covered by LNK-12
+and `test_linker_bind.py`; (B) keep them at P1 and build the missing pieces (a `mcp.run` provider rule, a TS transport consumer, JS
+`import.meta.env` records): P2-sized work added to P1 and the 2026-11-11 deferral reopened. Recommendation A: B buys two rows with
+a feature the stakeholder already deferred.
 
 ## P1-17 · linker — `tdd-engineer`
 

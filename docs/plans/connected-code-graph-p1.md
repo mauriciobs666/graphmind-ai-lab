@@ -361,6 +361,9 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-16 | Pack runtime, conformance over the stored slice bundles | `tdd-engineer` | lnk | 01 | `analyst` |
 | P1-46 | Shell `mcp-call` consumer pack (+ `negatives.yaml`), leaf-harness update | `tdd-engineer` | lnk | 16, 10 (10b) | `analyst` |
 | P1-49 | `python-http-client` consumer pack and the unknown-origin key rule (49a tests `qa-engineer`, 49b `tdd-engineer`) | `tdd-engineer` | lnk | 16, 17, 46, 05 (5d) | `analyst` |
+| P1-51 | Typed `requests`/`httpx` verb seeds (51a); wrapper's own site and `urlLike` on `py-request` (51b) | `tdd-engineer` | lnk | 49, 50 | `analyst` |
+| P1-52 | TypeScript MCP-client consumer pack (pending Q-TSMCP) | `tdd-engineer` | lnk | 16, 51 | `analyst` |
+| P1-53 | Fixture conformance to the P1 binding contract, defect D3 (53a pin test and row text `qa-engineer`, 53b fixture edits `tdd-engineer`; LNK-18/AC6-EX-2 pending Q-CENSUS) | `qa-engineer`, `tdd-engineer` | lnk | 17, 52 | `analyst` |
 | P1-17 | Linker: matchers, statuses, bindings (Compose and `.mcp.json` are linker code, D10), example configs, prompt mentions | `tdd-engineer` | lnk | 16, 46, 07, 11, 14, `-graph` | `analyst` |
 | P1-18 | Assembler: bundles to graph rows, `mask_http_segments` import, `MOUNTED_BY`, `SkippedFile`, `Unit.flowAvailable`, pack-set identity | `graph-dba` | lnk | 16, 17, `-graph` | `analyst` |
 | P1-19 | Store loader, DDL, ACL users and test, swap, stamp, fuzz test, re-derived `TIMEOUT_MAX` and lock ttl, size re-estimate | `graph-dba` | lnk | 18, 48, 02, `-graph` | `analyst` |
