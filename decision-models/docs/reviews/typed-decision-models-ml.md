@@ -1,6 +1,6 @@
 # Typed decision models: fit question texts, methodology review
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Reviews:** `decision-models/fit/*/questions.json` (U6f.4c)
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** — · **Reviews:** `decision-models/fit/*/questions.json` (U6f.4c)
 
 ## Pass 1 — U6f.4c question texts (2026-11-19)
 

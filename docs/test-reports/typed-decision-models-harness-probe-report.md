@@ -1,6 +1,6 @@
 # Typed Decision Models — Harness Spawn-Mode Probe — Evidence Record
 
-> **Status:** active · **Owner:** `devops` · **Tracks:** U6.1, U6.2 (`docs/plans/typed-decision-models6.md` §3.6, §4)
+> **Status:** archived · **Owner:** `devops` · **Tracks:** U6.1, U6.2 (`docs/plans/typed-decision-models6.md` §3.6, §4)
 
 ## 1. Summary and fact index
 

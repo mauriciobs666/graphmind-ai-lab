@@ -1,6 +1,6 @@
 # Typed Decision Models — Requirements and Plan Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** —
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** —
 
 ## Pass 1
 

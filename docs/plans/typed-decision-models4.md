@@ -1,6 +1,6 @@
 # Typed Decision Models — Implementation Plan, Subagent Labelling Amendments
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.17 · **Extends:** `docs/plans/typed-decision-models3.md` · **Reviews:** `docs/reviews/typed-decision-models4.md` · **Extended by:** `docs/plans/typed-decision-models5.md`, `docs/plans/typed-decision-models6.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — · **Version:** 1.17 · **Extends:** `docs/plans/typed-decision-models3.md` · **Reviews:** `docs/reviews/typed-decision-models4.md` · **Extended by:** `docs/plans/typed-decision-models5.md`, `docs/plans/typed-decision-models6.md`
 
 *2026-11-19 — v1.17: emission contracts adopted from the U6f.9b gate (Pass 60): ordinal, shared manifest, `sourceSha`, policy mapping, report file, calls-file derivation, write protocol.*
 

@@ -1,6 +1,6 @@
 # Review — Typed Decision Models Plan Successor 5
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** —
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** —
 
 ## Pass 1 (2026-11-01)
 

@@ -1,6 +1,6 @@
 # Typed decision models: pilot bat_0001 safeguard halt (RCA)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Last updated:** 2026-11-11
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — · **Last updated:** 2026-11-11
 
 CPG: not applicable — RCA of a live campaign run's artifacts (ledger, transcripts, plan text); no code-level change under review.
 

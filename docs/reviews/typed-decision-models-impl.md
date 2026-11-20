@@ -1,6 +1,6 @@
 # Typed Decision Models — Implementation Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** —
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** —
 
 Code gates for the model-bench units of `docs/plans/typed-decision-models.md`. The plan review is
 `docs/reviews/typed-decision-models.md`.

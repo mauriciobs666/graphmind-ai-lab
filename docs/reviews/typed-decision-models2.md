@@ -1,6 +1,6 @@
 # Typed Decision Models — Review of the Method-Amendments Plan
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/typed-decision-models2.md`
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/typed-decision-models2.md`
 
 ## Pass 1
 

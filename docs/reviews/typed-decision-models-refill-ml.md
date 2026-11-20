@@ -1,6 +1,6 @@
 # Methodology review: eval refill from cell surplus and the floor gate
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Reviews:** `docs/plans/typed-decision-models4.md` v1.4 §3.6 "Cells, then splits", U5.10c
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** — · **Reviews:** `docs/plans/typed-decision-models4.md` v1.4 §3.6 "Cells, then splits", U5.10c
 
 **Verdict: approve with suggestions.** The refill is valid; the floor gate is right. For message-type `escalation` the refill alone will almost certainly not reach the floor (52), so the gate will refuse and a drop-aware top-up is the better path than accepting the printed n.
 

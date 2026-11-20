@@ -1,6 +1,6 @@
 # Typed Decision Models — Method Note (statistics, data, fitting)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.18 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 12), `docs/reviews/typed-decision-models-ml.md` (Pass 1)
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.18 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 12), `docs/reviews/typed-decision-models-ml.md` (Pass 1)
 
 *2026-11-05 — v1.18: §Q1.2 rule (a) joins listed tokens by any run of non-word characters and rule (d) is deleted as subsumed (plan6 v1.21 §3.8, impl review Pass 21 P21-m2).*
 

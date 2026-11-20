@@ -1,6 +1,6 @@
 # Typed Decision Models — Implementation Plan, Headless Driver and Probe-Informed Audit
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.25 · **Extends:** `docs/plans/typed-decision-models4.md` · **Reviews:** `docs/reviews/typed-decision-models6.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — · **Version:** 1.25 · **Extends:** `docs/plans/typed-decision-models4.md` · **Reviews:** `docs/reviews/typed-decision-models6.md`
 
 *2026-11-10 — v1.25: §3.8 names the probe's pending state, narrows `install`'s immutability compare, states the generator-restart spend clause and the rubric-fix route, and cuts restated copies; the U5.9 fix-round and U5.10 rows are completed (Pass 28 P28-M1, M2, m1, m2, n1).*
 

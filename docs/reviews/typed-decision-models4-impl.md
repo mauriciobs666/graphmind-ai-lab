@@ -1,6 +1,6 @@
 # Typed Decision Models, Plan 4 — Implementation Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** —
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** —
 
 ## Pass 1 — U5.1 scaffold (2026-10-31)
 

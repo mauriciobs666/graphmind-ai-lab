@@ -1,6 +1,6 @@
 # Typed Decision Models: U6f Fit Rulings (method note)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Extends:** `docs/plans/typed-decision-models-ml.md` · **Reviews:** `docs/reviews/typed-decision-models4-impl.md` (Pass 38)
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** — · **Extends:** `docs/plans/typed-decision-models-ml.md` · **Reviews:** `docs/reviews/typed-decision-models4-impl.md` (Pass 38)
 
 Rulings for plan4 §3.11/§4.4 (`docs/plans/typed-decision-models4.md`) that note §Q2 leaves open. The
 note's ladders, margins and outcome order (§Q2.0–§Q2.3) stand; this note states only what they do not.

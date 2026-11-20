@@ -1,6 +1,6 @@
 # Typed Decision Models: Fit f1 Diagnosis (methodology)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Extends:** `docs/plans/typed-decision-models-fit-ml.md`
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** — · **Extends:** `docs/plans/typed-decision-models-fit-ml.md`
 
 Scope: the three U6fL f1 fits (guard-judge v1, message-type-classifier v2, join-in-judge v2), decision model `laya`, H = `qwen/qwen3-4b-2507`, 180 s decision timeout, no aborts, no exclusions, no parse failures (`k = 0` on every call kind), both models resident start and end. All figures below were recomputed from `decision-models/data/*/fits/*-f1.fit-report.json`, the calls files, `items.jsonl` and `splits.json`; the bars are `docs/plans/typed-decision-models-ml.md` §Q2.1/§Q2.2/§Q3/§Q5.
 

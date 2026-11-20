@@ -2,6 +2,27 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-20 — typed-decision-models feature close — live fits, U7 evaluations, no candidate shipped
+
+**What:** The live fits (U6fL, f1–f4) produced 16 candidates, all `fit-infeasible: agreement`
+(`decision-models/docs/reviews/typed-decision-models-fit-diagnosis-ml.md`); all 16 were imported
+into `model-bench/candidates/` (U6i, replicate 1 only). U7 replicate 1 ran per point, reports in
+`model-bench/reports/`: guard `guard-judge-synthetic-20261119-01.md`/`-02.md`, join-in
+`join-in-judge-synthetic-20261119-01.md`/`-02.md`, message type
+`message-type-classifier-synthetic-20261119-01.md`. **No candidate meets FR-10 on any point.**
+Nearest misses, read from the reports: join-in hand-off f3 per-class 0.93/0.92 but latency unstable
+(1026 ms, then 146 ms; "unstable — not met"); message-type hand-off f1 four of five classes at
+0.90 or above, `other` 48/54, 210 ms. Message-type hand-off f3/f4 ran with basis `assumed`.
+
+**Decisions (user, 2026-11-19/20):** FR-10's 0.90 floor stands; the `question`-with-grievance
+boundary stays; fine-tuning (§Q7) skipped; screening of further hand-off models stopped; U6a
+(per-label `minConfidence`) skipped; the feature closes as no-ship, with no live spec in either
+component, so close steps (2)–(3) were skipped by decision. U8 and U9–U12 are not applicable.
+
+**Close:** eleven proposed `REVIEW.md` lines applied verbatim (nine root, two `model-bench/`),
+source `docs/reviews/typed-decision-models-close-sweep.md`; the plan, review, requirements,
+coordination and test-report documents flipped to `archived`; follow-ons in `BACKLOG.md`.
+
 ## 2026-11-19 — typed-decision-models U6f.9b — fit emission
 
 **What:** plan4 `docs/plans/typed-decision-models4.md` v1.17 §3.11 emission contracts, §4.4/§5 row U6f.9b; gates `docs/reviews/typed-decision-models.md` Pass 60–61. `decisionmodels/emit.py`, `report.py`, `fit.py` wiring. `fit.run_fit` writes `fits/calls-<UTC ts>-<runId>.json` (labelled `ok`/`refused`/`unreadable`, no item text) after collection and the end residency read, before analysis, with an exclusive-create fallback if `os.link` fails; a start refusal or an abort writes none. The calls file is deliberately non-strict JSON (losing the live calls over an `inf` is worse). `fit.main` then calls `emit.emit`: it builds and checks all bytes first (each candidate's policy and `handoffModel` pass `check_handoff_rule`; the `(outcome, target)` pair from `assemble_outcome` with the role's bar kind), then links manifest, report, then candidates, all or nothing (POSIX hard links, rollback on failure). Files: `<role>-<ver>-handoff-f<N>.json` / `-only-f<N>.json` (the bench's `Candidate.load` keys), `<role>-<ver>-f<N>.fit.txt` (every calibration item's `input_hash`, excluded items included) and `<role>-<ver>-f<N>.fit-report.json` (every §3.11 key; `Fraction` as `{fraction, decimal}`; absent halves `null`; outside the manifest; no item text). `N` is the largest candidate, manifest or report ordinal in `fits/` plus one; `provenance.sourceSha` is the sha256 of `items.jsonl`. An `OSError` from the run or emission exits 1 as `refused:`, and `main` prints a refusal's notes. **Tests:** `tests/test_emit.py` (52), `tests/test_report.py` (19), a guarded `Candidate.load` check; suite 2989 passed, 3 deselected. **Gate:** Pass 60 (one major, test pins) fixed; Pass 61 approve with suggestions, folded.

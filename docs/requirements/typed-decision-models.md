@@ -1,6 +1,6 @@
 # Typed Decision Models (Jev/Laya-style "System 1") — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-01
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-01
 
 ## Intent
 

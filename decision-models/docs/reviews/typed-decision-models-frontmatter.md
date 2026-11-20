@@ -1,6 +1,6 @@
 # U5.7 agent definitions: Claude Code frontmatter and hook semantics (cobb consult)
 
-> **Status:** active · **Owner:** `cobb` · **Tracks:** —
+> **Status:** archived · **Owner:** `cobb` · **Tracks:** —
 
 **Verdict: approve with suggestions.** No field in the three definitions or in `settings.json` is rejected, and every field means what plan4 §3.4 and plan6 §3.3 assume. I found no blocker and no major. Two findings are worth acting on (F1, F2).
 

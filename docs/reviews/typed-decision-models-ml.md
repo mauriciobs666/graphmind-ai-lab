@@ -1,6 +1,6 @@
 # Typed decision models — methodology review
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** —
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** —
 
 ## Pass 1 — U5.3 rubrics, templates and seed design (2026-11-01)
 

@@ -1,6 +1,6 @@
 # Typed Decision Models — Plan Review, Subagent Labelling Amendments (plan4)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/typed-decision-models4.md`
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/typed-decision-models4.md`
 
 ## Pass 1
 

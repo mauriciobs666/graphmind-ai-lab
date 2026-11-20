@@ -1,6 +1,6 @@
 # Typed Decision Models — Review of the Over-Limit and Loading Amendments Plan
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/typed-decision-models3.md`
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/typed-decision-models3.md`
 
 ## Pass 1
 

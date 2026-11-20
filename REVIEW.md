@@ -46,6 +46,15 @@
   with one planted X for each composition axis the format allows (nested object, array element,
   map value, `$ref`, `anyOf`/`allOf`), not only the shapes in use today. A walker that recurses
   into only some axes is a bound, not proof.
+- A method or plan that runs LLM work as Claude Code subagents names what its transcript audit checks beyond tool calls: the spawn prompt (against a hashed template), `agentType`, and the injected `instructions`/`gitStatus` context. A tool-call-only audit is a finding.
+- When a unit's code validates the shape of a record field that a later unit produces, the plan's record row states the shape, and the producer's done-condition feeds its output through that validator (a round trip over every role and call kind). A validator the producer is never run against fails only at the end of a live run.
+- For a record another unit consumes (a ledger event, a dataset row, a key binding), mutate each field's value at its write site. A field whose value no test pins, with the expected value computed independently, is a finding.
+- For code that stops a process tree (a group kill, a grace period, a timeout), plant a descendant that survives the first signal and assert it is gone afterwards; assert the grace by elapsed time. Run timing-dependent tests under CPU oversubscription before calling them stable.
+- A plan step that relies on agent-harness behaviour (frontmatter fields, hook firing, transcript fields, CLI flags, tool size limits) cites a live probe or transcript for each premise. The probe runs under the production invocation's exact flags and environment. Each premise has a named pass/fail route, and a worst-case-sized smoke that goes red if the premise is false.
+- A control command that shares a single-flight lock with the long-running process it controls (stop, pause, signal) is checked for reachability while that process holds the lock.
+- In a plan for unattended operation, every refusal or halt the plan adds is checked against what an ordinary user action on the same machine changes (config edits, logins, other sessions). Each refusal must also show up in a status command, not only in a run's exit line.
+- A fail-closed path is traced to its consumer. The guard's own failure must reach a class that halts and is distinguishable from a policy decision. A fail-closed default that the consumer counts as the actor's fault turns a broken guard into silent attrition.
+- A row that keys on a missing record (no hook entry, no result, no field) is checked against every producer of that absence: a kill, batched or parallel writes, and validation before the recorder runs. Checking only the producer that motivated the row is not enough.
 
 ## Do not report
 

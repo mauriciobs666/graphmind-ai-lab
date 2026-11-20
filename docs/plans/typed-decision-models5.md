@@ -1,6 +1,6 @@
 # Typed Decision Models — Implementation Plan, Seed Identity and Method-Note Amendments
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.5 · **Extends:** `docs/plans/typed-decision-models4.md` · **Reviews:** `docs/reviews/typed-decision-models5.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — · **Version:** 1.5 · **Extends:** `docs/plans/typed-decision-models4.md` · **Reviews:** `docs/reviews/typed-decision-models5.md`
 
 *2026-11-01 — v1.5: review Pass 2: halts count every reason, vector re-copy rule, single-write decision, Unicode boundaries.*
 
