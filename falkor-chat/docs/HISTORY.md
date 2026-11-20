@@ -5,6 +5,51 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-20 — K-095 closed: the dead `config.AGENT_NAME` and its server-facing mentions removed
+
+- **Cause.** `config.py` read `FALKORCHAT_AGENT_NAME` into `AGENT_NAME`, and nothing in
+  `falkorchat/` read it. The variable itself is live: `scripts/seed_demo.sh` reads it directly as
+  the seeded `Agent`'s display name. But the start scripts' exports to uvicorn and the
+  `server/.env.example` line implied the server used it. The stakeholder took the backlog item's
+  default, removal.
+- **What (commit `940dc1e2`).**
+  - Removed: `config.AGENT_NAME`; `FALKORCHAT_AGENT_NAME` from the uvicorn `export` line in both
+    `scripts/start_server.sh` and `scripts/start_demo.sh`; the `server/.env.example` line.
+  - Kept: the variable, its `Assistant` default in both start scripts, and its handoff to
+    `seed_demo.sh`. Each script's header comment now says it is handed to `seed_demo.sh` only.
+    `seed_eval_corpus.{py,sh}` use a separate variable, `EVAL_AGENT_NAME`, and are untouched.
+  - New `server/tests/test_agent_name_handoff.py`:
+    - for each start script, with no name set, `seed_demo.sh` gets `Assistant` and uvicorn gets
+      none; a name the caller sets reaches `seed_demo.sh`;
+    - `test_every_config_key_is_read`, an AST guard for the done-condition. It requires every
+      public module-level name `config.py` assigns to be loaded somewhere in `falkorchat/`: a bare
+      name or an attribute in load position, or a `from .config import` alias that is itself
+      loaded. Comments, docstrings and string literals do not count. It is a bound, not a proof:
+      an unrelated variable or attribute with a key's name still counts as a read.
+  - The stub recorders in `test_start_demo_script.py` and `test_opencode_config_resolution.py`
+    also record `FALKORCHAT_AGENT_NAME`.
+  - The one possible behaviour change: a model config that cited `{env:FALKORCHAT_AGENT_NAME}`
+    would now fail at startup under the start scripts. No shipped or operator config cites it.
+- **Verified.** FalkorDB-free subset (`test_agent_name_handoff.py`, `test_start_demo_script.py`,
+  `test_opencode_config_resolution.py`, `test_modelconfig.py`, `test_logging_config.py`):
+  `128 passed`. No Cypher changed, so `test_queries.sh` was not run here. Mutants on copies, each
+  red: the uvicorn export put back in each script; the `seed_demo.sh` handoff dropped from each
+  script; `AGENT_NAME` put back; `AGENT_NAME` put back with only a comment, a string-literal or
+  an unused-import mention; `USER_ID`'s one real read replaced by a literal, leaving only
+  docstring and comment mentions. A real attribute read and a loaded alias stay green.
+- **Gate and close check.** `docs/reviews/agent-name-removal-impl.md`:
+  - Pass 1, approve with suggestions. F1, that the first guard counted word matches in source
+    text so prose passed it, was closed by the AST rewrite. F2 is the `{env:...}` note above.
+  - Pass 2, approve. Its new nit, that the alias check is package-wide rather than per file,
+    falls within the bound the docstring states and needs no change.
+  - § Close check, approve.
+- **Spec.** `docs/SERVER.md` §1.3: the `FALKORCHAT_AGENT_NAME` row is deleted, so every row
+  matches the table intro again ("read once, at import, by `config.py`"). `docs/DESIGN.md` and
+  `docs/QUERIES.md` are unchanged; neither mentions the variable.
+- **`REVIEW.md`.** `falkor-chat/REVIEW.md` `## Always check` gains one line (source: F1): a guard
+  that proves a name is read (or unread) is checked with a planted comment-only and a string-only
+  mention of the name; a text match is a bound, so count AST loads.
+
 ## 2026-11-20 — K-097 closed: a `ctxVersion` compare-and-swap on `POST /workflow-runs/{runId}/input` and the timer sweep
 
 - **Cause.** `resume_run_with_ctx` (QUERIES §12.13) compared only `status`. Once the winning

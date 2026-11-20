@@ -193,3 +193,33 @@ Results: baseline `[]` · dead-`USER_ID` → `['USER_ID']` · `AGENT_NAME` + sel
   its own `_AN`. That is the same name-collision class the docstring already declares as a bound,
   so no change is needed. Resolving aliases per file would close it cheaply if wanted.
 - **Proposed REVIEW.md line:** unchanged from Pass 1.
+
+## Close check
+
+**Verdict: approve.** Checked the uncommitted `docs/SERVER.md` change against the shipped diff
+`940dc1e2` (`config.py`, `.env.example`, both start scripts). The spec change is a one-line
+deletion of the §1.3 `FALKORCHAT_AGENT_NAME` row.
+
+- **The table intro is still true (verified).** The intro at line 154 says every key is an
+  environment variable read once by `config.py`, and that the server reads no other environment
+  variable apart from `{env:NAME}`. I compared the env-var literals in `config.py` with the
+  table's rows. Every row is read by `config.py`. The only `config.py` names with no row are the
+  four `LEGACY_MODEL_ENV_VARS`, which are refused rather than read, and §1.8 (line 788) documents
+  them. Outside `config.py`, the only environment read in `falkorchat/` is
+  `modelconfig._substitute`, which is the `{env:NAME}` exception the intro already names. The
+  deletion removed the one row that contradicted the intro.
+- **No other live-spec mention (verified).** `/usr/bin/grep -nI AGENT_NAME` over
+  `docs/SERVER.md`, `docs/DESIGN.md`, `docs/QUERIES.md`, `README.md` and `AGENTS.md` finds no hits.
+- **No change history (verified).** The diff adds 0 lines and removes 1. No section is
+  renumbered and no "removed"/"formerly" note was added.
+- **The shipped diff matches the reviewed one.** `940dc1e2` has the same `config.py`,
+  `.env.example` and script hunks I gated in Pass 1.
+
+Final `falkor-chat/REVIEW.md` proposal, unchanged from Pass 1 (target `## Always check`; source F1
+and the Pass 2 result; no prune):
+
+```
+- A guard that proves a name is read (or unread) is checked with a planted comment-only and a
+  string-only mention of the name. A regex or grep over source text counts prose: `config.X`
+  is cited in docstrings across `falkorchat/`. A text match is a bound; count AST loads.
+```
