@@ -66,7 +66,7 @@ def test_scip_disagreeing_with_every_dropped_target_leaves_the_demoted_site_as_5
     s = demoted()
     res = merge([s], index_of((3, 4, h.OTHER)), {s["id"]: [tgt(Q_HELPER)]})
     assert only(res) == s
-    assert res.counts["disagree"] == 1
+    assert res.counts["disagree"] == 1 and res.counts["disagree_partial_kept"] == 0       # nothing was kept: not a "partial" site
     assert {c["qname"] for c in res.candidates[s["id"]]} == {Q_HELPER, Q_OTHER}
 
 
@@ -75,7 +75,7 @@ def test_scip_disagreeing_with_a_partially_demoted_site_keeps_its_type_backed_ta
     res = merge([s], index_of((3, 4, h.OTHER)), {s["id"]: [tgt(Q_HELPER)]})
     r = only(res)
     assert r == s and r["status"] == "confirmed" and tgt_ids(r) == [KNOWN[Q_PUT]]
-    assert res.counts["disagree"] == 1
+    assert res.counts["disagree"] == 1 and res.counts["disagree_partial_kept"] == 1
     assert {c["qname"] for c in res.candidates[s["id"]]} == {Q_PUT, Q_HELPER, Q_OTHER}
 
 
@@ -90,6 +90,31 @@ def test_scip_silent_leaves_a_demoted_site_alone():
     s = demoted()
     res = merge([s], index_of(), {s["id"]: [tgt(Q_HELPER)]})
     assert only(res) == s and res.counts["silent"] == 1
+
+
+def test_a_partially_demoted_site_whose_scip_target_is_external_is_counted_as_a_partial_kept_disagreement_too():
+    s = site("put", 0, [Q_PUT])
+    res = merge([s], index_of((3, 4, h.LEN)), {s["id"]: [tgt(Q_HELPER)]})
+    r = only(res)
+    assert r == s and r["status"] == "confirmed"
+    assert res.counts["disagree"] == 1 and res.counts["disagree_partial_kept"] == 1
+
+
+def test_the_same_disagreement_with_no_entry_is_demoted_and_is_not_a_partial_kept_one():
+    """The asymmetry the count reports (5d diff gate F6): identical SCIP evidence, a site with a `nameLinked` entry stays `confirmed`
+    to its type-backed target, a site without one is demoted to `possible`/`name-match`."""
+    s = site("put", 0, [Q_PUT])
+    res = merge([s], index_of((3, 4, h.OTHER)), {})
+    r = only(res)
+    assert (r["status"], r["reason"], r["targets"]) == ("possible", "name-match", [])
+    assert res.counts["disagree"] == 1 and res.counts["disagree_partial_kept"] == 0
+
+
+def test_agreement_and_silence_are_never_partial_kept_disagreements():
+    s = site("put", 0, [Q_PUT])
+    agree = merge([s], index_of((3, 4, h.BOX_PUT)), {s["id"]: [tgt(Q_HELPER)]})
+    silent = merge([s], index_of(), {s["id"]: [tgt(Q_HELPER)]})
+    assert agree.counts["disagree_partial_kept"] == 0 == silent.counts["disagree_partial_kept"]
 
 
 # --- no entry: as before --------------------------------------------------------------------------------------------

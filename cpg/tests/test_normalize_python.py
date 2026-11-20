@@ -486,7 +486,7 @@ def test_the_orphan_fallback_is_counted_in_the_report(tmp_path):
 def test_a_depth_one_to_three_template_nests_and_a_fourth_level_is_capped(tmp_path):
     B = core.Builder("python", ".", "r", {}, core.Source(tmp_path))
     R = core.Resolver(B, {}, {})
-    e = {"o": "lit", "c": "'a'"}
+    e = {"o": "lit", "c": "a"}                     # P1-50: the text piece of a Python f-string is raw source text
     for _ in range(3):
         e = {"o": "fmt", "p": [e]}
     assert R.element(e, "a.py") == {"template": [{"template": [{"template": [{"const": "a"}]}]}]}

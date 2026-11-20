@@ -288,11 +288,15 @@ class Resolver:
             return {"const": unicodedata.normalize("NFC", v)}
         return None
 
-    def element(self, e: dict, file: str, depth: int = 1):
+    def element(self, e: dict, file: str, depth: int = 1, fmt_piece: bool = False):
+        """``fmt_piece``: ``e`` is a direct child of a ``fmt``. In a Python file its text is the raw source text of the f-string's
+        constant part (Joern never quotes it), so it is a constant as written and is not parsed as a literal."""
         o = e["o"]
         if depth > 4:
             return {"unknown": "value-set-cap"}
         if o == "lit":
+            if fmt_piece and self.B.lang == "python":
+                return {"const": e["c"]}
             r = self.lit(e["c"])
             return r if r is not None else {"unknown": "runtime-built"}
         if o == "name":
@@ -324,7 +328,7 @@ class Resolver:
                     return {"importRef": {"module": module, "name": f"{orig}.{e['f']}"}}
             return {"unknown": "point-derived"}
         if o in ("fmt", "add"):
-            parts = [self.element(p, file, depth + 1) for p in e["p"]]
+            parts = [self.element(p, file, depth + 1, fmt_piece=o == "fmt") for p in e["p"]]
             parts = [p for p in parts if p != {"const": ""}]
             if not parts:
                 return {"const": ""}

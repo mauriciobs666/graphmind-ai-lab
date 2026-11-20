@@ -42,3 +42,16 @@ def test_every_drawn_row_is_a_self_call_to_a_method_of_the_enclosing_class():
         cls = d["enclosing"].rsplit(".", 1)[0]                           # `path::Class.method` -> `path::Class`
         assert d["confirmedTarget"] == f"{cls}.{d['callee']}", d
         assert d["path"] == d["enclosing"].split("::")[0] and d["line"] > 0
+
+
+def test_the_draw_was_remade_over_the_p1_50_population_and_keeps_the_previous_one_beside_it():
+    """P1-50: the same seed over the new population (the self rule counts the unit's definers); the earlier draw (normalizer 0.6, 511 sites) stays under
+    `previous`, and the site the first draw held although an in-unit test double overrides its method is in neither the new population nor the new draw."""
+    prev = DRAW["previous"]
+    assert prev["normalizerVersion"] == "0.6" and prev["population"] == len(prev["populationIds"]) == 511 and len(prev["drawn"]) == 30
+    assert "a118e830a3fd791d5a6b2c9e6f2cf705" in prev["populationIds"]
+    assert "a118e830a3fd791d5a6b2c9e6f2cf705" not in DRAW["populationIds"] and DRAW["population"] == 379
+    assert {d["callSiteId"] for d in DRAW["drawn"]} <= set(DRAW["populationIds"]) and prev["seed"] == DRAW["seed"]
+    assert {u["rootPath"]: u["selfResolved"] for u in DRAW["units"].values() if u["selfResolved"]} == {
+        "claude": 9, "falkor-chat/server": 147, "mcp-monitor": 7, "salesperson": 17, "model-bench": 22, "skills": 11, "decision-models": 166}
+    assert set(DRAW["populationIds"]) <= set(prev["populationIds"])          # the rule only narrowed: ids are content hashes of unchanged call sites

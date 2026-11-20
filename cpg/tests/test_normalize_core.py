@@ -362,10 +362,11 @@ def test_resolver_attribute_of_a_non_name_is_point_derived(R):
 
 def test_resolver_templates_and_concatenation_drop_empty_parts(R):
     lit = lambda c: {"o": "lit", "c": c}
-    assert R.element({"o": "fmt", "p": [lit("'a'"), lit("''"), {"o": "name", "n": "other"}]}, "a.py") == {
+    # the pieces of a Python f-string are raw text (P1-50: `tests/golden/fstring/probe.json`), so an empty piece is `""`, not the literal `''`
+    assert R.element({"o": "fmt", "p": [lit("a"), lit(""), {"o": "name", "n": "other"}]}, "a.py") == {
         "template": [{"const": "a"}, {"unknown": "point-derived"}]}
     assert R.element({"o": "add", "p": [lit("'a'"), lit("'b'")]}, "a.py") == {"concat": [{"const": "a"}, {"const": "b"}]}
-    assert R.element({"o": "fmt", "p": [lit("''")]}, "a.py") == {"const": ""}
+    assert R.element({"o": "fmt", "p": [lit("")]}, "a.py") == {"const": ""}
 
 
 def test_resolver_depth_cap_and_nested_template_cap(R):

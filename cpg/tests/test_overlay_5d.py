@@ -114,6 +114,6 @@ def test_the_extras_file_is_self_consistent():
     for tag, u in e["units"].items():
         assert all(0 <= i < len(u["rt"]) for _, _, i, _ in u["sites"])
         assert len({c for c, *_ in u["sites"]}) == len(u["sites"]) == len({s for _, s, *_ in u["sites"]})
-        assert set(u["selfByJoernNarrowing"] if "selfByJoernNarrowing" in u else []) <= {s for _, s, *_ in u["sites"]}
-    assert len(e["units"]["fcs"]["sites"]) == 1479 and len(e["units"]["fcs"]["selfByJoernNarrowing"]) == 117
+        assert "selfByJoernNarrowing" not in u                 # P1-50: the `self` rule's expectation is the independent `ast` reference alone
+    assert len(e["units"]["fcs"]["sites"]) == 1479
     assert len(e["units"]["sp"]["constFacts"]) == 8 and len(e["units"]["sp"]["constRecords"]) == 3

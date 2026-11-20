@@ -358,6 +358,12 @@ def test_the_hand_listed_rt_of_every_site_is_what_the_live_script_wrote(tag):
 # --- tier 2: Docker -----------------------------------------------------------------------------------------------
 
 
+#: P1-50 (5d gate F4): per unit, the number of `cs` facts the live script tags with `rt` and the sha256 of the sorted `(fact id, rt)` list, as the live
+#: run below derives them (the table lists only the 1,479 `falkor-chat/server` sites whose targets `rt` does not back; the script tags every dynamic call, 22,805 there).
+RT_PINS = {"fcs": (22805, "c0a5329bd37e0c90b08f30e7314adfdfbbd9ec2792ea30e7dadbd8929c5e9df8"),
+           "sp": (448, "bda5b6a751bc8e5c85523a253957cb1640d5e96c785ca11aaa2561b2df827715")}
+
+
 @pytest.mark.slice
 @pytest.mark.live
 @pytest.mark.parametrize("tag", sorted(SLICE))
@@ -374,5 +380,11 @@ def test_the_ported_extractor_reproduces_the_slices_raw_facts(tag, tmp_path, mon
     assert want_stats == SLICE[tag][3]
     assert len(got) == len(want)
     assert got == want
+    live = [json.loads(x) for x in rf.facts.read_text(encoding="utf-8").splitlines()]
+    rt_live = overlay_5d.rt_of(live)
+    table = overlay_5d.rt_table(tag)
+    assert {i: rt_live.get(i) for i in table} == table, "the live `rt` of a listed site differs from the hand-listed table"
+    assert (len(rt_live), hashlib.sha256(json.dumps(sorted(rt_live.items()), separators=(",", ":")).encode()).hexdigest()) == RT_PINS[tag], \
+        "the live run's `rt`-bearing facts changed: a wrong receiver base on a site outside the table is otherwise invisible"
     assert rf.source_files == SLICE[tag][4]
     assert len(rf.sandbox_audit_ids) == (3 if SLICE[tag][1] == "javascript" else 2)

@@ -353,12 +353,12 @@ def _import_before_constant(header, records):
     return touched
 
 
-# P1-05 5d: a name-linked call is not `confirmed` (assemble's type rule and `self` rule, NORMALIZER_VERSION "0.6"). The stored bundles hold
-# no `rt`, so the expected edit is written here from independent inputs and `assemble` is fed the stored facts plus the hand-listed `rt`
-# table (`tests/overlay_5d.py`), never the other way round. Per listed call site (`p1_05_5d_extras.json`): the type-backed targets
-# (`kept`, derived from the Joern fullNames) survive; with none, the site keeps exactly the one class method among its stored targets
-# when the `self` rule applies (the `ast` reference over the oracle's stage tree below, plus the hand-listed `selfByJoernNarrowing`),
-# else it is `unresolved`/`possible`/`name-match` with no targets. `salesperson` has no such site (`jssrc2cpg` demoted nothing there)
+# P1-05 5d and P1-50 Part A: a name-linked call is not `confirmed` (assemble's type rule and `self` rule, NORMALIZER_VERSION "0.7"). The stored
+# bundles hold no `rt`, so the expected edit is written here from independent inputs and `assemble` is fed the stored facts plus the
+# hand-listed `rt` table (`tests/overlay_5d.py`), never the other way round. Per listed call site (`p1_05_5d_extras.json`): the type-backed
+# targets (`kept`, derived from the Joern fullNames) survive; with none, the site keeps exactly the one class method among its stored
+# targets when the `self` rule applies (the strict `ast` reference over the oracle's stage tree below: the enclosing class is the unit's
+# only definer of the name), else it is `unresolved`/`possible`/`name-match` with no targets. `salesperson` has no such site (`jssrc2cpg` demoted nothing there)
 # but gains the constant records of its export-block constants (`constRecords`), `counts.constant` raised by their number.
 PINNED_ORACLE = "defca60ff16534aa12a74e35856de9be98bfc710"           # the commit the oracle's stage trees were built at
 
@@ -374,16 +374,14 @@ def expected_site_edits(records: list[dict], tag: str) -> dict[str, list[str] | 
     syms = {r["id"]: r for r in records if r["type"] == "symbol"}
     calls = {r["id"]: r for r in records if r["type"] == "callsite"}
     strict = collections.Counter(reference_self_sites()) if tag == "fcs" else collections.Counter()
-    known = set(overlay_5d.extras()["units"][tag].get("selfByJoernNarrowing", []))
     out = {}
     for s in sorted(overlay_5d.sites(tag), key=lambda s: s["site"]):
         rec = calls[s["site"]]
         stored = [t["symbolId"] for t in rec["targets"]]
         key = (syms[rec["symbolId"]]["path"], rec["line"], rec["calleeName"])
-        is_self = s["site"] in known
-        if not is_self and strict[key] > 0:
+        is_self = strict[key] > 0
+        if is_self:
             strict[key] -= 1
-            is_self = True
         if s["kept"]:
             out[s["site"]] = list(s["kept"])
         elif is_self:
@@ -395,8 +393,15 @@ def expected_site_edits(records: list[dict], tag: str) -> dict[str, list[str] | 
     return out
 
 
-@delta("p1-05-5d-name-linked", "0.6")
-def _name_linked(header, records):
+#: P1-50 Part B: the stored Python template elements of `falkor-chat/server` that gain their constant text, id -> expected `values`, hand-listed
+#: (`tests/data/p1_50_fstring_constants.json`, derived once from a real rebuild) and verified against the independent `ast` reference by
+#: `test_the_template_edits_equal_the_ast_reference_over_the_oracles_stage_tree`. 475 value sets, 3 constants and 1 decorator record; no record is
+#: added or removed, so no count moves. `salesperson` is JavaScript: none.
+P1_50_FSTRING = json.loads((CPG / "tests" / "data" / "p1_50_fstring_constants.json").read_text(encoding="utf-8"))
+P1_50_COUNTS = {"fcs": 479, "sp": 0}          # 475 value sets, 3 constants, 1 decorator (its call's argument values sit in the record's `args`)
+
+
+def _name_linked_edits(header, records):
     tag = UNIT_TAG_OF_ROOT[header["unit"]["rootPath"]]
     touched = 0
     calls = {r["id"]: r for r in records if r["type"] == "callsite"}
@@ -417,6 +422,29 @@ def _name_linked(header, records):
         header["counts"]["constant"] += len(new)
         touched += len(new)
     return touched
+
+
+def _fstring_edits(header, records):
+    tag = UNIT_TAG_OF_ROOT[header["unit"]["rootPath"]]
+    want, deco = P1_50_FSTRING[tag], P1_50_FSTRING["decorators"][tag]
+    touched = 0
+    for r in records:
+        if r["type"] in ("valueSet", "constant") and r["id"] in want:
+            assert r["values"] != want[r["id"]] and any("template" in v for v in r["values"])
+            r["values"] = copy.deepcopy(want[r["id"]])
+            touched += 1
+        elif r["type"] == "decorator" and r["id"] in deco:
+            assert r["args"] != deco[r["id"]] and "template" in json.dumps(r["args"])
+            r["args"] = copy.deepcopy(deco[r["id"]])
+            touched += 1
+    assert touched == len(want) + len(deco) == P1_50_COUNTS[tag]
+    return touched
+
+
+@delta("p1-50-name-linked-and-fstring-constants", "0.7")
+def _name_linked_and_fstring_constants(header, records):
+    """The two edit sets touch disjoint fields (call-site `targets`/`resolution`/`status`/`reason` against `valueSet`/`constant` `values`)."""
+    return _name_linked_edits(header, records) + _fstring_edits(header, records)
 
 
 def apply_deltas(lines: list[bytes], deltas=None) -> tuple[list[bytes], dict[str, int]]:
@@ -524,7 +552,7 @@ def test_the_lambda_decorator_delta_removes_exactly_3_records_all_of_falkor_chat
     assert (fcs_touched["drop-lambda-decorators"], sp_touched["drop-lambda-decorators"]) == (3, 0)
     assert (fcs_touched["p1-06-mask-cond-code"], sp_touched["p1-06-mask-cond-code"]) == (41, 2)
     assert (fcs_touched["p1-08-skipped-files"], sp_touched["p1-08-skipped-files"]) == (0, 33)
-    assert (fcs_touched["p1-05-5d-name-linked"], sp_touched["p1-05-5d-name-linked"]) == (1216, 3)
+    assert (fcs_touched["p1-50-name-linked-and-fstring-constants"], sp_touched["p1-50-name-linked-and-fstring-constants"]) == (1333 + P1_50_COUNTS["fcs"], 3)
     assert "skippedFiles" not in json.loads(fcs[0]) and len(json.loads(sp[0])["skippedFiles"]) == 33
     assert json.loads(fcs[0])["counts"]["decorator"] == 210 == json.loads(stored_lines("fcs")[0])["counts"]["decorator"] - 3
     assert sum(json.loads(x)["type"] == "decorator" for x in fcs[1:]) == 210
@@ -595,20 +623,19 @@ def test_the_reference_reads_the_oracles_stage_tree_pinned_at_the_oracle_commit_
 
 
 @pytest.mark.slice
-def test_the_self_rule_confirms_the_ast_references_sites_and_lists_every_further_one(fcs_built):
-    """Done-condition 2. The strict `ast` reference (a `self.m()` in a method of the class that defines `m`, no other class of the unit
-    defining `m`) must be a subset of what `assemble` confirms by the `self` rule; every further confirmed site is LISTED, and the
-    list is the hand-written `selfByJoernNarrowing` (Joern's own type recovery had already narrowed the site to the enclosing class's
-    method, so the in-set held one class method although another class names it). Nothing is excluded silently: a disagreement in
-    either direction fails with its ids."""
+def test_the_self_rule_confirms_exactly_the_ast_references_sites(fcs_built):
+    """Done-condition 1 (P1-50 Part A). The strict `ast` reference (a `self.m()` in a method of the class that defines `m`, no other class of
+    the unit, subclass or test double included, defining `m`; read from the oracle's stage tree, never from `assemble`) equals the set of
+    sites `assemble` confirms by the `self` rule among those the type rule demotes whose facts list that method. A disagreement in either
+    direction fails with its ids. The site Joern had narrowed to the base method while an in-unit test double overrides it
+    (`a118e830a3fd791d5a6b2c9e6f2cf705`, `WorkflowExecutor._drive_loop` -> `self._execute_step`) is absent."""
     recs, report = fcs_built
     syms = {r["id"]: r for r in recs if r["type"] == "symbol"}
     calls = {r["id"]: r for r in recs if r["type"] == "callsite"}
     confirmed = sorted(s["site"] for s in overlay_5d.sites("fcs") if not s["kept"] and calls[s["site"]]["status"] == "confirmed")
     key = lambda cid: (syms[calls[cid]["symbolId"]]["path"], calls[cid]["line"], calls[cid]["calleeName"])
-    strict, loose = reference_self_sites(), overlay_5d.ast_self_sites(S14A / "fcs" / "stage", FCS_ROOT, strict=False)
-    left = collections.Counter(strict)
-    further = []
+    strict = reference_self_sites()
+    left, further = collections.Counter(strict), []
     for cid in confirmed:
         k = key(cid)
         if left[k] > 0:
@@ -616,10 +643,10 @@ def test_the_self_rule_confirms_the_ast_references_sites_and_lists_every_further
         else:
             further.append(cid)
     assert +left == collections.Counter(), f"the reference lists self sites that assemble did not confirm: {sorted(+left)}"
-    assert further == sorted(overlay_5d.extras()["units"]["fcs"]["selfByJoernNarrowing"]), f"unlisted disagreement: {further}"
-    assert not (collections.Counter(map(key, confirmed)) - loose), "a confirmed site lies outside even the loose reference"
-    assert report["nameLinkCounts"]["selfResolved"] == len(confirmed)
-    assert (len(confirmed), sum(strict.values()), len(further)) == (264, 147, 117)
+    assert further == [], f"assemble confirmed sites the reference does not list: {further}"
+    assert report["nameLinkCounts"]["selfResolved"] == len(confirmed) == sum(strict.values()) == len(report["selfResolvedSites"])
+    assert "a118e830a3fd791d5a6b2c9e6f2cf705" not in report["selfResolvedSites"] and calls["a118e830a3fd791d5a6b2c9e6f2cf705"]["status"] == "possible"
+    assert len(confirmed) == 147
 
 
 @pytest.mark.slice
@@ -633,7 +660,7 @@ def test_every_listed_site_has_exactly_the_expected_nameLinked_entry_and_no_othe
             want[site] = dropped
     got = {cid: sorted(t["symbolId"] for t in ts) for cid, ts in report["nameLinked"].items()}
     assert got == want
-    assert report["nameLinkCounts"]["nameLinkedDemoted"] == len(want) == 1216
+    assert report["nameLinkCounts"]["nameLinkedDemoted"] == len(want) == 1333
 
 
 @pytest.mark.slice
@@ -649,12 +676,117 @@ def test_without_the_overlay_the_stored_facts_demote_nothing(tmp_path):
     path = assemble_bundle.build_bundle(raw.unit, raw, REPO, header["builtCommit"], system="slice", root=tmp_path,
                                         built_at=header["builtAt"], extract_script=SLICE_SCRIPT, report=report)
     got = path.read_bytes().split(b"\n")[:-1]
-    deltas_before_5d = [d for d in DELTAS if d[1] != "0.6"]
+    fstring_only = ("p1-50-fstring-only", "0.7", _fstring_edits)             # a facts file without `rt` still gets Part B: the pieces do not depend on it
+    deltas_before_5d = [d for d in DELTAS if d[1] != "0.7"] + [fstring_only]
     want = apply_deltas(stored_lines("fcs"), deltas_before_5d)[0]
     gh, wh = json.loads(got[0]), json.loads(want[0])
     gh["tools"].pop("normalizerVersion"), wh["tools"].pop("normalizerVersion")
     assert gh == wh and got[1:] == want[1:]
     assert report["nameLinked"] == {} and report["nameLinkCounts"] == {"nameLinkedDemoted": 0, "selfResolved": 0}
+
+
+# -- P1-50 Part B: the template edits against the independent `ast` reference ----------------------------------------------------------
+#: Reference-only f-string arguments that no value set records and that are not decorators or implicit concatenations: two keyword arguments of
+#: multi-line `call_with_retry(lambda: ..., label=f"...")` calls. The stored bundle holds no value set at those call sites; the cause is not
+#: established (an open item reported with the unit), so they are named here and any further one fails.
+UNRECORDED_REFERENCE_ONLY = {("falkor-chat/server/falkorchat/embedding.py", 259, "kw.label"), ("falkor-chat/server/falkorchat/ingestion.py", 138, "kw.label")}
+
+
+def merged_pieces(pieces: list[dict]) -> list[dict]:
+    """The compared side: adjacent `const` pieces merged (the normalizer does not merge them; Joern has not been seen to split text)."""
+    out: list[dict] = []
+    for p in pieces:
+        if out and "const" in out[-1] and "const" in p:
+            out[-1] = {"const": out[-1]["const"] + p["const"]}
+        else:
+            out.append(p)
+    return out
+
+
+def _pieces_of(el: dict) -> list[dict]:
+    return merged_pieces(el["template"]) if "template" in el else ([] if el == {"const": ""} else [el])
+
+
+@pytest.mark.slice
+def test_the_template_edits_equal_the_ast_reference_over_the_oracles_stage_tree():
+    """Done-condition 4. Every edited template's constant text equals the reference's (a `JoinedStr` argument at the value set's (file, call
+    line, argument path), or the module constant of the qname); a stored value set with no f-string argument at its key (a value Joern reached
+    through a variable or a collection lowering) must still equal some f-string of the unit; a reference f-string with no value set is admitted
+    only as an implicit concatenation (Joern writes one `stringExpressionList`, the stored element is unknown), a decorator argument
+    (`deco`, not a call site) or one of `UNRECORDED_REFERENCE_ONLY`. A disagreement in either direction fails with its ids."""
+    import fstring_reference as FR
+    recs = [json.loads(x) for x in stored_lines("fcs")[1:]]
+    syms = {r["id"]: r for r in recs if r["type"] == "symbol"}
+    calls = {r["id"]: r for r in recs if r["type"] == "callsite"}
+    ref = FR.scan(need(S14A / "fcs" / "stage"), FCS_ROOT)
+    pool = {json.dumps(p, sort_keys=True) for p in ref.everywhere}
+    left = {k: list(v) for k, v in ref.calls.items()}
+    wrong, keyed, flow, const_ok = [], 0, [], 0
+    for r in recs:
+        if r["id"] not in P1_50_FSTRING["fcs"]:
+            continue
+        got = _pieces_of(P1_50_FSTRING["fcs"][r["id"]][0])
+        if r["type"] == "constant":
+            const_ok += ref.constants.get(r["qname"]) == got
+            if ref.constants.get(r["qname"]) != got:
+                wrong.append(r["id"])
+            continue
+        c = calls[r["callSiteId"]]
+        key = (syms[c["symbolId"]]["path"], c["line"], r["arg"])
+        hit = next((i for i, (p, implicit) in enumerate(left.get(key, [])) if p == got and not implicit), None)
+        if hit is not None:
+            left[key].pop(hit)
+            keyed += 1
+        elif json.dumps(got, sort_keys=True) in pool:
+            flow.append(key)
+        else:
+            wrong.append(r["id"])
+    assert wrong == [], f"edited templates the reference does not have: {wrong}"
+    rest = {k: v for k, v in left.items() if v}
+    implicit = sum(1 for v in rest.values() for _, imp in v if imp)
+    unexplained = {k for k, v in rest.items() if any(not imp for _, imp in v)}
+    assert unexplained == UNRECORDED_REFERENCE_ONLY, f"reference f-strings with no value set: {sorted(unexplained - UNRECORDED_REFERENCE_ONLY)}"
+    assert (keyed, len(flow), implicit, const_ok, len(ref.decorators)) == (446, 29, 144, 3, 1)
+    assert keyed + len(flow) + const_ok == len(P1_50_FSTRING["fcs"])
+    for r in recs:                                          # a decorator call's argument values sit in the decorator record, not in a value set
+        if r["type"] == "decorator" and r["id"] in P1_50_FSTRING["decorators"]["fcs"]:
+            [arg] = P1_50_FSTRING["decorators"]["fcs"][r["id"]]
+            assert r["line"] == 2239
+            assert _pieces_of(arg["values"][0]) == ref.decorators[0][1]
+            assert (ref.decorators[0][0][1], arg["arg"]) == (r["line"], ref.decorators[0][0][2])
+
+
+@pytest.mark.slice
+def test_the_census_of_python_template_value_sets_with_a_constant_piece_before_and_after():
+    """Measured effect (1): of the stored `falkor-chat/server` template value sets and constants, the number with at least one `const` piece
+    before the edit against after, and the reference's number for the same records."""
+    recs = {r["id"]: r for r in map(json.loads, stored_lines("fcs")[1:]) if r["type"] in ("valueSet", "constant")}
+    has = lambda values: any("const" in p for v in values for p in v.get("template", []))
+    before = sum(has(recs[i]["values"]) for i in P1_50_FSTRING["fcs"])
+    after = sum(has(v) for v in P1_50_FSTRING["fcs"].values())
+    assert (len(P1_50_FSTRING["fcs"]), before, after) == (478, 1, 478)
+
+
+@pytest.mark.slice
+def test_part_a_alone_and_both_parts_build_the_same_callsites_and_ids_and_differ_only_in_the_template_values(fcs_built, tmp_path, monkeypatch):
+    """P1-50 interaction 1: Part B edits only the template values of `valueSet`/`constant`/`decorator` records, so the call-site records and every id set are the same with Part A
+    only (the Resolver's pre-P1-50 literal parsing, forced through its `fmt_piece` argument) and with both; that is what lets the draw be made once."""
+    both, _ = fcs_built
+    real = core.Resolver.element
+    monkeypatch.setattr(core.Resolver, "element", lambda self, e, file, depth=1, fmt_piece=False: real(self, e, file, depth, False))
+    header = json.loads(stored_lines("fcs")[0])
+    os.chmod(tmp_path, 0o700)
+    raw = raw_of("fcs", header["builtCommit"], header["sandboxAuditIds"])
+    path = assemble_bundle.build_bundle(raw.unit, raw, REPO, header["builtCommit"], system="slice", root=tmp_path,
+                                        built_at=header["builtAt"], extract_script=SLICE_SCRIPT)
+    only_a = [json.loads(x) for x in path.read_bytes().split(b"\n")[:-1]][1:]
+    assert [r for r in only_a if r["type"] == "callsite"] == [r for r in both if r["type"] == "callsite"]
+    assert {(r["type"], r["id"]) for r in only_a} == {(r["type"], r["id"]) for r in both}
+    a, b = {r["id"]: r for r in only_a}, {r["id"]: r for r in both}
+    changed = sorted(i for i in a if a[i] != b[i])
+    field = {"valueSet": "values", "constant": "values", "decorator": "args"}          # a decorator call's argument values sit in its own record
+    assert all(a[i]["type"] in field and {k for k in a[i] if a[i][k] != b[i][k]} == {field[a[i]["type"]]} for i in changed)
+    assert changed == sorted([*P1_50_FSTRING["fcs"], *P1_50_FSTRING["decorators"]["fcs"]])
 
 
 # -- 5b live tier: two real Joern runs of one stage ------------------------------------------------------------------

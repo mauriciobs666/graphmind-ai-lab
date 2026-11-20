@@ -1307,10 +1307,10 @@ def test_every_cpg_file_the_build_path_imports_or_reads_is_pinned_by_the_record_
     packs = {p.relative_to(sd.REPO).as_posix() for n in refresh.DEFAULT_PACKS for p in (CPG / "packs" / n).glob("*.yaml")}
     pinned = set(sd.pinned_files(sd._line_of(sd.committed_record_lines(sd.REPO, sd.capture_head(sd.REPO)), sd.RECORD_ID)))
     assert imported - pinned - set(sd.TOOL_FILES) - set(sd.EXTRA_PIN_FILES) == set()
-    assert packs <= set(sd.EXTRA_PIN_FILES) and len(packs) == 9
+    assert packs <= set(sd.EXTRA_PIN_FILES) and len(packs) == 11
     assert set(sd.EXTRA_PIN_FILES) <= imported | packs, "an extra pin the build neither imports nor reads"
     assert not set(sd.EXTRA_PIN_FILES) & pinned and all((sd.REPO / f).is_file() for f in sd.EXTRA_PIN_FILES)
-    assert len(sd.EXTRA_PIN_FILES) == 23 and len(set(sd.EXTRA_PIN_FILES)) == 23 and all((sd.REPO / f).is_file() for f in sd.TOOL_FILES) and len(sd.TOOL_FILES) == 3
+    assert len(sd.EXTRA_PIN_FILES) == 25 and len(set(sd.EXTRA_PIN_FILES)) == 25 and all((sd.REPO / f).is_file() for f in sd.TOOL_FILES) and len(sd.TOOL_FILES) == 3
 
 
 def test_the_docstring_states_the_tool_line_shape():

@@ -1,0 +1,22 @@
+import requests
+
+
+def go(x, a, c, b, w, p):
+    requests.get(f"/a/{x}")
+    requests.get(f"it's {x}")
+    requests.get(f"{a}'b'{c}")
+    requests.get(f"{a}1{b}")
+    requests.get(f"{{lit}}{x}")
+    requests.get(f"a\n{x}")
+    requests.get("p" f"{x}")
+    requests.get(f"{x:{w}.{p}}")
+    requests.get(f"{x}{a}")
+    requests.get(f'q"{x}"')
+    requests.get(f"{x!r}tail")
+    requests.get(f"")
+    requests.get(f"a{x}b{y}c")
+    requests.get(f"{{{x}}}")
+    requests.get(rf"\d{x}")
+    requests.get(f"é{x}")
+    requests.get(f"{x}" "tail")
+    requests.get(f"""t{x}""")

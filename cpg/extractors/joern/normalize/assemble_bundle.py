@@ -30,7 +30,7 @@ from .mask import mask_cond_code
 
 #: The slice profile's header identity. A later step that changes output renames or re-versions it (the stamp reads it).
 NORMALIZER = "ccg-slice-normalize"
-NORMALIZER_VERSION = "0.6"     # bumped with each registered delta of tests/slice/test_normalize_equivalence.py (the last delta pins the same literal)
+NORMALIZER_VERSION = "0.7"     # bumped with each registered delta of tests/slice/test_normalize_equivalence.py (the last delta pins the same literal)
 JOERN_VERSION = "v4.0.579"
 DEFAULT_VENDORED = ["_vendor", "node_modules", "third-party", "third_party", "vendor", "vendored"]
 
@@ -104,22 +104,28 @@ def type_backed(lang: str, c: dict, target_full: str) -> bool:
     return target_full == rt + MEMBER_SEP[lang] + c["name"]
 
 
-def _self_rule(c: dict, s, name: str, tgt: dict, S: dict, recv_name: dict) -> str | None:
+def class_definers(S: dict) -> Counter:
+    """How many class members (a method or a property accessor of any class of the unit, a redefinition counted again) are named
+    ``base``: the symbol table of the whole unit, which Joern's candidates for one call do not cover."""
+    return Counter(s.base for s in S.values() if s.kind in ("method", "accessor") and s.parent is not None and s.parent.is_type)
+
+
+def _self_rule(c: dict, s, name: str, tgt: dict, S: dict, recv_name: dict, definers: Counter) -> str | None:
     """The `self` rule (5d, Python only): the symbol id of the one method a demoted ``self.m()`` site dispatches to, or None.
     All hold: (i) the receiver (arg 0, no name) is the name ``self`` and that name is the enclosing method's own receiver
-    parameter (a staticmethod or a nested function has none); (ii) among the site's candidates exactly one is a method of any
-    class, and its class is the enclosing method's class; (iii) its name is the callee's. A subclass of the unit overriding
-    the method is a second class-method candidate, an inherited method fails (ii): both stay name-linked."""
+    parameter (a staticmethod or a nested function has none); (ii) the unit defines exactly one class member named ``name``
+    (``definers``, over the whole symbol table, not over Joern's candidates), it is a method of the enclosing method's class and
+    it is among the site's candidates; (iii) its name is the callee's. Any other definer, a subclass override or a test double
+    included, fails (ii): Joern may have narrowed the call to the base method while a subclass is what runs. An inherited
+    method is not the enclosing class's own: all of these stay name-linked."""
     recv = next((a["e"] for a in c["args"] if int(a["i"]) == 0 and not a["an"]), None)
     if not (recv and recv.get("o") == "name" and recv.get("n") == "self" and recv_name.get(s.sid) == "self"):
         return None
-    methods = [k for k in tgt if S[k].kind == "method" and S[k].parent is not None and S[k].parent.is_type]
-    if len(methods) != 1:
+    if definers[name] != 1:
         return None
-    cand = S[methods[0]]
-    if s.parent is None or cand.parent.sid != s.parent.sid or cand.base != name:
-        return None
-    return methods[0]
+    methods = [k for k in tgt if S[k].kind == "method" and S[k].parent is not None and S[k].parent.is_type
+               and S[k].parent.sid == (s.parent.sid if s.parent is not None else None) and S[k].base == name]
+    return methods[0] if len(methods) == 1 else None
 
 
 # -- G-4, ordering ---------------------------------------------------------------------------
@@ -318,6 +324,7 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
     cs_info = {}
     name_linked: dict[str, list[dict]] = {}              # callSiteId -> the Joern targets 5d dropped (not type-backed), for merge_scip
     self_sites: list[str] = []                           # callSiteIds the `self` rule confirmed (the acceptance draw's population)
+    definers = class_definers(S)
     synthetic = Counter()
     # a class instantiation (`Cls(...)`) resolves to the class's constructor; a redefined ``__init__`` is the last one
     init_of_class: dict[str, tuple[int, str]] = {}
@@ -352,7 +359,7 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
                 keep = {k2 for k2, b in backed.items() if b}
                 by_self = False
                 if not keep and tgt and lang == "python":
-                    only = _self_rule(c, s, name, tgt, S, recv_name)
+                    only = _self_rule(c, s, name, tgt, S, recv_name, definers)
                     if only:
                         keep, by_self = {only}, True
                 targets = [{"symbolId": k2, "qname": v} for k2, v in sorted(tgt.items()) if k2 in keep]

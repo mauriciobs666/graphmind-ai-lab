@@ -44,7 +44,10 @@ def test_an_imported_name_is_not_shadowed_by_the_importing_files_own_constant_en
     expr, wrap = POSITIONS[position]
     B = core.Builder(lang, "svc", "r", {}, core.Source(tmp_path))
     R = core.Resolver(B, {file: [make_import(target)]}, {path: {f"{path}::{local}"}})   # the import-bound name is in the set
-    assert R.element(expr(local), file) == wrap(expect(target))
+    e = expr(local)
+    if position == "template-part" and lang == "python":
+        e["p"][0]["c"] = "p."          # P1-50: the text piece of a Python f-string is raw source text (`tests/golden/fstring/probe.json`), not a quoted literal
+    assert R.element(e, file) == wrap(expect(target))
 
 
 @pytest.mark.parametrize("lang", LANGS)

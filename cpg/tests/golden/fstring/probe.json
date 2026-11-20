@@ -1,0 +1,487 @@
+{
+ "purpose": "Python f-string pieces as Joern 4.0.579 (pysrc2cpg) hands them to the normalizer, one row per probe line of probe_fstrings.py.txt, run through the shipped extract.sc (P1-50 Part B check). `joern` is the recorded `e` of the call's argument 1; `expected` is the bundle element written by hand from the f-string's source text, never produced by the Resolver. Findings: a piece of a formatString is always raw source text, never quoted; `{{` and `}}` arrive as written, inside the text piece; a nested format spec is one formattedValue; an implicitly concatenated string is one stringExpressionList (never a formatString); an empty f-string has no pieces.",
+ "joernVersion": "v4.0.579",
+ "probeFile": "probe_fstrings.py.txt",
+ "rows": [
+  {
+   "line": 5,
+   "source": "f\"/a/{x}\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "lit",
+      "c": "/a/"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "const": "/a/"
+     },
+     {
+      "unknown": "runtime-built"
+     }
+    ]
+   }
+  },
+  {
+   "line": 6,
+   "source": "f\"it's {x}\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "lit",
+      "c": "it's "
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "const": "it's "
+     },
+     {
+      "unknown": "runtime-built"
+     }
+    ]
+   }
+  },
+  {
+   "line": 7,
+   "source": "f\"{a}'b'{c}\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     },
+     {
+      "o": "lit",
+      "c": "'b'"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "unknown": "runtime-built"
+     },
+     {
+      "const": "'b'"
+     },
+     {
+      "unknown": "runtime-built"
+     }
+    ]
+   }
+  },
+  {
+   "line": 8,
+   "source": "f\"{a}1{b}\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     },
+     {
+      "o": "lit",
+      "c": "1"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "unknown": "runtime-built"
+     },
+     {
+      "const": "1"
+     },
+     {
+      "unknown": "runtime-built"
+     }
+    ]
+   }
+  },
+  {
+   "line": 9,
+   "source": "f\"{{lit}}{x}\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "lit",
+      "c": "{{lit}}"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "const": "{{lit}}"
+     },
+     {
+      "unknown": "runtime-built"
+     }
+    ]
+   }
+  },
+  {
+   "line": 10,
+   "source": "f\"a\\n{x}\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "lit",
+      "c": "a\\n"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "const": "a\\n"
+     },
+     {
+      "unknown": "runtime-built"
+     }
+    ]
+   }
+  },
+  {
+   "line": 11,
+   "source": "\"p\" f\"{x}\"",
+   "joern": {
+    "o": "unk",
+    "l": "<operator>.stringExpressionList"
+   },
+   "expected": {
+    "unknown": "runtime-built"
+   }
+  },
+  {
+   "line": 12,
+   "source": "f\"{x:{w}.{p}}\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "unknown": "runtime-built"
+     }
+    ]
+   }
+  },
+  {
+   "line": 13,
+   "source": "f\"{x}{a}\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "unknown": "runtime-built"
+     },
+     {
+      "unknown": "runtime-built"
+     }
+    ]
+   }
+  },
+  {
+   "line": 14,
+   "source": "f'q\"{x}\"'",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "lit",
+      "c": "q\""
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     },
+     {
+      "o": "lit",
+      "c": "\""
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "const": "q\""
+     },
+     {
+      "unknown": "runtime-built"
+     },
+     {
+      "const": "\""
+     }
+    ]
+   }
+  },
+  {
+   "line": 15,
+   "source": "f\"{x!r}tail\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     },
+     {
+      "o": "lit",
+      "c": "tail"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "unknown": "runtime-built"
+     },
+     {
+      "const": "tail"
+     }
+    ]
+   }
+  },
+  {
+   "line": 16,
+   "source": "f\"\"",
+   "joern": {
+    "o": "fmt",
+    "p": []
+   },
+   "expected": {
+    "const": ""
+   }
+  },
+  {
+   "line": 17,
+   "source": "f\"a{x}b{y}c\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "lit",
+      "c": "a"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     },
+     {
+      "o": "lit",
+      "c": "b"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     },
+     {
+      "o": "lit",
+      "c": "c"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "const": "a"
+     },
+     {
+      "unknown": "runtime-built"
+     },
+     {
+      "const": "b"
+     },
+     {
+      "unknown": "runtime-built"
+     },
+     {
+      "const": "c"
+     }
+    ]
+   }
+  },
+  {
+   "line": 18,
+   "source": "f\"{{{x}}}\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "lit",
+      "c": "{{"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     },
+     {
+      "o": "lit",
+      "c": "}}"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "const": "{{"
+     },
+     {
+      "unknown": "runtime-built"
+     },
+     {
+      "const": "}}"
+     }
+    ]
+   }
+  },
+  {
+   "line": 19,
+   "source": "rf\"\\d{x}\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "lit",
+      "c": "\\d"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "const": "\\d"
+     },
+     {
+      "unknown": "runtime-built"
+     }
+    ]
+   }
+  },
+  {
+   "line": 20,
+   "source": "f\"é{x}\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "lit",
+      "c": "é"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "const": "é"
+     },
+     {
+      "unknown": "runtime-built"
+     }
+    ]
+   }
+  },
+  {
+   "line": 21,
+   "source": "f\"{x}\" \"tail\"",
+   "joern": {
+    "o": "unk",
+    "l": "<operator>.stringExpressionList"
+   },
+   "expected": {
+    "unknown": "runtime-built"
+   }
+  },
+  {
+   "line": 22,
+   "source": "f\"\"\"t{x}\"\"\"",
+   "joern": {
+    "o": "fmt",
+    "p": [
+     {
+      "o": "lit",
+      "c": "t"
+     },
+     {
+      "o": "unk",
+      "l": "<operator>.formattedValue"
+     }
+    ]
+   },
+   "expected": {
+    "template": [
+     {
+      "const": "t"
+     },
+     {
+      "unknown": "runtime-built"
+     }
+    ]
+   }
+  }
+ ]
+}

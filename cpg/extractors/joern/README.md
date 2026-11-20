@@ -80,20 +80,42 @@ the access's base (`ANY` when untyped); for a bare-identifier call `f(x)` the la
 too); a parameter backs nothing; a member call keeps a target whose `fullName` is `rt` + the frontend's separator (`.` python, `:`
 javascript) + the member name; a fact without `rt` is never demoted. The targets dropped go to `report["nameLinked"]` (call-site id -> symbol
 list, for `merge_scip`'s `name_linked`), counted in `report["nameLinkCounts"]`; a site left with none is `unresolved`/`possible`/`name-match`.
-**The `self` rule** (python): a demoted `self.m()` whose receiver is the enclosing method's own receiver parameter, and whose candidates hold
-exactly one class method, the enclosing class's own, is `confirmed` to it (`report["selfResolvedSites"]` lists the ids). `cls`, `this`, a
-nested function, a staticmethod, an inherited method and a same-unit override are not restored. Probe notes and the rows: `tests/test_normalize_name_linked.py`.
+**The `self` rule** (python): a demoted `self.m()` whose receiver is the enclosing method's own receiver parameter is `confirmed` to the
+enclosing class's own `m` when the **unit defines exactly one class member named `m`** (a method or a property accessor of any class,
+counted over the whole symbol table, not over Joern's candidates), it is the enclosing class's, and it is among the site's candidates
+(`report["selfResolvedSites"]` lists the ids). Any other definer, a subclass override or an in-unit test double included, keeps the site
+`possible`/`name-match`, whether or not Joern's `in` still lists it (Joern may have narrowed the call to the base method while a subclass
+is what runs). `cls`, `this`, a nested function, a staticmethod and an inherited method are not restored. Limits, reported not fixed: a
+subclass in another unit, an instance attribute shadowing the method, and same-name classes unrelated by inheritance (a correct
+confirmation is lost; class-aware retention needs base-class data). Probe notes and the rows: `tests/test_normalize_name_linked.py`;
+JavaScript/TypeScript rows (`MEMBER_SEP` `:`, `ANY`, module-typed `this`, bare parameter, `LOCAL`): `tests/test_normalize_name_linked_js.py`.
 
-Measured on the stored `falkor-chat/server` unit: 1,479 sites have a target `rt` does not back, 1,216 end up changed, 264 are restored by the
-`self` rule; `salesperson` (javascript) has none (`jssrc2cpg` does tag `p: any` calls `ANY`, no such site occurs in that unit).
+**Typed receivers with a short type name stay demoted: a counted limit.** Joern gives `rt` as the bare annotation name (`Campaign`, `Fx`)
+when the annotated class is imported but not resolved, so `target == rt + sep + name` fails; accepting a short `rt` equal to the target's
+class name would be a second `confirmed`-producing rule and would wrongly confirm an annotation naming a same-named class of another unit.
+The cost is status only (candidates are listed), and `merge_scip` `name_linked` re-confirms a site whose SCIP target agrees. The planted
+row is `test_a_short_type_name_receiver_stays_demoted_as_a_counted_limit` in `tests/test_normalize_name_linked.py`.
+
+Measured figures (population, per unit, the short-`rt` count) are in `docs/plans/connected-code-graph-p1-linking.md` P1-50 and the 5d
+test report, not here.
 
 **Export-block constants.** `jssrc2cpg` writes `export const X = v` as a `BLOCK` child of `:program` (`const X = v` and `exports.X = X`);
 the module-constant scan reads the assignment children of such blocks (JS/TS, `Identifier` targets only), so an imported exported constant
 resolves through a `ref` instead of an `importRef`. Not read: `export let A = 1, B = 2` and destructuring exports (nested blocks).
 
 **Oracle overlay.** The S14a oracle and stored bundles are not regenerated: the slice tests overlay `tests/data/p1_05_5d_extras.json`
-(`tests/overlay_5d.py`: the hand-listed `rt` table and export-constant facts) and `NORMALIZER_VERSION` `0.6` has its delta in
+(`tests/overlay_5d.py`: the hand-listed `rt` table and export-constant facts) and `NORMALIZER_VERSION` `0.7` (the 5d fix round and the Python f-string constants, P1-50) has its one delta in
 `tests/slice/test_normalize_equivalence.py`.
+
+## Constant text of Python f-strings (`normalize/core.py:Resolver.element`, P1-50)
+
+Joern writes the pieces of a Python f-string (`formatString`) as raw source text, never quoted (`tests/golden/fstring/probe.json`: `{{lit}}` and
+`\n` arrive as written, a nested format spec is one `formattedValue`, an empty f-string has no pieces). A `lit` child of a `fmt` in a Python file
+is therefore `{"const": <c>}`, not parsed as a literal; the normalizer does not merge adjacent pieces and keeps escapes as source text. Not
+changed: JavaScript/TypeScript templates, `concat`, every other literal, the empty-piece filter, the depth cap. Limit: an implicitly concatenated
+string that holds an f-string (`"p" f"{x}"`, a multi-line message) is one `stringExpressionList` in Joern's output, so its value stays unknown.
+The independent reference is `tests/fstring_reference.py` (stdlib `ast`); the opt-in `CCG_FSTRING_LIVE=1` row of `tests/test_fstring_constants.py`
+re-runs the probe through live Joern.
 
 ### Regenerating the recorded facts
 

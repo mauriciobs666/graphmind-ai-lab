@@ -229,8 +229,19 @@ def test_a_bundle_with_name_links_keeps_the_header_counts_valid(tmp_path):
     assert set(records[0]["counts"]) == set(bundle.RECORD_TYPES[1:])
 
 
-def test_the_normalizer_version_is_0_6():
-    assert assemble_bundle.NORMALIZER_VERSION == "0.6"
+def test_the_normalizer_version_is_0_7():
+    assert assemble_bundle.NORMALIZER_VERSION == "0.7"
+
+
+def test_a_short_type_name_receiver_stays_demoted_as_a_counted_limit(tmp_path):
+    """Pins a LIMIT (P1-50, `extractors/joern/README.md`), not a goal: Joern gives `rt` as the bare annotation name (`Campaign`) when the annotated
+    class is imported and not resolved, so `target == rt + "." + name` fails and a call that does reach `Campaign.run` is `possible`/`name-match`
+    (status only: the candidate is listed and `merge_scip` re-confirms it when SCIP agrees). Accepting the short name would also confirm an
+    annotation that names a same-named class of another unit."""
+    src = "class Campaign:\n    def run(self):\n        return 1\n\n\ndef go(c: Campaign):\n    c.run()  # short-rt\n"
+    rows = [call("short-rt", "run", "Campaign", [("Campaign.run", f"{MOD}.Campaign.run")], enc="go", recv="c")]
+    by_line, report, lines = build(tmp_path, src, rows)
+    assert view(by_line, report, lines, "short-rt") == (*POSS, [], ["r.py::Campaign.run"])
 
 
 # --- the `self` rule ------------------------------------------------------------------------------------------------
@@ -279,25 +290,25 @@ class D(C):
 
 
 class E:
-    def m(self):
+    def e1(self):
         return 2
 
     def f(self):
-        self.m()  # self-overridden-in-unit
+        self.e1()  # self-overridden-in-unit
 
 
 class F(E):
-    def m(self):
+    def e1(self):
         return 3
 
 
 class P:
     @property
-    def m(self):
+    def pm(self):
         return 4
 
     def f(self):
-        self.m()  # self-property
+        self.pm()  # self-property
 '''
 FM = f"{MOD}.m"
 SELF_ROWS = [
@@ -312,8 +323,8 @@ SELF_ROWS = [
     call("other-receiver-in-self-method", "m", "ANY", [("m", FM), ("C.m", f"{MOD}.C.m")], enc="C.o", recv="other"),
     call("self-typed-to-the-module", "m", MOD, [("m", FM), ("C.m", f"{MOD}.C.m")], enc="C.p", recv="self"),
     call("self-inherited", "m", "ANY", [("m", FM), ("C.m", f"{MOD}.C.m")], enc="D.n", recv="self"),
-    call("self-property", "m", "ANY", [("P.m", f"{MOD}.P.m")], enc="P.f", recv="self"),
-    call("self-overridden-in-unit", "m", "ANY", [("E.m", f"{MOD}.E.m"), ("F.m", f"{MOD}.F.m")], enc="E.f", recv="self"),
+    call("self-property", "pm", "ANY", [("P.pm", f"{MOD}.P.pm")], enc="P.f", recv="self"),
+    call("self-overridden-in-unit", "e1", "ANY", [("E.e1", f"{MOD}.E.e1"), ("F.e1", f"{MOD}.F.e1")], enc="E.f", recv="self"),
 ]
 SELF_WANT = {
     # `m` is unique to the enclosing class among the class methods; the same-named module function cannot be reached by `self.m`
@@ -329,9 +340,9 @@ SELF_WANT = {
     "self-typed-to-the-module": (*CONF, ["r.py::m"], ["r.py::C.m"]),
     "self-inherited": (*POSS, [], ["r.py::C.m", "r.py::m"]),
     # the pinned override test: a subclass of the unit overriding `m` is a second class-method candidate
-    "self-overridden-in-unit": (*POSS, [], ["r.py::E.m", "r.py::F.m"]),
+    "self-overridden-in-unit": (*POSS, [], ["r.py::E.e1", "r.py::F.e1"]),
     # a property accessor is not a method that `self.m()` dispatches to
-    "self-property": (*POSS, [], ["r.py::P.m.<get>"]),
+    "self-property": (*POSS, [], ["r.py::P.pm.<get>"]),
 }
 
 
@@ -375,6 +386,156 @@ def test_a_self_receiver_is_the_methods_own_receiver_parameter_not_just_the_name
     rows = [call("ok", "m", "ANY", [("m", FM), ("C.m", f"{MOD}.C.m")], enc="C.f", recv="self")]
     by_line, report, lines = build(tmp_path, src, rows)
     assert view(by_line, report, lines, "ok") == (*CONF, ["r.py::C.m"], ["r.py::m"])
+
+
+# --- the `self` rule counts definers in the whole unit, not among Joern's candidates (P1-50 Part A) ---------------------------------
+#: Another class of the unit defines the method, so a `self.m()` is not confirmed to the enclosing class's own: it could dispatch to the
+#: other one. The axes: the other definer is {a subclass, a superclass, an unrelated class} x {listed in the fact's `in`, absent from
+#: `in` (Joern's own type recovery had narrowed the call to the enclosing class's method)}. The `absent` cells are the defect: the old
+#: rule counted the candidates and confirmed them. A same-named module function is not a class method and does not count.
+OTHER_SRC = '''\
+class Base:
+    def ov_in(self):
+        return 1
+
+    def ov_out(self):
+        return 1
+
+    def caller(self):
+        self.ov_in()  # sub-in
+        self.ov_out()  # sub-out
+
+
+class Sub(Base):
+    def ov_in(self):
+        return 2
+
+    def ov_out(self):
+        return 2
+
+    def sp_in(self):
+        return 3
+
+    def sp_out(self):
+        return 3
+
+    def caller2(self):
+        self.sp_in()  # super-in
+        self.sp_out()  # super-out
+
+
+class Root:
+    def sp_in(self):
+        return 4
+
+    def sp_out(self):
+        return 4
+
+
+class U1:
+    def un_in(self):
+        return 5
+
+    def un_out(self):
+        return 5
+
+    def caller(self):
+        self.un_in()  # unrelated-in
+        self.un_out()  # unrelated-out
+
+
+class U2:
+    def un_in(self):
+        return 6
+
+    def un_out(self):
+        return 6
+
+
+def fn_only():
+    return 7
+
+
+class Solo:
+    def fn_only(self):
+        return 8
+
+    def solo_f(self):
+        self.fn_only()  # module-function-of-the-same-name
+
+
+class PropOwner:
+    @property
+    def pr(self):
+        return 9
+
+
+class PropUser:
+    def pr(self):
+        return 10
+
+    def caller(self):
+        self.pr()  # property-of-another-class
+'''
+
+
+def other_row(marker, name, enc, *defs):
+    return call(marker, name, "ANY", [(f"{c}.{name}", f"{MOD}.{c}.{name}") for c in defs], enc=enc, recv="self")
+
+
+OTHER_ROWS = [
+    other_row("sub-in", "ov_in", "Base.caller", "Base", "Sub"),
+    other_row("sub-out", "ov_out", "Base.caller", "Base"),
+    other_row("super-in", "sp_in", "Sub.caller2", "Sub", "Root"),
+    other_row("super-out", "sp_out", "Sub.caller2", "Sub"),
+    other_row("unrelated-in", "un_in", "U1.caller", "U1", "U2"),
+    other_row("unrelated-out", "un_out", "U1.caller", "U1"),
+    other_row("module-function-of-the-same-name", "fn_only", "Solo.solo_f", "Solo"),
+    other_row("property-of-another-class", "pr", "PropUser.caller", "PropUser"),
+]
+OTHER_WANT = {
+    "sub-in": (*POSS, [], ["r.py::Base.ov_in", "r.py::Sub.ov_in"]),
+    "sub-out": (*POSS, [], ["r.py::Base.ov_out"]),
+    "super-in": (*POSS, [], ["r.py::Root.sp_in", "r.py::Sub.sp_in"]),
+    "super-out": (*POSS, [], ["r.py::Sub.sp_out"]),
+    "unrelated-in": (*POSS, [], ["r.py::U1.un_in", "r.py::U2.un_in"]),
+    "unrelated-out": (*POSS, [], ["r.py::U1.un_out"]),
+    "module-function-of-the-same-name": (*CONF, ["r.py::Solo.fn_only"], []),
+    "property-of-another-class": (*POSS, [], ["r.py::PropUser.pr"]),             # a property accessor is a definer too: `self.pr` could be it
+}
+
+
+@pytest.fixture(scope="module")
+def other_table(tmp_path_factory):
+    return build(tmp_path_factory.mktemp("other"), OTHER_SRC, OTHER_ROWS)
+
+
+@pytest.mark.parametrize("marker", sorted(OTHER_WANT))
+def test_self_rule_counts_the_other_definers_of_the_unit_not_the_candidates_joern_listed(other_table, marker):
+    assert view(*other_table, marker) == OTHER_WANT[marker]
+
+
+def test_the_other_definer_table_has_a_row_for_every_expectation_and_confirms_exactly_one_site(other_table):
+    assert {r["marker"] for r in OTHER_ROWS} == set(OTHER_WANT)
+    assert other_table[1]["nameLinkCounts"]["selfResolved"] == 1
+
+
+def test_another_file_defining_the_name_in_the_unit_also_blocks_the_rule(tmp_path):
+    """The symbol table is the unit's, not the file's: a class of a sibling module defining the name is another definer."""
+    path = tmp_path / "repo"
+    src = "class C:\n    def m(self):\n        return 1\n\n    def f(self):\n        self.m()  # ok\n"
+    commit = git_repo(path, {"r.py": src, "s.py": "class D:\n    def m(self):\n        return 2\n"})
+    facts = py_facts({"r.py": src, "s.py": "class D:\n    def m(self):\n        return 2\n"})
+    add_params(facts, src)
+    f = method(facts, "C.f")
+    facts["cs"].append({"k": "cs", "m": f["id"], "id": "9000", "name": "m", "mfn": "", "l": 6, "c": 1, "code": "m()", "dt": DYN, "rt": "ANY",
+                        "in": [{"id": method(facts, "C.m")["id"], "full": f"{MOD}.C.m"}], "out": [],
+                        "args": [{"i": 0, "an": "", "f": [], "e": {"o": "name", "n": "self"}}]})
+    records, report = assemble_bundle.assemble(lang="python", unit_root=".", repo_id="r", facts=facts, stage=path, astgen_dir=None,
+                                               repo=path, commit=commit, audit_ids=[UUID], extract_script=joern_run.EXTRACT_SC,
+                                               built_at=BUILT_AT)
+    [rec] = [r for r in of(records, "callsite") if r["calleeName"] == "m" and r["line"] == 6]
+    assert (rec["status"], rec["reason"], rec["targets"]) == ("possible", "name-match", []) and report["selfResolvedSites"] == []
 
 
 # 5d probe note (Joern 4.0.579, throwaway snippets; the rows above are these results written by hand):

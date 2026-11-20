@@ -111,7 +111,8 @@ def merge_scip(callsites: Sequence[dict], positions: Mapping[str, tuple[str, int
     and are not in the record. For a site with an entry, ``J`` is the record's ``targets`` plus the entry. ``S`` in ``J``:
     ``S`` is the target (``confirmed``/``resolved-call``), the other members candidates. ``S`` not in ``J``, or SCIP external:
     the record stays as 5d left it (demoted, or its type-backed targets); the disagreement is counted and its candidates
-    reported as for any other site. No entry (or ``None``): as before."""
+    reported as for any other site; a site that keeps a type-backed target (``resolution`` ``resolved``) is also counted in
+    ``counts["disagree_partial_kept"]``, because the same disagreement with no entry is demoted. No entry (or ``None``): as before."""
     res = MergeResult([])
     sited = set(positions.values())
     for rec in callsites:
@@ -158,6 +159,8 @@ def merge_scip(callsites: Sequence[dict], positions: Mapping[str, tuple[str, int
             out.update(resolution="unresolved", targets=[], status=CANDIDATE_STATUS, reason=DISAGREE_SITE_REASON)
         res.candidates[rec["id"]] = [_candidate(t) for _k, t in sorted(cands.items())]
         res.counts["disagree"] += 1
+        if entry and rec.get("resolution") == "resolved":      # keeps its type-backed target where the same disagreement without an entry demotes
+            res.counts["disagree_partial_kept"] += 1
         res.callsites.append(out if not entry else rec)
     for pos, targets in sorted(scip.refs.items()):
         if pos in sited:

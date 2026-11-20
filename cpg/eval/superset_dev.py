@@ -17,7 +17,7 @@ The ``-tool`` line (appended by the implementer once, before phase A; one line p
 
     {"id": "ccg-p1-flow-fallback-v1-tool",
      "sha256":    {<the 3 TOOL_FILES: this module, the live test, the offline test>: <sha256 hex>},
-     "extraPins": {<the 23 EXTRA_PIN_FILES: the build path's imported files the record's builderFiles omits, and the DEFAULT_PACKS YAML>: <sha256 hex>}}
+     "extraPins": {<the 25 EXTRA_PIN_FILES: the build path's imported files the record's builderFiles omits, and the DEFAULT_PACKS YAML>: <sha256 hex>}}
 
 Each map must hold exactly its constant's paths, every file must exist and match; a missing or extra key, or a differing byte, refuses (exit 2).
 
@@ -86,6 +86,8 @@ EXTRA_PIN_FILES = (
     "cpg/packs/infra-signatures/negatives.yaml",
     "cpg/packs/infra-signatures/pack.yaml",
     "cpg/packs/kafka/pack.yaml",
+    "cpg/packs/python-http-client/negatives.yaml",
+    "cpg/packs/python-http-client/pack.yaml",
     "cpg/packs/severity-rules/pack.yaml",
     "cpg/packs/shell-mcp-call/negatives.yaml",
     "cpg/packs/shell-mcp-call/pack.yaml",

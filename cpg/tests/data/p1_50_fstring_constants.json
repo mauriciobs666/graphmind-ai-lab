@@ -1,0 +1,6709 @@
+{
+"purpose": "P1-50 Part B: the value sets and constants (`fcs`/`sp` -> id -> values) and decorators (`decorators` -> id -> args, a decorator call's argument value sets live in the record) of the stored falkor-chat/server bundle whose Python template element gains its constant text at normalizer 0.7, id -> expected values. Derived once from a real rebuild of the oracle's facts, then checked against the independent ast reference by tests/slice/test_normalize_equivalence.py::test_the_template_edits_equal_the_ast_reference_over_the_oracles_stage_tree (nothing here is read back from the normalizer at test time).",
+"fcs": {
+"006ff8e10eb3f1fd39d132e657801fc1": [
+{
+"template": [
+{
+"const": "workflow run "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " not found in this workspace"
+}
+]
+}
+],
+"009ea450472bf65ea4e5adb0ea81ff4b": [
+{
+"template": [
+{
+"const": "- **model ref:** `"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "`"
+}
+]
+}
+],
+"009f6a820333a745c822946cff8033d4": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"00ca4f542e0017011ef822b7bcbea4e1": [
+{
+"template": [
+{
+"const": "repo."
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " touched before the input-bound check"
+}
+]
+}
+],
+"01570793883f477f985c208f0e922071": [
+{
+"template": [
+{
+"const": "- **date:** "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"0207bba9a505cde0f72ebd9d218b8c5e": [
+{
+"template": [
+{
+"const": "<row "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ">"
+}
+]
+}
+],
+"025a9404e954f842f022a022bde9c087": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"027ba0b3b1316d851622c1431c4808e9": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/deletion"
+}
+]
+}
+],
+"03800016debfd7dd9d5f912412b20857": [
+{
+"template": [
+{
+"const": "- **temperature:** `"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "`"
+}
+]
+}
+],
+"0397959d29a1b8749124296a81afc4eb": [
+{
+"template": [
+{
+"const": "CURRENT STATE:\\n"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"03d49a7fb3c7804a9f6972580bbe27e3": [
+{
+"template": [
+{
+"const": "th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"0501153ba41eba69f0ebc03ddd5cfcb9": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"052a72eaf22faa7b8c0194f3da1355d2": [
+{
+"template": [
+{
+"const": "unknown ref "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"053185376c192f8a827f7dd32a8e40f8": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "{{}}"
+}
+]
+}
+],
+"0593896e52bf3f32f4bd7f9b9ee5fee9": [
+{
+"template": [
+{
+"const": "m"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"06130ca38acf9eeb863eaa76a3ccf21e": [
+{
+"template": [
+{
+"const": "<row "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ">"
+}
+]
+}
+],
+"06b7266cf7c50ef8152d2e003b85a9a3": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"06fb02064f6eeae9616f386912567e86": [
+{
+"template": [
+{
+"const": "^("
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ")\\.("
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ")$"
+}
+]
+}
+],
+"070032fb26a5a7764d230a0c9207e76c": [
+{
+"template": [
+{
+"const": "S"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"07700720ad02c7217cb9bd995cf7f931": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " @ "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": response missing choices: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"08b01d4c9ffaa8156f43b52f463e9472": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"08d09261a4cf162c4ce68a1274044991": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"0978135935c9706440618e0f5455370b": [
+{
+"template": [
+{
+"const": "th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"0a1435bce0487e0e48b4b9f8c615abad": [
+{
+"template": [
+{
+"const": "/channels/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/threads"
+}
+]
+}
+],
+"0a236c7e9507277f499404e96cacacd6": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "="
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " must be a JSON object"
+}
+]
+}
+],
+"0a73f20eec7e8cd917d8a5de488deb3a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"0a9489d269df0e501f239851b3740441": [
+{
+"template": [
+{
+"const": "ch-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"0dcd1b0cef32cf1277c24e172f83d970": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " → "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"0e1850907424e8ab2ca27c948f35bc90": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"0edf7b1a061e424a6344f3ef2f67444d": [
+{
+"template": [
+{
+"const": "m-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"0ef8fe829dbf595d4d17121476080a4a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ".guard"
+}
+]
+}
+],
+"1005b63baf2c46ab7aba801624e953bf": [
+{
+"template": [
+{
+"const": "th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"10241c61b6e1aa22548ab8e522746b4c": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-m3"
+}
+]
+}
+],
+"102f219a1d5cc72d34755ac361930269": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " AS "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"113fe538b2158f6751e509f6030802d6": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/catalog"
+}
+]
+}
+],
+"12943e212d051ad28c7647f6c9c44eb5": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"12d15a636061441d1824686a35a7bb60": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-m1"
+}
+]
+}
+],
+"12f1cc5fa1e56b95552c6f1090144140": [
+{
+"template": [
+{
+"const": "answer from "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"12fab2c5ced9447d4e5678242d12afc1": [
+{
+"template": [
+{
+"const": "th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"14a95f456dcd0c06bfad8c61317a9ed8": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/catalog"
+}
+]
+}
+],
+"14c2b93bc131c2015c47c504be496fb5": [
+{
+"template": [
+{
+"const": "ch-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"16b4ce4578855fa24778fd5edad3f0ce": [
+{
+"template": [
+{
+"const": "conflicting values for repeated key "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"186d7bd879fde314d880866893e721de": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":demo-welcome"
+}
+]
+}
+],
+"18becb795f043de884c8be7cc1560d65": [
+{
+"template": [
+{
+"const": "^"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "$"
+}
+]
+}
+],
+"19870f7c3d54916506bfa339eddc1450": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"1a067b3be4fcc0f503dc38b89268c744": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"1a3647b9c89359ddf69e6733ff4af9d2": [
+{
+"template": [
+{
+"const": "#!"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "\nimport json, os, sys\nwith open(os.environ[\"STUB_RECORD\"], \"a\") as fh:\n    fh.write(json.dumps({{\"argv0\": os.path.basename(sys.argv[0]),\n                         \"opencode\": os.environ.get(\"FALKORCHAT_OPENCODE_CONFIG\")}}) + \"\\\\n\")\nsys.exit(int(os.environ.get(\"STUB_RC_\" + os.path.basename(sys.argv[0]).replace(\".\", \"_\"), \"0\")))\n"
+}
+]
+}
+],
+"1a5498ee24d1547e1214fbd8f45b9765": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"1b11c472cb91daac65076aa4d534d5a3": [
+{
+"template": [
+{
+"const": "property "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " is not registered for label "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"1be32f00ea2d37c1f6a559bfab514bb5": [
+{
+"template": [
+{
+"const": "unexpected: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"1c5b6be64d33ce7cd21b01c29db0b276": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "."
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " $"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"1cbf11839fd979593af1fa69a11be618": [
+{
+"template": [
+{
+"const": "#!"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "\\nprint('not json')\\n"
+}
+]
+}
+],
+"1d22cb9ff562120d7c4171531ff3be5e": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"1dfdb8dee337b10be50870002a395ed4": [
+{
+"template": [
+{
+"const": "boom fusing "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"1fb6f416ebc6c6d75013e4b54c233277": [
+{
+"template": [
+{
+"const": "guard combinator 'not' takes exactly one child, got "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"2061ddec08e585e1c76ef24457449af0": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"21c887c833696650afb7010a1d086c55": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/session"
+}
+]
+}
+],
+"2339b7a986083764f11bb1d46d49fee6": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"234eefcc5a4e6c8e3e8d15244ade89c8": [
+{
+"template": [
+{
+"const": "m"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"23e1f66de504457a1da12ad0d5cf3a24": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"244e71dc7d7b85a695b5710928e517b6": [
+{
+"template": [
+{
+"const": "m"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"24d944c8ee82475c580e3964fdb62119": [
+{
+"template": [
+{
+"const": "CREATE (n:"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " {{"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "}})"
+}
+]
+}
+],
+"24df1f9afa12ca8020bd5ec69ea711a4": [
+{
+"template": [
+{
+"const": "m"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"2513748a949027009929580843f320e2": [
+{
+"template": [
+{
+"const": "- **quantization (live-verified at run time):** `"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "`"
+}
+]
+}
+],
+"25711b71a8f6aaa3b105d1d2e981c7b6": [
+{
+"template": [
+{
+"const": "cc"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"2572fe862d4481194a73dcdb6b4073ad": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "{{}}"
+}
+]
+}
+],
+"259fe59c656dd77ee4b0b09b48bc0770": [
+{
+"template": [
+{
+"const": "boom embedding "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"25c07d7c6fb635ae49cece7bd14cd008": [
+{
+"template": [
+{
+"const": "    rationale: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"261d52f5caf00c5ad18e5b347afa1790": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":demo-welcome"
+}
+]
+}
+],
+"266da855e1d97356d4e7ad8a3c6a0c81": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"26dceae248c3704c10336fcff2641136": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " must be a string, got "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"276370a24757b06997ebefbeec675430": [
+{
+"template": [
+{
+"const": "Bearer u1."
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"2767cfa52c7bd2548c6f85786166e568": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/catalog"
+}
+]
+}
+],
+"277593adb3768a24e97b8df2b0ca8908": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/participants"
+}
+]
+}
+],
+"27c5a42e1b050f9a93f6326544e2d272": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/thing"
+}
+]
+}
+],
+"28983d46dd6ef880c014c4a5bab26f50": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": response body is not a JSON object (got "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ")"
+}
+]
+}
+],
+"295933fbee53ebf0fd4ac03983786d10": [
+{
+"template": [
+{
+"const": "expected a single scalar row/column, got "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"29b05518eff9f2ca7ef9b5146800b40d": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": invalid JSON — "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"29ded09b0880cbfd4c521ba0efc8fc4d": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"2a06726e4cdda6db9297e241380aa711": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/chat/completions"
+}
+]
+}
+],
+"2ad45c8f0e7e12e42dc5d85177c2fcb1": [
+{
+"template": [
+{
+"const": "duplicate step key(s) "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " — step keys must be unique within a def"
+}
+]
+}
+],
+"2bc98250f7593b99e07a9554e27da0c5": [
+{
+"template": [
+{
+"const": "order "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " is not an order of "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"2d2f8b87cea61813a3078184604b0c64": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/health"
+}
+]
+}
+],
+"2d3c953489b02e77450642f682f64cb3": [
+{
+"template": [
+{
+"const": "Bearer "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "."
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"2dac1dbd4f498fded3ce0a1c8a97bca4": [
+{
+"template": [
+{
+"const": "CONTEXT:\\n"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"2e45bc2b1638bd7f7869f4087e6c7d4f": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"2e9d0538ae2d6fce455f27ad49132158": [
+{
+"template": [
+{
+"const": "/messages/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"2eb6ffe0b71b9b9c2dae85bdb9609b54": [
+{
+"template": [
+{
+"const": "snapshot for run "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " missing"
+}
+]
+}
+],
+"2f7fb145c4f607c131b523b644dac7e7": [
+{
+"template": [
+{
+"const": "meta."
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"2f9797ff24c88edd6195569b40759995": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"2fdc70f257ab85911374385d96d3fbf0": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " @ "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": response missing choices: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"302f14371db59c3d9c100e94177f44a7": [
+{
+"template": [
+{
+"const": "<row "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ">"
+}
+]
+}
+],
+"30bbdb6647e8e53a0b00c106ef0874d4": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " is not mapped as the twin of "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"311a55f5b8565385f758d40bc3bcaa8f": [
+{
+"template": [
+{
+"const": "th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"31ab380342a854a77b22778315211800": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"31b6afefad195c6eef1627a32b68fa0d": [
+{
+"template": [
+{
+"const": "p-wait-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"3209eb4e11ad14038170a069fa561c72": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"323c5b4e8fecf19bf9034654f1b01fd1": [
+{
+"template": [
+{
+"const": "guard node count exceeds the cap of "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"32da00347a96a071bfa605e814d82af6": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"3350ac402b5f2b901a6001392ddc22e3": [
+{
+"template": [
+{
+"const": "no catalog product has productId '"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "'"
+}
+]
+}
+],
+"33e3f128f1feee5e2db5ad1f52a2ae22": [
+{
+"template": [
+{
+"const": "#!"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "\nimport json, os, sys\nwith open(os.environ[\"STUB_RECORD\"], \"a\") as fh:\n    fh.write(json.dumps({{\"argv0\": os.path.basename(sys.argv[0]),\n                         \"turn_workers\": os.environ.get(\"FALKORCHAT_STOREFRONT_TURN_WORKERS\")}}) + \"\\\\n\")\n"
+}
+]
+}
+],
+"34e2a92c917545b6ceaf496cc4f77fa1": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"3589998ff681eaa9a4f21468396e7fa9": [
+{
+"template": [
+{
+"const": "p-wait-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"371f617b6bfae91b47c79be442c13b9a": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"374045a1136fe97307fd60ba433b4316": [
+{
+"template": [
+{
+"const": "boom near "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"37cb0177984a0a1e342f7837315eaf3a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " references unknown var "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"3828bdd03f0d5c0214f05e6cd30d408e": [
+{
+"template": [
+{
+"const": "/workflow-runs/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/input"
+}
+]
+}
+],
+"386c637b6d9ae7c306c146ab54b963d3": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"38b8a0a660621c14c437eba5cc6234f9": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "="
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " is not valid JSON: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"3904591719c246a12b1938b9e936f1eb": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"399c710b338aed48b557c36634ed0209": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/participants"
+}
+]
+}
+],
+"39a7a9db67c18d77b3c1e90a93e212ee": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"39dafd48c22f0503e4b7ff6c28bb3364": [
+{
+"template": [
+{
+"const": "MATCH (n:"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " {{"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": $id}}) DETACH DELETE n"
+}
+]
+}
+],
+"39e611fd3d7e7489862f74ad6ca67bf8": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"3a001916f38d5c75f7b4081d921da69d": [
+{
+"template": [
+{
+"const": "base_url: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"3aad7470a88262622499ce65d44d44cf": [
+{
+"template": [
+{
+"const": "model config unusable ("
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "): "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"3c91507a339069a03c07f20a32b8d64e": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"3d179b71373ecd7825610ca4a5b6dc8a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-r1"
+}
+]
+}
+],
+"3dcaeb0ff64ef232aff3b3e3c43053ee": [
+{
+"template": [
+{
+"const": "msg "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"3ec44d8d081d117054570432d862ee03": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"3feefc02ada35b5291820ce120034386": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/workflow-runs"
+}
+]
+}
+],
+"3ff1176ab689cf2136c266b03a9139ef": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"3ff6a460728ff7cbee37af4100765963": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"409093f1d1c74be2112ef3fef0ca735c": [
+{
+"template": [
+{
+"const": "non-local $ref "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": the collector cannot see it"
+}
+]
+}
+],
+"413cce4c476112af2e71116d7af2ea8e": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"4177b61f35b07e6ae84c7e9d402f23c3": [
+{
+"template": [
+{
+"const": "Bearer "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"423929130790a4f25afc6921f223fd52": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"426348d3208142dc413550dd2af6b6b9": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":demo-welcome"
+}
+]
+}
+],
+"43ac161357e4213c8740b5f8b5b21428": [
+{
+"template": [
+{
+"const": "p-run-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"44802b669c9e6ecf9ef019e4c97787f4": [
+{
+"template": [
+{
+"const": "Alice"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"45489bbeda26c2eb8de1f13fd7da4e23": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/catalog"
+}
+]
+}
+],
+"4591487b32cbf0cbc97f037e65568ace": [
+{
+"template": [
+{
+"const": "/channels/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/threads"
+}
+]
+}
+],
+"45a0bc42b4a9de17a1177c27e370a3fb": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " names an unresolvable model "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"45ae25897b4487d86401bcdcf68ca6e0": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"45bb401730060ae2e8dc8ef6dc49ce79": [
+{
+"template": [
+{
+"const": "ORDER BY "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"460caecfdfd6f36ad5ee1e21132361c4": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " unique-b"
+}
+]
+}
+],
+"46be3fba6ff7be1e4d4607e5e077f0b0": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/catalog"
+}
+]
+}
+],
+"4763d9afd336a2830e4997121bc7de50": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"47a0098c197087cc774eff65552e594e": [
+{
+"template": [
+{
+"const": "  embedding model: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"48464b8a24a6463caf694c02a1614263": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/catalog"
+}
+]
+}
+],
+"48a1c3d5043dfbe359dc2879198f2acd": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "\\t"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "\\t"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "\\texpected="
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "\\traw="
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "\\tfinal="
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"4a13a45362b534e0618020a828072b44": [
+{
+"template": [
+{
+"const": "mentions has "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " items, exceeding the "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " limit"
+}
+]
+}
+],
+"4a7d01a1a56cbad8bd8f2a0217312e85": [
+{
+"template": [
+{
+"const": "trig-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"4b87cfee7da78c955e64bdd633a088ca": [
+{
+"template": [
+{
+"const": "- **prompt revision (HEAD at run time):** `"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "`"
+}
+]
+}
+],
+"4bdc52b4d02fe07e50a2b2e02c8593c1": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": simulated failure"
+}
+]
+}
+],
+"4be8b182901c56e05be193523ee3f8a4": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"4d4f263ed7f940411fc2ace354ebcbf2": [
+{
+"template": [
+{
+"const": "ch-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"4dbdc769bf2b47fe8296078077f3198c": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "["
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "]"
+}
+]
+}
+],
+"4df7902404938c57a38b994dcab2428c": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"4dfe90c6b832ed74ac365f246d94fa85": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"4effa1d0fd97f86afa6c6b0a3250fcc9": [
+{
+"template": [
+{
+"const": "order "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " cannot "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " from status "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"5001764de37cbc41e441b8d3d996a21b": [
+{
+"template": [
+{
+"const": "Widget "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"500541eda26a3b481a28af11035380ff": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"500f293585175415cc548c9b3bf5355c": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/reset"
+}
+]
+}
+],
+"522130a13e59c68640851f205307e6aa": [
+{
+"template": [
+{
+"const": "boom reporting "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"5234c1f58d7e8df3b49a0b5bc9de84ed": [
+{
+"template": [
+{
+"const": "- **fixture sha256:** `"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "`"
+}
+]
+}
+],
+"525015ebd4f31e39a0f7700d1d7b8652": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/order/advance"
+}
+]
+}
+],
+"52d62c809ea68002fd8af95ca0e7db45": [
+{
+"template": [
+{
+"const": "/workflow-runs/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/input"
+}
+]
+}
+],
+"52ea3df8e163a686d3b54d3e6a58b43b": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"5305e9ddf5a915ad078c85bcadd61bbf": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/nowhere"
+}
+]
+}
+],
+"536b439d9ac57e2ec6cddb3dacb673cf": [
+{
+"template": [
+{
+"const": "/workflow-defs/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/versions/1/materialize"
+}
+]
+}
+],
+"541e3a27bddc902a117b1e8962685149": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"5425d94e7db9990a643b3dd924a01350": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/order/advance"
+}
+]
+}
+],
+"559338125c6821e9f3d46f1f914246da": [
+{
+"template": [
+{
+"const": "  step model: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"564b7c3c1c85909279333a88390173b7": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"5653b3b9a2cd1ce51cb166bd652b6301": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/api/v0/models"
+}
+]
+}
+],
+"56cd5775a8480b2f1679366b574feb01": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": simulated outage"
+}
+]
+}
+],
+"56d564563a1977084864023d69762bd7": [
+{
+"template": [
+{
+"const": "m"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"56f4e9f30340238f9826495cd6b2efe3": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-sr0"
+}
+]
+}
+],
+"571d1353725fa06eb55bc5c6468da643": [
+{
+"template": [
+{
+"const": "/channels/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/threads"
+}
+]
+}
+],
+"57e8e4040c0cdff14b2ed9d116f04e25": [
+{
+"template": [
+{
+"const": "- **resolved baseURL:** `"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "`"
+}
+]
+}
+],
+"5811e43b2dfa80b79ff389738a666d58": [
+{
+"template": [
+{
+"const": "Loaded "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " existing cache entries from "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "."
+}
+]
+}
+],
+"59c45194c719ccb9ebea98e41ebd2210": [
+{
+"template": [
+{
+"const": "G1_all FAR = "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " ("
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " calls)"
+}
+]
+}
+],
+"5c095fde4959e4ecbf50732f8fc7b5ff": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-2"
+}
+]
+}
+],
+"5ce25a3ad03ac7a47c6a58c8e8ced5ca": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"5ce3a18b7d38ce1a651e5f356ec58681": [
+{
+"template": [
+{
+"const": "/workflow-defs/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/versions/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/materialize"
+}
+]
+}
+],
+"5d44d94a0cc44a6c0c228d0f5ba73d85": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/reset-all"
+}
+]
+}
+],
+"5e20acfd697f6fd8d1088213592f7858": [
+{
+"template": [
+{
+"const": "^"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "$"
+}
+]
+}
+],
+"5e593ff452ccea49a0f75e816621b656": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/workflow-runs"
+}
+]
+}
+],
+"5e5cf5805f35c4e1efa55ad225eaaa9d": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-m3"
+}
+]
+}
+],
+"5e6e9fd0f07d2b85097e4a95acfb6535": [
+{
+"template": [
+{
+"const": "result:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"5ec93126de967e28f204745b27b2df86": [
+{
+"template": [
+{
+"const": "l"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"5f384c87f0f2b9d104dc2524b9798090": [
+{
+"template": [
+{
+"const": "/workflow-runs/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/input"
+}
+]
+}
+],
+"5f628ae540d6a797ecb6e716c4e36d6c": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"6051f065e240a7dd0cfcfd12c8317869": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"61ab15a8ff08fc4467a54cc85de98884": [
+{
+"template": [
+{
+"const": "DROP VECTOR INDEX FOR (n:"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ") ON (n.embedding)"
+}
+]
+}
+],
+"63b5ee3234d4835204f8e987ccfeb2e2": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": invalid JSON — "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"63e99a6a8ce19613f52fbcd0b29f621a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/reset-all"
+}
+]
+}
+],
+"64da914e99220c4ee12e7d06dbf3c905": [
+{
+"template": [
+{
+"const": "len "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " != "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"663bcf8a95ebe41149bde1ef715f843b": [
+{
+"template": [
+{
+"const": "| "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " | "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " | "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " | "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " | "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " | "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " | "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " |"
+}
+]
+}
+],
+"6829adabf914dc2b65974efb3f58bc61": [
+{
+"template": [
+{
+"const": "unknown expected.type "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"6892b8c1f43ddf68bae18ddc86fcad64": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"69890b745e5944deb31e8dbc1a53a5f6": [
+{
+"template": [
+{
+"const": "widget "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"6a5777ab873cb89066e530d5bd6a5aa2": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"6a9d7babab2006d113db2231d508a8a9": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " references unknown var "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"6b9529f7407438c06ddea4c4db9a0ef1": [
+{
+"template": [
+{
+"const": "/workflow-defs/onboarding/versions/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/materialize"
+}
+]
+}
+],
+"6ceb7d2c6b2c2e9c1970d4c957d39c3a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": not published in `reference` at this version"
+}
+]
+}
+],
+"6dc6df5739e0987d2fe080af4f10b539": [
+{
+"template": [
+{
+"const": "m"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"6dd4f9296f655976146cc8035ca43311": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/participants"
+}
+]
+}
+],
+"6de6afec13d80d798790e6c7d9e5fa2f": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "[]"
+}
+]
+}
+],
+"6fb087dbdff1ea470f34103e6bd5628a": [
+{
+"template": [
+{
+"const": "Loaded "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " golden queries from "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "."
+}
+]
+}
+],
+"7009860acc8d6b9487fb021ee346c8f8": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"702c547b8ddce76fdfca93e739131db5": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"70820da6382d888350d518360c6079f8": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/session"
+}
+]
+}
+],
+"7202dcb3923464e528234452e105e41d": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/session"
+}
+]
+}
+],
+"7353324a3b8bcb3782d126f7cebf972e": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"73f914c9a2832f207297fc907aa867cd": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"741021c5bfc3aaad52ef12189653d1f7": [
+{
+"template": [
+{
+"const": "c"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"74515b184f9f2860b6616cf3e6c5df1c": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"751715dae9a0e57beaf2c29fb87be1bd": [
+{
+"template": [
+{
+"const": "d"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"758ecc3550e97a49b51d846fe87bfbad": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"75e390a48eaf79bec7cc042b733b6875": [
+{
+"template": [
+{
+"const": "unresolvable class expression: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"75f43411ea9aa99d019b99d4463bea19": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/health"
+}
+]
+}
+],
+"76b0b9ea5488f77d7a26486e44263ffd": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " references unknown property "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"77a4fcdcda004373c410c474157c00cc": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"78113a49738f30efe79d5c9337e47475": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"798527638660b244951d8d8cfca03878": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " references unknown property "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"79c84f27176c685a669471b8bd0ec2ea": [
+{
+"template": [
+{
+"const": "error: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"7a1d0a21099fd89429a4f58043e4c835": [
+{
+"template": [
+{
+"const": "th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"7b20caef3a7753bf3a099d59c926eed5": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"7c603ba08e6ef9d2a1eec989dd329678": [
+{
+"template": [
+{
+"const": "returns entry "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " does not match a projection or aggregate shape"
+}
+]
+}
+],
+"7cc5f872052082b250e4f51c924ef852": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/order/advance"
+}
+]
+}
+],
+"7d5d688c745fd01ac7e4a28ce401cd8b": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"7d677e6b19201fa12af4e115b78b2153": [
+{
+"template": [
+{
+"const": "word"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"7d8c7c4a1e39b09272a74c731e59421a": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"7d92474d02958c33be6119767c9e9300": [
+{
+"template": [
+{
+"const": "ORDER BY "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"7ddca721088ce8c75f4d008e94fd3d50": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/health"
+}
+]
+}
+],
+"7f3be0b2ba5ab3102b3149dd00da739c": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": not materialized into ws:"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " at this version"
+}
+]
+}
+],
+"7f8dba54120bb8cbf137b55596a95e89": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/participants"
+}
+]
+}
+],
+"7fbe03986a4114fe23873fafb599d5b4": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/reset-all"
+}
+]
+}
+],
+"802aca1c9f18d409fb31692cc6cd5afa": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"80348c3adbd192ad9abf94ed4b0770b3": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/reset-all"
+}
+]
+}
+],
+"824f411a73250dbaba4cb69a319d80f2": [
+{
+"template": [
+{
+"const": "/workflow-runs/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/step-runs"
+}
+]
+}
+],
+"8386aa85ebc87168a566868f5dff9e7d": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"8472ff6d4010783dc4b70f1da3440552": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " not found in repository.py"
+}
+]
+}
+],
+"8489aa06a18c53c672eab8edc85e7788": [
+{
+"template": [
+{
+"const": "m"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"86a96b9053782114a9d52a519d1964bb": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-m2"
+}
+]
+}
+],
+"873593902429fa7dff7ceeb68c526c34": [
+{
+"template": [
+{
+"const": "word"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"88d1563a1eef40f13dfe2b46bf2d5e76": [
+{
+"template": [
+{
+"const": "widget-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"88ec35b7e3e52ee0f4697afdb7bd157b": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"895afc47f4db930f0b4b8a00f2241b95": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"8984cf4e2ae722469d14f32791e1af4f": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " vs "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"8a63354f8b925ed20ef1ca0834fa0752": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/reset"
+}
+]
+}
+],
+"8acdc2acdcab4d74b8db8006a5e4344c": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"8ad6675dd7a5138616dcfb758caed296": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"8b530e931b400f6f3f81918eb7fa6075": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "."
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"8b9ed24946e853e2c6a1a8d71176896a": [
+{
+"template": [
+{
+"const": "word"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"91cf47bb35d88a0b4995c9c67ed1f39f": [
+{
+"template": [
+{
+"const": "call"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"91ef04155846a10f45dd7fa7ecebf448": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/reset"
+}
+]
+}
+],
+"925c3ebcd7ff899619ad8b17998df1a8": [
+{
+"template": [
+{
+"const": "label "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " is not registered for this dataset"
+}
+]
+}
+],
+"92d3722a010366c9068b71bba0adf5ff": [
+{
+"template": [
+{
+"const": "p-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"93a45d523960ac33b0c01252bce4477b": [
+{
+"template": [
+{
+"const": "th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"93f87804ef75c93765a355346a1f4b56": [
+{
+"template": [
+{
+"const": "quantization (live-verified): "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"94d906ca72fdb41fa292f3a265ba4a77": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " AS `"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "`"
+}
+]
+}
+],
+"956409da52622da000f8a7ddd52deb28": [
+{
+"template": [
+{
+"const": "unknown expected.type "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"956b5f80baf78ca97c78fe68011a9a26": [
+{
+"template": [
+{
+"const": "boom fuzzy lookup for "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"957165ce476d71a2f9c8d9d49498a2e2": [
+{
+"template": [
+{
+"const": "VERDICT: "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "  (gates: G1<=10% -> "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ", G2>=80% -> "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ")"
+}
+]
+}
+],
+"95db7d7fe4ca25da816fef32d7f178ad": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"95f0934e71dbfc3d4e04aa656962f476": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"966e97c8333a909db39ffbf29e87ea5f": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": malformed request: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"97033cc9feb0b28afe6f17a2fa687a99": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": provider error: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"978314defab63d1079607c42e878ce9c": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/embeddings"
+}
+]
+}
+],
+"979a2a9d1537352c2eeca5d49a87dacc": [
+{
+"template": [
+{
+"const": "word"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"98375801f4d448619bcbabcf3ee2dea0": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"99248778878c565ff83d36191933a893": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"998076df5d8d752f7061f94c1824c27f": [
+{
+"template": [
+{
+"const": "/workflow-runs/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/input"
+}
+]
+}
+],
+"9a2747ed7657c9a85faeec2d4c5093f4": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": simulated outage"
+}
+]
+}
+],
+"9ad3939670b384f579150dfee66a124d": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"9b72924f0129ea1970839a24e019f5e3": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"9c31b1f7eefd821ccde88780732526f8": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"9db35efbae85b0272d68b54a1df4aeb6": [
+{
+"template": [
+{
+"const": "model ref: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"9e7e2de294ccb98cf3db5ffd16fe59d6": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":th-p-ccc"
+}
+]
+}
+],
+"9e8e7aa137e530d143684605d8ddf342": [
+{
+"template": [
+{
+"const": "place_order was a no-op — customer not found ("
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ")"
+}
+]
+}
+],
+"9eaf5908da989366a152abeb82a096af": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/reset-all"
+}
+]
+}
+],
+"9eb9ac99257bbc93d3d99bb310571915": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"a0f94b3e39708ce6e53ac73b7f025643": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-run"
+}
+]
+}
+],
+"a1938d96f842009bc97db1a6b7e8272f": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/session"
+}
+]
+}
+],
+"a250c790033770ff7c084938980a0851": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "{{key}}"
+}
+]
+}
+],
+"a28d6dd2acd11cfcabc779d7239815e7": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"a2b12a56b88fe566d31ca44e438e09cc": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"a4084aa4002c7dca5f717af184e88cbb": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-o"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"a4521ac667a34855fc3c75db15a6e6d6": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"a4538aa55a04eed20bb9a1c315671e9b": [
+{
+"template": [
+{
+"const": "key must be 1.."
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " characters"
+}
+]
+}
+],
+"a46eb32db66138bc454dbc890358d8e1": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-r1"
+}
+]
+}
+],
+"a558b27b5c6def0799e1750b0d5468fb": [
+{
+"template": [
+{
+"const": "unexpected write status "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " (thread="
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ")"
+}
+]
+}
+],
+"a58b00e3989dd5bd984db075d80a0105": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"a58ef3ced2dabd2e068b7502d1d9bf4a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/catalog"
+}
+]
+}
+],
+"a6ecc72b583a999c81202ce9283c9853": [
+{
+"template": [
+{
+"const": "ch-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"a71434324d94e1d551f7adaead0d46aa": [
+{
+"template": [
+{
+"const": "^"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "$"
+}
+]
+}
+],
+"a85fd80eca611440eaab71f6c04606e7": [
+{
+"template": [
+{
+"const": "wrote "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"a94dd831a8066cdc2affe7d391359206": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"aa6aa60f77bdef74d6346fde7781a18e": [
+{
+"template": [
+{
+"const": "```json\\n"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "\\n```"
+}
+]
+}
+],
+"aab26ba9bd8aef6a8aabeff8d500fc44": [
+{
+"template": [
+{
+"const": "guard `path` must be a non-empty string, got "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ab208d8482633690998678222d9437b1": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"ac3c5a7ad6418f43eba5b0f8810e33c0": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ad23691849eb15afb567a0a5ce1646d4": [
+{
+"template": [
+{
+"const": "boom fetching "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ad37d62de569cf2927b71faf6fc3b244": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": invalid JSON — "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"addec815957cbd2a97bd2d58dfaa2bf2": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"ae820f5464170a6c762c86f03744b63e": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": reading response failed: "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ae8673e118317d4fd52cf4dbd24033e8": [
+{
+"template": [
+{
+"const": "ch-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"aebf80cd41c38c9543132369bb62801d": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/order/advance"
+}
+]
+}
+],
+"af040b655393cda44e77d0f497003491": [
+{
+"template": [
+{
+"const": "  embedded "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " ("
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " so far)"
+}
+]
+}
+],
+"af1d3e795cc05fe9751f5b1af05bd063": [
+{
+"template": [
+{
+"const": "th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"af68a02704abffabf1d448d799ed9220": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/"
+}
+]
+}
+],
+"af8b006200b0c3ebca35a5642fe1f43d": [
+{
+"template": [
+{
+"const": "order_by "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " must be a bare projection (\\\"var.property\\\")"
+}
+]
+}
+],
+"b06265d85d18357d57120a3d24ca5206": [
+{
+"template": [
+{
+"const": "/channels/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/threads"
+}
+]
+}
+],
+"b1394ea4cac416ef45279c205ac795a5": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-m3"
+}
+]
+}
+],
+"b1a47ca977774d4c27dd7ae2cf8f9438": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " has no owned channel — nothing was reset"
+}
+]
+}
+],
+"b1f76fc082f68452bb0a2b9a75f50a4c": [
+{
+"template": [
+{
+"const": "max_attempts must be >= 1, got "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b2252a230229ee93bfd6e6195b7182c3": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/participants"
+}
+]
+}
+],
+"b251a91f6564cec92ca3c457950af0ed": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " @ "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": response missing data: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b2c015c27e43d6f1eaa5d3177a79d1b7": [
+{
+"template": [
+{
+"const": "t"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b39ef5d53ad631ca453e984a73ffa452": [
+{
+"template": [
+{
+"const": "cand"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b3d26a2bfeb29487067d27964a0c4d79": [
+{
+"template": [
+{
+"const": "  - replicate "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": final="
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " — "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b3e390d95dd04639aa132649815cc524": [
+{
+"template": [
+{
+"const": "len "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " != "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b3fdbca11f8fed67c0425d7e265b3128": [
+{
+"template": [
+{
+"const": "cand"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b46d481cbbf6709dcf7807d61d3fc05b": [
+{
+"template": [
+{
+"const": "/workflow-runs/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/input"
+}
+]
+}
+],
+"b47870280bb9199f30036c735309ffd6": [
+{
+"template": [
+{
+"const": "Your cart is empty; "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " is not in it."
+}
+]
+}
+],
+"b49d5cd883d7e2d59b8278e31a292dc2": [
+{
+"template": [
+{
+"const": "guard node must be an object, got "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b5357360fea4a90b7b003d249779983c": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/catalog"
+}
+]
+}
+],
+"b559b2f428f44967f424fcdb62eeefc6": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b58d11e4f4f6aa64db5b318ef7300cae": [
+{
+"template": [
+{
+"const": "Bearer "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "."
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b5c0c0eef7b5ef0c4ba41e04743117b8": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"b6a5ca3a2172adef61f755462a8bd9f2": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b7002f40e0a6de32ae1ff3b5a2d82d6e": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"b7ae43503da2db8d723d2047fff305c6": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"b7c0a167fbd44dc04157b05b55f0aec5": [
+{
+"template": [
+{
+"const": "Bearer "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ".wrong"
+}
+]
+}
+],
+"b7cd3297bb857925964a2d69695f5d47": [
+{
+"template": [
+{
+"const": "G2 advance-recall = "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " (n="
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " cases, "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " advanced)"
+}
+]
+}
+],
+"b7dd65fc1ec69c44f5b8c033636ee450": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/catalog"
+}
+]
+}
+],
+"b80512a524ec04e0a645b930dfc3c313": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"b87987c0d7994023ab7b21953d2f55fe": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/health"
+}
+]
+}
+],
+"b881222af5e4d6d86366805f57e7d8b8": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": connection failed: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b8d43694d23435ec4df8f780877b9669": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": response body is not valid JSON: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b8e65cd3bf590de80502cd2873a058ab": [
+{
+"template": [
+{
+"const": "steps["
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "]."
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"b97198ab8064924a96fb97e443aab7b7": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"b9b72d78335e1437fd2d3eed5dab7cba": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-sr"
+}
+]
+}
+],
+"b9c57b279131d6042c0379f17c282046": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":th-long-gone"
+}
+]
+}
+],
+"ba4205e95c040820db05857a7c56c458": [
+{
+"template": [
+{
+"const": "MATCH (n:"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " {{"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": $id}}) RETURN n.embeddingModel"
+}
+]
+}
+],
+"bc20521bf60f17ce9d493a7d7b8dd584": [
+{
+"template": [
+{
+"const": "  "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " = "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"bcb6169a1829c9b1a57d59d44189cb79": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/reset-all"
+}
+]
+}
+],
+"bdf8ac978fb2208f1f2e1768d6bbba4d": [
+{
+"template": [
+{
+"const": "/channels/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/threads"
+}
+]
+}
+],
+"be22194c3d748dce0a6801dfae7892fb": [
+{
+"template": [
+{
+"const": "d.lshBand"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " = $band"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"be58af9b5aeb503b1cb6e97504589ca5": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " AS "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"be63500ec53c604f865ae46af0f76de1": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/reset"
+}
+]
+}
+],
+"bef7b5d85d354a34f86da228f97fb6ed": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"bfac92fc73f3d15fa7000ca5c00195b1": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"c01e5086f3b3a88cda51f3ea83e43e89": [
+{
+"template": [
+{
+"const": "filter op "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " is not a valid operator"
+}
+]
+}
+],
+"c0757f26a747fb425af69b408e72d0fe": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"c1f0b3ff7fcaebdad4ecc1741ed7747a": [
+{
+"template": [
+{
+"const": "no service probe semantics for "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"c201c100f8289ba831b6191aba951b25": [
+{
+"template": [
+{
+"const": "at most "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " keys allowed"
+}
+]
+}
+],
+"c2666465fe1c7e22fe75cfda5fd07b96": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"c4768178573824c0219c95c84cd86dea": [
+{
+"template": [
+{
+"const": "r"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"c54b5962a6dc1c3c790af983d60cbf06": [
+{
+"template": [
+{
+"const": "th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"c5841bbd580ed3c3d3269eb09d24c7c0": [
+{
+"template": [
+{
+"const": "quantization: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"c5c5c5d211f10ac32da2bbc29b5b325a": [
+{
+"template": [
+{
+"const": "guard path "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " has an empty segment"
+}
+]
+}
+],
+"c5fafea39f198a1bfc5af901270d7ffe": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"c705e93c0e52d459a033c19d7df57270": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-sr"
+}
+]
+}
+],
+"c7592844e18d9f13d3b68e1abecc4a8c": [
+{
+"template": [
+{
+"const": "Bearer "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "."
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"c76ef1b74b8412d3c91ee8403565fafd": [
+{
+"template": [
+{
+"const": "e"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"c8256236994e388199c9ec705782f61a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"c8c6584d3886ca4f9391d0a0a0236ec7": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"c8eb53c5bea953b614b8241f728bdafd": [
+{
+"template": [
+{
+"const": "timers-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"c9be1ab803ed5a87c5a5b7512f1a9fbf": [
+{
+"template": [
+{
+"const": "^(count|avg|min|max)\\(("
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ")(?:\\.("
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "))?\\)$"
+}
+]
+}
+],
+"c9f6995962940a63edca144c72d3efc8": [
+{
+"template": [
+{
+"const": "p-run-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"caeeeb758897c6106055f542bb476571": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"cc06f71348f9cbecfc8e8a4bcff60f03": [
+{
+"template": [
+{
+"const": "guard op "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " requires a `value`"
+}
+]
+}
+],
+"cd27c80a154a036f51083aa5d5e8db66": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " must not be empty"
+}
+]
+}
+],
+"ce15264a723d2efa524eeb9b026719ca": [
+{
+"template": [
+{
+"const": "th-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ce7a7e553663117136bd6ca88a18b8b7": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": malformed request: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"cf35ba1a6b0efefb8678d21c883a46f2": [
+{
+"template": [
+{
+"const": "hash-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"cf4bde1728659e892c08e59caa0a3d96": [
+{
+"template": [
+{
+"const": "unknown guard op "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " — allowed ops: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"cf96362dfc1b2136347fc30acfc3eea5": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-run"
+}
+]
+}
+],
+"d013d62e5649c17292a8080884c2d7c8": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/reset"
+}
+]
+}
+],
+"d0b74a3423320ea9379a75bc9c44b424": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"d1615eedd008786324f4d3a9ddc1e16d": [
+{
+"template": [
+{
+"const": "rationale contradicts advance (bias-to-suspend): "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d178014fac583749399026340f977d82": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/reset"
+}
+]
+}
+],
+"d1a4d99e7a5d752dd272178d3273720f": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d1ae4ae7b543911de54b008bc1ab5a72": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"d261018937186cbba22c18676ab13c6f": [
+{
+"template": [
+{
+"const": "boom extracting "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d289a094d57dcd38ad43052c5c89351b": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d28ded7688ab0edca2b6841d4ec831f1": [
+{
+"template": [
+{
+"const": "^"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "$"
+}
+]
+}
+],
+"d3a0bd77d6f764beb3db64697122a837": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"d40075cac0048162cd96485901151ebd": [
+{
+"template": [
+{
+"const": "Widget "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d420b7870d5aa6f66cea410885fa3db7": [
+{
+"template": [
+{
+"const": "- **k (replicates per case):** "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d47b903c800eb717531b1b031ac37a3a": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/workflow-runs"
+}
+]
+}
+],
+"d5135cce899f0ba6964b891f161aa288": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"d52f9f99a8eb667a0527e18d847f4281": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d59b3e713e3b21845160450ef630a2c7": [
+{
+"template": [
+{
+"const": "temperature: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d5a2f0833c0d9da88f0731b23ab6ca2c": [
+{
+"template": [
+{
+"const": "msgId="
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d5b422ec0da0a20c1cd936829d6b9c35": [
+{
+"template": [
+{
+"const": "MATCH (n:"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " {{"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": $id}}) RETURN n.embedding"
+}
+]
+}
+],
+"d64041f6b009508139449a6d98828484": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d685c8e262bac48f158aaeaf2883ad55": [
+{
+"template": [
+{
+"const": "/channels/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/threads"
+}
+]
+}
+],
+"d6ba5e5bbb7bc1c2ab7ac5cdb788dfb9": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"d810d714e2b0824a091a7d7f377312ce": [
+{
+"template": [
+{
+"const": "widget-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d8579884b00e467b4d651f9c7863f922": [
+{
+"template": [
+{
+"const": "no static embedder client was injected for kind "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d8c137cd0b427007780f7cb1e7e84f91": [
+{
+"template": [
+{
+"const": "filter property "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " is not a valid identifier"
+}
+]
+}
+],
+"d906984bcc07d8797fa863013e286942": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/api/v0/models"
+}
+]
+}
+],
+"d92cbb44f59573871af739e46243ffbc": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"d99558856fe527e647499b8cf34fbd06": [
+{
+"template": [
+{
+"const": "paragraph"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " about the quarterly report"
+}
+]
+}
+],
+"d9cd7475d8ac04c17fbf08faa0e0827b": [
+{
+"template": [
+{
+"const": "classified but not registered: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"d9f2ad040a90e5d20c2569b67ba3aec6": [
+{
+"template": [
+{
+"const": "widget "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"dc9873d1e90515ebc8f0cbdced77055f": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/session"
+}
+]
+}
+],
+"dcab59a081b970f243fb39c7e3832833": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"de706f9e7055e3a4a4bdc41ace9c469b": [
+{
+"template": [
+{
+"const": "/workflow-runs/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/input"
+}
+]
+}
+],
+"de7804d5536e9664cc4eafa6b389b962": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/reset"
+}
+]
+}
+],
+"e06b56da7bde817e3a90cb2677741435": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-sr1"
+}
+]
+}
+],
+"e1e097d8d1d4f7414ef342b76f50aff1": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"e265e877875a04f6735466a2022e56a7": [
+{
+"template": [
+{
+"const": "#!"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "\\nimport json\\nprint(json.dumps("
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "))\\n"
+}
+]
+}
+],
+"e3231cbbe295d3e067c5e38a87537538": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/order/advance"
+}
+]
+}
+],
+"e3c19ea7b4cfa07a9451ccb9c1c078d7": [
+{
+"template": [
+{
+"const": "ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"e3e3b480482cbe97690645cfee2f79d7": [
+{
+"template": [
+{
+"const": "/messages/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"e405050b764e9c9fccfdbf7802c7bc59": [
+{
+"template": [
+{
+"const": "a"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"e4241b6ba491febd31efc68c4b95ba0a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/catalog"
+}
+]
+}
+],
+"e475d8c2ed87097fd8bf3c1f82c9e062": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"e48c0683af32f0dcfb265be5c33e4b27": [
+{
+"template": [
+{
+"const": "no static llm client was injected for kind "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"e56e7ca49b811f4517b70050078244dd": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-sr1"
+}
+]
+}
+],
+"e5efe5ea345d9e6c53514b8bb474168b": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/participants"
+}
+]
+}
+],
+"e61ca8e19fafa0a02dad8d86dc435e6f": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "x "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "…"
+}
+]
+}
+],
+"e6f522c1a6250163942509fabc110b04": [
+{
+"template": [
+{
+"const": "match var "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " is not a valid identifier"
+}
+]
+}
+],
+"e74cc80d2be3f43e90b4e8b5847a53c3": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " is not a participant of ws:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"e78e3b503c903da6230668461e95fafa": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"e8287f303d5281b31faa98f77f6dfdf4": [
+{
+"template": [
+{
+"const": "widget-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"e843094f241943b22331ee138ba3d89e": [
+{
+"template": [
+{
+"const": "\\nResults written: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"e8bd8eceab9e94a2577544c46018cb0a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"e969e8883f32de592c1ca6f0ef25e9b2": [
+{
+"template": [
+{
+"const": "jitter must be >= 0, got "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"e979db2e7ba01beb859e7d46e9b9f543": [
+{
+"template": [
+{
+"const": "call_"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"e9e1daf7cc5e2ccbca04b259a9e47553": [
+{
+"template": [
+{
+"const": "unknown provider for ref "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ea0900987827a522e15efce6db49d493": [
+{
+"template": [
+{
+"const": "chunkId="
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"eaa66e88805c1d4e4284c5e73994e9a0": [
+{
+"template": [
+{
+"const": "word"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"eacf60461efb18f74b936f14468b983d": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"ec17aacb1bb5794fa56f2480827de670": [
+{
+"template": [
+{
+"const": "result:"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ecee2645cff68de78e0c447af6b5c776": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/workflow-runs"
+}
+]
+}
+],
+"ed3cbbda06bedbbb4cc1a983603dd846": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/health"
+}
+]
+}
+],
+"edbafa80090de5b42204cde50c529bac": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/deletion"
+}
+]
+}
+],
+"ede9b3b7d7bba4590e85d3f49c42ac1b": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "."
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"edf34452b635f7180f2dd4e8914dc673": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": HTTP "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ee7f135e5c498e1ccf1963e3e2d05c29": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"ef2e1a087aaf1b6dbfadddc4a1bbec16": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/reset"
+}
+]
+}
+],
+"ef3d3bc7c4f47b04a711c55fa785398e": [
+{
+"template": [
+{
+"const": "P "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ef40fccb55a75d7e166a113d60042373": [
+{
+"template": [
+{
+"const": "A"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ef4e92870a760e6f90d7b99db4834acc": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/messages"
+}
+]
+}
+],
+"f00456762f7427837b55e6192c0da81d": [
+{
+"template": [
+{
+"const": "returns contains a duplicate expression: "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"f0977f9e23959baa5bb8317d78caa09c": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " unique-a"
+}
+]
+}
+],
+"f114530210789221f0e3cd092d17abf8": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/chat/completions"
+}
+]
+}
+],
+"f159dc329068036de409315489d9199b": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"f237c8e3478978ffd16302064455cfc4": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/order/advance"
+}
+]
+}
+],
+"f3cb921bb238130fc7b658aca00b075a": [
+{
+"template": [
+{
+"const": "row "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"f495dd15a57f8f7c4336c88fcef62e5b": [
+{
+"template": [
+{
+"const": "p-wait-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"f4bbfa662af14c62b7e70a9f36c98290": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " uses unknown aggregate "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"f4bc743f9a4b06ae130af9309bcceb46": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/session"
+}
+]
+}
+],
+"f4bf35ffb50e68f1dbc08678dfe984ae": [
+{
+"template": [
+{
+"const": "ch-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"f558a3a06b82789b8cf11099104fd64f": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"f56ac4a37d429313c1a0332920d8e3f7": [
+{
+"template": [
+{
+"const": "materiality-probe bloc failed = "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"f66190bed8e3c085beb1bb66d011e76f": [
+{
+"template": [
+{
+"const": "G1 false-advance = "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " (n="
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " cases / "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " calls)"
+}
+]
+}
+],
+"f7a0eaa236d2b2b094fdb13420fd7912": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "["
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "]"
+}
+]
+}
+],
+"f7e33a028c5baff19ccf375e4a022a1a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": simulated failure"
+}
+]
+}
+],
+"f817161813b5da260e2d9a5f7d1f2d1b": [
+{
+"template": [
+{
+"const": "m"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"f856d43d986e3a48e2e54e2a4dc9ea68": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-te1"
+}
+]
+}
+],
+"f947aa1f5b73ec418231d6b2e56e243b": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/order/advance"
+}
+]
+}
+],
+"f97caba8fbc59eaebcbe43e962f221ec": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/state"
+}
+]
+}
+],
+"fa64456d2f84f4e2f8ce8d7de82af1bf": [
+{
+"template": [
+{
+"const": "P"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"fb1a555be4915b527e2cdd5ceff7ef6a": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " does not resolve to an allowed projection or aggregate"
+}
+]
+}
+],
+"fb50653e3e76d873cafc024183db8b65": [
+{
+"template": [
+{
+"const": "row "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"fce6e9eaaad650f40c3816364955b86d": [
+{
+"template": [
+{
+"const": "steps["
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "]"
+}
+]
+}
+],
+"fcf3576533f3810828e10c462392c012": [
+{
+"template": [
+{
+"const": "> "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"fcfac8f280f3a27f87e7c9f546061362": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/reset-all"
+}
+]
+}
+],
+"fd06291659c7df9890e520e547b55fec": [
+{
+"template": [
+{
+"const": "S"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"fd4a2649a9fee53017af3414436c122f": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-run"
+}
+]
+}
+],
+"fd570cb0aa562276f390a5b77c49acfb": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": " is "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " characters, exceeding the "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " limit"
+}
+]
+}
+],
+"fdfb47893d826375ab3e9e48da8063b4": [
+{
+"template": [
+{
+"const": "serialized payload exceeds "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": " characters"
+}
+]
+}
+],
+"fe3c44f535fbb2278be80055631366a5": [
+{
+"template": [
+{
+"const": "/documents/"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"fea0b2a541ec8b3004422ddee0d9cd48": [
+{
+"template": [
+{
+"const": "MATCH (d:Document {{documentId: $documentId}}) SET "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"febcd63c4e1583505027404d137ad5ce": [
+{
+"template": [
+{
+"const": "/threads/"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/workflow-runs"
+}
+]
+}
+],
+"fec2611257c6cba9ed6fa426cf1b83c6": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": ":"
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": ": "
+},
+{
+"unknown": "runtime-built"
+},
+{
+"const": "(...)"
+}
+]
+}
+],
+"fedd7eb81f51851733fe98a419c9f793": [
+{
+"template": [
+{
+"const": "hash-"
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ff892e4aa57ddcc1e3be33e832dc7469": [
+{
+"template": [
+{
+"const": "guard nesting depth exceeds the cap of "
+},
+{
+"unknown": "runtime-built"
+}
+]
+}
+],
+"ff9f28cae191b33fee63f635e1e10d70": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/presenter/session"
+}
+]
+}
+],
+"ffaee54b8eeb224d3f0a99e1bcbfb62d": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "-m1"
+}
+]
+}
+]
+},
+"sp": {},
+"decorators": {
+"fcs": {
+"2134ec05c7079140ac7af6b2ca248b58": [
+{
+"arg": "a0",
+"values": [
+{
+"template": [
+{
+"unknown": "runtime-built"
+},
+{
+"const": "/thing"
+}
+]
+}
+]
+}
+]
+},
+"sp": {}
+}
+}
