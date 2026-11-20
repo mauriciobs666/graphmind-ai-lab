@@ -45,7 +45,7 @@ CPG: considered, not relevant — no graph is loaded for `cpg/` (the loaded grap
   `salesperson/` until then (steps P1-02, P1-06; sequencing in the sub-plans).
 - **The compute host is small** (6 GB; `-p0-ml.md` §7). Python extract + normalize cost 4.1–4.2× the Joern
   run in the slice (`docs/test-reports/connected-code-graph-p0-slice-report.md` §7 Q2). P1-20 measures a full refresh.
-- **Fixture rows gated at P1:** 89 of 134 (`docs/test-plans/connected-code-graph-fixtures.md` §6, "By earliest
+- **Fixture rows gated at P1:** 87 of 134 (`docs/test-plans/connected-code-graph-fixtures.md` §6, "By earliest
   gate"; the census in `cpg/tests/test_fixtures.py` is the count of record), read from that document; P1-41 asserts them. The four `B1F` rows are not among them (P1-41, `-p1-gates.md`).
 - **System scope equals census scope.** The proving system's manifest (P1-03) excludes `cpg/`, `deprecated/`,
   `docs/**/connected-code-graph*`, `docs/BACKLOG.md` and the content-check files that
@@ -363,8 +363,8 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-49 | `python-http-client` consumer pack and the unknown-origin key rule (49a tests `qa-engineer`, 49b `tdd-engineer`) | `tdd-engineer` | lnk | 16, 17, 46, 05 (5d) | `analyst` |
 | P1-50 | 5d fix round and Python f-string constants (normalizer 0.7) | `tdd-engineer` | ext | 05 (5d), 49 | `analyst` |
 | P1-51 | Typed `requests`/`httpx` verb seeds (51a); a wrapper's informative template is the consumer, `wrapperSite` (51b) | `tdd-engineer` | lnk | 49, 50 | `analyst` |
-| P1-52 | TypeScript MCP-client consumer pack, `scope: unit` URL binding (dispatch only if Q-TSMCP is A) | `tdd-engineer` | lnk | 16, 51 | `analyst` |
-| P1-53 | Fixture conformance to the P1 binding contract, defect D3 (53a pin test, row text and census sweep `qa-engineer`; 53b fixture edits `tdd-engineer`; after Q-TSMCP, Q-CENSUS, Q-NC5) | `qa-engineer`, `tdd-engineer` | lnk | 17, 51, 52 | `analyst` |
+| P1-52 | TypeScript MCP-client consumer pack, `scope: unit` URL binding | `tdd-engineer` | lnk | 16, 51 | `analyst` |
+| P1-53 | Fixture conformance to the P1 binding contract, defect D3 (53a pin test, row text and census sweep `qa-engineer`; 53b fixture edits `tdd-engineer`) | `qa-engineer`, `tdd-engineer` | lnk | 17, 51, 52 | `analyst` |
 | P1-17 | Linker: matchers, statuses, bindings (Compose and `.mcp.json` are linker code, D10), example configs, prompt mentions | `tdd-engineer` | lnk | 16, 46, 07, 11, 14, `-graph` | `analyst` |
 | P1-18 | Assembler: bundles to graph rows, `mask_http_segments` import, `MOUNTED_BY`, `SkippedFile`, `Unit.flowAvailable`, pack-set identity | `graph-dba` | lnk | 16, 17, `-graph` | `analyst` |
 | P1-19 | Store loader, DDL, ACL users and test, swap, stamp, fuzz test, re-derived `TIMEOUT_MAX` and lock ttl, size re-estimate | `graph-dba` | lnk | 18, 48, 02, `-graph` | `analyst` |
@@ -389,7 +389,7 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-40 | AC-8 part 1 run: full refresh plus queries of a mixed fixture system | `devops` | gat | 31, 20, 25, 26 | `analyst` |
 | P1-32 | Eval tooling verbs, then the AC-5 gate harness (two dispatches) | `qa-engineer` | gat | 25, 20 (harness half) | `analyst`; `data-scientist` |
 | P1-33 | P1 test plan `docs/test-plans/connected-code-graph-p1.md` | `qa-engineer` | gat | 00 | `analyst` |
-| P1-41 | Fixture gate, part 1: the 89 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d, 05 (5d), 49, 50, 51, 52, 53 | `analyst` |
+| P1-41 | Fixture gate, part 1: the 87 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d, 05 (5d), 49, 50, 51, 52, 53 | `analyst` |
 | P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25); AC-16 is not read closed from P1-25's narrow raw-recipe test, P1-42 adds the other shapes | `qa-engineer` | gat | 41, 26, 39d, 24b, 49, 50, 51, 52, 53 | `analyst` |
 | P1-34 | Flow re-measurement (§5): re-point `s28_run.py`, entry check, fresh draw only if entered, decision record | `data-scientist` + `qa-engineer` | gat | 09, `-ml` | `analyst` |
 | P1-35 | AC-24 smoke harness and run | `qa-engineer` | gat | 26, 29, `-ml` | `data-scientist` |
@@ -429,7 +429,7 @@ The method is the proposal's §5 and the ML notes'; this section records only wh
 - **Altitudes** (proposal §5.1). Unit: each extractor ships fixture sources plus the expected bundle (golden per
   frontend, where a Joern upgrade is caught); each pack is table-driven; the projection has golden `DATA` and
   `CONTROLLED_BY` sets for small methods. Contract: bundle, graph and canonical-answer schemas validate in CI; the
-  engine's output passes `ccg.answer` validation (V1–V16). Integration: the fixture system's 89 P1 rows (P1-41) and
+  engine's output passes `ccg.answer` validation (V1–V16). Integration: the fixture system's 87 P1 rows (P1-41) and
   the proving repo's own anchors on `cpg/eval/dev/`.
 - **Equivalence before improvement.** A ported module (P1-04, P1-05, P1-16–P1-18, P1-21, P1-22) first reproduces
   the slice's output on the slice corpus, then changes behaviour in a separate, later dispatch. The stored slice
@@ -511,6 +511,7 @@ Items for `teco`'s close, not for build units (root `AGENTS.md`, live-spec and c
 no live spec; the feature's close (after P2) owes a whole-component spec, checked by `analyst`, before it.
 
 - **`-rule-pack-spec.md`** (owner `architect`, at the feature close; the spec has been executed against, so a successor or an in-place edit per the collision rule): §12.1 gains rows for P1-46's shell `mcp-call` pack, P1-49's `python-http-client` pack (with P1-51a's typed seeds) and P1-52's `ts-mcp-client` pack (if built); §1.6 gains the `ownSite`, `urlLike` and `wrapperSite` lifting words and the seed `scope`; §1.4 gains the unknown-origin rules of P1-49 (marker split, origin drop, lifted opaque slot) (the active home of the slot rules; `-bundle-spec3.md` is superseded and is not edited).
+- **P2 backlog items filed by P1-51..53** (owner `architect`; `teco` enters them at the close): LNK-18 (a `mcp.run(..., path="/mcp")` provider rule, a TS transport consumer, the 8200 fact) and AC6-EX-2 (JS `import.meta.env` records, `example-config`); name capture of f-string interpolations in `extract.sc` (LNK-08, TW-2); `package-dir` module resolution in `_launched_unit`; shell launch facts and a shell URL source (LNK-19's one-provider half); origins passed by callers joined into a wrapper site's key.
 - **Root `AGENTS.md`**, the `cpg/` bullet: rewritten in place (not appended) to the shipped state: the `ccg`
   package, the engine and clients, the broker and sandbox, the dedicated `ccg-falkordb` instance, the `cypher-mcp`
   boundary kept. The "Structure" and "Component docs" rows follow. Check the size bar (`awk` line in root

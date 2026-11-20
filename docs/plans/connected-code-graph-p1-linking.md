@@ -468,7 +468,7 @@ the architect.
   `typing.Mapping.get`, `os.py:<module>.<member>(environ).get`, the `fastapi/testclient.py` targets, `pathlib.py:<module>.Path.get`,
   `FalkorDB.select_graph.delete`), which kills the glob and `resolution` widening mutants; (3) a typed call in a file importing neither
   library is not seeded; (4) live guard (`-m live`): every Python unit of `fixture-system1` that calls `requests.<verb>` yields at
-  least one http consumer (the analyst's run: 10 consumers, baseline 0), and the report records the observed form of each consumer of
+  least one http consumer (gate review `docs/reviews/connected-code-graph-p1-51-53.md` M1: 10 consumers against 0 without the seeds), and the report records the observed form of each consumer of
   `LNK-08`, `LNK-11`, `LNK-13`, `LNK-14`, `LNK-15`, `LNK-37`, `TW-2`, `AC6-EX-4` and `DF-3`'s `requeue`; the forms are the key rule's
   (P1-49), with `LNK-08` `GET /items/{?}` and `TW-2` `GET /health`, both `possible`/`partial-key` (see P1-49); a divergence returns to
   the architect; (5) acceptance report, not a test: over the ten units' stored bundles the `providers`, `mounts`, `consumers`, `lifted`
@@ -496,8 +496,7 @@ the `urlLike` filter, hops from `X` to the seed, status by P1-49 rules 1-4 (a qu
 unknown is `possible`/`partial-key`; a further non-transparent slot below `X` records its `opaqueSlot`). Verbs come from `X`'s own
 chain: a wrapper that passes its `method` parameter into `X` yields `*` (pinned limit). With no informative slot nothing changes
 (LNK-11: the caller stays the consumer). **`urlLike` is not touched:** flipping it on `py-request` drops the bare-`\x01` leaf before
-the scan (observed by the analyst on the stored bundles: AC-5 8 of 8 with `wrapperSite` alone, 6 of 8 with the flip, plus 9 real
-keyless callers lost); dropping non-URL `Request(...)` leaves outside wrapper chains is a separate decision with its own figure
+the scan (gate review B1: 8 of 8 with `wrapperSite` alone, 6 of 8 with the flip, and 9 real keyless callers lost); dropping non-URL `Request(...)` leaves outside wrapper chains is a separate decision with its own figure
 (P1-36). The existing pins `tests/test_pack_python_http_client.py:172` and `:244` (no `urlLike` on `Request`) stay green.
 Origins passed by callers are not joined into `X`'s key (P2, owner `architect`, with the env binding). Demotion of keyless leaves
 is only this rule's removal of leaves beyond an informative slot; every other keyless leaf stays a keyless `possible` fact (AC-6,
@@ -525,11 +524,11 @@ is only this rule's removal of leaves beyond an informative slot; every other ke
   output, providers and mounts, every `confirmed` consumer. P1-36's possible-precision measure takes the new `possible` consumers.
 - **Gate:** `analyst` (diff; execute the before/after comparison). `packrt/` is hashed: lands before the `ac5-gate-1` record.
 
-## P1-52 · TypeScript MCP-client consumer pack — `tdd-engineer` — **dispatch only after Q-TSMCP is answered A**
+## P1-52 · TypeScript MCP-client consumer pack — `tdd-engineer`
 
 Basis: LNK-02/06/12 are P1 rows of `docs/test-plans/connected-code-graph-fixtures.md` §5.1 and count in its §6 per-shape floors; no
 requirement names a TS MCP client and the proving repository has none (`callTool` and `@modelcontextprotocol` occur only in
-`fx-web`); no plan step built the pack. Question text: "Open stakeholder questions" below.
+`fx-web`); no plan step built the pack.  Decided by the stakeholder (Q-TSMCP A): P1 builds it.
 **Design (no engine or schema edit).** `cpg/packs/ts-mcp-client/{pack.yaml,negatives.yaml}`. Lifting `ts-call-tool`, `role: {kind:
 mcp_tool, slot: url}` (`url` is the only lifted-role name the runtime and the schema's `lifted` enum carry; it holds the tool name,
 said in a comment), seed `{call: {callee: callTool, resolution: [unresolved]}, arg: a0.name, scope: {imports: [{module: {glob:
@@ -537,9 +536,9 @@ said in a comment), seed `{call: {callee: callTool, resolution: [unresolved]}, a
 {lifted: {lifting: ts-call-tool}}`, `extract: {tool: {lifted: url}}`, `emit: [{consumes: {kind: mcp_tool, key: "{tool}"}}]`.
 `urlBindings`: `{callsite: {callee: URL}, arg: a0, scope: unit}` for `kinds: [mcp_tool]`. **`scope: unit`, not `file`:** LNK-12's
 consumer is `Admin.tsx::onReindex` while `new URL("http://localhost:8200/mcp")` is in `mcp/client.ts`; `scope: file` leaves it unbound
-(observed by the analyst's prototype: links to both `reindex` providers), `scope: unit` binds it to `svc` alone (port 8200 matches only
+(gate review B2: it links to both `reindex` providers), `scope: unit` binds it to `svc` alone (port 8200 matches only
 `svc` once P1-53's `scripts/Dockerfile` exists). Limit, pinned by a test: any other literal `new URL(...)` in the unit adds an
-alternative to every `mcp_tool` consumer of the unit's URL set. The prototype also verified the `a0.name` object-literal values
+alternative to every `mcp_tool` consumer of the unit's URL set. Gate review B2 verified that the `a0.name` object-literal values
 resolve (`get_item` literal, `list_orders` through `TOOL_LIST_ORDERS`, `reindex` through the wrapper and `p0`) and that the SDK calls
 are `unresolved` while `Admin.tsx:4` resolves to the wrapper.
 **Consequence for the rows.** The binding applies to every `mcp_tool` consumer in unit `web`, so LNK-02, LNK-06 and LNK-12 are all
@@ -547,15 +546,18 @@ are `unresolved` while `Admin.tsx:4` resolves to the wrapper.
 test-plan forms of LNK-02/06 (`key-match`) change in 53a (owner `qa-engineer`).
 - **Files:** the two pack files; `tests/test_pack_ts_mcp_client.py`; `SERVED` in `tests/test_packrt_generic.py`; the leaf-harness
   registration; `DEFAULT_PACKS` in `ccg/refresh.py` (8 to 9; grep the tests that pin the pack count and the store's `Pack` count).
-- **Done when:** over the fixture build, LNK-02, 06 and 12 each link to exactly the `svc` provider, `binding-confirmed`; the mutant
-  `scope: file` turns the LNK-12 assertion red; negatives (a `callTool` in a file without the SDK import, a non-string name);
-  proving-repository pack facts equal before and after (0 TS importers).
+- **Done when (reachable at this step, before P1-53b):** (1) over the fixture build the consumer facts exist with the keys `get_item`,
+  `list_orders` (through `TOOL_LIST_ORDERS`) and `reindex` (through the wrapper); (2) an offline `Binder` test with a synthetic port
+  fact (loopback 8200 owned by unit `svc`) makes an `mcp_tool` consumer in another file of unit `web` bind to `svc` under `scope: unit`;
+  the mutant `scope: file` turns it red; (3) negatives (a `callTool` in a file without the SDK import, a non-string name);
+  (4) the proving repository's pack facts are equal before and after (0 TS importers). The Link-level `binding-confirmed` rows
+  (LNK-02, 06, 12 each linking to exactly the `svc` provider) need the 8200 fact that only P1-53b's `scripts/Dockerfile` creates: they
+  are in 53a's live tier and go green at 53b.
 
 ## P1-53 · fixture conformance to the P1 binding contract (defect D3) — 53a `qa-engineer`, 53b `tdd-engineer`
 
 Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.md` (R1-R6), verified against P1-17 and
-`ccg/linker/bind.py`; plan gate `docs/reviews/connected-code-graph-p1-51-53.md` (M2). **Dispatch only after Q-TSMCP, Q-CENSUS and
-Q-NC5 are answered:** 53a writes the final row forms and a pin with a branch is not a pin. Order: 51a, 51b, 52, 53a, 53b.
+`ccg/linker/bind.py`; plan gate `docs/reviews/connected-code-graph-p1-51-53.md` (M2). Order: 51a, 51b, 52, 53a, 53b; 53a authors the pin red, 53b makes it green.
 **The contract the fixtures conform to (design).**
 - *Launch chain (R2).* A server binds through its `command` entry and the `Dockerfile` beside the script; the script hop is lexical and
   stored nowhere; shell `exec` launch facts and `-m` targets are P2. `launch` rows (LNK-21, LNK-22) are not stored `Link`s at P1: they
@@ -575,9 +577,10 @@ Q-NC5 are answered:** 53a writes the final row forms and a pin with a branch is 
   claimed by units `svc` and `job`: LNK-16 is `possible`/`port-shared`. LNK-13/14/15/22 are unchanged (service hosts and port 8300).
   If the Compose extractor does not take the file, LNK-16 moves to P2 (a census change, back to the stakeholder).
 - *Shell consumer (R4).* No path binds a shell consumer by URL; LNK-19's P1 form is unbound `confirmed`/`key-match` to both `reindex`
-  providers unless Q-NC5 rules otherwise; NC-5's one-provider half holds for LNK-12 (bound, P1-52).
+  providers (stakeholder, Q-NC5 A: P1-17's rule stands; NC-5 narrows to LNK-12, bound, and LNK-20; the P1-36 report carries the count of
+  unbound `mcp_tool`/`http` links whose key has providers in more than one unit, a line `teco` adds to `-p1-gates.md` P1-36).
 - *Rows that need no fixture edit.* LNK-14's base is a config value no Binder input reads: `possible`/`partial-key` (P1-49 rule 3).
-  LNK-08 and TW-2: the observed forms of P1-49. AC6-EX-2 and LNK-18: Q-CENSUS.
+  LNK-08 and TW-2: the observed forms of P1-49. LNK-18 and AC6-EX-2 move to P2 (stakeholder, Q-CENSUS A): the P1 census is **87**, the AC-6 example-config floor at P1 holds 2 instances (EX-1, EX-4); both are filed as P2 backlog items (owner `architect`) in the close list of `docs/plans/connected-code-graph-p1.md`.
 - **53a (`qa-engineer`):** (1) the pin, authored red against the unmodified fixtures, two tiers. *Offline tier (no Joern, no store):*
   the real config and shell extractors over `fx-svc`/`fx-job`, plus synthetic provider/consumer facts in the style of
   `tests/linker_bind_helpers.py` (a mention `mcp__fx-svc-exec__list_orders`, a loopback `:8000` consumer, a `:8200/mcp` mcp_tool
@@ -585,46 +588,23 @@ Q-NC5 are answered:** 53a writes the final row forms and a pin with a branch is 
   Binder: the `launchUnit` multiset **per Dockerfile** from an independent parse of each CMD and the path-suffix rule; `BOUND_BY`
   entries resolved through the bundles' records at the manifest `aux` locators (path + keyPath), never by id. *Live tier* (the
   fixture build, `-m live`): the Link-level rows LNK-45, 16, 19, 12, 02, 06. Run against the unmodified fixtures it fails on exactly
-  `launchUnit` for `svc` absent, no `BOUND_BY` on LNK-45, no `port-shared` link, and nothing else. Mutants, each named with its file:
+  `launchUnit` for `svc` absent, no `BOUND_BY` on LNK-45, no `port-shared` link, and LNK-02, 06 and 12 unbound (`key-match` to both
+  `reindex` providers, no 8200 fact), and nothing else. Mutants, each named with its file:
   delete `fx-svc/scripts/Dockerfile`; change the CMD module of `fx-svc/deploy/Dockerfile` to `fx_svc.api.app` (red only through the
   per-Dockerfile `launchUnit` multiset); flip LNK-45 to `confirmed` in the manifest; delete `fx-job/deploy/compose.dev.yaml`.
   (2) Text, in the manifests, `docs/test-plans/connected-code-graph-fixtures.md` and `docs/test-plans/connected-code-graph-p1.md`:
   the owed `p1Form` for LNK-11/13/14/AC6-EX-4 and LNK-15 re-derived, LNK-08/TW-2 observed forms, LNK-45, LNK-19, LNK-02/06/12
   (`binding-confirmed`), P1T-06 and P1T-09 (which still say "the other five `binding-confirmed`" and assert LNK-21/22 as Links), the
-  LNK-21/45 narrative; no fixture tree edit. (3) The census sweep: after the answers, an unfiltered grep for the P1 row count ("89",
-  and the answered figure) across `docs/plans/connected-code-graph-p1.md`, `-p1-gates.md`, the P1 and fixtures test plans and the
-  tests' census constants, every hit mapped to an owner and fixed or listed. Done: the pin red as stated, `tests/test_fixtures.py`
+  LNK-21/45 narrative; no fixture tree edit. (3) The census sweep (87 P1 rows; the families recomputed without LNK-18 and AC6-EX-2): an unfiltered grep for `89` (and `P1 93`/`P1 92`
+  history lines left alone as dated notes) in `docs/test-plans/connected-code-graph-fixtures.md` (§6 totals, §7 matrix), `docs/test-plans/connected-code-graph-p1.md`
+  (the family table, P1T-05, §6, the totals lines), `cpg/tests/test_fixtures.py` and the manifests' `gate` fields, which `qa-engineer`
+  fixes; the hits in `docs/plans/connected-code-graph-p1-gates.md` (lines about 125, 131, 144) are listed for `teco`
+  (`docs/plans/connected-code-graph-p1.md` is already 87). Every hit is mapped to an owner and fixed or listed. Done: the pin red as stated, `tests/test_fixtures.py`
   consistency green, the sweep list attached.
 - **53b (`tdd-engineer`):** `fx-svc/scripts/Dockerfile`, `fx-svc/deploy/Dockerfile`, `fx-job/deploy/compose.dev.yaml`, the pinned
   materialized SHAs and family counts. Done: the pin green with each mutant recorded red with its failure message; the link multiset
   of the fixture build differs from the pre-edit one by exactly two rows (LNK-16 `port-shared`; LNK-45 gains its two `BOUND_BY`
   entries), any other changed row stops the unit. Must not regress: LNK-13/14/15/22, AC6-EX-1/4, `UNIT_FLOORS` (68, 67), the walk rows.
-
-## Open stakeholder questions (P1-51..53); each is stated here once
-
-**Q-TSMCP. Add a TypeScript MCP-client pack to P1?** LNK-02, 06, 12 are P1 rows and P1 per-shape floors (`exact literal`, `constant
-across files`, `client wrapper`: exactly 3 each, fixtures plan §6) but no step builds their consumer.
-- **A (recommended):** add P1-52. Small (one pack, one test file, registrations, no engine change), inert on the proving repository.
-- **B:** move the three rows to P2: no code, the three shape floors fall to 2 at P1, the P1 census loses 3, and the eval-protocol
-  §12.2 floors and the fixtures plan §6 change.
-
-**Q-CENSUS. LNK-18 and AC6-EX-2 are unreachable at P1** under the approved contract (shell launch facts and JS env names are P2; no
-pack provides `mcp.run(..., path="/mcp")` or consumes the TS transport constructor).
-- **A (recommended):** move both to P2. The P1 census goes from 89 to 87 (84 with Q-TSMCP B); the AC-6 example-config floor at P1
-  holds 2 instances (EX-1, EX-4) instead of 3; the 8000-and-8200 one-unit behaviour stays covered by LNK-12 and `test_linker_bind.py`.
-- **B:** keep both at P1 and build the missing pieces (a `mcp.run` provider rule, a TS transport consumer, JS `import.meta.env`
-  records): P2-sized work added to P1, reopening the 2026-11-11 deferral.
-Recommendation A: B buys two rows with a feature the stakeholder already deferred.
-
-**Q-NC5. LNK-19 and the NC-5 negative control.** An unbound shell `mcp-call reindex` links `confirmed`/`key-match` to both `reindex`
-providers (P1-17's rule for an unbound site), a known false `confirmed` against AC-5's 95% bar.
-- **A (recommended):** keep P1-17; LNK-19 is that form at P1; NC-5 narrows to LNK-12 and LNK-20; the P1-36 report carries the count of
-  unbound `mcp_tool`/`http` links whose key has providers in more than one unit (owner `teco` adds the line to `-p1-gates.md` P1-36 at
-  the answer; done when the report shows the count).
-- **B:** a P1-17 linker rule demoting an unbound confirmed link whose key has providers in more than one unit to `possible` under a
-  new registry reason (`reasons.yaml`, P1-17 reopened; it would also demote legitimate same-path `http` keys across units).
-- **C:** move LNK-19's one-provider half to P2 (a shell URL source, owner `architect`) and keep it out of the P1 floors.
-Recommendation A: B changes a shipped, gated contract for one fixture row.
 
 ## P1-17 · linker — `tdd-engineer`
 
