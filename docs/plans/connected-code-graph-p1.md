@@ -361,9 +361,10 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-16 | Pack runtime, conformance over the stored slice bundles | `tdd-engineer` | lnk | 01 | `analyst` |
 | P1-46 | Shell `mcp-call` consumer pack (+ `negatives.yaml`), leaf-harness update | `tdd-engineer` | lnk | 16, 10 (10b) | `analyst` |
 | P1-49 | `python-http-client` consumer pack and the unknown-origin key rule (49a tests `qa-engineer`, 49b `tdd-engineer`) | `tdd-engineer` | lnk | 16, 17, 46, 05 (5d) | `analyst` |
-| P1-51 | Typed `requests`/`httpx` verb seeds (51a); wrapper's own site and `urlLike` on `py-request` (51b) | `tdd-engineer` | lnk | 49, 50 | `analyst` |
-| P1-52 | TypeScript MCP-client consumer pack (pending Q-TSMCP) | `tdd-engineer` | lnk | 16, 51 | `analyst` |
-| P1-53 | Fixture conformance to the P1 binding contract, defect D3 (53a pin test and row text `qa-engineer`, 53b fixture edits `tdd-engineer`; LNK-18/AC6-EX-2 pending Q-CENSUS) | `qa-engineer`, `tdd-engineer` | lnk | 17, 52 | `analyst` |
+| P1-50 | 5d fix round and Python f-string constants (normalizer 0.7) | `tdd-engineer` | ext | 05 (5d), 49 | `analyst` |
+| P1-51 | Typed `requests`/`httpx` verb seeds (51a); a wrapper's informative template is the consumer, `wrapperSite` (51b) | `tdd-engineer` | lnk | 49, 50 | `analyst` |
+| P1-52 | TypeScript MCP-client consumer pack, `scope: unit` URL binding (dispatch only if Q-TSMCP is A) | `tdd-engineer` | lnk | 16, 51 | `analyst` |
+| P1-53 | Fixture conformance to the P1 binding contract, defect D3 (53a pin test, row text and census sweep `qa-engineer`; 53b fixture edits `tdd-engineer`; after Q-TSMCP, Q-CENSUS, Q-NC5) | `qa-engineer`, `tdd-engineer` | lnk | 17, 51, 52 | `analyst` |
 | P1-17 | Linker: matchers, statuses, bindings (Compose and `.mcp.json` are linker code, D10), example configs, prompt mentions | `tdd-engineer` | lnk | 16, 46, 07, 11, 14, `-graph` | `analyst` |
 | P1-18 | Assembler: bundles to graph rows, `mask_http_segments` import, `MOUNTED_BY`, `SkippedFile`, `Unit.flowAvailable`, pack-set identity | `graph-dba` | lnk | 16, 17, `-graph` | `analyst` |
 | P1-19 | Store loader, DDL, ACL users and test, swap, stamp, fuzz test, re-derived `TIMEOUT_MAX` and lock ttl, size re-estimate | `graph-dba` | lnk | 18, 48, 02, `-graph` | `analyst` |
@@ -388,8 +389,8 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-40 | AC-8 part 1 run: full refresh plus queries of a mixed fixture system | `devops` | gat | 31, 20, 25, 26 | `analyst` |
 | P1-32 | Eval tooling verbs, then the AC-5 gate harness (two dispatches) | `qa-engineer` | gat | 25, 20 (harness half) | `analyst`; `data-scientist` |
 | P1-33 | P1 test plan `docs/test-plans/connected-code-graph-p1.md` | `qa-engineer` | gat | 00 | `analyst` |
-| P1-41 | Fixture gate, part 1: the 89 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d, 05 (5d), 49 | `analyst` |
-| P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25); AC-16 is not read closed from P1-25's narrow raw-recipe test, P1-42 adds the other shapes | `qa-engineer` | gat | 41, 26, 39d, 24b, 49 | `analyst` |
+| P1-41 | Fixture gate, part 1: the 89 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d, 05 (5d), 49, 50, 51, 52, 53 | `analyst` |
+| P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25); AC-16 is not read closed from P1-25's narrow raw-recipe test, P1-42 adds the other shapes | `qa-engineer` | gat | 41, 26, 39d, 24b, 49, 50, 51, 52, 53 | `analyst` |
 | P1-34 | Flow re-measurement (§5): re-point `s28_run.py`, entry check, fresh draw only if entered, decision record | `data-scientist` + `qa-engineer` | gat | 09, `-ml` | `analyst` |
 | P1-35 | AC-24 smoke harness and run | `qa-engineer` | gat | 26, 29, `-ml` | `data-scientist` |
 | P1-47 | Runtime-oracle capture on an isolated instance | `qa-engineer` | gat | 48, 02, `-ml` | `analyst` |
@@ -406,7 +407,7 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 `cpg/packs/**`, `cpg/tests/**` and `**/*.md` (`-eval-protocol-ml.md` §12.3), and a first-contact run needs the record's
 commit to precede the build with no uncommitted change under `cpg/`. The `ac5-gate-1` pre-registration record
 therefore Needs **every step that edits a tracked file outside those exclusions**: 01, 02, 03–12, 14, 15, 16–26,
-28, 29, 31, 34 (`cpg/spikes/**` is hashed), 39, 44, 45, 48, 48b, 49 (its `httpkey.py` and `packrt/` edits; the pack files are excluded), and 5d's `extract.sc` edit (committed after P1-09's, before the record). It also Needs **32 (both dispatches), 35, 36 and 47**,
+28, 29, 31, 34 (`cpg/spikes/**` is hashed), 39, 44, 45, 48, 48b, 49 (its `httpkey.py` and `packrt/` edits; the pack files are excluded), 50 (normalizer), 51b (`packrt/lift.py`, the schema), 52 (`ccg/refresh.py` `DEFAULT_PACKS`, if built), 53b (`cpg/fixtures/**` is hashed), and 5d's `extract.sc` edit (committed after P1-09's, before the record). It also Needs **32 (both dispatches), 35, 36 and 47**,
 which are not hashed (`cpg/eval/**` is excluded) but are written before the record and pinned at its commit
 (`-p1-ml.md` §6.1, §6.2: the gate harness is the one at the record's commit, and an edit after it makes the run "after
 adaptation"). Its commit is the freeze. **`cpg/spikes/frontend-fitness/s28_core.py` and `cpg/extractors/joern/extract.sc` are hashed, so P1-09's scorer and projection changes are committed together, after the P1-09 gates and C8–C12 of `docs/reviews/connected-code-graph-p1-09-ml.md`, before `ccg-prereg-v1`/`ac5-gate-1` and before P1-34's `ccg-p1-flow-python-v1` record; that record names the commit of both;  the scorer is not changed after a fresh-draw miss, whatever it shows** (`docs/reviews/connected-code-graph-p1-09-ml.md` C5). P1-15 either lands before it or
@@ -509,7 +510,7 @@ are not blocked. Slugs follow the closed role set (`-ml`, `-graph`).
 Items for `teco`'s close, not for build units (root `AGENTS.md`, live-spec and closeout bullets). `cpg/` has
 no live spec; the feature's close (after P2) owes a whole-component spec, checked by `analyst`, before it.
 
-- **`-rule-pack-spec.md`** (owner `architect`, at the feature close; the spec has been executed against, so a successor or an in-place edit per the collision rule): §12.1 gains rows for P1-46's shell `mcp-call` pack and P1-49's `python-http-client` pack; §1.4 gains the unknown-origin rules of P1-49 (marker split, origin drop, lifted opaque slot) (the active home of the slot rules; `-bundle-spec3.md` is superseded and is not edited).
+- **`-rule-pack-spec.md`** (owner `architect`, at the feature close; the spec has been executed against, so a successor or an in-place edit per the collision rule): §12.1 gains rows for P1-46's shell `mcp-call` pack, P1-49's `python-http-client` pack (with P1-51a's typed seeds) and P1-52's `ts-mcp-client` pack (if built); §1.6 gains the `ownSite`, `urlLike` and `wrapperSite` lifting words and the seed `scope`; §1.4 gains the unknown-origin rules of P1-49 (marker split, origin drop, lifted opaque slot) (the active home of the slot rules; `-bundle-spec3.md` is superseded and is not edited).
 - **Root `AGENTS.md`**, the `cpg/` bullet: rewritten in place (not appended) to the shipped state: the `ccg`
   package, the engine and clients, the broker and sandbox, the dedicated `ccg-falkordb` instance, the `cypher-mcp`
   boundary kept. The "Structure" and "Component docs" rows follow. Check the size bar (`awk` line in root

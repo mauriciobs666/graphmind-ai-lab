@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1)
 
-*2026-11-20: P1-51, P1-52 and P1-53 added (post-P1-50 report D1, D2, AC-5 wrapper items; D3 RCA R1-R6); P1-49's typed-verb, wrapper-leaf and Done-when (2) text revised in place.*
+*2026-11-20: P1-51, P1-52 and P1-53 added (post-P1-50 report D1, D2, AC-5 wrapper items; D3 RCA R1-R6); P1-49's typed-verb, wrapper-leaf, f-string-name and Done-when (2) text revised in place; revised after the analyst plan gate (`docs/reviews/connected-code-graph-p1-51-53.md`).*
 
 Part of `docs/plans/connected-code-graph-p1.md` (decisions D1–D11, obligation walk §4, step index §7). Contracts:
 packs `docs/plans/connected-code-graph-rule-pack-spec.md`, graph `-graph.md` + `-p0-graph.md` (model v1, DDL,
@@ -102,10 +102,8 @@ lifted fact is `confirmed`/`lifted-role`);
 `salesperson/scripts/load_demo.py::run_participant` and `language_salience_probe.py::{run_participant,_assistant_rows_since}` call
 `http_json(method, url)`, whose seed slot is the bare parameter `url`; lifted to the caller's `f"{base_url}/shop/api/..."`
 (`\x01/shop/api/...`, `base_url` a parameter: rule 2 drops the origin, `possible`). A caller that passes a parameter into
-an informative template of a wrapper (`_poll_until_terminal(document_id)` into `f"/documents/{document_id}"`;
-`_assistant_rows_since(..., since)` into the `/shop/api/messages?since=` template) is not the consumer, the template's site is
-(unit P1-51): the gold impacted symbols `_poll_until_terminal` (line 289) and `_assistant_rows_since` (line 367) are those
-sites, `possible`/`partial-key`. The item keys above need the constant text of Python f-strings, which the stored bundles do not carry
+an informative template of a wrapper is not the consumer, the template's site is (unit P1-51b): the gold wrappers
+`_poll_until_terminal` and `_assistant_rows_since` hit at their own sites. The item keys above need the constant text of Python f-strings, which the stored bundles do not carry
 (precondition S-1, below): the count is measured on bundles that have it, else reported with that cause; (3) the analyst plan-gate stopping conditions: the coverage table below
 is asserted cell by cell with its cause-axis rows committed in 49a before 49b starts; 5d's oracle mechanism is the one stated
 there; 5d's rule is the one stated there over both receiver shapes with its probe table.
@@ -119,9 +117,8 @@ bundle files at `builtCommit 8377c326`; the probe is re-run in 49b and reported)
 `<client>.<verb>(p)` on an untyped client all have `calleeName` = the verb, `resolution` `unresolved`, no `externalTarget`, no
 receiver; `httpx.Client(...)` is `external` `httpx.py:<module>.Client.__init__`; `Request(...)` and `urlopen(...)` are `external`
 `urllib.py:<module>.<member>(request).Request.__init__` and `...urlopen`. A module-level `requests.<verb>(u)` call is `external`
-`requests.py:<module>.<verb>` (observed in the fixture build: `fx-job/job/run_report.py` and `api_client.py`, `fx-svc/api/orders.py`
-and `clients/*.py`; no `externalTarget` of that form, and none of `httpx.py:<module>.<verb>`, occurs in the proving repository's
-bundles at `01cb0dba`). Each verb lifting therefore has a typed seed beside the untyped one (unit P1-51, part A).
+`requests.py:<module>.<verb>` (fixture build; none in the proving repository, counts in unit P1-51a), so each verb lifting has a
+typed seed beside the untyped one.
 - *Verbs* `get|post|put|patch|delete`: one lifting each (`py-get`...), two seeds with `arg: a0` and the same `scope`
   `{imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}`: the untyped `{call: {callee: <verb>, resolution:
   [unresolved]}}` and the typed `{call: {callee: <verb>, externalTarget: [{exact: "requests.py:<module>.<verb>"}, {exact:
@@ -235,8 +232,13 @@ Base-unknown is therefore never `confirmed` wherever the bundle shows the base: 
 template (rules 1-3), a seed or intermediate slot with a sibling (rule 4). `binding-confirmed` (O-9: confirmed and
 bound) needs the base known: the fixture rows whose base is a parameter, `self.<field>` or environment read (`LNK-13`,
 `LNK-11`, `LNK-14`, `AC6-EX-4`) are asserted `possible`/`partial-key` with their path key at P1 (`LNK-11` by rule 4: its seed slot is
-`self.base + path`; `confirmed`/`binding-confirmed` is the P2 environment binding, `-p0-compose-binding.md`); `LNK-08`, `TW-2`,
-`LNK-37` have constant bases and stay `confirmed`. `qa-engineer` verifies each against the rebuilt graph.
+`self.base + path`; `confirmed`/`binding-confirmed` is the P2 environment binding, `-p0-compose-binding.md`); `LNK-37`'s whole URL is
+an imported constant and stays `confirmed`; `LNK-08` and `TW-2` interpolate a module constant (`f"{BASE}/health"`), which the bundle
+cannot name: `extract.sc` (`ex`, the `formatString` case) drops the child of each `<operator>.formattedValue`, so the piece is a
+bare `unknown` and the P1 forms are the observed `possible`/`partial-key` (`GET /items/{?}`; `GET /health`, the leading unknown
+dropped as an origin by rule 2), neither linking to its `/api/...` provider. Capturing the name is a P2 item (owner `architect`):
+it edits the hashed `extract.sc`, re-extracts every unit, and can change provider and mount keys built from f-strings, so it needs
+its own measure and audit. `qa-engineer` verifies each against the rebuilt graph.
 Cite `-rule-pack-spec.md` §1.4 and this step in the `httpkey.py` docstring.
 
 **Marker sweep (49b; the grep is run verbatim from `cpg/` and its output attached to the report).**
@@ -445,201 +447,180 @@ literals, the regenerated draw file; (e) the full run of Done when 6.
 
 ## P1-51 · typed `requests`/`httpx` verb seeds and the wrapper's own site — `tdd-engineer`
 
-Two serial dispatches (both edit `packs/python-http-client/pack.yaml` and its test file): **51a** part A, then **51b** part B.
-Cause: the post-P1-50 report `docs/test-reports/connected-code-graph-p1-5d-50-report.md` (defect D1; section C items 4 and 6 and the
-`GET /0` finding). Needs P1-49 and P1-50. Briefing line as for every step of this plan.
+Two serial dispatches (both edit `packs/python-http-client/pack.yaml` and its test file): **51a**, then **51b**; both are
+dispatchable now (neither waits on a stakeholder answer). Cause: `docs/test-reports/connected-code-graph-p1-5d-50-report.md` (D1,
+section C, the `GET /0` finding); gate: `docs/reviews/connected-code-graph-p1-51-53.md` (B1, M1, M5). Needs P1-49 and P1-50.
 CPG: considered, not relevant — the subject is the `ccg` pack runtime and its stored bundles, not a Joern `cpg_<component>` graph.
 
-### Part A (51a): typed verb seeds — the fixture rows' Python consumers
-**Premise, checked on the stored data.** The claim "no `requests`/`httpx` verb call is typed" holds for the proving repository and
-fails for the fixtures. Proving repository (bundles at `01cb0dba`, 2,178 callsites named `get|post|put|patch|delete`): 816 are
-`unresolved`, none has an `externalTarget` naming `requests.py` or `httpx.py` (`httpx.py` occurs only as `Client.__init__`, 3
-times). Fixture build (QA's throwaway store, the `svc` and `job` bundles): 5 callsites per bundle (4 `get`, 1 `post`) have
-`resolution: external`, `externalTarget: "requests.py:<module>.<verb>"`; the pack's `resolution: [unresolved]` seeds match none.
-Typing only appears where a file imports `requests` at module level, so the fixtures (which all do) are the pack's only test data.
-**Decision.** Each verb lifting gets the typed second seed stated under "Pack" in P1-49 (exact `externalTarget` pair, same `scope`,
-same `urlLike`/`ownSite`). Rejected: re-gating the rows (the rows are correct: a Python `requests` consumer is the pack's purpose,
-D13); widening the seed to `resolution: [unresolved, external]` (it would seed `__builtin.dict.get` 358 times, `typing.Mapping.get`
-176, `TestClient.get` 188 in the proving repository, held back only by the import gate and URL-likeness); a glob `*get` (same hole).
-**Proving-repository risk: none by construction**, the new seeds match 0 callsites there (observed). It is asserted, not assumed.
-- **Files:** `packs/python-http-client/pack.yaml` (the five liftings), `tests/test_pack_python_http_client.py`, the leaf-harness
-  registration (`tests/test_rule_pack_leaf_mutation.py`: the new leaves `KILLED`), `tests/test_fixtures.py` (the live guard below).
-- **Done when:** (1) over synthetic records of the observed shapes (`calleeName` verb, `resolution: external`, `externalTarget`
-  `requests.py:<module>.<verb>` and `httpx.py:<module>.<verb>`, in a file whose import record is `requests`/`httpx`), each of the 5
-  verbs yields the own-site consumer in the key form P1-49's rules give; (2) the real `externalTarget` strings observed on the
-  proving repository yield nothing, with the import gate satisfied: `__builtin.dict.get`, `typing.Mapping.get`,
-  `os.py:<module>.<member>(environ).get`, `fastapi/testclient.py:<module>.TestClient...get`, `pathlib.py:<module>.Path.get`,
-  `FalkorDB.select_graph.delete`; (3) a typed call in a file importing neither library is not seeded; (4) **live guard** (`-m live`,
-  fixture build; QA recommendation 5): every Python unit of `fixture-system1` that calls `requests.<verb>` yields at least one http
-  consumer, and the consumer facts of `LNK-08`, `LNK-11`, `LNK-13`, `LNK-14`, `LNK-15`, `LNK-37`, `TW-2`, `AC6-EX-4` and `DF-3`'s
-  `requeue` exist in the forms of "Unknown-origin key rule" above (their `binding-confirmed` halves are the binding RCA's, not this
-  unit's); (5) **no regression:** over the ten Python units' stored bundles the run's `providers`, `mounts`, `consumers`, `lifted`
-  multisets are equal before and after (the Part B figures of the report: providers 91, mounts 3, consumers 128, lifted 73).
+### 51a: typed verb seeds
+**Basis.** The seed form is P1-49 "Pack" (exact `externalTarget` pair; exact, never a glob or `resolution: [unresolved, external]`,
+which would seed `__builtin.dict.get` 358 times and `typing.Mapping.get` 176 in the proving repository). Observed on the proving
+repository's bundles (`01cb0dba`): 2,178 callsites are named `get|post|put|patch|delete`, 816 are `unresolved`, none has a verb
+target in `requests.py` or `httpx.py` (3 `httpx.py` targets exist, all `Client.__init__`). Observed on the fixture `svc` and `job`
+bundles: 5 `requests.py:<module>.<verb>` callsites each (4 `get`, 1 `post`). `httpx.py:<module>.<verb>` is **assumed** by symmetry,
+observed nowhere, and pinned only by its synthetic row.
+**Stop condition:** if the typed seeds match any callsite on the ten Python units' stored bundles (expected 0), stop and return to
+the architect.
+- **Files:** `packs/python-http-client/pack.yaml`, `tests/test_pack_python_http_client.py`, the leaf-harness registration
+  (`tests/test_rule_pack_leaf_mutation.py`, new leaves `KILLED`), `tests/test_fixtures.py` (the live guard).
+- **Done when:** (1) synthetic records of the two shapes, in a file importing the library, give each verb's own-site consumer;
+  (2) the real proving-repository `externalTarget` strings give nothing with the import gate satisfied (`__builtin.dict.get`,
+  `typing.Mapping.get`, `os.py:<module>.<member>(environ).get`, the `fastapi/testclient.py` targets, `pathlib.py:<module>.Path.get`,
+  `FalkorDB.select_graph.delete`), which kills the glob and `resolution` widening mutants; (3) a typed call in a file importing neither
+  library is not seeded; (4) live guard (`-m live`): every Python unit of `fixture-system1` that calls `requests.<verb>` yields at
+  least one http consumer (the analyst's run: 10 consumers, baseline 0), and the report records the observed form of each consumer of
+  `LNK-08`, `LNK-11`, `LNK-13`, `LNK-14`, `LNK-15`, `LNK-37`, `TW-2`, `AC6-EX-4` and `DF-3`'s `requeue`; the forms are the key rule's
+  (P1-49), with `LNK-08` `GET /items/{?}` and `TW-2` `GET /health`, both `possible`/`partial-key` (see P1-49); a divergence returns to
+  the architect; (5) acceptance report, not a test: over the ten units' stored bundles the `providers`, `mounts`, `consumers`, `lifted`
+  multisets are equal before and after (baseline: providers 91, mounts 3, consumers 128, lifted 73).
 
-### Part B (51b): a wrapper whose template is informative is the consumer, not its callers
-**Premise, checked.** AC-5's gold items are the wrapper symbols at the wrapper's own line: `impacted.qname`
-`seed_nlq_eval_corpus.py::_poll_until_terminal`, `lines [289]`, and `language_salience_probe.py::_assistant_rows_since`, `lines
-[367]` (`cpg/eval/dev/ac5-http.jsonl`; hit definition: P1-49 Done-when 2, "at any status"). AC-5's text ("every one appears in the
-answer individually, with its evidence, as confirmed or possible") is satisfied by that reading; **no requirement or gold item
-changes**. The engine is what is wrong: `lift.py:run_lifting` makes the wrapper's *callers* the consumers and takes their key from
-the leaf slot alone, which for `main:377 _poll_until_terminal(document_id)` is the bare `\x01` (a keyless `possible` fact the linker
-fans out to every `http` provider; QA observed 60), and for `run_participant:397 ..._assistant_rows_since(base_url, token, 0)` the
-constant `0` (`GET /0`). A caller that passes an *id*, a *cursor* or an *origin* into a wrapper's template has not made a request to
-that value: the template's site is the request. Observed on the ten Python units with the unit's own scratch probe (not committed;
-`py-request` only): 9 leaf facts have a non-transparent slot below them, 7 of them an informative one (`/documents/\x01` at
-`seed_nlq_eval_corpus.py:289`; `\x01/shop/api/messages?since=\x01&limit=\x01` at `language_salience_probe.py:366`; `\x01/shop/api/state`
-at `language_salience_probe.py:424`; `\x01/shop/api/presenter/session` at `load_demo.py:284`); the last two sites have **no
-consumer today** (their callers took their place), so the rule also recovers recall; the other 2 are non-informative (kept).
-**Decision.** New optional lifting word `liftings[].wrapperSite` (boolean, default off, set on the seven `python-http-client`
-liftings; the `fetch` pack and the S12 oracle stay byte-equal with it off, measured 0 opaque slots in `s14a`).
-- *Informative slot:* a slot that is non-transparent (rule 4: it has a value set with an alternative not wholly unresolved) and has
-  an alternative `a` with `is_url_like(a)` whose `normalize_key_parts("GET " + a, "consumer")` path has at least one segment other
-  than `{?}`. `/documents/\x01` (`/documents/{?}`) and `\x01/shop/api/messages?...` (origin dropped) are informative; `\x01\x01`,
-  `/api\x01` (one partial segment, `{?}`) and `\x01?q` are not. The non-informative opaque case is unchanged (LNK-11: the caller
-  is the consumer, `possible`/`partial-key`, `opaqueSlot` recorded).
-- *Rule:* for a leaf, scan its chain from the leaf toward the seed (the seed's slot included) for the first informative
-  non-transparent slot X. If X exists, **the leaf is dropped from `PackFacts.lifted`** (else `linker/link.py:_unknown_lifted`
-  re-creates the keyless fact, as the `urlLike` drop already avoids) and X becomes the consumer: `leaf: true`, its own
-  alternatives (with the `urlLike` filter), hops from X to the seed, verbs from X's chain, status by P1-49 rules 1-4 (an unresolved
-  piece in the path or an origin drop gives `possible`/`partial-key`). X is emitted once however many leaves map to it. With two
-  informative slots on a chain the nearest to the leaf wins (the slot `opaqueSlot` already names). Origins passed by callers are not
-  joined into X's key (a P2 item, owner `architect`, with the env binding).
-- *Demotion of keyless caller sites:* decided here only where an informative wrapper site exists (above), which removes the keyless
-  fan-out of the 7 observed leaves. Any other keyless leaf (a `Request` wrapper with a bare parameter and no informative template
-  anywhere) stays a keyless `possible` fact: AC-6 requires such an address to appear as `possible`, AC-5 is "never miss", and a
-  fan-out cap is a precision trade-off that belongs to P1-36's measure, not to this unit.
-- *`urlLike: true` on `py-request`* (the plan left it off): a `Request`'s first argument is a URL, so a lifted leaf that is a
-  constant non-URL (`0`) or a text with no URL shape is not one. This is the plan's own stated behaviour (a `\x01\x01` wrapper gives
-  no consumer) that `py-request` did not implement; observed effect on the proving repository after the rule above: one fact,
-  `model-bench/.../lmstudio.py:366` (`\x01\x01`, a keyless `possible`), leaves; it is not a gold item.
-- **Files:** `ccg/packrt/lift.py` (`run_lifting`; reuse `_opaque_slot`, add the informative test beside it, `httpkey` supplies the
-  predicates), `ccg/schemas/rule-pack-v1.schema.json` (the word), `packs/python-http-client/pack.yaml` (`wrapperSite: true` on the
-  seven liftings, `urlLike: true` on `py-request`), the tests below, `tests/test_packrt_generic.py` (`SERVED` already holds the
-  pack; the new format word is in the schema vocabulary the test requires), the leaf-harness registration.
-- **Done when:** (1) the behaviours below pass; (2) over the ten Python units' stored bundles, before/after: `providers` and
-  `mounts` multisets equal; every `confirmed` consumer fact equal; every other changed consumer fact `possible`; no keyless
-  consumer fact whose chain holds an informative slot remains; the removed set is the 7 observed leaf sites (modulo the stored
-  data) and the added set the observed sites `seed_nlq_eval_corpus.py:289`, `language_salience_probe.py:366` and `:424`,
-  `load_demo.py:284` (counts reported as observed, never tuned); (3) the AC-5 8-script count on dev items by the P1-49 definition
-  is reported by the store method and the bundle method (QA's two instruments), target **8 of 8**, a miss with its cause; the
-  `join` link of gold item 5 no longer carries the keyless sites `:397`/`:438`; (4) `fetch` and `s14a` conformance unchanged;
-  (5) the whole `cpg` suite and `-m "slice and live"` run, the 8 known reds named (report section B), no new failure.
-- **Behaviours (red first, in this order):** (a) wrapper with informative template and one lifted caller passing a bare parameter:
-  the wrapper site is the consumer (`GET /documents/{?}`, `possible`/`partial-key`), the caller yields no fact and the linker
-  emits no keyless fact for it (run through `link()`); (b) two callers: one fact; (c) the `_assistant_rows_since` shape (the
-  parameter feeds the query and origin, caller literal `0`, caller `cursor`): one consumer `GET /shop/api/messages` `possible`, no
-  `GET /0`; (d) non-informative opaque slot (`self.base + path`, `"/api" + path`): the caller stays the consumer, as LNK-11 and the
-  plan's `fetch_chain()` tests (rule 4 coverage) expect; `"/api/" + path` is informative; (e) two informative slots on a chain:
-  nearest to the leaf; (f) a promoted X whose own chain holds a further non-transparent slot keeps `opaqueSlot` and `possible`;
-  (g) `wrapperSite` on/off pair: off reproduces today's output (incl. `fetch`), on changes only wrapper chains; (h) `urlLike` on
-  `py-request`: `Request(0)`-shaped leaf dropped, bare `\x01` kept; (i) the fixture build (`-m live`): `LNK-11`'s `requeue` stays
-  `possible`/`partial-key` `POST /api/v1/orders`; (j) mutation check on the informative test, the leaf drop, the nearest-slot
-  choice and the `wrapperSite` gate.
-- **Must not regress:** the 5d precision work (this unit edits `packrt/` and a pack only; the bundles are byte-identical, asserted by
-  re-running on the stored bundles); Part B's key/status figures for providers and mounts; every `confirmed` consumer; the `fetch`
-  pack output; P1-36's possible-precision measure takes the new `possible` consumers like any other.
-- **Gate:** `analyst` (diff; execute the before/after comparison, do not read it). `httpkey.py` and `packrt/` are hashed by the
-  `ac5-gate-1` record, so this lands before P1-41/P1-42 and before that record.
+### 51b: a wrapper whose template is informative is the consumer, not its callers
+**Basis.** AC-5's gold items name the wrapper symbols (`_poll_until_terminal`, `_assistant_rows_since`: the gold lines are 289 and 367,
+the stored facts 289 and 366; the hit is by symbol, `cpg/eval/dev/ac5-http.jsonl`); AC-5's text and the gold are unchanged. The engine
+attributes a wrapper's *callers* as consumers with the key of the leaf slot alone: a bare `\x01` (keyless, linked to every `http`
+provider; QA observed 60) or the constant `0` (`GET /0`). A caller that passes an id, cursor or origin into a template has not
+requested that value; the template's site is the request.
+**Rule** (`liftings[].wrapperSite`, boolean, default off, set on the seven `python-http-client` liftings; `fetch` and the S12 oracle
+are byte-equal with it off). For each leaf `L` (as `ownSite` defines it), read **before** the `urlLike` filter and the `resolved`
+test: scan `chain_of(L)[1:]` (the leaf excluded; the first-discovered predecessor chain `lift_role` already records, deterministic
+because seeds and flows are sorted; a parameter that feeds two slots belongs to the first one reached: a pinned limit) for the first
+**informative** slot `X`. A slot is informative when it has an alternative `a` with `is_url_like(a)` and the path of
+`normalize_key_parts("GET " + a, "consumer")` has a segment other than `{?}` (`/documents/\x01`, `\x01/shop/api/messages?...`; not
+`\x01\x01`, `/api\x01`, `\x01?q`). If `X` exists: `L` is dropped from `PackFacts.lifted` (else `linker/link.py:_unknown_lifted`
+re-creates its keyless fact) and `X` is the consumer, once however many leaves map to it: `leaf: true`, its own alternatives under
+the `urlLike` filter, hops from `X` to the seed, status by P1-49 rules 1-4 (a query-only unknown stays `confirmed`, a path or origin
+unknown is `possible`/`partial-key`; a further non-transparent slot below `X` records its `opaqueSlot`). Verbs come from `X`'s own
+chain: a wrapper that passes its `method` parameter into `X` yields `*` (pinned limit). With no informative slot nothing changes
+(LNK-11: the caller stays the consumer). **`urlLike` is not touched:** flipping it on `py-request` drops the bare-`\x01` leaf before
+the scan (observed by the analyst on the stored bundles: AC-5 8 of 8 with `wrapperSite` alone, 6 of 8 with the flip, plus 9 real
+keyless callers lost); dropping non-URL `Request(...)` leaves outside wrapper chains is a separate decision with its own figure
+(P1-36). The existing pins `tests/test_pack_python_http_client.py:172` and `:244` (no `urlLike` on `Request`) stay green.
+Origins passed by callers are not joined into `X`'s key (P2, owner `architect`, with the env binding). Demotion of keyless leaves
+is only this rule's removal of leaves beyond an informative slot; every other keyless leaf stays a keyless `possible` fact (AC-6,
+"never miss"); a fan-out cap is P1-36's trade-off.
+- **Files:** `ccg/packrt/lift.py` (`run_lifting`, the informative test beside `_opaque_slot`), `ccg/schemas/rule-pack-v1.schema.json`,
+  `packs/python-http-client/pack.yaml` (`wrapperSite: true` x7), `tests/test_packrt_wrapper_site.py`, `tests/test_packrt_generic.py`,
+  the leaf-harness registration.
+- **Tests, red before the engine edit (stopping condition c).** A reference model written in the test, independent of `lift.py`,
+  generates the expected facts over the axes the rule varies on: slot kind (leaf, intermediate, seed), alternative shape (no origin,
+  `\x01` origin, known origin, `\x00` prefix, one partial segment, query-only, scheme), alternative count (one; mixed with a bare
+  `\x01`), informative slots on the chain (0; 1; 2 with a non-informative one nearer), leaves per `X` (1, 2), verb source at `X`
+  (literal, parameter), `urlLike` on and off, `wrapperSite` on and off; checked cell by cell against the code. Plus: the linker emits
+  no keyless fact for a dropped leaf (through `link()`); `fetch`/`s14a` conformance unchanged. The fixture live check (`LNK-11` stays
+  `possible`/`partial-key`) is a regression check only, since the fixtures hold no informative wrapper; the synthetic axes are the
+  positive control. Mutation check: the informative test, the leaf drop, the scan start (leaf excluded), the pre-filter read, the
+  `wrapperSite` gate.
+- **Done when:** (a) the AC-5 count by the P1-49 definition is **8 of 8** on both instruments (store method, bundle method), equal
+  item by item; if either is below 8, stop and report the item and its cause, never tune; (b) the ten-unit diff (acceptance report)
+  equals: removed consumers `{language_salience_probe.py:397 GET /0}`, added `{seed_nlq_eval_corpus.py:289,
+  language_salience_probe.py:366 and :424, load_demo.py:284}`, 7 keyless lifted leaf items removed (5 sites), providers, mounts and
+  every `confirmed` consumer equal; any other row stops the unit; (c) the reference-model test is committed red first; (d) the
+  `join` link of gold item 5 no longer carries the keyless sites 397 and 438; (e) the whole `cpg` suite and `-m "slice and live"`,
+  the 8 known reds named, no new failure.
+- **Must not regress:** the 5d precision work (only `packrt/` and a pack change; the bundles are byte-identical), the `fetch`
+  output, providers and mounts, every `confirmed` consumer. P1-36's possible-precision measure takes the new `possible` consumers.
+- **Gate:** `analyst` (diff; execute the before/after comparison). `packrt/` is hashed: lands before the `ac5-gate-1` record.
 
-## P1-52 · TypeScript MCP-client consumer pack — `tdd-engineer` — **pending a stakeholder decision (Q-TSMCP)**
+## P1-52 · TypeScript MCP-client consumer pack — `tdd-engineer` — **dispatch only after Q-TSMCP is answered A**
 
-**Premise, checked.** `LNK-02`, `LNK-06` and `LNK-12` are gated P1 by `docs/test-plans/connected-code-graph-fixtures.md` §5.1, and
-the P1 per-shape floors of its §6 (eval-protocol §12.2) count them: `exact literal` (LNK-01, 02, 36), `constant across files` (LNK-04,
-06, 37) and `client wrapper` (LNK-10, 11, 12) each hold exactly 3 at P1. The requirements name no TS MCP client: the phase line says
-P1 covers "Python/TS/shell/config extractors, http, mcp_tool", and AC-2's callers (`kiro/`, `mcp-monitor/`) are config and Python.
-The proving repository has none either (the only `@modelcontextprotocol` imports and `callTool` calls are in `cpg/fixtures/.../fx-web`).
-No plan step builds a pack for it (P1-46 is the shell one): the rows were gated P1 and never planned, which is the defect.
-**Design if approved (no engine change).** Pack `cpg/packs/ts-mcp-client/{pack.yaml,negatives.yaml}`: lifting `ts-call-tool`, `role:
-{kind: mcp_tool, slot: url}` (`url` is the only lifted-role name the runtime and the schema's `lifted` enum carry; it holds the tool
-name here, said in a pack comment), seed `{call: {callee: callTool, resolution: [unresolved]}, arg: a0.name, scope: {imports:
-[{module: {glob: "@modelcontextprotocol/sdk/**"}}]}}` (a `prefix` matcher would not match: its separator is `.`), `ownSite: true`;
-rule `match: {lifted: {lifting: ts-call-tool}}`, `extract: {tool: {lifted: url}}`, `emit: [{consumes: {kind: mcp_tool, key:
-"{tool}"}}]`. Observed in the fixture build: the SDK's `c.callTool({...})` calls (`client.ts` lines 19, 24, 29) are `unresolved`
-`name-match`, the wrapper call in `Admin.tsx:4` is `resolved` to the wrapper (so not seeded, and the wrapper is lifted through
-`p0` to `a0.name`), and `client.ts` imports `@modelcontextprotocol/sdk/client/index.js`. `TOOL_LIST_ORDERS` crosses files by the
-existing TS constant resolution (as `API_PREFIX`). The pack also declares a `urlBindings` source (`{callsite: {callee: URL}, arg: a0,
-scope: file}`, the `new URL("http://localhost:8200/mcp")` of `connect`): without it LNK-12 stays unbound and links to both `reindex`
-providers (NC-5), which P1-53 rules out; if format v1.5 cannot express it the unit reports that and LNK-12 moves to P2 with
-LNK-18 (Q-CENSUS).
-- **Files:** the two pack files; `tests/test_pack_ts_mcp_client.py`; `SERVED` in `tests/test_packrt_generic.py` and the leaf-harness
+Basis: LNK-02/06/12 are P1 rows of `docs/test-plans/connected-code-graph-fixtures.md` §5.1 and count in its §6 per-shape floors; no
+requirement names a TS MCP client and the proving repository has none (`callTool` and `@modelcontextprotocol` occur only in
+`fx-web`); no plan step built the pack. Question text: "Open stakeholder questions" below.
+**Design (no engine or schema edit).** `cpg/packs/ts-mcp-client/{pack.yaml,negatives.yaml}`. Lifting `ts-call-tool`, `role: {kind:
+mcp_tool, slot: url}` (`url` is the only lifted-role name the runtime and the schema's `lifted` enum carry; it holds the tool name,
+said in a comment), seed `{call: {callee: callTool, resolution: [unresolved]}, arg: a0.name, scope: {imports: [{module: {glob:
+"@modelcontextprotocol/sdk/**"}}]}}` (a `prefix` matcher would not match: its separator is `.`), `ownSite: true`; rule `match:
+{lifted: {lifting: ts-call-tool}}`, `extract: {tool: {lifted: url}}`, `emit: [{consumes: {kind: mcp_tool, key: "{tool}"}}]`.
+`urlBindings`: `{callsite: {callee: URL}, arg: a0, scope: unit}` for `kinds: [mcp_tool]`. **`scope: unit`, not `file`:** LNK-12's
+consumer is `Admin.tsx::onReindex` while `new URL("http://localhost:8200/mcp")` is in `mcp/client.ts`; `scope: file` leaves it unbound
+(observed by the analyst's prototype: links to both `reindex` providers), `scope: unit` binds it to `svc` alone (port 8200 matches only
+`svc` once P1-53's `scripts/Dockerfile` exists). Limit, pinned by a test: any other literal `new URL(...)` in the unit adds an
+alternative to every `mcp_tool` consumer of the unit's URL set. The prototype also verified the `a0.name` object-literal values
+resolve (`get_item` literal, `list_orders` through `TOOL_LIST_ORDERS`, `reindex` through the wrapper and `p0`) and that the SDK calls
+are `unresolved` while `Admin.tsx:4` resolves to the wrapper.
+**Consequence for the rows.** The binding applies to every `mcp_tool` consumer in unit `web`, so LNK-02, LNK-06 and LNK-12 are all
+`confirmed`/`binding-confirmed` and each links to exactly the `svc` provider (not `job:job/mcp_admin.py::reindex`). The manifest and
+test-plan forms of LNK-02/06 (`key-match`) change in 53a (owner `qa-engineer`).
+- **Files:** the two pack files; `tests/test_pack_ts_mcp_client.py`; `SERVED` in `tests/test_packrt_generic.py`; the leaf-harness
   registration; `DEFAULT_PACKS` in `ccg/refresh.py` (8 to 9; grep the tests that pin the pack count and the store's `Pack` count).
-  Same shape and size as P1-46 (one pack, one test file, registrations); no `lift.py`, `run.py` or schema edit.
-- **Done when:** over the fixture build, consumers `mcp_tool` `get_item` (LNK-02, `confirmed`/`key-match`), `list_orders` (LNK-06) and
-  `reindex` (LNK-12, the wrapper lifted from `onReindex`); the first test probes that `a0.name` object-literal values resolve (the one
-  unverified clause); negatives: an unrelated `callTool` in a file without the SDK import, `callTool` of a non-string name;
-  **no regression:** the proving repository's pack facts are equal before and after (0 TS importers, observed by grep).
-- **If the stakeholder re-gates instead (Q-TSMCP option B):** this section is deleted, the three rows move to P2 in the fixtures test
-  plan and `-p1.md`, and §6's P1 floors for the three shapes change; no P1 code changes.
+- **Done when:** over the fixture build, LNK-02, 06 and 12 each link to exactly the `svc` provider, `binding-confirmed`; the mutant
+  `scope: file` turns the LNK-12 assertion red; negatives (a `callTool` in a file without the SDK import, a non-string name);
+  proving-repository pack facts equal before and after (0 TS importers).
 
 ## P1-53 · fixture conformance to the P1 binding contract (defect D3) — 53a `qa-engineer`, 53b `tdd-engineer`
 
-Cause: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.md` (R1-R6) and the QA report section E. The RCA's finding stands, checked
-against P1-17 and `ccg/linker/bind.py`: **D3 is not a Binder defect.** The fixture rows were derived by reading, and several expect
-what the P1-17 contract (and AC-6) rule out; where the contract is the better design the rows change, where the fixture is not the
-shape the contract supports the fixture changes. 53a lands first (red), 53b makes it green; 53a also owns the manifest/test-plan text.
+Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.md` (R1-R6), verified against P1-17 and
+`ccg/linker/bind.py`; plan gate `docs/reviews/connected-code-graph-p1-51-53.md` (M2). **Dispatch only after Q-TSMCP, Q-CENSUS and
+Q-NC5 are answered:** 53a writes the final row forms and a pin with a branch is not a pin. Order: 51a, 51b, 52, 53a, 53b.
+**The contract the fixtures conform to (design).**
+- *Launch chain (R2).* A server binds through its `command` entry and the `Dockerfile` beside the script; the script hop is lexical and
+  stored nowhere; shell `exec` launch facts and `-m` targets are P2. `launch` rows (LNK-21, LNK-22) are not stored `Link`s at P1: they
+  are asserted as Binder outcomes (unit set, `BOUND_BY` entries), as LNK-15's context check already is. The fixture gains
+  `fx-svc/scripts/Dockerfile` with `CMD ["uvicorn", "mcp.server:app", "--host", "127.0.0.1", "--port", "8200"]`: it gives LNK-21/45
+  their chain, `svc` a `launchUnit`, and `svc` the port 8200 that LNK-12's binding needs. The CMD is **inert** (the real
+  `cypher-mcp/Dockerfile` ends `python server.py`; `mcp/server.py` has no `app`): resolution is by path suffix only, and no later unit
+  "fixes" it. The LNK-21/45 narrative (`python -m fx_svc.mcp.server`, fixtures plan lines 166 and 191) becomes `run-mcp.sh` to
+  `scripts/Dockerfile`.
+- *Prompt mention (R1).* LNK-45 is `possible`/`prompt-mention` with `BOUND_BY` ord 0 `.mcp.json @mcpServers.fx-svc-exec` and ord 1 the
+  `scripts/Dockerfile` command entry (P1-17 (7), (9); AC-6: a prompt that names a tool is never confirmed). Fixtures plan §7 moves it
+  to the `mcp_tool` possible cell.
+- *Module path (R5).* `fx-svc/deploy/Dockerfile` CMD becomes `api.app:create_app` (unit-relative, as the fixture imports are):
+  `_launched_unit` matches a path suffix; `package-dir` resolution is a P2 item (owner `architect`). It adds a second `launchUnit` for
+  `svc` and no link change.
+- *Shared port (R3).* `fx-job/deploy/compose.dev.yaml` (service `job-dev`, `build.context: ..`, `8000:8000`) makes loopback :8000
+  claimed by units `svc` and `job`: LNK-16 is `possible`/`port-shared`. LNK-13/14/15/22 are unchanged (service hosts and port 8300).
+  If the Compose extractor does not take the file, LNK-16 moves to P2 (a census change, back to the stakeholder).
+- *Shell consumer (R4).* No path binds a shell consumer by URL; LNK-19's P1 form is unbound `confirmed`/`key-match` to both `reindex`
+  providers unless Q-NC5 rules otherwise; NC-5's one-provider half holds for LNK-12 (bound, P1-52).
+- *Rows that need no fixture edit.* LNK-14's base is a config value no Binder input reads: `possible`/`partial-key` (P1-49 rule 3).
+  LNK-08 and TW-2: the observed forms of P1-49. AC6-EX-2 and LNK-18: Q-CENSUS.
+- **53a (`qa-engineer`):** (1) the pin, authored red against the unmodified fixtures, two tiers. *Offline tier (no Joern, no store):*
+  the real config and shell extractors over `fx-svc`/`fx-job`, plus synthetic provider/consumer facts in the style of
+  `tests/linker_bind_helpers.py` (a mention `mcp__fx-svc-exec__list_orders`, a loopback `:8000` consumer, a `:8200/mcp` mcp_tool
+  consumer, `reindex` providers in `svc` and `job`), through `run_packs` + `Binder` + `link`. Expected values are independent of the
+  Binder: the `launchUnit` multiset **per Dockerfile** from an independent parse of each CMD and the path-suffix rule; `BOUND_BY`
+  entries resolved through the bundles' records at the manifest `aux` locators (path + keyPath), never by id. *Live tier* (the
+  fixture build, `-m live`): the Link-level rows LNK-45, 16, 19, 12, 02, 06. Run against the unmodified fixtures it fails on exactly
+  `launchUnit` for `svc` absent, no `BOUND_BY` on LNK-45, no `port-shared` link, and nothing else. Mutants, each named with its file:
+  delete `fx-svc/scripts/Dockerfile`; change the CMD module of `fx-svc/deploy/Dockerfile` to `fx_svc.api.app` (red only through the
+  per-Dockerfile `launchUnit` multiset); flip LNK-45 to `confirmed` in the manifest; delete `fx-job/deploy/compose.dev.yaml`.
+  (2) Text, in the manifests, `docs/test-plans/connected-code-graph-fixtures.md` and `docs/test-plans/connected-code-graph-p1.md`:
+  the owed `p1Form` for LNK-11/13/14/AC6-EX-4 and LNK-15 re-derived, LNK-08/TW-2 observed forms, LNK-45, LNK-19, LNK-02/06/12
+  (`binding-confirmed`), P1T-06 and P1T-09 (which still say "the other five `binding-confirmed`" and assert LNK-21/22 as Links), the
+  LNK-21/45 narrative; no fixture tree edit. (3) The census sweep: after the answers, an unfiltered grep for the P1 row count ("89",
+  and the answered figure) across `docs/plans/connected-code-graph-p1.md`, `-p1-gates.md`, the P1 and fixtures test plans and the
+  tests' census constants, every hit mapped to an owner and fixed or listed. Done: the pin red as stated, `tests/test_fixtures.py`
+  consistency green, the sweep list attached.
+- **53b (`tdd-engineer`):** `fx-svc/scripts/Dockerfile`, `fx-svc/deploy/Dockerfile`, `fx-job/deploy/compose.dev.yaml`, the pinned
+  materialized SHAs and family counts. Done: the pin green with each mutant recorded red with its failure message; the link multiset
+  of the fixture build differs from the pre-edit one by exactly two rows (LNK-16 `port-shared`; LNK-45 gains its two `BOUND_BY`
+  entries), any other changed row stops the unit. Must not regress: LNK-13/14/15/22, AC6-EX-1/4, `UNIT_FLOORS` (68, 67), the walk rows.
 
-**Rulings (premise, decision).**
-- **R1, LNK-45.** The row expects `confirmed`/`binding-confirmed`; P1-17 (7) and (9) make a prompt mention `possible`/`prompt-mention`
-  (`link.py:_causes`, pinned by `tests/test_linker_bind.py` `test_br_1...`), and AC-6 requires a prompt that names a tool never be
-  shown as confirmed. The row is wrong, the contract right. **Decision:** `possible`/`prompt-mention` with the `BOUND_BY` chain
-  (ord 0 `.mcp.json @mcpServers.fx-svc-exec`, then the `scripts/Dockerfile` command entry of R2); the chain is the P1 assertion. The
-  fixtures plan §7 moves LNK-45 from the `mcp_tool` confirmed to the possible cell.
-- **R2, LNK-21/22/45 chain.** P1-17 (6) and `bind.py:_launch_chains` bind a server through its `command` entry and the `Dockerfile` beside
-  the script (script hop lexical, not stored); no extractor emits a script's `exec python -m ...` and `targetArg` is `module-attr`
-  only; the fixture has its Dockerfile in `deploy/`, not beside `scripts/run-mcp.sh`. Shell launch facts stay P2 (the P1-17 ruling),
-  so the contract stands and the fixture conforms. **Decision:** add `fx-svc/scripts/Dockerfile` (the shape of the real
-  `cypher-mcp/Dockerfile` beside `docker-run.sh`) with `CMD ["uvicorn", "mcp.server:app", "--host", "127.0.0.1", "--port", "8200"]`
-  (module path unit-relative, resolves to `mcp/server.py`): it gives the chain for LNK-21/45, a `launchUnit` for `svc`, and the 8200
-  port fact of unit `svc` that LNK-12's URL binding needs. Rejected: moving LNK-21/45 to P2 (the supported launch chain would have no
-  fixture row at P1); a shell-`exec` extractor (scope growth against P1-17 (6)). `launch` rows (LNK-21, LNK-22) are not stored `Link`s
-  at P1: they are asserted as Binder outcomes over real extractor records (unit set and `BOUND_BY` entries), the precedent of LNK-15's
-  context check in P1T-09.
-- **R3, LNK-16.** The second :8000 listener is `fx-job/scripts/dev.sh` (`exec uvicorn ...`), a shell launch: unreachable by the same
-  contract. **Decision:** keep the row at P1 and give `fx-job` a Compose listener, `fx-job/deploy/compose.dev.yaml` (service `job-dev`,
-  `build.context: ..`, port `8000:8000`), so loopback :8000 is claimed by units `svc` and `job` and the link is `possible`/`port-shared`
-  to `job:job/trigger_server.py::status`; `dev.sh` stays as the narrative. It must not touch LNK-13/14/15/22 (service hosts
-  `api`/`job` and port 8300 are unchanged; the pin test asserts them). If the Compose extractor does not take the file, LNK-16 moves
-  to P2 (a census change, then Q-CENSUS again); `port-shared` stays covered synthetically by `test_linker_bind.py`.
-- **R4, LNK-19 and NC-5.** No path binds a shell consumer by URL (`export MCP_URL=...` is read by nothing; P1-46: "neither the pack
-  format nor the shell extractor changes"). **Decision:** the P1 form of LNK-19 is `confirmed`/`key-match` to **both** `reindex`
-  providers, unbound (the `Bindings` docstring's rule for an unbound site); NC-5 at P1 asserts LNK-12 (bound through P1-52's URL source
-  and R2's 8200 fact: one provider, `svc`) and LNK-20 (both), and LNK-19's one-provider half is P2 with a shell URL source (owner
-  `architect`, with the shell launch facts). Known cost, not fixed here: an unbound confirmed link to a second same-named tool is a false
-  `confirmed`; P1-36 reports the count of unbound `mcp_tool`/`http` links whose key has providers in more than one unit.
-- **R5, fx-svc Dockerfile module.** `packrt/launch.py:_launched_unit` matches `module.replace(".", "/") + ".py"` as a path suffix;
-  `fx_svc.api.app` is a `package-dir` name no path has. **Decision:** edit `fx-svc/deploy/Dockerfile` to `api.app:create_app` (unit-relative,
-  as the fixtures' imports are, plan §4 line 121); `package-dir` resolution is a P2 item (owner `architect`). Verified by the RCA's
-  mutation (a second `launchUnit` and port 8000, no link change).
-- **R6, the pin.** `cpg/tests/test_fixture_binding_offline.py` (offline, no Joern, no store): the config and shell bundles of
-  `fx-svc`/`fx-job` through `run_packs` + `Binder` + `link`, asserted from the manifest rows, never from Binder output: the
-  `launchUnit` set; `_launch_chains` for servers `fx-svc` and `fx-svc-exec`; LNK-45 `(status, reason)` and `BOUND_BY` ids; LNK-22 and
-  LNK-15's context; LNK-16's `port-shared`; LNK-19's provider count (2) and LNK-12's (1, once P1-52 lands). Authored red by `qa-engineer`
-  (53a) before any fixture edit. Mutants that must go red: delete `scripts/Dockerfile`; change a CMD module path; flip LNK-45 to
-  `confirmed`; drop `compose.dev.yaml`.
-- **Open items.** LNK-14's base is the config value `base_url` (`job.yaml`); no Binder input reads a config value, so at P1 it is
-  `possible`/`partial-key` (P1-49 rule 3; the P1T-09 text already says so): not a fourth mismatch, only the stale manifest form.
-  **AC6-EX-2** needs the JS `import.meta.env.VITE_REPORTS_BASE` name, which no record carries (P1-17 decision (f), deferred to P2 by the
-  stakeholder 2026-11-11): its `example-config` reason is unreachable at P1. **LNK-18** has neither side at P1: no pack emits a
-  provider for `mcp.run(..., path="/mcp")` and no pack has a consumer for the TS transport constructor.
+## Open stakeholder questions (P1-51..53); each is stated here once
 
-**Rows.** Stay at P1, form unchanged: LNK-22 (Compose chain verified working), LNK-21 (after R2), LNK-16 (after R3). Stay at P1, form
-corrected in the manifests and `-p1.md`: LNK-45 (R1), LNK-19 (R4), LNK-13 and LNK-14 `possible`/`partial-key`, LNK-11 `possible`/
-`partial-key`, AC6-EX-4 `possible`/`example-config` (the QA report's owed `p1Form` for LNK-11/13/14/AC6-EX-4, and the fixtures plan rows
-LNK-11/13/14), LNK-12 `binding-confirmed` (needs P1-52 option A). **Move to P2, pending Q-CENSUS:** LNK-18 and AC6-EX-2, taking the P1
-census from 89 to 87 (84 if Q-TSMCP is B). `fx-svc` gains no Python symbol from the new files, but the materialized SHAs change:
-`test_f7_materialized_shas_equal_the_pinned_shas`, the pinned SHAs and the family counts are regenerated in 53b.
-- **53a (`qa-engineer`):** the pin test (red); the manifest `p1Form` and fixtures-plan/`-p1.md` row text for R1, R4 and the owed
-  LNK-11/13/14/AC6-EX-4 forms; no fixture tree edit. Done: red for the stated reasons, `tests/test_fixtures.py` consistency green.
-- **53b (`tdd-engineer`):** `fx-svc/scripts/Dockerfile`, `fx-svc/deploy/Dockerfile` (R5), `fx-job/deploy/compose.dev.yaml`, pinned SHAs;
-  the pin test green with every mutant red; the fixture build re-run offline gives `launchUnit` for `svc` and `job`, LNK-16 `port-shared`,
-  LNK-45 with its chain, NC-5 as ruled. Must not regress: LNK-13/14/15/22 and the AC6-EX-1/4 rows, `UNIT_FLOORS` (68, 67), the walk rows.
+**Q-TSMCP. Add a TypeScript MCP-client pack to P1?** LNK-02, 06, 12 are P1 rows and P1 per-shape floors (`exact literal`, `constant
+across files`, `client wrapper`: exactly 3 each, fixtures plan §6) but no step builds their consumer.
+- **A (recommended):** add P1-52. Small (one pack, one test file, registrations, no engine change), inert on the proving repository.
+- **B:** move the three rows to P2: no code, the three shape floors fall to 2 at P1, the P1 census loses 3, and the eval-protocol
+  §12.2 floors and the fixtures plan §6 change.
 
-**Q-CENSUS (stakeholder).** LNK-18 and AC6-EX-2 are unreachable at P1 under the stakeholder-approved contract (shell launch facts and
-JS env names are P2; no pack covers the TS transport). Options: (A, recommended) move both to P2: the P1 census becomes 87, the AC-6
-example-config floor at P1 holds 2 instances (EX-1, EX-4) instead of 3, the one-unit-8000-and-8200 behaviour stays covered by LNK-12
-and `test_linker_bind.py`; (B) keep them at P1 and build the missing pieces (a `mcp.run` provider rule, a TS transport consumer, JS
-`import.meta.env` records): P2-sized work added to P1 and the 2026-11-11 deferral reopened. Recommendation A: B buys two rows with
-a feature the stakeholder already deferred.
+**Q-CENSUS. LNK-18 and AC6-EX-2 are unreachable at P1** under the approved contract (shell launch facts and JS env names are P2; no
+pack provides `mcp.run(..., path="/mcp")` or consumes the TS transport constructor).
+- **A (recommended):** move both to P2. The P1 census goes from 89 to 87 (84 with Q-TSMCP B); the AC-6 example-config floor at P1
+  holds 2 instances (EX-1, EX-4) instead of 3; the 8000-and-8200 one-unit behaviour stays covered by LNK-12 and `test_linker_bind.py`.
+- **B:** keep both at P1 and build the missing pieces (a `mcp.run` provider rule, a TS transport consumer, JS `import.meta.env`
+  records): P2-sized work added to P1, reopening the 2026-11-11 deferral.
+Recommendation A: B buys two rows with a feature the stakeholder already deferred.
+
+**Q-NC5. LNK-19 and the NC-5 negative control.** An unbound shell `mcp-call reindex` links `confirmed`/`key-match` to both `reindex`
+providers (P1-17's rule for an unbound site), a known false `confirmed` against AC-5's 95% bar.
+- **A (recommended):** keep P1-17; LNK-19 is that form at P1; NC-5 narrows to LNK-12 and LNK-20; the P1-36 report carries the count of
+  unbound `mcp_tool`/`http` links whose key has providers in more than one unit (owner `teco` adds the line to `-p1-gates.md` P1-36 at
+  the answer; done when the report shows the count).
+- **B:** a P1-17 linker rule demoting an unbound confirmed link whose key has providers in more than one unit to `possible` under a
+  new registry reason (`reasons.yaml`, P1-17 reopened; it would also demote legitimate same-path `http` keys across units).
+- **C:** move LNK-19's one-provider half to P2 (a shell URL source, owner `architect`) and keep it out of the P1 floors.
+Recommendation A: B changes a shipped, gated contract for one fixture row.
 
 ## P1-17 · linker — `tdd-engineer`
 
