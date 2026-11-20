@@ -47,6 +47,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from . import config
 from .extraction import normalize_name
 
 # ── The one shared identifier grammar — defined ONCE, reused everywhere ──────
@@ -212,7 +213,7 @@ class DatasetSchema:
 # — this registry is a curated query-facing allowlist, not every property that
 # exists on the node).
 CATALOG_SCHEMA = DatasetSchema(
-    graph_key="reference",
+    graph_key=config.REFERENCE_GRAPH,
     labels={
         "Product": {
             "name": str,

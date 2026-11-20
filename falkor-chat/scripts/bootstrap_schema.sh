@@ -35,7 +35,7 @@ gconstraint() {
 # reference graph
 # ─────────────────────────────────────────────────────────────
 bootstrap_reference() {
-  local g="reference"
+  local g="${FALKORCHAT_REFERENCE_GRAPH:-reference}"
   echo ""
   echo "── reference graph ──────────────────────────────────────"
 

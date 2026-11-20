@@ -4149,7 +4149,7 @@ class _RecordingConn:
         self.graph = _RecordingGraph()
 
     def select_graph(self, name):
-        assert name == "reference"
+        assert name == config.REFERENCE_GRAPH
         return self.graph
 
 

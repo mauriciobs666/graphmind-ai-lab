@@ -149,7 +149,7 @@ and not latency-critical.
 - Labels: `PascalCase` — `User`, `Channel`, `Message`, `WorkflowRun`
 - Relationship types: `UPPER_SNAKE` — `POSTED_BY`, `REPLY_TO`, `AT_STEP`
 - Properties: `camelCase` — `userId`, `createdAt`, `embedding`
-- Graph keys: `ws:{workspaceId}`, `reference`, `identity`
+- Graph keys: `ws:{workspaceId}`, `reference` (name configurable via `FALKORCHAT_REFERENCE_GRAPH`; test runs use a throwaway), `identity`
 
 ---
 

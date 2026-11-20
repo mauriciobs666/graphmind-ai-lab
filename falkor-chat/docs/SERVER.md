@@ -159,6 +159,7 @@ substitutions inside the model-config files (§1.8). A boolean flag is on for `1
 | Env var | Default | Effect |
 |---|---|---|
 | `FALKORCHAT_WS_ID` | `acme` | The workspace (`ws:{id}` graph) every `get_context` call and the storefront run against. |
+| `FALKORCHAT_REFERENCE_GRAPH` | `reference` | Name of the global reference graph (workflow defs, product catalog). Test runs point it at a throwaway (§1.7); leave unset in production. |
 | `FALKORCHAT_USER_ID` | `u1` | The actor every `get_context` call is attributed to; projected as a `User` at startup. |
 | `FALKORDB_HOST` / `FALKORDB_PORT` | `127.0.0.1` / `6379` | Where the FalkorDB client connects. |
 | `FALKORDB_CONNECT_TIMEOUT` | `5` (s) | Client connect timeout: an unreachable instance fails startup fast rather than hanging (a dead port on WSL2 can blackhole instead of refusing). |
@@ -616,17 +617,15 @@ Not a current contract: build history is in `falkor-chat/docs/HISTORY.md`, and t
 
 ### 1.7 Testing hazards specific to `server/`
 
-Gotchas that a green `pytest` run does not surface, distinct from the `test_queries.sh` teardown
-hazard documented in `falkor-chat/AGENTS.md`'s "Key scripts" table:
+Gotchas that a green `pytest` run does not surface:
 
-- **`pytest -q` is destructive to the global `reference` graph too — a different mechanism than
-  `test_queries.sh`'s teardown wipe.** The `wf_repo` fixture (`tests/conftest.py`) runs
-  `MATCH (n) DETACH DELETE n` on `reference` at fixture **setup**, once per workflow test, to
-  isolate it from earlier tests. Because the wipe never runs at teardown, a finished pytest
-  session leaves the *last* workflow test's own published defs sitting in `reference` — so
-  `already present — no-op` after a pytest run may be reporting a **test's** publish, not a real
-  seed, while each `ws:<id>` snapshot still holds whatever it held before. Re-run
-  `scripts/seed_workflows.sh <wsId>` after any pytest run, exactly as after `test_queries.sh`.
+- **The suites run against a throwaway reference graph, never the live `reference`.** The graph name is
+  `config.REFERENCE_GRAPH` (env `FALKORCHAT_REFERENCE_GRAPH`, default `reference`, read once at import).
+  `tests/conftest.py` sets it to `reference-test` before `falkorchat` is imported, so the `wf_repo` setup
+  wipe (`MATCH (n) DETACH DELETE n`) and every def/catalog write land there; the fixture also refuses to
+  wipe a graph named `reference`. `scripts/test_queries.sh` exports the same name, and
+  `bootstrap_schema.sh` / `verify_catalog.sh` honour it. A finished pytest session leaves `reference-test`
+  behind (harmless, throwaway). Guard: `tests/test_reference_graph_isolation.py`.
 - **A green exit code is not evidence the graph-backed half of the suite ran.** With FalkorDB
   unreachable, `conftest._falkordb_reachable()` turns the whole integration suite into
   `pytest.skip` rather than failures, so the run still exits 0 with roughly half the tests
@@ -654,8 +653,7 @@ hazard documented in `falkor-chat/AGENTS.md`'s "Key scripts" table:
 
 **Verifying a claimed test count safely:** `pytest --collect-only -q` reports the suite's test
 count with no FalkorDB connection and no writes — the correct way to check a plan's or review's
-"N tests" baseline claim without triggering either the `wf_repo` setup-time wipe or
-`test_queries.sh`'s teardown wipe above.
+"N tests" baseline claim without running any graph-backed fixture.
 
 - **A wired agent requires the two config files of §1.8.** `tests/conftest.py`'s
   `_model_config_env` autouse fixture points both at `tests/data/` fixtures for every test — the suite must pass on a machine with **no**

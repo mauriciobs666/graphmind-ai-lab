@@ -40,9 +40,8 @@
 # is `MERGE (…) ON CREATE SET …`, so EDITING a step config / guard / prompt here (or in
 # `proof_defs.py`) and re-running changes NOTHING live: the run reports a clean
 # `already present — no-op` while the old content stays. Worse, `reference` (def) and
-# `ws:<id>` (snapshot) go stale INDEPENDENTLY — `scripts/test_queries.sh` and the pytest
-# `wf_repo` fixture both wipe `reference` but not `ws:<id>` — so a naive re-seed after either
-# republishes the NEW def while the workspace keeps the OLD snapshot, a silent split-brain,
+# `ws:<id>` (snapshot) can go stale INDEPENDENTLY (e.g. a manual `GRAPH.DELETE reference`) — so a
+# naive re-seed after a wipe republishes the NEW def while the workspace keeps the OLD snapshot, a silent split-brain,
 # and the snapshot is what the executor drives. Landing a def edit therefore requires an
 # explicit act: delete the def + snapshot subgraphs and republish, or bump `key`/`version`
 # (for triage, kept in sync with config.TRIGGER_DEF_KEY/TRIGGER_DEF_VERSION via matching
@@ -56,14 +55,8 @@
 #                                               embedding-model override, FR-2)
 #   2. ./scripts/seed_demo.sh <wsId>          (the `assistant` Agent + a channel/thread to @mention)
 # It depends on the workspace graph + its schema existing; it does NOT touch chat or demo data.
-# RE-RUN IT after `./scripts/test_queries.sh` or a server pytest run — for DIFFERENT reasons:
-#   * test_queries.sh DELETES `reference` at teardown, taking BOTH defs with it (ws:<id> survives);
-#   * the pytest `wf_repo` fixture wipes `reference` at fixture SETUP, per workflow test, so a
-#     finished pytest session LEAVES BEHIND whatever the last workflow test published. After a
-#     pytest run, `already present — no-op` may therefore be reporting a TEST's publish rather
-#     than a real seed, while ws:<id> still holds the older snapshot the executor drives.
-#     (The acceptance test publishes `access-request@v1-test`, deliberately not the production
-#     version, so it cannot be the def you find here.)
+# `test_queries.sh` and the pytest suite use the throwaway `reference-test` graph
+# (FALKORCHAT_REFERENCE_GRAPH, GAL-I01-D0001), so they no longer require a re-seed.
 #
 # K-037: this script's own FALKORCHAT_TRIAGE_DEF_KEY/_VERSION pair (below) is DELIBERATELY
 # NOT FALKORCHAT_TRIGGER_DEF_KEY/_VERSION. That pair is the app's real, sanctioned override

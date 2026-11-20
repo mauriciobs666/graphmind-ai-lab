@@ -74,7 +74,7 @@ idempotent retry, `hadHead` = lost the first-post race). See DESIGN §5.3 for th
 | `./scripts/start_server.sh` | One-shot: starts FalkorDB, bootstraps schema, seeds demo agent + workflows, starts uvicorn. Runtime env vars are documented in the script's own header comment. |
 | `./scripts/bootstrap_schema.sh <wsId> …` | Creates all indexes + constraints for `reference` + workspace(s). Idempotent. **Always touches `reference` too, even when given only a probe workspace ID** — but DDL only, no `MERGE`/`CREATE (n)`/`DELETE` (`scripts/bootstrap_schema.sh:37-70`), so bootstrapping a throwaway probe workspace is safe for `reference`'s *data*. For a real, live-served workspace use `create_workspace.sh` instead (below), which also pins the embedding-model override, FR-2 — this script alone leaves that unset. |
 | `./scripts/create_workspace.sh <wsId> …` | Canonical entry point for a **real** workspace (§3.2 Option B, `docs/plans/embedding-migration.md`): `bootstrap_schema.sh "$@"` then FR-2's pin operation (`pin_workspace_embedding_model.sh`) per given id, so every real workspace gets an explicit `embeddingModelOverride` at birth with no separate operator step. Not for a throwaway/offline-suite workspace (`ws:test`, `ws:nlq-eval`) — those call `bootstrap_schema.sh` directly, deliberately. |
-| `./scripts/test_queries.sh` | End-to-end test suite against the live instance; must pass before any schema change is committed. **⚠️ Deletes the `reference` graph at teardown** (`GRAPH.DELETE` — indexes and constraints go too, not just node data), wiping both published workflow defs, so `@mention`-to-start silently breaks (workspace snapshots survive). Re-run `bootstrap_schema.sh <wsId>` → `seed_demo.sh` → `seed_workflows.sh` afterward — `seed_workflows.sh` alone is not enough — or check first with `verify_workflows.sh <wsId>`. |
+| `./scripts/test_queries.sh` | End-to-end test suite against the live instance; must pass before any schema change is committed. Wipes only `ws:test` and the throwaway reference graph `reference-test` (it exports `FALKORCHAT_REFERENCE_GRAPH=reference-test`), never the live `reference` — no re-seed needed afterward. |
 | `./scripts/reembed_unembedded_chunks.sh <wsId> [--apply]` | One-off repair (K-102): lists (dry run, default) or re-embeds (`--apply`) `Chunk`s with no embedding via `EmbeddingWorker`; never changes `Document.status`, and reports which documents stay `failed`. Embeds through the same config the server resolves (`shlib/opencode_config.sh`). |
 | `./scripts/backfill_thread_ids.sh <wsId> …` | One-off: stamps `Message.threadId` on pre-K-007 messages. Idempotent; run once per existing workspace. |
 | `./scripts/load_test.sh` | Load-tests the REST append path, profiles the four hot reads, and measures per-workspace RAM delta against a throwaway `ws:load`. Env: `LOAD_MESSAGES`/`LOAD_WORKERS`/`SERVER_PORT`. |
@@ -127,11 +127,12 @@ are wired only *inside* the `FALKORCHAT_ENABLE_AGENT` branch of `_build_default_
 flags read as independent. Both flags are needed to exercise a workflow end-to-end, including the
 LLM-free `access-request@v1` proof flow.
 
-**A default (offline) `pytest` run wipes the `reference` graph at teardown (see `test_queries.sh`
-above); `pytest -m live` does not** — the live-only marker deselects every offline test, so the
-`wf_repo` fixture that clears `reference` never runs, and the live test seeds its own throwaway
-`ws:live` instead. The re-seed obligation (`seed_workflows.sh`) attaches to a **default** `pytest`
-run, not to a `-m live`-only one.
+**The reference graph's name is `FALKORCHAT_REFERENCE_GRAPH` (default `reference`).** `tests/conftest.py`
+forces `reference-test` for every pytest run (unset or `reference` is replaced) and `test_queries.sh` does the
+same, so neither suite touches the live `reference` (guard: `server/tests/test_reference_graph_isolation.py`).
+`pytest -m live` tests that read the catalog (`test_querygen_live.py`) therefore need it seeded into
+`reference-test`: `FALKORCHAT_REFERENCE_GRAPH=reference-test ./scripts/bootstrap_schema.sh <ws>` then
+`seed_catalog.sh` with the same variable. Never set the variable to `reference` for a test run.
 
 **Model/provider configuration is two hand-edited files, not env vars.** Every LLM/
 embedding consumer resolves through `falkorchat.modelconfig.ModelGateway` — the pristine, shared
@@ -154,16 +155,11 @@ WSL, both work.
 
 ### Probing shared graph state without mutating it
 
-- **A workflow-def *publish* has no graph seam** — `Repository._reference()`
-  (`server/falkorchat/repository.py:156-158`) always resolves to `db.reference_graph()`
-  (`server/falkorchat/db.py:87-94`), a hardcoded `select_graph("reference")` with no
-  parameter/env override, so `publish_def` can only ever write the global graph. The isolatable
-  equivalent is the **snapshot** side: `materialize_snapshot` (`repository.py:1669`) formats the
-  same `_PUBLISH_CYPHER` constant (`:992`) against `self._graph(ws)` instead, and
-  `get_snapshot` (`repository.py:1702`), via `_read_subgraph` (`:1031`), read it back with the
-  same `_READ_META_CYPHER` (`:1016`). Any engine-semantics probe about publish/read behaviour can
-  therefore run byte-identically against a throwaway `ws:<probe>` graph and be torn down with
-  `GRAPH.DELETE`, instead of touching `reference`.
+- **A workflow-def *publish* writes the graph named by `config.REFERENCE_GRAPH`**
+  (`FALKORCHAT_REFERENCE_GRAPH`, default `reference`; `db.reference_graph()` is the one resolver). A probe
+  that must not touch the live graph sets the variable to a throwaway name, or uses the snapshot side:
+  `materialize_snapshot` formats the same `_PUBLISH_CYPHER` against a throwaway `ws:<probe>` graph and
+  `get_snapshot` reads it back, torn down with `GRAPH.DELETE`.
 - **`server/tests/test_services.py` is the review-safe pytest subset** — it builds
   `Services(FakeRepo())` (a module-local fake) and requests no `conftest.py` fixture that reaches
   a real `conn`/`wf_repo`, so it (and any `test_api.py` node that builds its own throwaway
@@ -187,7 +183,7 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 
 Application architecture (layering, front doors, REST/MCP surface, layout) is
 `falkor-chat/docs/SERVER.md` §1–§2 — not restated here. **Testing hazards specific to this suite**
-(the pytest-side destructive-reference-graph gotcha, skip-count reading, `ws:test`'s fixed dim-4
+(the reference-graph isolation seam, skip-count reading, `ws:test`'s fixed dim-4
 vector index, ruff not being a wired gate) are `falkor-chat/docs/SERVER.md` §1.7. Model-output parse tolerance (`llm.py`)
 and the executor/workflow-def invariants are documented at their own definitions
 (`llm.py` docstrings; `services._validate_def_spec`, `executor.py`) and in `falkor-chat/docs/DESIGN.md` §6 —

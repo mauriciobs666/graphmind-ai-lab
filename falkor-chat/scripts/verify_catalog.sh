@@ -42,7 +42,7 @@ echo "── verifying product catalog in reference ──"
 
 rq() {
   # Read-only GRAPH.RO_QUERY — never GRAPH.QUERY (this script must never write).
-  redis-cli -h "$HOST" -p "$PORT" GRAPH.RO_QUERY reference "$1" --compact
+  redis-cli -h "$HOST" -p "$PORT" GRAPH.RO_QUERY "${FALKORCHAT_REFERENCE_GRAPH:-reference}" "$1" --compact
 }
 
 failures=0

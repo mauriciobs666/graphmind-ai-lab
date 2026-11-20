@@ -16,6 +16,12 @@ from pathlib import Path
 WS_ID: str = os.environ.get("FALKORCHAT_WS_ID", "acme")
 USER_ID: str = os.environ.get("FALKORCHAT_USER_ID", "u1")
 
+# ── Reference graph name (GAL-I01-D0001) ───────────────────────────────────────
+# The global reference graph's NAME is configurable so a test suite can point at a
+# throwaway graph instead of the live one. Default `reference` leaves production
+# byte-identical; `tests/conftest.py` and `scripts/test_queries.sh` set a throwaway.
+REFERENCE_GRAPH: str = os.environ.get("FALKORCHAT_REFERENCE_GRAPH", "reference")
+
 # ── FalkorDB connection ────────────────────────────────────────────────────────
 FALKORDB_HOST: str = os.environ.get("FALKORDB_HOST", "127.0.0.1")
 FALKORDB_PORT: int = int(os.environ.get("FALKORDB_PORT", "6379"))

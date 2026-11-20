@@ -5,6 +5,24 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-20 — GAL-I01-D0001 closed: suites no longer wipe the live `reference` graph
+
+- **Cause.** `db.reference_graph()` hardcoded `select_graph("reference")`, so the `wf_repo` fixture
+  (`MATCH (n) DETACH DELETE n`) and `test_queries.sh` (`GRAPH.DELETE reference` at start and end) emptied the
+  graph the live `:8200` server reads defs and the catalog from; every suite run broke `@mention`-to-start and
+  storefront lookups until the five seed scripts were re-run by hand.
+- **What.** The graph name is now `config.REFERENCE_GRAPH` (env `FALKORCHAT_REFERENCE_GRAPH`, default
+  `reference`, so production is unchanged), read by `db.reference_graph()` and `querygen.CATALOG_SCHEMA`;
+  `bootstrap_schema.sh` and `verify_catalog.sh` honour it. `tests/conftest.py` sets `reference-test` before
+  `falkorchat` is imported and `wf_repo` refuses to wipe a graph named `reference`; `test_queries.sh`
+  uses and exports `reference-test`. `ws:test` handling is unchanged (not a live name). `services.py`
+  `source="reference"` is a label, not a graph key, and is unchanged.
+- **Verified.** `tests/test_reference_graph_isolation.py` (7 tests) failed first (no `config.REFERENCE_GRAPH`).
+  Server suite 3662 passed, 14 deselected, 1 xfailed; `test_queries.sh` 461/461. After a restore, a
+  default pytest and `test_queries.sh` left `reference` at 15 Step / 4 WorkflowDef / 15 Product and the
+  three verifiers OK. `AGENTS.md` (script table, reference-graph paragraph, probing bullet) and
+  `docs/SERVER.md` §1.7 and the env-var table, `docs/DESIGN.md` §2 graph-keys line were rewritten.
+
 ## 2026-11-20 — K-102 and K-070 closed: embed timeouts retried, embeds scheduled before extracts, repair script
 
 - **Cause (K-102).** LM Studio holds one model at a time: a document's extract call (qwen3-4b) evicts

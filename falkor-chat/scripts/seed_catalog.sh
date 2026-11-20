@@ -28,8 +28,8 @@
 #
 # IDEMPOTENT BY DESIGN (plan §3.2): `productId` is a DETERMINISTIC slug derived
 # from the product's name (e.g. "Wireless Mouse Pro" -> "wireless-mouse-pro"),
-# NOT a `uuid4()` minted fresh per run. `scripts/test_queries.sh`'s teardown
-# `GRAPH.DELETE`s the entire `reference` graph (schema included) — a naive
+# NOT a `uuid4()` minted fresh per run. a `GRAPH.DELETE` of the
+# `reference` graph (schema included) — a naive
 # random-id reseed after that wipe would silently duplicate/diverge the catalog
 # under fresh ids. A deterministic slug means a re-seed after a wipe
 # reconstructs BYTE-IDENTICAL data, and the `MERGE ... ON CREATE SET` (backed by
@@ -102,8 +102,7 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 def _slugify(name: str) -> str:
     """A stable, deterministic `productId` derived from the product name (plan
-    §3.2) — NOT `uuid4()` — so a re-seed after a `reference` wipe (test_queries.sh's
-    teardown) reconstructs byte-identical ids. Lowercase, non-alnum runs collapsed
+    §3.2) — NOT `uuid4()` — so a re-seed after a `reference` wipe reconstructs byte-identical ids. Lowercase, non-alnum runs collapsed
     to a single '-', no leading/trailing '-'."""
     return _SLUG_RE.sub("-", name.lower()).strip("-")
 

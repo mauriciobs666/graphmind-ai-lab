@@ -19,7 +19,7 @@ exercises the seed script itself plus structural Cypher reads — no LLM involve
 part of the ordinary `pytest -q` baseline.
 
 **Throwaway identities, never the real `triage`/`access-request` keys**, even though
-`reference` is a shared graph the `wf_repo` fixture already wipes at setup: this keeps the
+the reference graph (`reference-test` under pytest) is shared and the `wf_repo` fixture already wipes it at setup: this keeps the
 test's own assertions unambiguous (nothing else could have contributed to
 `k037-*-guard`'s step count) and means a solo run of just this module can't collide with
 anything a parallel/adjacent workflow test might have left behind. Cleans up its own

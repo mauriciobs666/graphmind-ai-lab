@@ -20,6 +20,12 @@ from pathlib import Path
 import pytest
 from redis.exceptions import ResponseError
 
+# GAL-I01-D0001: point every default run at a throwaway reference graph BEFORE falkorchat
+# is imported (config reads the env once). Never the live `reference`: an unset or live
+# value is replaced; any other explicit value is kept.
+if os.environ.get("FALKORCHAT_REFERENCE_GRAPH", "reference") == "reference":
+    os.environ["FALKORCHAT_REFERENCE_GRAPH"] = "reference-test"
+
 from falkorchat import config, db
 from falkorchat.repository import Repository
 
@@ -137,14 +143,17 @@ def repo(conn) -> Repository:
 
 @pytest.fixture()
 def wf_repo(conn) -> Repository:
-    """A Repository over `ws:test` **and** the global `reference` graph, both wiped.
+    """A Repository over `ws:test` **and** the throwaway reference graph, both wiped.
 
-    `conn` wipes only `ws:test` node data; the `reference` graph is global and
+    `conn` wipes only `ws:test` node data; the reference graph (`config.REFERENCE_GRAPH`,
+    forced to `reference-test` above, never the live `reference`) is global and
     additive (workflow-def authoring writes there, plan F3), so workflow tests
     also wipe its node data here to stay isolated across tests (plan F8 — no
     cross-test collisions). Schema (indexes + constraints) survives DETACH DELETE.
     """
-    db.reference_graph(conn).query("MATCH (n) DETACH DELETE n")
+    graph = db.reference_graph(conn)
+    assert graph.name != "reference", "refusing to wipe the live `reference` graph (GAL-I01-D0001)"
+    graph.query("MATCH (n) DETACH DELETE n")
     return Repository(conn)
 
 

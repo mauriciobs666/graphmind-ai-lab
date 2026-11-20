@@ -22,7 +22,7 @@ import json
 import pytest
 from conftest import TEST_EMBEDDING_DIM
 
-from falkorchat import querygen, tools
+from falkorchat import config, querygen, tools
 from falkorchat.config import CallContext
 from falkorchat.services import Services, UnknownMemberError
 from falkorchat.tools import (
@@ -1002,7 +1002,7 @@ def test_query_graph_data_happy_path_compiles_and_returns_items():
     assert llm.calls[0][1] == {"role": "user", "content": "what audio products do you have?"}
     # compiled against the resolved (reference-graph) catalog schema, default timeout
     [call] = svc.structured_query_calls
-    assert call["graph_key"] == "reference"
+    assert call["graph_key"] == config.REFERENCE_GRAPH
     assert call["timeout"] == querygen.DEFAULT_QUERY_TIMEOUT_MS
     assert call["compiled"].cypher == (
         "MATCH (p:Product) WHERE p.category = $p0 RETURN DISTINCT p.name, p.price LIMIT $limit"
@@ -1114,7 +1114,7 @@ def test_query_graph_data_ignores_a_dataset_field_the_model_supplied_and_uses_th
 
     assert out == {"items": rows}
     [call] = svc.structured_query_calls
-    assert call["graph_key"] == "reference"  # catalog's graph_key, not knowledge_base's
+    assert call["graph_key"] == config.REFERENCE_GRAPH  # catalog's graph_key, not knowledge_base's
 
 
 # K-066 Q2 (`docs/test-reports/salesperson-single-model-report.md`): ministral's

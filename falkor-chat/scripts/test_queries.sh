@@ -12,7 +12,10 @@ set -euo pipefail
 HOST="${FALKORDB_HOST:-127.0.0.1}"
 PORT="${FALKORDB_PORT:-6379}"
 WS="ws:test"
-REF="reference"
+# Throwaway reference graph — never the live `reference` (GAL-I01-D0001). Exported so the
+# bootstrap script (and any Python it spawns) targets the same name.
+REF="reference-test"
+export FALKORCHAT_REFERENCE_GRAPH="$REF"
 
 PASS=0
 FAIL=0
@@ -1936,7 +1939,7 @@ gq "$WS" "MATCH (c:Chunk) WHERE c.documentId IN ['asd1','asd2','asd3'] DETACH DE
 echo ""
 echo "▶ teardown"
 redis-cli -h "$HOST" -p "$PORT" GRAPH.DELETE "$WS"  > /dev/null && echo "  ✓ ws:test deleted"
-redis-cli -h "$HOST" -p "$PORT" GRAPH.DELETE "$REF" > /dev/null && echo "  ✓ reference deleted"
+redis-cli -h "$HOST" -p "$PORT" GRAPH.DELETE "$REF" > /dev/null && echo "  ✓ ${REF} deleted"
 
 # ── summary ──────────────────────────────────────────────────────────────────
 

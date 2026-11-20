@@ -44,7 +44,7 @@ def test_reference_graph_selects_global_reference_graph(_schema):
 
     graph = db.reference_graph(conn)
 
-    assert graph.name == "reference"
+    assert graph.name == config.REFERENCE_GRAPH
 
 
 def test_connect_unreachable_fails_within_timeout_budget_with_clear_error(monkeypatch):

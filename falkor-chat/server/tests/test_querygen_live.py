@@ -16,8 +16,8 @@ Unreachable FalkorDB skips (never fails) with a reason.
 `.ro_query` (`repository.run_readonly_query`'s own Layer-2 guarantee) — this
 file never writes to `reference` or `ws:nlq-eval`. Both graphs must already
 be seeded: `reference` via `./scripts/bootstrap_schema.sh <ws> &&
-./scripts/seed_catalog.sh` (a default offline `pytest` run wipes `reference`
-at teardown, `falkor-chat/AGENTS.md`); `ws:nlq-eval` is the golden-set
+./scripts/seed_catalog.sh` run with `FALKORCHAT_REFERENCE_GRAPH=reference-test`
+(conftest points every pytest run at that throwaway graph, `falkor-chat/AGENTS.md`); `ws:nlq-eval` is the golden-set
 knowledge-base workspace seeded by an earlier unit and left alone here.
 
 This is deliberately narrower than the full 39-pair golden-set harness
@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import pytest
 
-from falkorchat import db
+from falkorchat import config, db
 from falkorchat.querygen import (
     CATALOG_SCHEMA,
     KNOWLEDGE_BASE_SCHEMA,
@@ -63,7 +63,7 @@ NLQ_EVAL_WS = "nlq-eval"
 
 def _falkordb_reachable() -> bool:
     try:
-        db.connect().select_graph("reference").query("RETURN 1")
+        db.connect().select_graph(config.REFERENCE_GRAPH).query("RETURN 1")
         return True
     except Exception:
         return False
@@ -92,7 +92,7 @@ def test_nlq08_quoted_numeric_price_filter_matches_golden_set(repo: Repository):
         returns=["p.name"],
     )
     compiled = qg_compile(request, CATALOG_SCHEMA)
-    rows = repo.run_readonly_query("reference", compiled)
+    rows = repo.run_readonly_query(config.REFERENCE_GRAPH, compiled)
     names = {row["p.name"] for row in rows}
     assert names == {
         "Gaming Mouse Pad XL", "Wireless Charging Pad", "Wireless Mouse Pro",
@@ -114,7 +114,7 @@ def test_nlq02_verbatim_name_normalized_value_matches_golden_set(repo: Repositor
         returns=["p.category"],
     )
     compiled = qg_compile(request, CATALOG_SCHEMA)
-    rows = repo.run_readonly_query("reference", compiled)
+    rows = repo.run_readonly_query(config.REFERENCE_GRAPH, compiled)
     assert rows == [{"p.category": "Storage"}]
 
 
@@ -149,7 +149,7 @@ def test_nlq16_cheapest_product_superlative_matches_golden_set(repo: Repository)
         limit=1,
     )
     compiled = qg_compile(request, CATALOG_SCHEMA)
-    rows = repo.run_readonly_query("reference", compiled)
+    rows = repo.run_readonly_query(config.REFERENCE_GRAPH, compiled)
     assert rows == [{"p.name": "Gaming Mouse Pad XL"}]
 
 
@@ -165,7 +165,7 @@ def test_nlq17_most_expensive_product_superlative_matches_golden_set(repo: Repos
         limit=1,
     )
     compiled = qg_compile(request, CATALOG_SCHEMA)
-    rows = repo.run_readonly_query("reference", compiled)
+    rows = repo.run_readonly_query(config.REFERENCE_GRAPH, compiled)
     assert rows == [{"p.name": "27-inch 4K Monitor"}]
 
 
@@ -185,7 +185,7 @@ def test_nlq20_superlative_combined_with_a_filter_matches_golden_set(repo: Repos
         limit=1,
     )
     compiled = qg_compile(request, CATALOG_SCHEMA)
-    rows = repo.run_readonly_query("reference", compiled)
+    rows = repo.run_readonly_query(config.REFERENCE_GRAPH, compiled)
     assert rows == [{"p.name": "Fitness Tracker Band"}]
 
 
@@ -206,7 +206,7 @@ def test_tuple_distinct_pairs_multiple_columns_correctly_live(repo: Repository):
         limit=1,
     )
     compiled = qg_compile(request, CATALOG_SCHEMA)
-    rows = repo.run_readonly_query("reference", compiled)
+    rows = repo.run_readonly_query(config.REFERENCE_GRAPH, compiled)
     # The cheapest product overall (min price 19.99) is "Gaming Mouse Pad
     # XL", category "Peripherals" — a swapped-alias mutant would instead
     # produce {"p.name": "Peripherals", "p.category": "Gaming Mouse Pad XL"}.
