@@ -167,3 +167,27 @@ def test_a_field_read_does_not_turn_a_runtime_built_slot_into_config_derived():
     produce["extract"]["topic"]["onUnknown"] = "runtime-built"
     (f,) = run_packs([kafka_send(with_field_read=True)], [p]).providers
     assert (f["key"], f["reason"]) == (None, "runtime-built")
+
+
+# ---- config-derived: what counts as the evidence (spec §1.4, §5.13)
+
+def test_a_field_read_on_another_call_does_not_make_this_site_config_derived():
+    other = call("c2", "s", "send")
+    recs = kafka_send() + [other, field_read("c2")]          # the read is on c2's a0, the unresolved site is c1
+    (f,) = run_packs([recs], [KAFKA]).providers
+    assert (f["key"], f["reason"]) == (None, "runtime-built")
+
+
+def test_a_field_write_is_not_a_read_and_does_not_make_it_config_derived():
+    recs = kafka_send() + [field_read("c1") | {"mode": "write"}]
+    (f,) = run_packs([recs], [KAFKA]).providers
+    assert (f["key"], f["reason"]) == (None, "runtime-built")
+
+
+def test_a_config_derived_slot_behind_first_of_still_sees_the_field_read():
+    import copy
+    p = copy.deepcopy(KAFKA)
+    (produce,) = [r for r in p["rules"] if r["id"] == "produce"]
+    produce["extract"]["topic"] = {"firstOf": [{"arg": "kw.topic"}, {"arg": "a0", "onUnknown": "config-derived"}]}
+    (f,) = run_packs([kafka_send(with_field_read=True)], [p]).providers
+    assert (f["key"], f["status"], f["reason"]) == (None, "possible", "config-derived")
