@@ -97,3 +97,6 @@
 {"evid":"c901402b6f204901","ts":1795217005639076392,"ev":"new","id":"GAL-I02-K0090","type":"K","parent":"GAL-I02","home":"claude","title":"Non-functional requirements section"}
 {"evid":"18c0618d59b84c9d","ts":1795217005703340112,"ev":"new","id":"GAL-I02-K0091","type":"K","parent":"GAL-I02","home":"claude","title":"Project-scoped default-agent setting for tico"}
 {"evid":"ea760b6fe40844f7","ts":1795217078744055026,"ev":"new","id":"GAL-F0004","type":"F","parent":null,"home":"opencode","title":"Wire `tank`'s outer scripts into a scheduler"}
+{"evid":"876a8a2b89044452","ts":1795217079229388747,"ev":"new","id":"GAL-F0005","type":"F","parent":null,"home":"decision-models","title":"Hand-off prompt parity for join-in and message type"}
+{"evid":"a9d53af875cb4e1b","ts":1795217079268728978,"ev":"new","id":"GAL-F0006","type":"F","parent":null,"home":"decision-models","title":"Per-label `minConfidence` (former U6a)"}
+{"evid":"79441808011d4d43","ts":1795217079306344360,"ev":"new","id":"GAL-F0007","type":"F","parent":null,"home":"decision-models","title":"Fine-tuning a decision model (§Q7)"}

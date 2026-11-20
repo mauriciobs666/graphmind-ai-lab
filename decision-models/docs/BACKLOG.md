@@ -7,7 +7,9 @@
 
 ## Open items
 
-### Hand-off prompt parity for join-in and message type
+### GAL-F0005 — Hand-off prompt parity for join-in and message type
+
+- **Status:** 🔵 proposed — defaulted; owner confirms status
 
 The guard's hand-off prompt is checked against the served one (`tests/test_handoff_parity.py`,
 `_JUDGE_SYSTEM_PROMPT` in `falkor-chat/server/falkorchat/app.py`). The join-in judge and the message
@@ -21,7 +23,9 @@ type classifier have no runtime prompt yet, so `fit/join-in-judge/handoff.md` an
   fails when the file exists and the name is not a module-level assignment), covers each prompt
   that unit adds.
 
-### Per-label `minConfidence` (former U6a)
+### GAL-F0006 — Per-label `minConfidence` (former U6a)
+
+- **Status:** 🔵 proposed — defaulted; owner confirms status
 
 Message type fails per class (`escalation`, `other`); a per-label confidence policy is the
 unbuilt lever (`docs/plans/typed-decision-models2.md` §4.2, §3.8). Skipped at close by decision.
@@ -29,7 +33,9 @@ unbuilt lever (`docs/plans/typed-decision-models2.md` §4.2, §3.8). Skipped at 
 - **Done when:** a `tdd-engineer` unit adds it to `decisions.py`/`policy.py` with an `analyst` gate,
   then message type is re-evaluated.
 
-### Fine-tuning a decision model (§Q7)
+### GAL-F0007 — Fine-tuning a decision model (§Q7)
+
+- **Status:** 🔵 proposed — defaulted; owner confirms status
 
 Candidate follow-on feature after fits plateaued (message type ~0.77, join-in ~0.85 per the fit
 reports). Not started.
