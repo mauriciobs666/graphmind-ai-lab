@@ -203,7 +203,8 @@ _RECORD_ENV = f'''#!{sys.executable}
 import json, os, sys
 with open(os.environ["STUB_RECORD"], "a") as fh:
     fh.write(json.dumps({{"argv0": os.path.basename(sys.argv[0]),
-                         "opencode": os.environ.get("FALKORCHAT_OPENCODE_CONFIG")}}) + "\\n")
+                         "opencode": os.environ.get("FALKORCHAT_OPENCODE_CONFIG"),
+                         "agent_name": os.environ.get("FALKORCHAT_AGENT_NAME")}}) + "\\n")
 sys.exit(int(os.environ.get("STUB_RC_" + os.path.basename(sys.argv[0]).replace(".", "_"), "0")))
 '''
 

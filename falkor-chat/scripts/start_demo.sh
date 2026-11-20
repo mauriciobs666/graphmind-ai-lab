@@ -45,7 +45,8 @@ set -euo pipefail
 #                          index (Qwen3-Embedding). Exported to the app as
 #                          FALKORCHAT_EMBEDDING_DIM.
 #   FALKORCHAT_AGENT_ID    (default: assistant)
-#   FALKORCHAT_AGENT_NAME  (default: Assistant)
+#   FALKORCHAT_AGENT_NAME  (default: Assistant) — the seeded Agent's display name;
+#                          handed to seed_demo.sh only (the server never reads it).
 #   FALKORCHAT_TRIGGER_DEF_KEY     (default: salesperson) — pinned so an @mention
 #   FALKORCHAT_TRIGGER_DEF_VERSION (default: v9)           starts the demo agent,
 #                          not the dev deployment's `triage`.
@@ -366,7 +367,7 @@ echo ""
 
 export FALKORCHAT_WS_ID FALKORCHAT_USER_ID FALKORDB_HOST FALKORDB_PORT
 export FALKORCHAT_EMBEDDING_DIM="$EMBEDDING_DIM"
-export FALKORCHAT_ENABLE_AGENT FALKORCHAT_AGENT_ID FALKORCHAT_AGENT_NAME
+export FALKORCHAT_ENABLE_AGENT FALKORCHAT_AGENT_ID
 export FALKORCHAT_WORKFLOW_ENABLED FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S
 export FALKORCHAT_TRIGGER_DEF_KEY FALKORCHAT_TRIGGER_DEF_VERSION
 export FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH

@@ -33,7 +33,8 @@ set -euo pipefail
 #                          be published or @mention-to-start is a silent no-op). Set 0 to
 #                          keep the M2 direct-reply wiring only.
 #   FALKORCHAT_AGENT_ID    (default: assistant)
-#   FALKORCHAT_AGENT_NAME  (default: Assistant)
+#   FALKORCHAT_AGENT_NAME  (default: Assistant) — the seeded Agent's display name;
+#                          handed to seed_demo.sh only (the server never reads it).
 #   FALKORCHAT_TRIGGER_DEF_KEY     (default: triage) — which def an @mention resolves/starts
 #   FALKORCHAT_TRIGGER_DEF_VERSION (default: v1)       (config.TRIGGER_DEF_KEY/_VERSION).
 #                          Override for a demo/QA session (e.g. `access-request`/`v1`) to
@@ -239,7 +240,7 @@ echo ""
 # vecf32 write is silently accepted then drops out of ANN — DEF in config.py).
 export FALKORCHAT_WS_ID FALKORCHAT_USER_ID FALKORDB_HOST FALKORDB_PORT
 export FALKORCHAT_EMBEDDING_DIM="$EMBEDDING_DIM"
-export FALKORCHAT_ENABLE_AGENT FALKORCHAT_AGENT_ID FALKORCHAT_AGENT_NAME
+export FALKORCHAT_ENABLE_AGENT FALKORCHAT_AGENT_ID
 export FALKORCHAT_WORKFLOW_ENABLED
 export FALKORCHAT_TRIGGER_DEF_KEY FALKORCHAT_TRIGGER_DEF_VERSION
 export FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S

@@ -90,7 +90,6 @@ def assert_no_legacy_model_env() -> None:
 # registered in the workspace (see `scripts/seed_demo.sh`) and is wired into
 # `AgentResponder(agent_id=…)`; `@mention`-ing it in a message triggers a reply.
 AGENT_ID: str = os.environ.get("FALKORCHAT_AGENT_ID", "assistant")
-AGENT_NAME: str = os.environ.get("FALKORCHAT_AGENT_NAME", "Assistant")
 
 
 def _env_flag(name: str, default: bool = False) -> bool:

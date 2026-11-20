@@ -24,7 +24,8 @@ _RECORD_ENV = f'''#!{sys.executable}
 import json, os, sys
 with open(os.environ["STUB_RECORD"], "a") as fh:
     fh.write(json.dumps({{"argv0": os.path.basename(sys.argv[0]),
-                         "turn_workers": os.environ.get("FALKORCHAT_STOREFRONT_TURN_WORKERS")}}) + "\\n")
+                         "turn_workers": os.environ.get("FALKORCHAT_STOREFRONT_TURN_WORKERS"),
+                         "agent_name": os.environ.get("FALKORCHAT_AGENT_NAME")}}) + "\\n")
 '''
 
 # PONG for the readiness pings; echoing the args back satisfies step 5's Agent check,
