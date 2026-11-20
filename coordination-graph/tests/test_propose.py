@@ -150,6 +150,14 @@ def test_ac13_history_mention_without_delivery_shape_is_unknown_dependency():
     assert "drop the ref or add a `<ID> delivered` history heading" in p.not_plannable[0].text
 
 
+def test_every_dependency_token_counts_not_only_the_first():
+    ext = {"other:K-900": DepResolution(frozenset({"other:K-900"}), external=("other:K-900", "o/BACKLOG.md"))}
+    p = run([it(1), it(2, deps=[1, "other:K-900"])], extra=ext)
+    assert refs(p.held) == [ref(2)] and "other:K-900" in p.held[0].reason
+    p = run([it(1), it(2, deps=[1, "other:K-902"])])
+    assert refs(p.not_plannable) == [ref(2)] and p.not_plannable[0].unknown == ("other:K-902",)
+
+
 def test_unknown_dependency_reason_from_identity_is_kept():
     ext = {"GAL-T0001": DepResolution(frozenset({"GAL-T0001"}), reason="unminted: no such item")}
     p = run([it(1, deps=["GAL-T0001"])], extra=ext)
@@ -290,6 +298,14 @@ def test_touch_overlap_rules(a, b, hit):
     assert (touch_overlap(b, a) is not None) is hit
 
 
+def test_a_file_entry_covers_a_directory_only_on_a_name_boundary():
+    assert touch_overlap(["file:src/a"], ["file:src/ab.py"]) is None
+    assert touch_overlap(["file:src/ab.py"], ["file:src/a"]) is None
+    assert touch_overlap(["file:src/a"], ["file:src/a/b.py"]) == ("file", "src/a")
+    p = run([it(1, touches=["file:src/a"]), it(2, touches=["file:src/ab.py"])])
+    assert waves(p, 1, 2) == [1, 1]  # no false overlap pushing the second into a later wave
+
+
 def test_touch_overlap_names_kind_and_value():
     assert touch_overlap(["file:a.py", "graph:kb"], ["graph:kb"]) == ("graph", "kb")
 
@@ -356,6 +372,11 @@ def test_fixed_items_keep_their_milestone_and_order_and_new_items_open_proposed_
     assert refs(p.milestones[0].items) == [ref(2), ref(1)]
     assert refs(p.milestones[2].items) == [ref(4), ref(5)]
     assert all(pl.reason is None for pl in p.milestones[0].items)
+
+
+def test_a_sub_milestone_orders_by_its_second_number():
+    p = run([it(1, milestone="M5.10"), it(2, milestone="M5.2"), it(3, milestone="M5.1"), it(4, milestone="M5")])
+    assert [m.name for m in p.milestones] == ["M5", "M5.1", "M5.2", "M5.10"]
 
 
 def test_an_unassigned_item_is_never_added_to_a_fixed_milestone_with_room():
@@ -557,3 +578,23 @@ def test_render_lists_every_section_with_id_and_source_file():
     for needle in ("M1", "proposed-1", "Carried", "Held:", "Deferred", "Not plannable yet", ref(1), ref(2),
                    ref(3), ref(4), ref(5), ref(6), PATH, "o/docs/BACKLOG.md", "Priority"):
         assert needle in out, needle
+
+
+def test_the_planner_imports_only_pure_standard_library_modules():
+    """Purity (plan 3.7): no store, `wilib`, identity, network, file, clock or randomness; the caller's resolver
+    does the I/O. The import set is the whole claim: any other module would have to appear in it."""
+    import ast
+    import sys
+    from pathlib import Path
+
+    from coordgraph import propose as module
+
+    tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+    imports = [n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))]
+    assert not [n for n in imports if isinstance(n, ast.ImportFrom) and n.level]  # no relative (package) import
+    roots = {a.name.split(".")[0] for n in imports if isinstance(n, ast.Import) for a in n.names}
+    roots |= {n.module.split(".")[0] for n in imports if isinstance(n, ast.ImportFrom)}
+    assert roots and roots <= set(sys.stdlib_module_names), roots
+    impure = {"os", "pathlib", "io", "socket", "urllib", "http", "subprocess", "time", "datetime", "random",
+              "sqlite3", "shutil", "tempfile", "uuid", "secrets"}
+    assert not roots & impure, roots & impure

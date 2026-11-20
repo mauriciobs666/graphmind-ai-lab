@@ -90,8 +90,11 @@ DRIFT_MARK = "⚠ drift"
 _TRUNC = 140
 
 
+EMPTY_MIRROR_HINT = "(no synced mirror: run `coordgraph bootstrap` and `coordgraph sync`)"
+
+
 class ViewError(RuntimeError):
-    """A view that cannot answer (an empty or unreachable mirror); the message says what to do."""
+    """A view that cannot answer (an empty mirror); the message says what to do."""
 
 
 def records(result) -> list[dict]:
@@ -123,7 +126,7 @@ def inflight(graph, identity) -> Inflight:
     paused = ro(graph, Q_PAUSED)
     reviews = ro(graph, Q_REVIEWS)
     reqs = ro(graph, Q_REQUIREMENTS)
-    cands = {r["path"]: _candidates(identity, r["itemId"]) for r in reqs if r.get("itemId")}
+    cands = {r["path"]: _candidates(identity, r["itemId"], r["component"]) for r in reqs if r.get("itemId")}
     if cands:
         pool = sorted(set().union(*cands.values()))
         carried = {c["itemId"] for c in ro(graph, Q_CARRIERS, {"candidates": pool})}
@@ -131,8 +134,10 @@ def inflight(graph, identity) -> Inflight:
     return Inflight(units, paused, reviews, reqs)
 
 
-def _candidates(identity, token: str) -> set[str]:
-    return {norm_value(c) for c in identity.resolve(token, UNSCOPED).candidates}
+def _candidates(identity, token: str, scope: str) -> set[str]:
+    """The requirement's `Item:` is read in its own component's scope: a bare `K-065` denotes that home's
+    item, not whichever home's ledger happens to cite a bare `K-065` (plan3 3.1 step 3)."""
+    return {norm_value(c) for c in identity.resolve(token, scope).candidates}
 
 
 # --- unit ---------------------------------------------------------------------------------------------------
@@ -338,6 +343,13 @@ def _header(cfg, root: Path, graph, identity) -> tuple[str, set[tuple[str, str]]
             report.flagged_rows())
 
 
+def _explain(exc: Exception) -> ViewError | Exception:
+    """An unsynced graph key answers `Invalid graph operation on empty key`: add what to do about it."""
+    if "empty key" in str(exc).casefold():
+        return ViewError(f"{exc} {EMPTY_MIRROR_HINT}")
+    return exc
+
+
 def _run(name: str, args, body) -> int:
     """Shared frame: connect (ephemeral only), load identity, run `body(graph, identity)`, print the header
     first. An absent mirror or a refused endpoint is one clear line, never a traceback."""
@@ -348,8 +360,8 @@ def _run(name: str, args, body) -> int:
         identity = load_identity(root)
         answer = body(graph, identity)
         header, flagged = _header(cfg, root, graph, identity)
-    except Exception as exc:  # noqa: BLE001 - includes an empty graph key: say to bootstrap and sync
-        print(f"{name}: {exc}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 - a failure is one line, never a traceback
+        print(f"{name}: {_explain(exc)}", file=sys.stderr)
         return 1
     text, code = answer(flagged)
     print(header + "\n")

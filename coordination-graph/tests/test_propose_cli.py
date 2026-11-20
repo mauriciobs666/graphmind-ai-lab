@@ -142,3 +142,21 @@ def test_fixed_milestone_order_and_started_marker_are_read_from_the_graph(tmp_pa
     assert m7.index("K-002") < m7.index("K-001")          # order 1 before order 2
     assert "ahead-of-M7" not in out                       # started: no insertion before it
     assert "falkor-chat:K-003" in out.split("Milestone proposed-1")[1]
+
+
+def test_a_delivered_item_in_another_backlog_is_not_an_external_blocker(tmp_path, monkeypatch, capsys):
+    """`DEP_ITEMS` has no `open` predicate: only the adapter's filter keeps a closed row from holding."""
+    put(tmp_path, ".work-items/project.json", json.dumps(PROJECT))
+    put(tmp_path, "falkor-chat/docs/BACKLOG.md", "# B\n\n" + item(1, deps="other:K-009"))
+    put(tmp_path, "other/docs/BACKLOG.md", "# B\n\n" + item(9, status="✅ delivered"))
+    put(tmp_path, "other/docs/HISTORY.md", "# H\n\n## 2026-01-01 — K-009 delivered: x\n")
+    monkeypatch.setenv("COORDGRAPH_REPO_ROOT", str(tmp_path))
+    graph = ProposeGraph()
+    sync.sync_all(graph, sync.Parser.for_root(tmp_path))
+    rows = graph.ro_query(commands_propose.DEP_ITEMS, {"candidates": ["other:K-009"]}).result_set
+    assert rows and rows[0][2] is False  # the closed row does reach the adapter
+    monkeypatch.setattr(commands_store, "_target", lambda args: (Config.from_env(), "k", tmp_path, None, graph))
+    assert main(["propose", "falkor-chat"]) == 0
+    out = capsys.readouterr().out
+    assert "external blocker" not in out and "Held" not in out and "Not plannable" not in out
+    assert "falkor-chat:K-001" in out

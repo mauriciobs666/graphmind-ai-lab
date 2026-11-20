@@ -23,6 +23,7 @@ and the `⚪` trailing group; plan3 test 13 `unit` by new ID, old ID and task ID
 registry, an `IN` index plan, `Registry: unavailable` under a bogus `COORDGRAPH_WI_ROOT`. Mutation run on a copy:
 33 single-point mutants, all killed (two survivors on the first pass, a shared-slug archived paused unit and a
 word-only/emoji-only `⚪` marker, each fixed by a new test).
+S7 gate fixes (F1-F6, `claude/docs/reviews/coordination-graph-impl.md` `## S7`): `inflight` resolves a requirement's `Item:` in its own component's scope; an unsynced graph key now says to run `coordgraph bootstrap` and `sync`; new tests for headerless ledger/review, two-token `Depends on`, the closed-item filter, `src/a` vs `src/ab.py`, `M5.1`/`M5.2`, a live `propose` run over `ITEMS`/`DEP_ITEMS`, and propose's stdlib-only imports (offline 941 → 955, live views file 21 → 24; 17 mutants, all killed).
 
 ## 2026-11-20 — S7b: milestone proposal (`propose.py`, `commands_propose.py`)
 

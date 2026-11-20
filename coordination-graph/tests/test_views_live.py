@@ -331,3 +331,71 @@ def test_planned_flags_a_hand_edited_item_row(synced, capsys):
     put(root, "a/docs/BACKLOG.md", BACKLOG_A.replace("Alpha", "Alpha changed"))
     out = run(capsys, "planned", "a")[1]
     assert "\tAlpha\ta/docs/BACKLOG.md\t⚠ drift" in out and "Beta\ta/docs/BACKLOG.md\t⚠" not in out
+
+
+# --- F2: headerless files are not archived (the `coalesce(docStatus, '')` guards) ---------------------------------
+
+HEADERLESS_LEDGER = ("# H\n\n| Unit | Item | Owner | Status | Deliverable |\n|---|---|---|---|---|\n"
+                     "| P1 | - | coder | **relayed** | \"which table?\" — relayed 2026-11-05 |\n")
+HEADERLESS_REVIEW = "# R\n\n## Pass 1\n\nVerdict: needs changes\n"
+H_LEDGER = "a/docs/plans/h-coordination.md"
+H_REVIEW = "a/docs/reviews/h.md"
+
+
+def test_a_ledger_and_a_review_without_a_status_header_are_listed_not_silently_dropped(synced, capsys):
+    root = synced[0]
+    put(root, H_LEDGER, HEADERLESS_LEDGER)
+    put(root, H_REVIEW, HEADERLESS_REVIEW)
+    assert run(capsys, "sync", H_LEDGER, H_REVIEW)[0] == 0
+    out = run(capsys, "inflight")[1]
+    assert f"  a\t{H_LEDGER}\n    P1\t" in out  # Q_UNITS
+    assert f"  a\t{H_LEDGER}\tP1\tasked 2026-11-05\twhich table?" in out  # Q_PAUSED
+    assert f"  a\t{H_REVIEW}\tpass 1\t" in out  # Q_REVIEWS
+    assert "Waiting on the stakeholder (2)" in out and 'Open "needs changes" verdicts (2)' in out
+
+
+# --- F5: an unsynced key says what to do --------------------------------------------------------------------------
+
+def test_an_unsynced_graph_key_says_to_bootstrap_and_sync(env, capsys):
+    for argv in (["inflight"], ["unit", "x"], ["planned", "a"]):
+        code, out, err = run(capsys, *argv)
+        assert code == 1 and out == "" and err.startswith(f"{argv[0]}: ")
+        assert "run `coordgraph bootstrap` and `coordgraph sync`" in err
+
+
+# --- F4: `propose` through the real ITEMS / DEP_ITEMS statements ---------------------------------------------------
+
+def _item(n, prio="medium", deps="none", touches="none", extra="", status="🔵 proposed"):
+    return (f"### K-{n:03d} — Item {n}\n\n- **Status:** {status}\n- **Priority:** {prio}\n"
+            f"- **Depends on:** {deps}\n- **Touches:** {touches}\n{extra}\n")
+
+
+PROPOSE_BACKLOG = "# B\n\n" + "".join([
+    _item(1, prio="high", touches="file:a.py"),                                  # high, free: inserted ahead of M7
+    _item(2, touches="file:b.py"),
+    _item(3, touches="file:b.py"),                                               # overlaps K-002 on b.py
+    _item(4, deps="a:K-001"),                                                    # open in another backlog: held
+    _item(5, deps="K-001, a:K-001"),                                             # a second token that holds
+    _item(6, extra="- **Milestone:** M7 — order 2 — approved 2026-11-01\n"),
+    _item(7, extra="- **Milestone:** M7 — order 1 — approved 2026-11-01\n"),
+])
+
+
+def test_propose_reads_every_column_of_the_items_and_dep_items_statements(synced, capsys):
+    root = synced[0]
+    put(root, "c/docs/BACKLOG.md", PROPOSE_BACKLOG)
+    assert run(capsys, "sync", "c/docs/BACKLOG.md")[0] == 0
+    code, out, err = run(capsys, "propose", "c")
+    assert code == 0, (out, err)
+    m7 = out.split("Milestone M7")[1].split("Milestone proposed-1")[0]
+    assert m7.index("c:K-007") < m7.index("c:K-006")                   # milestoneOrder
+    assert "Milestone ahead-of-M7" in out and out.index("ahead-of-M7") < out.index("Milestone M7")  # not started
+    assert "overlap with c:K-002 on file b.py" in out                  # touches
+    held = out.split("Held:")[1]
+    assert "c:K-004" in held and "external blocker a:K-001 in `a/docs/BACKLOG.md`" in held  # dependsOn, d.backlogPath
+    assert "c:K-005" in held                                           # the second token holds
+    assert "    c:K-007  Item 7  [c/docs/BACKLOG.md]" in m7                    # b.path
+    started = _item(6, extra="- **Milestone:** M7 — order 2 — approved 2026-11-01 — started 2026-11-02\n")
+    put(root, "c/docs/BACKLOG.md", PROPOSE_BACKLOG.replace(_item(6, extra="- **Milestone:** M7 — order 2 — approved 2026-11-01\n"), started))
+    assert run(capsys, "sync", "c/docs/BACKLOG.md")[0] == 0
+    assert "ahead-of-M7" not in run(capsys, "propose", "c")[1]         # milestoneStarted

@@ -179,6 +179,37 @@ class TestInflightPickedUp:
         g2 = FakeGraph({views.Q_REQUIREMENTS: [req("a/q.md")]})
         assert views.inflight(g2, self.idn()).requirements and g2.ran(views.Q_CARRIERS) == []
 
+    def two_homes(self):
+        other = new("GAL-I02-K0043", "K", parent="GAL-I02", legacy={"home": "teco", "name": "K-065"})
+        return identity(*KAIZEN, MINTED_K065, other)
+
+    @staticmethod
+    def carriers_like_the_engine(*stored):
+        """`s.itemId IN $candidates`: a ledger is found only when its raw `Item:` is among the candidates."""
+        return lambda p: [{"path": X, "slug": "x", "itemId": s} for s in stored if s in p["candidates"]]
+
+    def test_a_bare_item_is_resolved_with_the_requirements_own_component_as_scope(self):
+        """K-065 is minted in two homes: the requirement in `falkor-chat` denotes falkor-chat's, so a ledger
+        citing the minted ID picks it up (red while the candidates were computed UNSCOPED)."""
+        r = req("falkor-chat/docs/requirements/k.md", "K-065") | {"component": "falkor-chat"}
+        g = FakeGraph({views.Q_REQUIREMENTS: [r],
+                       views.Q_CARRIERS: self.carriers_like_the_engine("GAL-I02-K0042")})
+        assert views.inflight(g, self.two_homes()).requirements == []
+        (call,) = g.ran(views.Q_CARRIERS)
+        assert "GAL-I02-K0042" in call["candidates"] and "K-065" not in call["candidates"]
+
+    def test_a_ledger_citing_a_bare_k065_does_not_pick_up_another_homes_requirement(self):
+        r = req("teco/docs/requirements/k.md", "K-065") | {"component": "falkor-chat"}
+        g = FakeGraph({views.Q_REQUIREMENTS: [r], views.Q_CARRIERS: self.carriers_like_the_engine("K-065")})
+        assert len(views.inflight(g, self.two_homes()).requirements) == 1
+
+    def test_each_requirement_is_scoped_by_its_own_component(self):
+        a = req("falkor-chat/r.md", "K-065") | {"component": "falkor-chat"}
+        b = req("teco/r.md", "K-065") | {"component": "teco"}
+        g = FakeGraph({views.Q_REQUIREMENTS: [a, b],
+                       views.Q_CARRIERS: self.carriers_like_the_engine("GAL-I02-K0042")})
+        assert [r["path"] for r in views.inflight(g, self.two_homes()).requirements] == ["teco/r.md"]
+
     def test_a_requirement_with_an_item_no_ledger_carries_stays_listed(self):
         g = FakeGraph({views.Q_REQUIREMENTS: [req("a/q.md", "GAL-I04-F0001")],
                        views.Q_CARRIERS: [{"path": X, "slug": "x", "itemId": "GAL-I09-F0009"}]})
@@ -322,6 +353,24 @@ class TestCli:
         assert main(argv) == 1
         cap = capsys.readouterr()
         assert cap.out == "" and cap.err.startswith(f"{argv[0]}: refusing") and "Traceback" not in cap.err
+
+    @pytest.mark.parametrize("argv", [["inflight"], ["unit", "x", "U1"], ["planned", "a"]])
+    @pytest.mark.parametrize(("engine_says", "hinted"), [("Invalid graph operation on empty key", True),
+                                                         ("connection reset", False)])
+    def test_an_empty_graph_key_says_to_bootstrap_and_sync_and_any_other_error_does_not(
+            self, argv, engine_says, hinted, monkeypatch, capsys, tmp_path):
+        from coordgraph import commands_store
+
+        class Broken:
+            def ro_query(self, *a, **k):
+                raise RuntimeError(engine_says)
+
+        monkeypatch.setattr(commands_store, "_target", lambda args: (None, "k", tmp_path, None, Broken()))
+        assert main(argv) == 1
+        cap = capsys.readouterr()
+        assert cap.out == "" and "Traceback" not in cap.err
+        assert cap.err.startswith(f"{argv[0]}: {engine_says}")
+        assert ("`coordgraph bootstrap`" in cap.err and "`coordgraph sync`" in cap.err) is hinted
 
     def test_importing_the_cli_loads_neither_identity_nor_wilib(self):
         code = textwrap.dedent("""
