@@ -38,34 +38,30 @@ cd decision-models && .venv/bin/pytest -q # run the suite from the component dir
 
 ## Status
 
-The scaffold (U5.1), the guard contract copies (U5.2: the guard input renderer and the
-`input_hash` leakage key, pinned by byte-copies of model-bench's golden vectors), and the
-decision points' definitions with seed generation (U5.3: `points/<role>/` rubric, generator
-template and design per point; `decisionmodels/seeds.py`), and the request/answer exchange
-(U5.4: `decisionmodels/exchange.py` writes closed, paged, id-blind requests;
-`decisionmodels/ingest.py` checks answers), the `input_hash` rows for join-in and message
-type (U5.2b-hash), and the transcript audit (U5.5: `decisionmodels/audit.py` locates a subagent
-run from the driver's transcript and classes it per plan6 §3.4 over plan4 §3.3), and the
-campaign ledger with its driver CLI (U5.6: `decisionmodels/campaign.py`,
-`decisionmodels/driver.py`), and the unattended runner with its stop switch (U6.3:
-`decisionmodels/runner.py`, `driver run`, `pause [--now]`, `resume`), and the three agent
-definitions, the guard and `driver install` (U5.7: `agents/`, `decisionmodels/install.py`; its
-live smoke ran, `docs/test-reports/live-smoke-report.md`), and generation runs with the
-generated-text screen, form obedience, the template halts and the generator restart (U5.8a:
-`Campaign.begin_round`, `decisionmodels/screen.py`; no `driver` subcommand queues a round yet), the
-votes of a settled round (U5.8b: `Campaign.queue_votes`, `decisionmodels/labels.py`), and the guard
-pilot (U5.8c: `decisionmodels/pilot.py`, below), and rounds and top-up (U5.9: the message-type
-tranche, the top-up planner, the spend halt and `decisionmodels/diagnostics.py`, below), and
-`finalize` with the cells, splits and `generation.json` (U5.10: `decisionmodels/finalize.py`).
-Fitting's LM Studio client is built (U6f.1/U6f.1b/U6f.1c: `decisionmodels/lmstudio.py`, `decide`, `chat` and
-`residency`, with the over-limit rule and a closed `failure_kind`; `pytest -m live` runs the live tests (`decide`, `chat` and `residency`) against a real server, default
-`http://localhost:1234`, override with `DM_LMSTUDIO_URL`), and so is the policy copy (U6f.2:
-`decisionmodels/policy.py`, `apply_policy` and the bounds and hand-off refusals, pinned by a byte-copy of
-model-bench's `apply-policy.jsonl`); `fit.py` and what follows are not.
-Labelling requests render all three points' items (U5.2b-render: the join-in and message-type
-renderers, pinned by byte-copies of model-bench's render vectors and `normalize-turns.jsonl`).
-The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
-`docs/HISTORY.md`.
+**Data side.** The pipeline produces, per decision point, a finalized dataset version under
+`data/<role>/<version>/` (`items.jsonl`, `splits.json`, `generation.json`, `diagnostics.json`)
+that `model-bench/`'s importer copies in. A campaign is driven with `python -m decisionmodels.driver`
+(`init`, `install`, `start`, `run`, `pause`, `resume`, `resolve`, `status`, `finalize`,
+`smoke-fixture`; sections below) and, for the guard's pilot, `python -m decisionmodels.pilot`
+(`start`, `screen`, `report`, `recheck`, `record-decision`). Seeds are drawn from each point's
+`points/<role>/` definition, generation and labelling run through the subagent file exchange
+(`agents/`, audited from the driver's transcript), and everything is folded from one ledger.
+
+**Fit side.** `python -m decisionmodels.fit` fits candidate configurations for a role against a
+finalized dataset through a local LM Studio server (default `http://localhost:1234`; a human loads
+the decision and hand-off models first). It writes the calls file, manifest, report and the two
+candidates under `data/<role>/<version>/fits/`, all or nothing:
+
+```bash
+.venv/bin/python -m decisionmodels.fit --role guard-judge --dataset-version <version> \
+    --decision-model <id> --handoff-model <id> --lmstudio-url http://localhost:1234 \
+    --decision-timeout-seconds <s>   # required, no default; also what the candidate ships
+    # [--exclude-item ID:CALLKIND[:TEXTID] --reason "..."]  a recorded disposition, never a default
+```
+
+`pytest -m live` runs the human-started tests against a real LM Studio (`DM_LMSTUDIO_URL`
+overrides the URL). Delivery, unit by unit (U5.1 to U6f.8), is recorded in `docs/HISTORY.md`; the
+layout is `docs/plans/typed-decision-models4.md` §3.1 over v1.3 §3.4.
 
 ## Running a campaign
 

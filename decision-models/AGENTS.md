@@ -9,23 +9,32 @@ the design.
 
 ## Current state
 
-`decisionmodels/` holds `render.py` (all three roles' renderers; `exchange.RENDERERS` maps each), `hashing.py` (all three roles), `points.py` (loads
-`points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas),
-`ingest.py` (answer checks, idempotence), `audit.py` (transcript audit), `campaign.py` (ledger,
-reconciliation, halts, generation runs, votes, tranche, top-up), `diagnostics.py`
-(`diagnostics.json`), `screen.py` (the generated-text screen and form
-obedience, pure), `labels.py` (majority of three, `labelVotes`, pure), `pilot.py` (the guard pilot's CLI and pure
-screen/cue-check, below), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
-(`driver install`), `smoke.py` (the label smoke's fixture) and `driver.py` (CLI: `init`, `install`, `start`,
-`resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`, `finalize`), plus `shingles.py` and
-`split.py` (pure: the 8-token shingle rule and cells-then-splits, plan4 §3.6;
-`scripts/import_side_check_shingles.py` writes `data/guard-judge/side-check-shingles.txt`, hashes
-only) and `finalize.py` (the dataset writer). `agents/` holds the three agent definitions, spawn
-templates, `guard_hook.py` and `settings.json`. `lmstudio.py` is fit's client (`decide` returns
-`OverLimit` on plan3 §3.3's refusal; `chat`; `residency()` reads `/api/v0/models` and returns the non-`not-loaded` rows, ids compared exactly; no load, a human loads both models: plan4 §3.11; every failure carries one closed kind, read with `failure_kind(exc)`: `timeout`, `connection`, `http` (iff `status` is set) or `malformed`, never from message text);
-`policy.py` is the pure `apply_policy` copy (`predicate-band`, `choice-confidence`; bounds `0 ≤ l ≤ h ≤ 1`, `0 ≤ c ≤ 1` refused as `ValueError`; `check_handoff_rule` is plan3 §3.2's one-way rule: an empty band or `c == 0` loads with a hand-off model, any policy that can hand off refuses `handoffModel: null`). U5.7's live smoke ran; its facts are in
-Fit units, all pure and byte- or vector-pinned (HISTORY has the detail): `handoff.py` (hand-off parse, parity constants, `handoff_messages`), `manifest.py` (fit manifest bytes, sha256, `size` = entry count), `fit/<role>/handoff.md` x3 (byte-copies of the pack prompts `pack.json` names), `questions.py` (loads `fit/<role>/questions.json`, three reviewed files; copies the bench's `_question_problem`, held to it by a differential test), `fitstats.py` (exact McNemar, tie-0.5 `roc_auc`, `Fraction` ceilings, `LadderResult`/`ScoredCall`, `CALIBRATION_FLOOR_PER_CELL = 50`) and `ladder.py` (`guard_ladder`, `predicate_ladder`, `choice_ladder` over `ScoredCall`s, exact `Fraction`s; a missing rung is a reported `rung=None`, never a raise). `fitcalls.py` (residency check, `AbortRecord`/`Disposition`, the call collector, summaries over the full calls; a failure outside a `Disposition`'s exact key aborts with one record file, an excluded call that does not fail refuses). `fit.py` (`analyze_fit` over the shared calls: per-candidate `TextScore`/`Selection` by fit note §3/§6, split-half both directions; `python -m decisionmodels.fit`, `--decision-timeout-seconds` required); `exclusion.py` (`--exclude-item`: record check (a)-(e), guard floor fail-fast, per-role effects, per-class `k`/`kWrong`/ceiling); `outcome.py` (`assemble_outcome(ladder, selection, bar_kind)`: the `(fit.outcome, qualityTarget)` pair by `ranking` > `agreement` > `latency`, else `within-margin` at rung 1 on `D_c<=0`/`T=0.94`, else `below-margin`; combinations no ladder emits are refused; closed-set copy equal to the bench's by test); `emit.py`/`report.py`: `fit` emits under `data/<role>/<ver>/fits/`, all or nothing and POSIX-only (the calls file from `run_fit`, then manifest, report, the two candidates); `N` = largest existing fit ordinal + 1; the report is not in the manifest.
-`docs/test-reports/live-smoke-report.md`.
+Detail: `docs/plans/typed-decision-models4.md` and `docs/HISTORY.md` (unit trail, U5.1 to U6f.8).
+`decisionmodels/` by role:
+
+- **Data and contract copies:** `render.py` (all three roles; `exchange.RENDERERS`), `hashing.py`,
+  `points.py` (loads `points/<role>/`), `seeds.py`, `shingles.py` and `split.py` (pure; plan4 §3.6),
+  `screen.py` and `labels.py` (pure), `diagnostics.py`. `scripts/import_side_check_shingles.py`
+  writes `data/guard-judge/side-check-shingles.txt`, hashes only.
+- **Exchange and campaign:** `exchange.py` (request writer, closed schemas), `ingest.py`, `audit.py`,
+  `campaign.py` (ledger, halts, generation, votes, top-up, tranche), `pilot.py`, `runner.py`,
+  `install.py`, `smoke.py`, `finalize.py` (dataset writer) and `driver.py` (CLI: `init`, `install`,
+  `start`, `resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`, `finalize`).
+- **Agents:** `agents/` holds the three agent definitions, spawn templates, `guard_hook.py` and
+  `settings.json`. The live smoke's record is `docs/test-reports/live-smoke-report.md`.
+- **Fit (pure and byte- or vector-pinned, except the LM Studio client):** `lmstudio.py` (`decide`
+  returns `OverLimit` on plan3 §3.3's refusal; `residency()` returns the non-`not-loaded` rows of
+  `/api/v0/models`, ids compared exactly; no load, a human loads both models, plan4 §3.11; every
+  failure carries one closed kind via `failure_kind(exc)`, never from message text), `policy.py`
+  (copy of `apply_policy`; bounds refused as `ValueError`; `check_handoff_rule`, plan3 §3.2),
+  `handoff.py` + `fit/<role>/handoff.md` x3 (byte-copies of the pack prompts `pack.json` names),
+  `manifest.py`, `questions.py` (copies the bench's `_question_problem`, held by a differential
+  test), `fitstats.py`, `ladder.py`, `fitcalls.py`, `fit.py` (`python -m decisionmodels.fit`,
+  `--decision-timeout-seconds` required), `exclusion.py`, `outcome.py` (closed-set copy equal to the
+  bench's by test), `emit.py`/`report.py`.
+- **`fit` emits** under `data/<role>/<ver>/fits/`, all or nothing and POSIX-only; `N` = largest
+  existing fit ordinal + 1; the report is not in the manifest. A call failure outside a
+  `Disposition`'s exact key aborts with one record file; an excluded call that does not fail refuses.
 
 ## Load-bearing invariants
 
