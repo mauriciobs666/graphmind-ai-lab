@@ -96,3 +96,64 @@ CPG: considered, not relevant — new offline parsers/CLI over Markdown in a com
 
 ### Proposed REVIEW.md lines
 Target: root `REVIEW.md`, *Always check* (source: this review, B1/M1). Add: "A one-time rewriter of real documents is checked by a word-multiset diff, old minus new, over every real input; each lost word is mapped to an authorising decision. Planted cells whose shape the rewriter does not recognise (a bold-wrapped value, a parenthetical) must survive verbatim." No pruning proposed.
+
+## S3 (graph-dba)
+
+**Scope.** Commit `683eb212` (S3a: `coordgraph/{store,dryrun,commands_store}.py`, `tests/{test_store,test_dryrun,test_store_live}.py`) against graph note v4 §3.2/§3.3/§4.2/§4.3/§5.5 and plan §3/S3. Lens: Cypher, atomicity, DDL order, connect guard, index hygiene. Root `REVIEW.md` applied; no component `REVIEW.md`.
+
+**Verdict: approve with suggestions.** No blocker, no major. The statements, replace atomicity, bootstrap order and guard match the note and hold against the live engine.
+
+### Executed
+- Offline suite (`cypher-mcp/.venv`): 674 passed, 1 failed — `tests/test_requirements.py::test_requirement_is_its_header_fields_and_nothing_else`, an uncommitted S3b parser edit (`parse/source.py`), not S3a.
+- `-m live tests/test_store_live.py` (fixture's own `--rm` container, free port): 24 passed; no container left behind.
+- Own probes on a second throwaway container (`127.0.0.1:16392`, removed by name), with the note's DDL bootstrapped (all five constraints `OPERATIONAL`):
+  - 8 threads x 15 `replace_source` on one path: 0 errors, exactly 1 `:Source`, 5 units all from one writer, 0 orphan `:Unit`. The per-source replace is atomic and serialised.
+  - Hostile free text (trailing `\`, `\r\n`, U+2028, `'''"""`, an injection-shaped string, `$p`, `CYPHER x=1 MATCH`): all round-trip.
+  - 2,000 units x 5 KB (about 10 MB parameter): committed in 0.09 s.
+  - `python -c "import coordgraph.dryrun, store, commands_store"`: neither `falkordb` nor `redis` in `sys.modules`.
+
+### Verified against the claims
+- Cypher: `REPLACE["ledger"]` equals the note's statement; backlog differs only in labels (pinned by tests).
+- Bootstrap: indexes before constraints, a read-then-create second run changes nothing, polled to `OPERATIONAL`, `FAILED` and timeout raise, an empty listing is not read as all-operational (`status` is keyed by the expected pairs).
+- `write_converged`: re-hash after commit, re-parse and rewrite, `ConvergenceError` after `rounds`. The last round's stale write stays committed, which is acceptable because `sync --all` and the hook re-converge.
+- `require_ephemeral`: loopback only, refuses 6379/6390/3000, and requires `COORDGRAPH_EPHEMERAL_PORT` to equal the port. `bootstrap` refuses before connecting; the dry-run never connects.
+
+### Findings
+- **m1 — minor (live-verified; known quirk).** A non-unique indexed value over 4,096 bytes is silently unindexed and an equality lookup misses it (`itemId` of 4,097 and 5,000 bytes: 0 hits, with a `Node By Index Scan` plan; the 4,096-byte lookup matched 3 nodes, 1 after an extra filter). `store.py` claims "whatever a parser forgot never reaches an index", but `_indexed` only strips. The 512-byte cap lives in the parser and in the dry-run (`indexed-value-bad`), not at the write boundary. Fix: have `prepare_meta`/`prepare_rows` raise `KeyHygieneError` on any indexed non-unique value over `MAX_KEY_BYTES` or empty, with one test. The boundary is already in `falkordb-quirks.md`; I added the new bits.
+- **m2 — minor (live-verified).** A NUL byte in any string parameter fails the whole replace (`Failed to parse query parameters`). It is atomic and loud, but one control character in a free-text cell leaves that source unmirrored on every `rebuild`. Fix: replace `\x00` in the parser or in `prepare_*` (U+FFFD plus a source warning), with a test. Added to `falkordb-quirks.md`.
+- **n1 — nit.** The guard cannot tell the harness's `--rm` container from another agent's published port (for example 16390/16483): the env declaration is the only check. Acceptable; S8a's shared load needs its own explicit override, as the docstring says.
+- **n2 — nit (my note).** §3.2 said the review/requirement form "stops after `SET s = $meta`". The code ends `RETURN count(s) AS written`, which is harmless, and I aligned the note.
+
+### Downstream
+- **S3b:** the real-repo dry-run strict xfail is the parser gaps already named. Wire `bootstrap` and `rebuild --dry-run` in the CLI; `rebuild` must run `delete_source` for paths no longer on disk.
+- **Test to add:** the m1 and m2 cases, red first on the current code.
+
+## S1 close
+
+**Scope.** Committed revision `e340f565` only (extracted with `git archive` into the scratchpad; live tree untouched, `.work-items/` `git status` empty before and after): S1e fixes (`migrate`, `history`, `lint`, `cli`), S1d `identity.py` (`7e78ee99`), unit-label fallback (`d2a1899b`). Suite in that copy: 675 passed, 1 xfailed (real-repo dry-run, S3b — out of scope). `--apply` ran only on the scratch copy with its own registry. CPG: considered, not relevant — offline Markdown tooling, no loaded graph.
+**Verdict: approve with suggestions.** All four S1e findings are fixed and execute correctly; S1d meets plan3 §3.4 and §3.1 on every probe I ran. One major (bare legacy tokens leak across scopes through `candidates`) and test/name gaps below; none blocks S3b/S4.
+
+### S1e findings
+- **B1 — fixed (executed).** K-019 now yields `Priority: high — filed upstream` plus the bold text as a body line. Word-set diff of all 19 real backlogs, old minus new, tables included: 5 hits, all `med`→`medium`; 0 content words lost.
+- **M1 — fixed (executed).** Summary cells survive as `> Summary:` / `> Index row:` when not a word-subset of the item; row-only items get a ≤90-char title with the full text in the body. Bound: "subset" is word-set containment, so a reordered/negated restatement is not kept; acceptable for a one-time reformat.
+- **M2 — fixed (executed), one residue.** Dry-run on all files: 117 mints, no `…` titles; 40 titles in 13 files are flagged (`(this repo)` ×4, `Judged and kept…` ×5, `No analyst backlog item…` ×6, cut mid-clause, over 120). `--apply` refuses with exit 2 and allocates nothing (verified on `claude/devops/kaizen/plan.md`); with `--titles-reviewed` all 19 files apply: 117 minted, second run 0, `lint` 0 errors, registry only grew in the scratch copy. Residue (minor): `--titles-reviewed` is one blanket flag, so S4 can pass it without any title having changed; S4's row should require the owner to edit the flagged source lines first, then apply without the flag where possible.
+- **M3 — fixed (executed).** Mutant `candidates(token, 'unscoped')` now fails `test_the_scope_passed_to_the_resolver_is_the_referrers`. Residue (minor): the new `reason(token, scope)` seam is unpinned — mutant `reason(token, "x")` survives the suite.
+- **m1/m3/n1 — fixed (mutants killed):** `copymode`, changed-since-analysis check, orphan-ID list, `wilib-unavailable` error when expected, case-insensitive verbs, missing dry-run path. **m2 not fixed** (still a warning on cobb K-033 `medium (raised …)`; priority unrecorded) — carry to S5/S4, minor.
+
+### S1d `identity.py`
+- **Isolation (plan3 §3.1, test 12) — holds, run not grepped.** Fresh interpreter, `COORDGRAPH_WI_ROOT=/nonexistent`, importing every module of the package one by one (incl. `identity`, `store`, `dryrun`, `commands_store`): `'wilib' in sys.modules` False for all; the only `wilib` imports are inside `load_wilib_rules` (lint) and `load_wilib` (identity), both lazy and unreferenced by the sync modules. Minor: the subprocess test's module list still omits `store`/`dryrun`/`commands_store`/`identity`; add them, or the guard stops at the S1e set while S3 adds sync code.
+- **Routing/exit mapping (tests 4–5) — correct against a scratch registry:** scheme resolved (`GAL-F0002`, type `F`), `GAL-F9999`/`GAL-F42` unknown, `falkor-chat:K-065` and bare `K-065` in scope `falkor-chat` unminted with the `wi mint-legacy` text and candidate `{falkor-chat:K-065}`, bare `K-065` unscoped ambiguous with the home list, `slug:unit` only when `needs=True`, degraded registry → `unavailable` with the token as written, header line `Registry: 9 items · last event … · 0 unflushed …`.
+- **Exact-key precedence (§3.4) — correct and pinned.** Planted rows: `U3` → the rows keyed `U3` (incl. the `~2` repeat), not `U3 gate`; `S6` (two distinct keys, no exact) → both (ambiguous); `U32~2`-style → the `#`-suffix row; whole token tried first. Mutant `exact = []` is killed (`test_exact_key_wins`).
+- **Feature/task needs (§3.4, test 9):** feature met iff every carrying ledger archived or (≥1 unit and all `accepted`); read by the code and by the tests, not re-run end to end with a graph.
+- **M4 — major. Two distinct legacy items share a candidate: the bare token as written (executed).** Minted `falkor-chat:K-065` (`GAL-F0004`) and `cobb:K-065` (`GAL-I02-K0004`): `candidates("K-065","falkor-chat")` = `{GAL-F0004, K-065, falkor-chat:K-065}`, `candidates("K-065","cobb")` = `{GAL-I02-K0004, K-065, cobb:K-065}`; they intersect on `K-065`, and plan3 §3.1 says two references denote one item iff their sets intersect. Bites in the S7 joins on raw stored strings (`Unit.itemId IN candidates` for a need on `cobb:K-065` also matches a unit whose `Item` cell says bare `K-065`, i.e. falkor-chat's). The plan's step 3 ("the token as written") causes it for a scope-qualified bare token. Fix: when a bare legacy token is qualified by a scope, keep the qualified name and drop the bare string (an unscoped bare token stays ambiguous, as now); `architect` to correct step 3. Test red first: two scopes, same number, minted both, assert disjoint candidate sets. Note the mutant that removes `token` from `cands` survives today, so the as-written part is unpinned either way.
+- **m4 — minor (name drift).** Plan3 §3.4 and base S1/S3/S7 cite `identity.pick_unit_rows`; the code has `select_units`. S3/S7 callers following the plan will not find it: rename or alias, or `architect` to update the plan.
+- **n2 — nit.** `lint` is not yet wired to `Identity.candidates`/`reason` in the CLI (offline candidates only); run programmatically on the real tree it gives the same 38 pre-reformat `status` errors and no dependency errors, i.e. no interaction defect.
+
+### Unit-label fallback (`d2a1899b`)
+Executed: `U3:`→`U3`, `U1(a)`→`U1`, `(x) y`/`(`/`:`/`;x` → the whole key, `''`→`''`, `U10b Note: x`→`U10b`, `C-graph-dba (data half)`→`C-graph-dba`; real corpus: 1,294 units, 0 empty labels, 0 fallbacks fired (the warning is exercised by tests only). Matches the stated invariant.
+
+### Same-revision interactions
+Checked `migrate` × `history`/`lint` × `identity`: no defect. The reformatted output of all 19 files lints clean (0 errors, 1 warning) with the new `Priority: <word> — <rest>` shape parsed (`priority` = word), `wi check` over the migrated copy reports only the unrelated `family-no-item: claude/docs/reviews/coordination-graph-guard.md lacks Item:` (a review doc, not touched by `migrate`; the owner of that header adds it). The case-insensitive `history` verbs and the narrower `fixed-up`/`done criteria` exclusions do not change any heading the real history files use (coverage probe not re-run; the S1e numbers stand).
+
+### Mutants (copy outside the repo)
+Killed: priority rest text, over-120 rule, title gate inversion, copymode, changed-since check, orphan list, summary kept, wilib severity and its default, verb case, CLI ack flag, dry-run missing-path rc, lint resolve scope, exact-key precedence. Survived: `_boundary_ok` paren relaxation (title heuristic, low stakes), `reason(token, scope)` scope arg, `token` in `candidates` (M4).
