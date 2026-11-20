@@ -15,7 +15,8 @@ import re
 from collections import defaultdict
 
 from ccg.packrt.extract import Corpus
-from ccg.packrt.httpkey import VERBS, is_url_like, is_wholly_unresolved
+from ccg.keynorm import CONSUMER
+from ccg.packrt.httpkey import VERBS, is_url_like, is_wholly_unresolved, normalize_key_parts
 from ccg.packrt.match import clause_hit, scope_ok
 
 _PARAM_PATH = re.compile(r"^p(\d+)(.*)$")
@@ -197,12 +198,34 @@ def _url_like_alternatives(alts: list[str]) -> list[str] | None:
     return [a for a in alts if is_url_like(a) or is_wholly_unresolved(a)]
 
 
+def _informative(alt: str) -> bool:
+    """``alt`` is a template that names a resource (P1-51b): URL-like, and its consumer-form path has a segment other than ``{?}``
+    (``/documents/\\x01``, ``\\x01/shop/api/messages?...``; not ``\\x01\\x01``, ``/api\\x01``, ``\\x01?q``)."""
+    if not is_url_like(alt):
+        return False
+    path = normalize_key_parts("GET " + alt, "consumer").key.partition(" ")[2]
+    return any(seg != CONSUMER for seg in path.split("/")[1:])
+
+
+def _wrapper_sites(corpus: Corpus, pred: dict, leaves: list[tuple]) -> dict[tuple, tuple]:
+    """``leaf -> X`` for each leaf with an informative slot on ``chain_of(leaf)[1:]`` (the leaf itself is not scanned): the first
+    one in the chain the fixpoint recorded, which is the first-discovered predecessor chain."""
+    out = {}
+    for leaf in leaves:
+        for n in chain_of(pred, leaf)[1:]:
+            if n[0] == "slot" and any(_informative(a) for a in corpus.slot_alternatives(n[1], n[2]) or ()):
+                out[leaf] = n
+                break
+    return out
+
+
 def run_lifting(corpus: Corpus, pack_id: str, lifting: dict) -> list[dict]:
     """Every lifted ``slot`` node of ``lifting`` (sorted), resolved or not, with its hops, verbs and weakest link.
 
     Optional format words: a seed's ``scope`` gates the seed call's own file; ``ownSite`` makes a slot a leaf when no slot lies
     beyond it (a wrapper no call edge reaches is a consumer at its own site); ``urlLike`` keeps at a leaf only the URL-like
-    alternatives (``partialAlternatives`` is decided before the filter) and drops a leaf with none. A lifted fact whose chain
+    alternatives (``partialAlternatives`` is decided before the filter) and drops a leaf with none; ``wrapperSite`` replaces a leaf
+    by the first informative slot below it on its chain (the wrapper's own template), which becomes the leaf. A lifted fact whose chain
     below the leaf is not transparent records ``opaqueSlot`` and is ``possible``/``partial-key``.
     """
     calls = sorted(corpus.callsites.values(), key=lambda c: c["id"])
@@ -219,13 +242,21 @@ def run_lifting(corpus: Corpus, pack_id: str, lifting: dict) -> list[dict]:
             if n[0] == "slot":
                 verb_slots[n[1]].append(n)
     has_child = _slot_descendants_of(url_pred) if lifting.get("ownSite") else {p[0] for p in url_pred.values() if p}
+    slots = sorted(n for n in url_pred if n[0] == "slot")
+    dropped: set[tuple] = set()
+    promoted: set[tuple] = set()
+    if lifting.get("wrapperSite"):      # read before the `urlLike` filter and the `resolved` test: a bare-`\x01` leaf is still a leaf
+        sites = _wrapper_sites(corpus, url_pred, [n for n in slots if n not in has_child])
+        dropped, promoted = set(sites), set(sites.values())
     out = []
-    for node in sorted(n for n in url_pred if n[0] == "slot"):
+    for node in slots:
+        if node in dropped:
+            continue
         _, cid, path = node
         site = corpus.callsites[cid]
         alts = corpus.slot_alternatives(cid, path)
         resolved = alts is not None and not all(is_wholly_unresolved(a) for a in alts)
-        leaf = node not in has_child
+        leaf = node not in has_child or node in promoted
         partial = any(is_wholly_unresolved(a) for a in alts or ())
         if lifting.get("urlLike") and leaf:
             kept = _url_like_alternatives(alts or [])

@@ -797,7 +797,7 @@ def _file_pack_mutant(pack: dict, path: tuple):
 
 # The packs that are files only: id -> (the test module whose `behaviour_failures` is the pack's contract, the leaf count).
 # P1-49 registers `python-http-client`: its contract also carries the `httpx.Client` base-URL binding and `negatives.yaml`.
-FILE_PACKS = {"shell-mcp-call": ("test_pack_shell_mcp_call", 24), "python-http-client": ("test_pack_python_http_client", 155)}
+FILE_PACKS = {"shell-mcp-call": ("test_pack_shell_mcp_call", 24), "python-http-client": ("test_pack_python_http_client", 162)}
 
 
 def file_pack_survivors(pid: str = "shell-mcp-call") -> tuple[int, set[str]]:
@@ -874,4 +874,4 @@ def test_a_sibling_value_swap_of_python_http_client_leaves_is_caught_by_behaviou
 
 
 def test_the_python_http_client_leaf_mutants_die_behaviourally_and_at_the_validator_in_these_numbers():
-    assert file_pack_death_split("python-http-client") == (74, 81, 0)
+    assert file_pack_death_split("python-http-client") == (81, 81, 0)

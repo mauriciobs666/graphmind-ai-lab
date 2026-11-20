@@ -5,6 +5,9 @@
 # the gate is the file's import of the library (`scope.imports` on the seed) plus URL-likeness at the leaf (`urlLike`), never the
 # seed alone. Not covered: `requests.request`, `Session`, `aiohttp`, `http.client`, an aliased import, a relative URL without a
 # leading `/`, a fully unknown URL.
+# Wrapper site (P1-51b): a wrapper whose own template is informative (`/documents/{?}`, `{?}/shop/api/messages?...`) is the consumer, not
+# its callers (who pass an id or an origin into it); the leaf's callers lose their keyless/`GET /0` facts. `urlLike` is NOT flipped on
+# `py-request` (that drops the bare-`\x01` leaf before the scan: AC-5 6 of 8 instead of 8; review gate B1).
 # Typed verbs (P1-51a): a verb call the extractor typed is `external` `requests.py:<module>.<verb>` (observed on the fixture build) and
 # `httpx.py:<module>.<verb>` (ASSUMED by symmetry, observed nowhere); it is the second seed of each verb, an exact pair, never a glob or
 # `resolution: [unresolved, external]` (`__builtin.dict.get`, `typing.Mapping.get`, `TestClient.get` are `external` too).
@@ -28,6 +31,7 @@ liftings:
       - {call: {callee: get, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
       - {call: {callee: get, externalTarget: [{exact: "requests.py:<module>.get"}, {exact: "httpx.py:<module>.get"}]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
     ownSite: true
+    wrapperSite: true
     urlLike: true
   - id: py-post
     role: {kind: http, slot: url}
@@ -35,6 +39,7 @@ liftings:
       - {call: {callee: post, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
       - {call: {callee: post, externalTarget: [{exact: "requests.py:<module>.post"}, {exact: "httpx.py:<module>.post"}]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
     ownSite: true
+    wrapperSite: true
     urlLike: true
   - id: py-put
     role: {kind: http, slot: url}
@@ -42,6 +47,7 @@ liftings:
       - {call: {callee: put, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
       - {call: {callee: put, externalTarget: [{exact: "requests.py:<module>.put"}, {exact: "httpx.py:<module>.put"}]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
     ownSite: true
+    wrapperSite: true
     urlLike: true
   - id: py-patch
     role: {kind: http, slot: url}
@@ -49,6 +55,7 @@ liftings:
       - {call: {callee: patch, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
       - {call: {callee: patch, externalTarget: [{exact: "requests.py:<module>.patch"}, {exact: "httpx.py:<module>.patch"}]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
     ownSite: true
+    wrapperSite: true
     urlLike: true
   - id: py-delete
     role: {kind: http, slot: url}
@@ -56,6 +63,7 @@ liftings:
       - {call: {callee: delete, resolution: [unresolved]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
       - {call: {callee: delete, externalTarget: [{exact: "requests.py:<module>.delete"}, {exact: "httpx.py:<module>.delete"}]}, arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}
     ownSite: true
+    wrapperSite: true
     urlLike: true
   # `urllib.request.Request(url, method=...)`: a bare `Request(url)` is a GET; `data=` or `headers=` withhold the default.
   - id: py-request
@@ -63,11 +71,13 @@ liftings:
     seeds: [{call: {externalTarget: {glob: "urllib.py:*Request.__init__"}}, arg: a0, scope: {imports: [{module: {prefix: urllib}}]}}]
     companions: [{role: verb, arg: kw.method, bareDefault: GET, unknown: "*"}]
     ownSite: true
+    wrapperSite: true
   # `urlopen(x)`: `urlopen(req)` takes a `Request` object, which is not URL-like, so it yields nothing.
   - id: py-urlopen
     role: {kind: http, slot: url}
     seeds: [{call: {externalTarget: {glob: "urllib.py:*urlopen"}}, arg: a0, scope: {imports: [{module: {prefix: urllib}}]}}]
     ownSite: true
+    wrapperSite: true
     urlLike: true
 rules:
   - id: get

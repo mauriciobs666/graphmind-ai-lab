@@ -53,6 +53,14 @@ def own_site_wrapper(site, *imports, seed_slot):
                               site, data(site["id"], "p0", "a0", "p0"), vs(site["id"], "a0", seed_slot)]
 
 
+def called_wrapper(site, *imports, caller_arg="/other"):
+    """``def w(path): <site>(f"/items/{path}")`` called as ``w("/other")`` (P1-51b): the caller is a lifted caller, so without `wrapperSite`
+    the caller is the consumer (`<verb> /other`); with it the wrapper's own informative template is (`<verb> /items/{?}`)."""
+    return own_site_wrapper(site, *imports, seed_slot={"template": [{"const": "/items/"}, UNK]}) + [
+        sym("m", "m", fid="f1", path="svc/client.py", start=50),
+        call("cs", "m", "w", line=51, resolution="resolved", targets=("w",)), vs("cs", "a0", caller_arg)]
+
+
 def two_files(wrapper_imports, caller_imports):
     """``w`` (a wrapper over an untyped ``get(path)``) in ``svc/w.py`` and its type-backed caller ``m`` in ``svc/m.py``."""
     return ([file_("f1", "svc/w.py")] + [imp("f1", m) for m in wrapper_imports]
@@ -155,6 +163,17 @@ def behaviour_failures(the_pack: dict) -> list[str]:
                       module("requests") + [sym("m", "m", fid="f1", path="svc/client.py", start=60),
                                             call("c1", "fn", verb, line=10, resolution="resolved", targets=("m",)), vs("c1", "a0", "/x")], []))
         cases.append((f"{verb} typed non-http", module("requests") + [external("c1", verb, "__builtin.dict." + verb), vs("c1", "a0", "/x")], []))
+    # P1-51b: a wrapper with an informative template is the consumer, its caller is not (each lifting's `wrapperSite`)
+    for verb in VERBS:
+        for lib in LIBS[:1]:
+            cases.append((f"{lib}.{verb} wrapper site", called_wrapper(untyped("rq", verb, owner="w"), lib),
+                          [(f"{verb.upper()} /items/{{?}}", "possible", verb)]))
+            cases.append((f"{lib}.{verb} typed wrapper site", called_wrapper(external("rq", verb, f"{lib}.py:<module>.{verb}", owner="w"), lib),
+                          [(f"{verb.upper()} /items/{{?}}", "possible", verb)]))
+    cases.append(("Request wrapper site", called_wrapper(external("rq", "Request", REQUEST, owner="w"), "urllib.request"),
+                  [("GET /items/{?}", "possible", "request")]))
+    cases.append(("urlopen wrapper site", called_wrapper(external("rq", "urlopen", URLOPEN, owner="w"), "urllib.request"),
+                  [("GET /items/{?}", "possible", "urlopen")]))
     # P1-51a: a TYPED verb call (`external`, `<lib>.py:<module>.<verb>`) is seeded beside the untyped one. The `httpx` shape is
     # ASSUMED by symmetry (observed nowhere); only these synthetic rows pin it.
     for verb in VERBS:

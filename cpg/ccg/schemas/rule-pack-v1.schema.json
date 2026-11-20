@@ -1169,6 +1169,9 @@
     },
     "urlLike": {
      "type": "boolean"
+    },
+    "wrapperSite": {
+     "type": "boolean"
     }
    },
    "required": [
