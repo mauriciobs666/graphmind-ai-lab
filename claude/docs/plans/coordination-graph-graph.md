@@ -294,7 +294,7 @@ exceptions.
 
 The CLI holds **one literal statement per kind** (labels cannot be parameters; they are code
 constants, never spliced from input). Ledger form — the backlog form is identical with
-`:Source:Backlog` / `HAS_ITEM` / `:Item`, and the review/requirement form stops after `SET s = $meta`:
+`:Source:Backlog` / `HAS_ITEM` / `:Item`, and the review/requirement form stops after `SET s = $meta` and ends `RETURN count(s) AS written` (no `UNWIND`):
 
 ```cypher
 OPTIONAL MATCH (old:Source {path: $path})
@@ -976,7 +976,7 @@ Everything below applies to both forms.
    rows whose `unitKey` equals `$unit` **if there are any**, and only otherwise the label matches
    (plan3 §3.4 `Unit label`). `S6` returns the `S6` row(s), not `S6 gate`; `U1` against
    `U1 K-091 band write` (no exact sibling) falls through to the label. Label-only matches that stay
-   ambiguous are shown in table order, never guessed. The one pure helper `identity.pick_unit_rows(rows, token)` (plan3 §3.4) owns this selection
+   ambiguous are shown in table order, never guessed. The one pure helper `identity.select_units(rows, token)` (plan3 §3.4) owns this selection
    and the `~n` step for the `unit` view and the need resolver alike, so they cannot drift.
 
 Coverage probe (offline, over the parsed rows of every ledger — 98, of which 88 archived): each unit is

@@ -50,7 +50,9 @@ identity.resolve(token, scope) -> Resolution(state, uid, candidates, reason)
 
 1. **Route by one shape test** (opaque for storage, shape-tested only to pick the resolver; ASCII):
    (a) `^<legacy-letter>-\d+$` (one uppercase letter) **bare** → legacy, qualified with the referrer's `scope`
-   (base §3.6 "bare = same backlog" is kept; `wi` alone would answer exit 3);
+   (base §3.6 "bare = same backlog" is kept). A bare token whose referrer has **no scope** (a ledger with no
+   backlog scope) is passed to `wi` as written, and its exit 3 → `ambiguous` when several homes carry that
+   number; with the referrer's scope there is no exit 3;
    (b) `^[a-z0-9][a-z0-9-]*:<legacy-letter>-\d+$` → qualified legacy, as written;
    (c) `^[A-Z]{2,6}(-[A-Z]\d+|-FR\d+[a-z]?|-AC\d+[a-z]?)+$`-shaped (key, then segments) → scheme ID or alias;
    (d) in a `needs` cell only, `^[a-z0-9][a-z0-9-]*:\S+$` not matching (b) → `<ledger-slug>:<unit>` (§3.4), and a bare token equal to a unit label of the referring ledger → local unit;
@@ -61,8 +63,14 @@ identity.resolve(token, scope) -> Resolution(state, uid, candidates, reason)
    candidate list verbatim (never guess); 5 → `unminted`; 4 → `unknown`; `retired` item → `retired`;
    registry unreadable or no `.work-items/` → `unavailable`.
 3. **`candidates`** = `{id, uid}` ∪ `aliases` ∪ the item's legacy `home:name` (when minted) ∪ the token as
-   written. An `unminted` legacy name has only the qualified token; `unknown`/`unavailable` only the token as
-   written. Two references denote one item iff their candidate sets intersect.
+   written — **except** a bare legacy token that step 1(a) qualified by the referrer's scope: the bare string
+   is dropped (the qualified name stands in for it), because `cobb:K-065` and `falkor-chat:K-065` are two items
+   whose sets would otherwise intersect on `K-065`. A bare token with no scope keeps itself (and is `ambiguous`
+   when `wi` says so). An `unminted` legacy name has only the qualified token; `unknown`/`unavailable` only the
+   token as written (qualified when step 1(a) qualified it). Two references denote one item iff their
+   candidate sets intersect; the sets of two distinct items are disjoint. Consequence: a stored **bare**
+   legacy string in an `Item`/`Needs`/`Depends on` cell no longer joins to a qualified reference — legacy IDs
+   are written qualified (`<home>:K-NNN`, S5) or as the scheme ID after `wi mint`.
 4. **Joins are `IN $candidates` on indexed raw strings** (graph note §4.2 indexes; §4 G5): a reference matches
    an item whose stored string — `Item.ref`, `Source.itemId`, `Unit.itemId` — is any candidate. A rename after
    `wi move` therefore joins without any stored string changing (alias ∈ candidates). No mirrored copy of the
@@ -125,7 +133,7 @@ is "picked up" when a ledger shares its slug **or** its resolved `itemId`.
     (whatever its units read) or, when not archived, has ≥1 unit and all units `accepted`** (`abandoned` and
     `unknown` units in a non-archived ledger do not count); no ledger carries it
     → `unresolvable`, "no ledger carries `<ID>`";
-  - `<slug>:<unit>` → ledgers with that `Source.slug`, then the unit rows picked by `identity.pick_unit_rows`
+  - `<slug>:<unit>` → ledgers with that `Source.slug`, then the unit rows picked by `identity.select_units`
     (§3.4 `Unit label`). A **local** token (`U3`, no slug) anchors on the **referring ledger's `Source.path`**
     (`Unit.ledgerPath`), never on its slug, so two ledgers sharing a slug do not make every local label
     ambiguous (note §7.6 carries the path-anchored query). **More than one picked row** (a repeated label, or one slug in two components) → `unresolvable`,
@@ -147,7 +155,7 @@ invariant is therefore: `unitLabel` is non-empty exactly when `unitKey` is, and 
 whitespace, `(`, or trailing `:,;` (`U3:` → `U3`, `U1(a)` → `U1`, `U1;` → `U1` are *not* equal to their key) (`U10b Note: …` → `U10b`; `A7 Note: …` → `A7`; `U2.3 between…` →
 `U2.3`; `C-graph-dba (data half)` → `C-graph-dba`). Lookup — the `unit` view (note §7.3) and the need
 resolver — match `unitKey = $u OR unitLabel = $u`, case-sensitive, with **exact-key precedence** (one pure helper,
-`identity.pick_unit_rows(rows, token) -> list[row]`, in `coordgraph/identity.py`; the S1d resolver and the
+`identity.select_units(rows, token) -> list[row]`, in `coordgraph/identity.py`; the S1d resolver and the
 S3/S7 `unit` CLI both call it and neither re-implements the rule; rows carry `key`, `unitKey`, `unitLabel`): if any
 row's `unitKey` equals `$u`, only those rows (every repeat of that key) are the result; only when none does,
 the label matches are, all of them. Without the precedence `S6` would be ambiguous wherever `S6` and
@@ -156,7 +164,7 @@ and wins, in 15 the label alone is ambiguous and stays so — `unitLabel` only w
 otherwise miss). The precedence is decided client-side from the one query's rows. `~n` is not a
 label feature and no stored `unitKey`/`unitLabel` carries it: for a token ending in an end-anchored `~\d+$`
 (a real key may contain `~80 tool calls)` mid-text, so the pattern must anchor at the end), the client
-queries the stripped text and `pick_unit_rows` keeps the row whose `key` ends `#<token>` (`U32~2` → the second
+queries the stripped text and `select_units` keeps the row whose `key` ends `#<token>` (`U32~2` → the second
 repeat of `U32`), after first trying the whole token as written; units that differ
 only after the label are told apart by their full `unitKey` or cited by task ID. Checked over all 98
 ledgers (88 archived; 1,296 units): every unit yields a non-empty label, none ends in punctuation, 68 labels repeat within a
@@ -269,11 +277,11 @@ Offline unless noted; each is red first on the naive implementation named.
 2. Opacity: planted `GAL-F42`/free text in `Depends on` and `Needs` stored verbatim, shown unresolved.
 3. Header: `parse/header.py` parity with `wilib.rebuild.header_fields`/`tokens` over every repo family document; a header carrying `Version`, `Extends`, `Reviews`, `Last updated`, `Item`, `Aliases` parses with `itemId`/`aliases` set and no other field lost.
 4. Routing (§3.1): each of (a)–(e) incl. `falkor-chat:K-065` (legacy) vs `connected-code-graph:U7` (unit).
-5. Exit mapping: 3 (bare `K-065`, repeats the list), 4, 5 (unminted: compares as written, not unresolvable for a backlog ref), retired, registry unavailable.
+5. Exit mapping: 3 (bare `K-065` **with no referrer scope**, repeats the list; with a scope it qualifies and never exits 3), 4, 5 (unminted: compares as written, not unresolvable for a backlog ref), retired, registry unavailable.
 6. **Planted rename:** a `Depends on`/`Needs`/header `Item:` written with the old ID joins after `wi move` (red on raw-string equality); a dependency `falkor-chat:K-065` joins an item headed `GAL-I02-K0042` once minted and the reverse.
 7. Cross-backlog bare scheme ID in a `cpg` backlog for an item in `falkor-chat` (AC-13) joins; never `cpg:`-qualified.
 8. Delivery: `## … — GAL-F0042 delivered` satisfies a dependency written as `falkor-chat:K-065`; slash-joined siblings.
-9. Needs: task ID met/unmet; feature ID (D1) — every ledger archived; all units `accepted`; one ledger unfinished; `abandoned` unit in a non-archived ledger → unmet, in an archived one → met; none carries it → unresolvable; need on an archived ledger's task (live: minimal units); `<slug>:<unit>` unique, repeated label, same slug in two components → unresolvable with the list; a local `U3` with two ledgers sharing the slug resolves on the referring ledger's path; `U32~2`; **red-first `identity.pick_unit_rows` cases** (a mutant dropping exact-key precedence must fail): `S6` vs `S6 gate` (exact wins, `S6 gate` still reachable by its full key), `U1` vs `U1 K-091 band write + backfill` (no exact key → label matches fall through), a label-only ambiguity (`Pass`, 11 rows in one ledger → all returned, resolver `ambiguous`), a local label, and `unit_label_of` edges (`(x) y` falls back to the key with the warning, `U3:`, `U1(a)`, `U1;`); malformed cell → AC-3 listing; AC-4 variants D (other ledger) and D′ (cited by alias after a move).
+9. Needs: task ID met/unmet; feature ID (D1) — every ledger archived; all units `accepted`; one ledger unfinished; `abandoned` unit in a non-archived ledger → unmet, in an archived one → met; none carries it → unresolvable; need on an archived ledger's task (live: minimal units); `<slug>:<unit>` unique, repeated label, same slug in two components → unresolvable with the list; a local `U3` with two ledgers sharing the slug resolves on the referring ledger's path; `U32~2`; **red-first `identity.candidates` case**: `K-065` minted in two scopes (`falkor-chat:K-065`, `cobb:K-065`) → `candidates("K-065", "falkor-chat")` and `candidates("K-065", "cobb")` are disjoint and neither contains bare `K-065` (a mutant restoring `token` fails); bare `K-065` with no scope keeps itself; **red-first `identity.select_units` cases** (a mutant dropping exact-key precedence must fail): `S6` vs `S6 gate` (exact wins, `S6 gate` still reachable by its full key), `U1` vs `U1 K-091 band write + backfill` (no exact key → label matches fall through), a label-only ambiguity (`Pass`, 11 rows in one ledger → all returned, resolver `ambiguous`), a local label, and `unit_label_of` edges (`(x) y` falls back to the key with the warning, `U3:`, `U1(a)`, `U1;`); malformed cell → AC-3 listing; AC-4 variants D (other ledger) and D′ (cited by alias after a move).
 10. Reformat: dry-run allocates nothing (registry/journal unchanged); `--apply` over a scratch copy of each of the six `BACKLOG.md` files and the agent plans yields only scheme IDs, `lint` and `wi check` clean, idempotent on a second run; id-less counts equal the dry-run's.
 11. Scope derivation test reads `project.json` `legacy_paths` and asserts the parser's scope for each backlog path.
 12. Hook-time sync with `COORDGRAPH_WI_ROOT` bogus still mirrors the file (red if the sync path imports `wilib`); a read view then reports `Registry: unavailable`.
