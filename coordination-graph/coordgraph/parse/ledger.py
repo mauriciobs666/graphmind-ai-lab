@@ -115,10 +115,15 @@ def unit_key_of(cell: str) -> str:
     return text.split(" — ", 1)[0].strip()
 
 
+def _label_cut(unit_key: str) -> str:
+    return _LABEL.match(unit_key).group(0).rstrip(":,;")
+
+
 def unit_label_of(unit_key: str) -> str:
     """The derived `unitLabel` (plan3 section 3.4): `unit_key` up to the first whitespace or `(`,
-    trailing `:`, `,`, `;` trimmed. Not indexed; lookup is `unitKey = $u OR unitLabel = $u`."""
-    return _LABEL.match(unit_key).group(0).rstrip(":,;")
+    trailing `:`, `,`, `;` trimmed; the whole key when that is empty, so the label is empty only
+    for an empty key. Not indexed; lookup is `unitKey = $u OR unitLabel = $u`."""
+    return _label_cut(unit_key) or unit_key
 
 
 def _norm_cells(cells: list[str]) -> list[str]:
@@ -289,6 +294,8 @@ def parse_ledger(path: str, raw: bytes, review_paths: set[str] | None = None) ->
             full_key = ukey if n == 1 else f"{ukey}~{n}"
             if n > 1:
                 doc.warnings.append(f"duplicate unit {ukey} → {full_key}")
+            if ukey and not _label_cut(ukey):
+                doc.warnings.append(f"unit {full_key}: unit label fell back to the key")
             status_text = cell("status")
             token = status_token(status_text) if status_text is not None else UNKNOWN
             if token == UNKNOWN:

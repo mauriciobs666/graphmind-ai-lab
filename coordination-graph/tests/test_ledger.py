@@ -319,6 +319,10 @@ def test_a_ledger_without_a_header_block_has_no_status_and_no_aliases():
     ("Queued: foo", "Queued"),
     ("U3:", "U3"),
     ("U3,;", "U3"),
+    ("U1;", "U1"),
+    ("(x) y", "(x) y"),
+    ("(x)", "(x)"),
+    (":", ":"),
     ("", ""),
 ])
 def test_unit_label_rule(key, label):
@@ -373,3 +377,20 @@ def test_a_row_without_a_status_column_has_no_status_text_but_an_unknown_token()
     u = d.units[0]
     assert u.status_text is None and u.status_token == "unknown"
     assert "statusText" not in u.props() and u.props()["statusToken"] == "unknown"
+
+
+@pytest.mark.parametrize("archived", [False, True])
+def test_label_falls_back_to_the_whole_key_with_a_warning_when_the_cut_is_empty(archived):
+    d = ledger(["| (x) y — z | a | queued | — | — |", "| U1(a) | a | queued | — | — |"],
+               status="archived" if archived else "active", cols=ITEM_COLS)
+    props = d.unit_props()
+    assert [(p["unitKey"], p["unitLabel"]) for p in props] == [("(x) y", "(x) y"), ("U1(a)", "U1")]
+    assert [w for w in d.warnings if "label" in w] == ["unit (x) y: unit label fell back to the key"]
+
+
+def test_label_is_empty_exactly_when_the_key_is_and_the_warning_names_the_repeat_key():
+    d = ledger(["| (x) | a | queued | — | — |", "| (x) | a | queued | — | — |", "|  | a | queued | — | — |"],
+               cols=ITEM_COLS)
+    assert [p["unitLabel"] for p in d.unit_props()] == ["(x)", "(x)", ""]
+    assert "unit (x)~2: unit label fell back to the key" in d.warnings
+    assert sum("label fell back" in w for w in d.warnings) == 2  # the empty-key row gets none
