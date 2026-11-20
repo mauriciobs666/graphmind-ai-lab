@@ -51,6 +51,29 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   logged embed retry, or shows the failure still occurs and what blocks the retry.
 - **Owner:** `qa-engineer`.
 
+### GAL-I02-K0003 — A thread-reply resume returns no `error` on a step-budget failure (🔵 proposed — `docs/reviews/step-budget-reporting-impl.md` F3, 2026-11-20)
+
+> A reply in a thread with a parked run resumes it (`trigger.maybe_trigger` rule 2 →
+> `services.resume_workflow_run`), and that method answers `{runId, status}` with no `error`
+> (SERVER.md §1.4, "Step-budget exhaustion is not a fault"). The two REST routes report a budget
+> failure's reason by reading the run back (`Services._drive_and_report`); this path does not.
+> The storefront is chat-driven, so every turn after the first is a resume, and
+> `storefront.py`'s failed-turn log (`_run_turn`, the `status == "failed"` branch) records
+> `error=None` for a budget failure on any of them. The reason is visible only through
+> `GET /workflow-runs/{runId}`.
+- **Done when:** a budget failure on a thread-reply resume returns `error` equal to the graph's
+  own `ctx.error` note, and the storefront failed-turn log records it; a `done`/`waiting` resume
+  and a CAS miss (`None`) are unchanged; SERVER.md §1.4's thread-reply sentence updated at close.
+- **Owner:** `tdd-engineer`. The change is in `services.py`, outside the locked `_drive_loop`.
+- **Risks:** `resume_workflow_run` lets a drive fault propagate to `background._safe_run_workflow`
+  (`executor._drive`'s docstring), so it needs `_drive_and_report`'s read-back alone, not
+  `_drive_or_fault`'s fault catch — a design choice that needs its own pin. One extra `get_run` on
+  a `failed` drive only. `maybe_trigger`'s return is read by `storefront.py` (`_run_turn`) and
+  discarded by `background.py`; the envelope gains a field and loses nothing.
+- **Test strategy:** red first, a resume that exhausts the budget asserting `error` equals the
+  graph's note (with a monkeypatched `_fail_budget` probe note, as the K-096 tests do); a test that
+  a drive fault still propagates; a storefront turn test asserting the logged `error`.
+
 ### K-082 — Storefront demo: optional long-conversation KV stress rerun (🔵 proposed — carried from K-066, closed 2026-10-22)
 
 > The demo runs on `ministral-3-3b` (`-c 8192 --gpu max`) plus the 0.6B embedder, and

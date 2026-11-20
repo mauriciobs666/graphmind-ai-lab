@@ -224,3 +224,85 @@ Each mutant was run against `test_process_input.py test_workflow_timers.py test_
 | hardcode `error = "step budget exceeded"` | **survives** | killed only by the F2 monkeypatched-note probe |
 | fill `error` but not `read_ctx` | 2 failed | both `/input` budget tests |
 | fill `read_ctx` but not `error` | 4 failed | all four budget-envelope tests |
+
+## Close check
+
+**Scope.** This is step 3 of the root `AGENTS.md` live-spec close. I checked the uncommitted
+SERVER.md edit against the shipped code at `068bc951`, with every code read done through
+`git show 068bc951:<path>`. The diff baseline is `git diff -- falkor-chat/docs/SERVER.md`. The
+committed `services.py` differs from the gated diff only in the `_drive_and_report` docstring,
+which now states F1's concurrency reason. The commit also adds the F1 and F2 pins:
+`test_a_waiting_envelope_is_never_read_back_so_a_concurrent_writer_cannot_leak_in` and
+`test_budget_error_is_the_graphs_own_note_not_a_service_literal`. I ran no suites, as
+instructed, so I did not re-run those two tests.
+
+**Verdict: approve. The close may proceed.** No contract changed by the shipped diff is missing
+or contradicted, and nothing below blocks.
+
+**My four sentences.** All four are resolved:
+1. The "not a fault" paragraph is replaced in place.
+2. The "graph truth, whole" paragraph now separates the fault path's re-read status from the
+   budget path's returned status.
+3. The error map gains a budget row, and "That last row" became "The last two rows".
+4. The §1.7 bullet is deleted.
+
+I re-read the lines the edit left unchanged. The "Response bodies" line (`[, error]`) and the
+zombie re-raise sentence, now scoped to the fault path, are still true. The other SERVER.md
+sweep text (`:176`, `:311`, `:363`) states no bucketing that the new text contradicts.
+
+**Claims and absolute words, checked against `068bc951`.**
+- **"The only writers of an existing run's `ctx` are `resume_run_with_ctx` … and `fail_run`."**
+  Holds (unfiltered grep). Across `falkorchat/` and `scripts/` outside the tests, I grepped for
+  `.ctx =`, `SET x +=` / `= $map` and `DETACH DELETE`. The only `ctx` `SET`s are
+  `repository.py:3040` (§12.13) and `:3077` (§12.5). The only other `ctx:` writes are the two
+  `CREATE`s in `start_run*` (`:2856`, `:2901`), which create runs rather than write to an
+  existing one. Each writer has one caller: `executor.py:628` and `:1511`. The § numbers match
+  QUERIES `:1364` and `:1547`. The other `ctx` writes found are test-only (`test_queries.sh`,
+  `docs/reviews/*-evidence/`).
+- **"`faulted` holds only caught drive faults, escaped exceptions and oversized-merge
+  rejections."** Holds (read in full). `faulted.append` occurs at three sites: the oversized
+  merge (`services.py` about `:2905`), the `except Exception` around the drive (`:2921`) and
+  `error is not None` from `_drive_or_fault` (`:2929`). `resumed` gets every other non-`None`
+  status (`:2931`). "The periodic tick" exists (`app.py:214-229`).
+- **"Read the run back once", "the graph's own `ctx.error`, not a service literal".** Holds;
+  `_drive_and_report` makes exactly one `get_run`. "`error` is a reserved key" also holds:
+  `RESERVED_CTX_KEYS` (`services.py:115`) is checked on both routes, the sweep merges only
+  `timerFired`, and the chat `resume_run` writes no ctx.
+- **"Explained only by `GET /workflow-runs/{runId}`".** Holds. `get_run` (`repository.py:3128`)
+  is the only read that projects `r.ctx`. `find_runs_for_thread` does not project it (`:3218`),
+  and no MCP tool fronts a run.
+- **"Trigger's rule 2 (§1.12)".** Matches §1.12's ordered rule, where item 2 is resume.
+- **"On any `failed` reply, `ctx` is the graph's"** and **"cannot race".** These are true about
+  ctx writers. One residual is not a ctx write and is listed as CC-2.
+
+**History prose and numbering.** The added lines contain no item IDs, dates or
+"now/no longer/previously" framing. No heading was added, removed or renumbered.
+
+**DESIGN/QUERIES need no change.** Confirmed by reading the only budget sentences in each:
+- DESIGN §6.2 (`:639`, and the `maxSteps` note at `:657-664`) covers terminal semantics.
+- QUERIES §12.5 (`:1375`, `:1385`) covers the `fail_run` note.
+
+Neither states anything about the response envelope.
+
+**Non-blocking findings.**
+- **CC-1 — minor — the writer set now has two homes.** DESIGN §6.2 "Who writes the run `ctx`"
+  (`:596`) owns the ctx-writer design. The new SERVER.md sentence enumerates the full writer
+  set with "only", which K-097 (`workflow-input-cas-graph.md` §2) is about to revisit in that
+  same DESIGN paragraph. K-097 adds no ctx writer, so the sentence stays true. Even so, a future
+  writer would make SERVER's "only" false silently. Suggested fix: keep the reasoning, and cite
+  the writer set as "(DESIGN §6.2; QUERIES §12.5/§12.13)" so the K-097 close re-checks it.
+  Alternatively, record a no-change ruling.
+- **CC-2 — nit — a deleted run degrades the reply (inferred, not run).** The storefront
+  reset-mine query `DETACH DELETE`s a participant's runs (`repository.py` about `:4158`). If a
+  REST `/input` on such a run is mid-drive at that moment, the read-back gets `None`. The reply
+  is then `failed` with the submitted merge and no `error`, an edge case that "On any `failed`
+  reply" does not cover. It is reachable only by REST-driving a storefront chat run during a
+  reset. No spec change is needed unless the owner wants the edge named.
+
+**Final proposed REVIEW.md line** (root `REVIEW.md`, `## Always check`; source: F1; addition, no
+prune):
+
+- A surviving mutant called behaviour-equivalent is checked against concurrency as well as the
+  serial suite. If it widens a condition to a state that another actor can write (a
+  non-terminal status, an unlocked row), plant a concurrent write in that window before
+  accepting the equivalence.

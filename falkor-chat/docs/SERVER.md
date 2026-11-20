@@ -429,28 +429,42 @@ and the thread lookup short-circuits on an empty thread id from the other end.
 | structurally malformed `cmp` guard (dominant source: publish-time validation) | **400** `WorkflowConfigError` |
 | workflow engine not wired into this deployment: `POST /workflow-runs`, `POST /workflow-runs/{runId}/input`, `POST /workflow-runs/due` (the run reads still serve) | **503** `WorkflowEngineDisabledError` |
 | **a fault *during* the drive**: `NotImplementedError` (unimplemented step type), `WorkflowConfigError` (malformed guard reaching evaluation), `ModelResolutionError` or `ProviderCallError` (any agent node or LLM guard) | **201/200** carrying `{"status":"failed","error":"<type>: <message>"}` |
+| **step-budget exhaustion during the drive** (not a fault: nothing raises) | **201/200** carrying `{"status":"failed","error":"step budget exceeded"}` |
 
-That last row is the deliberate one: the executor's fault net has already stamped the run
-`failed`, so the run *is* terminal and correct in the graph — a 500 traceback would misreport a
-correctly-recorded terminal run as a server bug.
+The last two rows are the deliberate ones: the executor has already stamped the run `failed` (its
+fault net, or its budget check), so the run *is* terminal and correct in the graph — a 500
+traceback would misreport a correctly-recorded terminal run as a server bug.
 
 **Response bodies.** `POST /workflow-runs` answers `{runId, status, defKey, defVersion, trace[,
 error]}`, with no `ctx`; `POST /workflow-runs/{runId}/input` answers `{runId, status, ctx[,
 error]}`.
 
-**The `/input` failed envelope reports graph truth, whole.** Its `status` **and** its `ctx` both come from
-the *same* post-fault `get_run` re-read — never a re-read status beside the caller's submitted
-input. So the `ctx` a caller gets back on the fault path is the engine's own state including the
-diagnostic note `fail_run` stamped, not the merge that was attempted; on the clean path the two
-are the same value by construction (the CAS wrote exactly that merge). Reporting one field from
-the graph and the other from what the caller hoped happened would half-apply the rule, and the two
-could disagree in exactly the situation where a reader most needs them consistent. If the re-read
+**The `/input` failed envelope reports graph truth, whole.** On any `failed` reply, `ctx` is the
+graph's, read back after the drive: the engine's own state including the diagnostic note
+`fail_run` stamped, not the merge that was attempted. On the fault path `status` comes from that
+same post-fault `get_run` re-read; on a budget failure `status` is the drive's own `failed` return,
+and the read-back supplies `ctx` and `error`. Reporting one field from the graph and the other
+from what the caller hoped happened would half-apply the rule, and the two could disagree in
+exactly the situation where a reader most needs them consistent. If the fault path's re-read
 status is anything other than `failed`/`done`/`waiting` the service **re-raises**, because
 reporting a still-`running` zombie as success would be the worst outcome available.
-**Step-budget exhaustion is not a fault**: the run is stamped `failed` with a `step budget
-exceeded` note in its graph ctx, but the route answers through the clean path — `status: "failed"`,
-no `error` field, and on `/input` the submitted merge as `ctx` rather than the graph's. The reason
-is visible only through `GET /workflow-runs/{runId}`.
+**Only a `failed` drive is read back.** `failed` is terminal, and the only writers of an existing
+run's `ctx` (the set DESIGN §6.2 "Who writes the run `ctx`" owns) are `resume_run_with_ctx` (§12.13, which needs `waiting`) and `fail_run` (§12.5, inside
+a drive), so a read after `failed` cannot race. A run that re-parks `waiting` is open to the next
+resume the moment the drive returns, so a read-back there could report another actor's ctx as
+this caller's result. A `done`/`waiting` reply therefore carries the merge this caller's own CAS
+wrote, with no `error`.
+**Step-budget exhaustion is not a fault, but these two routes report it.** Nothing raises: the
+executor stamps the run `failed` with a `step budget exceeded` note in its graph ctx and returns
+`failed`. `POST /workflow-runs` and `POST /workflow-runs/{runId}/input` then read the run back once
+and answer `status: "failed"` with `error` set to that note — the graph's own `ctx.error`, not a
+service literal (`error` is a reserved key, so a caller cannot plant one) — and, on `/input`, the
+graph's ctx. **The timer sweep reads nothing back:** `POST /workflow-runs/due` and the periodic
+tick list a release that exhausts the budget under `resumed` as `{runId, status: "failed"}`;
+`faulted` holds only caught drive faults, escaped exceptions and oversized-merge rejections.
+**A thread-reply resume reports no reason:** the trigger's rule 2 (§1.12,
+`services.resume_workflow_run`) answers `{runId, status}` with no `error`, so a budget failure
+there is explained only by `GET /workflow-runs/{runId}`.
 
 **The `/shop/api` storefront surface.** Eleven routes at `API_PREFIX = "/shop/api"`, present only
 under `create_app(storefront=True)` (§1.3). The SPA build is mounted beside them at `/shop`, but
@@ -676,8 +690,6 @@ count with no FalkorDB connection and no writes — the correct way to check a p
   into a thread with an open `waiting` run silently resumes it. Only a fresh thread with **no**
   open run correctly exercises "an ordinary message never triggers a workflow" — reusing a thread
   from an earlier test item in the same pass will confound this check.
-- **A step-budget failure carries no `error` in its response (§1.4).** A black-box check that
-  sees a bare `status:"failed"` reads the reason with a follow-up `GET /workflow-runs/{id}`.
 - **MCP-scheduled jobs do not survive a restart** (schedulers: §1.12). A black-box check that
   restarts the server mid-pass can lose MCP-scheduled replies, embeddings or extractions with
   nothing in any response saying so.

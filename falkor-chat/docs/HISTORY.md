@@ -5,6 +5,40 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-20 — K-096 closed: a step-budget failure reports its reason and the graph's ctx on both REST routes
+
+- **Cause.** `executor._fail_budget` stamps the run `failed` with a `step budget exceeded` note and
+  returns `"failed"` without raising, so `Services._drive_or_fault` treated it as the clean path:
+  `POST /workflow-runs` and `POST /workflow-runs/{runId}/input` answered `status: "failed"` with no
+  `error`, and `/input` returned the submitted merge as `ctx` instead of the graph's.
+- **What (commit `068bc951`).** Budget exhaustion stays "not a fault" (nothing raises; the locked
+  `_drive_loop` is untouched). New `Services._drive_and_report` wraps `_drive_or_fault` for the two
+  REST routes: when the drive returns `failed` with no caught fault, it reads the run back once and
+  fills `error` from the graph's own `ctx.error` note and, on `/input`, `ctx` from the graph. Only a
+  `failed` drive is read back, because a terminal run cannot race; a `done`/`waiting` reply and a
+  caught fault's `"<Type>: <message>"` envelope are unchanged. The timer sweep is unchanged: it
+  calls `_drive_or_fault` directly and lists a budget-failed release under `resumed` as
+  `{runId, status: "failed"}`. Not covered: a thread-reply resume (`trigger` →
+  `services.resume_workflow_run`) still answers `{runId, status}` with no `error` — follow-up
+  `GAL-I02-K0003`. The pinning test `test_budget_exhaustion_reaches_the_same_envelope_without_raising`
+  was rewritten to expect `error`, red first; new tests cover REST start, `/input` (response `ctx`
+  equals the graph's), the sweep bucket, the caught-fault envelope, a concurrent writer after a
+  re-park (F1), and the note's provenance via a monkeypatched `_fail_budget` (F2).
+- **Verified.** The commit message records "suite 3701 passed"; no Cypher changed, so
+  `test_queries.sh` was not run. Gate and close check: `docs/reviews/step-budget-reporting-impl.md`
+  — gate approve with suggestions (F1 and F2 closed in the commit; F3 filed as `GAL-I02-K0003`),
+  Close check approve (CC-1 applied: the SERVER.md ctx-writer sentence cites DESIGN §6.2 "Who
+  writes the run `ctx`"; CC-2, a nit on a run deleted mid-drive, needs no spec change).
+- **Spec.** `docs/SERVER.md` §1.4 (error map gains the budget 201/200 row; "The `/input` failed
+  envelope reports graph truth, whole" and "Step-budget exhaustion is not a fault" rewritten,
+  including the sweep's `resumed` bucket and the thread-reply resume's missing reason) and §1.7
+  (the "A step-budget failure carries no `error`" bullet removed). `docs/DESIGN.md` and
+  `docs/QUERIES.md` unchanged (neither states a route envelope).
+- **`REVIEW.md`.** Root `REVIEW.md` `## Always check` gains one line (source: F1): a surviving
+  mutant called behaviour-equivalent is checked against concurrency as well as the serial suite;
+  if it widens a condition to a state another actor can write, plant a concurrent write in that
+  window before accepting the equivalence.
+
 ## 2026-11-20 — K-091 closed: `Document.lshBand0..7` stored at ingest, plus a one-off backfill
 
 - **Cause.** `find_update_shortlist`'s LSH band lookup read `Document.lshBand0..7`, but no write path

@@ -15,8 +15,8 @@ Sequencing: implementer units run one at a time — they share `repository.py`/`
 |---|---|---|---|---|---|---|
 | U1 K-091 band write + backfill | `tdd-engineer` | `a06eeb5521c81ccf1`; F6 fix `a7afd84687b716cf5` | accepted | code + tests | `analyst` `a20ec9d1e5163523e` → approve w/ suggestions (Pass 2) | 250k / 88 + 76k / 13 |
 | U2 K-097 CAS design + ABA check | `graph-dba` | `a8a5e4080fa48fd8c` | accepted | `docs/plans/workflow-input-cas-graph.md` | `analyst` `a0052887e4da8f4a4` → approve w/ suggestions (Pass 2) | 215k / 50 |
-| U3 K-097 implementation | `tdd-engineer` | — | queued (after U2 gate, U1) | code + tests | `analyst` → — | — |
-| U4 K-098 GRAPH.CONFIG sizing | `graph-dba` | `a02427cdbdf32b4c8` | gated | `docs/plans/graph-config-defaults-graph.md` | `analyst` `a34f76a361e21f807` → — | 240k / 77 |
+| U3 K-097 implementation | `tdd-engineer` | `a35b78e4b204f8e10` | in-flight | code + tests | `analyst` → — | — |
+| U4 K-098 GRAPH.CONFIG sizing | `graph-dba` | `a02427cdbdf32b4c8` | in-flight (revision) | `docs/plans/graph-config-defaults-graph.md` | `analyst` `a34f76a361e21f807` → needs changes | 240k / 77 |
 | U5 K-098 set values | `devops` | — | queued (after U4 gate) | deployment config | `analyst` → — | — |
 | U6 K-096 budget failure reporting | `tdd-engineer` | `ade689ec2f7ffb5cc` | accepted | code + tests | `analyst` `a5cf8134b051914e0` → approve w/ suggestions | 143k / 39 |
 | U7 K-095 AGENT_NAME removal | `coder` | — | queued (after U6) | code | `analyst` → — | — |
@@ -24,6 +24,7 @@ Sequencing: implementer units run one at a time — they share `repository.py`/`
 | U9 K-094 quoting plan | `architect` | `ae4cd56c931f9746a` | accepted | `docs/plans/message-quoting.md` | `analyst` `a5276e9a50a55ecea` → approve (Pass 2) | 212k / 58 |
 | U10 K-094 implementation | `tdd-engineer` | — | queued (after U9 gate) | code + tests | `analyst` → — | — |
 | C1 K-091 close: spec update | `tdd-engineer` | `a1093354e3d6b012f` | accepted | QUERIES §14.9, DESIGN §5.1/§7.1, BACKLOG K-064 | `analyst` `a20ec9d1e5163523e` (`docs/reviews/document-lsh-bands-impl.md` § Close check) → approve w/ suggestions | 136k / 31 |
+| C2 K-096 close: SERVER.md §1.4/§1.7 | `tdd-engineer` | `ade689ec2f7ffb5cc` | accepted | `docs/SERVER.md` | `analyst` `a5cf8134b051914e0` (close check) → approve | — |
 
 Documentation impact (for each item's close, not its build unit): the DESIGN/SERVER/QUERIES
 sections each item names; `docs/HISTORY.md` entry per item; `docs/BACKLOG.md` item removed at
@@ -50,3 +51,7 @@ milestone close (human applies); `server/.env.example` and start scripts for K-0
 - 2026-11-20 U6 delivered. `teco` re-ran the suite (3699). `teco`'s mutant (hardcoding the error string instead of reading the ctx note) survived 208 tests; it went to the gate as a question, since it may be behaviour-equivalent. Gate: `docs/reviews/step-budget-reporting-impl.md`.
 - 2026-11-20 U6 gate: approve with suggestions. F1: M6 is not equivalent under a concurrent writer. F2: pin the error's source (`teco`'s survivor). Both went back to the implementer. F3: thread-reply resumes (`trigger` → `resume_workflow_run`) still report no reason; at the K-096 close it becomes a follow-up backlog item (`teco` default, stakeholder told) and HISTORY says 'the @mention-start path'. One root `REVIEW.md` line is proposed, to be applied at the close.
 - 2026-11-20 U6 accepted. `teco` verified it after the killed mutant battery: no leftover mutant (the sweep still calls `_drive_or_fault`, and the read-back is gated on `failed` + `error is None`). Suite 3701 passed. `teco`'s hardcoded-error mutant now fails one test. No Pass 2: both findings were test additions with reviewer-specified probes, and `teco` checked them.
+- 2026-11-20 stakeholder decisions: K-098's AOF/`maxmemory` part is split out into its own backlog item (hand-off section in the note). Rollout: one runbook that `teco` prepares and the stakeholder runs (server restarts, backfill, verify, optional FalkorDB restart), once K-097 and K-098 are approved.
+- 2026-11-20 U4 gate: needs changes. B1: the AOF safe order can still wipe the volume (now split out). M1: 64 MiB fails a 10-hub-seed `hybrid_search`. M2: the restart is under-sequenced. The revision went back to `graph-dba` along with permission to write its quirks entries. The reviewer reported one pytest failure (`test_sweep_buckets_a_release_that_exhausts_the_budget_as_resumed_not_faulted`) on its own containers and called it pre-existing. That is K-096's new test, which passed in `teco`'s run at `068bc951` (3701), so the reviewer most likely ran against U3's in-flight tree. Re-check at U3 integration.
+- 2026-11-20 K-096 close step 4: CC-1 fixed by `teco` (one citation in the SERVER.md sentence). The review's final line was applied to root `REVIEW.md` `## Always check`. Integrity check: the first apply truncated the wrapped proposal to its first line; caught on the diff and replaced with the full text. The diff is now exactly that one addition and does not narrow any check.
+- 2026-11-20 K-096 closed: SERVER.md, the root `REVIEW.md` line and the HISTORY entry are committed. F3 is filed as `GAL-I02-K0003` (a registry line flushed). CC-2 (a run deleted mid-drive during a storefront reset) is left unnamed in the spec, per the reviewer.
