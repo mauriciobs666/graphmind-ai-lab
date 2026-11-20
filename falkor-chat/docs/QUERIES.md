@@ -1209,7 +1209,7 @@ contract for `repository.py` — **method name = query name** below. Every state
 
 ```
 (:WorkflowRun {runId, defKey, defVersion, status, startedAt, endedAt,
-               ctx, trace, maxSteps, stepCount, waitingThreadId})
+               ctx, ctxVersion, trace, maxSteps, stepCount, waitingThreadId})
 (:WorkflowRun)-[:OF_DEF]->(:WorkflowDefSnapshot)        // which materialized def (§11)
 (:WorkflowRun)-[:AT_STEP]->(:Step)                      // current position (cleared on terminal)
 (:WorkflowRun)-[:TRIGGERED_BY]->(:Message)              // the @mention that started it (chat runs only)
@@ -1243,7 +1243,8 @@ contract for `repository.py` — **method name = query name** below. Every state
   `append_trace_event` use the endpoints' existing indexes.
 
 **Status-move contract (all state-move queries).** Each state-move `MATCH`es its anchor(s), so
-**zero rows = the anchor missed** (run gone / wrong current state): the service treats zero rows as
+**zero rows = the anchor missed** (run gone / wrong current state / for §12.13, a stale
+`ctxVersion`): the service treats zero rows as
 "CAS did not apply" (suspend/resume) or "run not found" (advance/complete/fail → `WorkflowRunNotFound`).
 A returned row = the move committed.
 
@@ -1352,7 +1353,8 @@ suspend of a non-running run) matches the node but fails the `WHERE` → **zero 
 // $runId
 MATCH (r:WorkflowRun {runId: $runId})
 WHERE r.status = 'waiting'
-SET r.status = 'running', r.waitingThreadId = ''
+SET r.status = 'running', r.waitingThreadId = '',
+    r.ctxVersion = coalesce(r.ctxVersion, 0) + 1
 RETURN r.runId AS runId, r.status AS status
 ```
 *The single-flight guard for concurrent human replies (DESIGN §6): two near-simultaneous replies both
@@ -1360,6 +1362,10 @@ try to resume, but per-query atomicity means only the one that observes `status 
 the loser sees `running` → `WHERE` fails → **zero rows** → does not re-enter the executor. **Verified:**
 first resume returns the row, an immediate second returns zero rows. Clears `waitingThreadId` so the run
 is no longer discoverable as parked.*
+
+*It bumps `ctxVersion` and compares nothing: it writes no ctx, so it has no ctx read to compare. The
+bump still ends the wait instance, so a §12.13 CAS taken against that wait is refused even when this
+resume's drive re-parks the run. A refused resume (zero rows) does not bump.*
 
 ### 12.5 `complete_run` / `fail_run` — terminal states (clear `AT_STEP`)
 
@@ -1376,7 +1382,8 @@ RETURN r.runId AS runId, r.status AS status
 MATCH (r:WorkflowRun {runId: $runId})
 OPTIONAL MATCH (r)-[atRel:AT_STEP]->()
 DELETE atRel
-SET r.status = 'failed', r.endedAt = $endedAt, r.ctx = $ctx
+SET r.status = 'failed', r.endedAt = $endedAt, r.ctx = $ctx,
+    r.ctxVersion = coalesce(r.ctxVersion, 0) + 1
 RETURN r.runId AS runId, r.status AS status
 ```
 *`AT_STEP` ("current position") is cleared on terminal states — the audit trail is preserved by the
@@ -1384,7 +1391,9 @@ RETURN r.runId AS runId, r.status AS status
 `DELETE` of a **null** `OPTIONAL MATCH`ed edge is a verified no-op (re-completing a run that already has
 no `AT_STEP` does not error). **Step-budget fail:** the executor compares `stepCount` (returned by
 §12.2) to `maxSteps` app-side; on `stepCount > maxSteps` it calls `fail_run` — verified `failed` +
-`AT_STEP` cleared + `StepRun`s retained. Zero rows = run not found (→ `WorkflowRunNotFoundError`).*
+`AT_STEP` cleared + `StepRun`s retained. Zero rows = run not found (→ `WorkflowRunNotFoundError`).
+`fail_run` bumps `ctxVersion` because it writes `ctx`; `complete_run` writes no ctx and leaves it
+unchanged. Neither is load-bearing for §12.13: a terminal run already fails its `status` guard.*
 
 > What `maxSteps` bounds, and on which executor paths it is checked: `DESIGN.md` §6.2.
 
@@ -1422,10 +1431,13 @@ OPTIONAL MATCH (r)-[:OF_DEF]->(snap:WorkflowDefSnapshot)
 RETURN r.runId AS runId, r.status AS status, r.stepCount AS stepCount, r.maxSteps AS maxSteps,
        r.trace AS trace, r.ctx AS ctx, r.startedAt AS startedAt, r.endedAt AS endedAt,
        r.waitingThreadId AS waitingThreadId,
-       cur.key AS atStepKey, snap.key AS defKey, snap.version AS defVersion
+       cur.key AS atStepKey, snap.key AS defKey, snap.version AS defVersion,
+       coalesce(r.ctxVersion, 0) AS ctxVersion
 ```
-*Point lookup on `WorkflowRun.runId`. `atStepKey` is `null` for terminal runs (§12.5). Route via
-`GRAPH.RO_QUERY`.*
+*Point lookup on `WorkflowRun.runId`. `atStepKey` is `null` for terminal runs (§12.5). `ctxVersion`
+is 0 for a run never resumed (created without the property), and it is read in the same query as
+`ctx`, which is what lets a caller hand §12.13 the version that belongs to the ctx it merged onto.
+Route via `GRAPH.RO_QUERY`.*
 
 ### 12.8 `read_step_runs` — the NEXT-ordered audit trail
 
@@ -1544,50 +1556,60 @@ Results | Records produced: 1
                         Node By Index Scan | (snap:WorkflowDefSnapshot) | Records produced: 1
 ```
 
-### 12.13 `resume_run_with_ctx` — guarded CAS `waiting → running` **that also writes `ctx`**
+### 12.13 `resume_run_with_ctx` — versioned CAS `waiting → running` **that also writes `ctx`**
 
-Parent: **§12.4** (`resume_run`), which **remains in use unchanged** for the chat/trigger resume path
-(`trigger.py`, where no ctx is submitted). This variant is §12.4 **plus one `SET` term** and is the
-human/signal-input path for a `process` run: the submitted input, already merged
-into the run ctx service-side, rides **inside** the CAS so the write and the flip cannot be split.
+Sibling of **§12.4** (`resume_run`), which serves the chat/trigger resume path (`trigger.py`, where
+no ctx is submitted). This variant compares `ctxVersion` as well as `status`, writes the merged ctx,
+and bumps the version. It is the human/signal-input path for a `process` run and the timer sweep's
+release (§12.16): the input, already merged into the run ctx service-side, rides **inside** the CAS
+so the write and the flip cannot be split.
 
 ```cypher
 // $runId; $ctx = the FULL merged run ctx (opaque serialized string, rule 8) — the service
-// reads the current ctx, merges the validated input flat into it, and passes the result
+// reads the current ctx (§12.7), merges the validated input flat into it, and passes the result;
+// $ctxVersion = the ctxVersion that same read returned
 MATCH (r:WorkflowRun {runId: $runId})
-WHERE r.status = 'waiting'
-SET r.status = 'running', r.waitingThreadId = '', r.ctx = $ctx
+WHERE r.status = 'waiting' AND coalesce(r.ctxVersion, 0) = $ctxVersion
+SET r.status = 'running', r.waitingThreadId = '', r.ctx = $ctx,
+    r.ctxVersion = $ctxVersion + 1
 RETURN r.runId AS runId, r.status AS status
 ```
 
-**Zero-row contract (live-verified — the input path rests on it):** a run that is not
-`waiting` matches the node but fails the `WHERE` ⇒ **zero rows and NOTHING is written — neither the
-status flip nor the ctx**. Verified by replaying the CAS with a marker ctx (`{"decision":"LOSER"}`)
-against an already-`running` run: zero rows returned and `r.ctx` still holds the winner's value. So
-only the CAS **winner's** ctx is ever persisted — "which input advanced the run" and "which input is in
-`ctx`" can never disagree. A missing `runId` is likewise zero rows (the service distinguishes the two
-cases with a prior `get_run`: `None` ⇒ 404, present-but-not-waiting ⇒ 409). The loser's input is
-**rejected, never silently lost**.
+**Zero-row contract (live-verified — the input path rests on it):** a run that is not `waiting`, or
+not at the read `ctxVersion`, matches the node but fails the `WHERE` ⇒ **zero rows and NOTHING is
+written — no status flip, no ctx, no version bump**. Verified by replaying the CAS with a marker ctx
+(`{"decision":"LOSER"}`) against an already-`running` run, and against a run that was resumed and
+re-parked after the read (`waiting` again, version moved): zero rows, no property set, and `r.ctx`
+still holds the winner's value. A read of `(waiting, v)` names one wait instance, so the CAS commits
+only if no resume (§12.4, §12.13) and no ctx write (§12.5 `fail_run`) has happened since that read.
+This query therefore writes only a merge built on the run's current ctx, so "which input advanced the run" and
+"which input is in `ctx`" agree. A missing `runId` is likewise zero rows; the service splits it out
+with its prior `get_run` (`None` ⇒ 404), and maps a status miss and a version miss alike to 409
+("re-read the run and retry"). The refused input is **rejected, never silently lost**. A run created
+without `ctxVersion` reads 0 through `coalesce`, so its first CAS carries `$ctxVersion = 0` and
+writes 1.
 
-**`GRAPH.PROFILE`** — point lookup on `WorkflowRun.runId`, **no label scan**; the
-`status` predicate is folded **into** the index scan (no residual `Filter` operator), so a
-non-matching run produces zero records at the scan itself:
+**`GRAPH.PROFILE`** — point lookup on `WorkflowRun.runId`, **no label scan**. The `status`
+predicate folds into the index scan; the `ctxVersion` compare is a residual `Filter` over the one
+record the scan produces, and zero rows there means `Update` writes nothing (500 padding runs, half
+of them `waiting`):
 
 ```
-# winner (run is waiting)                     # loser (run already running)
-Results | Records produced: 1                 Results | Records produced: 0
-    Project | Records produced: 1                 Project | Records produced: 0
-        Update | Records produced: 1                 Update | Records produced: 0
-            Node By Index Scan | (r:WorkflowRun)        Node By Index Scan | (r:WorkflowRun)
-              | Records produced: 1                       | Records produced: 0
+# winner (v matches)                      # loser (stale v)                        # run not waiting, v matches
+Results            | Records produced: 1  Results            | 0                   Results            | 0
+ Project           | 1                     Project           | 0                    Project           | 0
+  Update           | 1                      Update           | 0                     Update           | 0
+   Filter          | 1                       Filter          | 0                      Filter          | 0
+    Node By Index Scan | (r:WorkflowRun) | 1  Node By Index Scan | 1                    Node By Index Scan | 0
 ```
-*Anchoring confirmed on `runId`, not `status`: with five other `waiting` runs in the graph the scan
-still produced exactly 1 record. (`WorkflowRun` carries RANGE indexes on both `runId` and `status`.)*
+*Anchoring confirmed on `runId`, not `status`: the scan produces one record among 501.
+(`WorkflowRun` carries RANGE indexes on both `runId` and `status`.)*
 
 **Indexes (rule 6).** Both queries use only indexes `bootstrap_schema.sh` creates in every
 workspace: `WorkflowDefSnapshot.key`/`.version`, `WorkflowRun.runId` and the `WorkflowRun` UNIQUE
-`{runId}` constraint. The RAM cost is the merged `ctx` string; §12.12 stores one relationship fewer
-than §12.1 (no `TRIGGERED_BY`).
+`{runId}` constraint. `ctxVersion` takes no index: it is only compared after the `runId` point
+lookup. The RAM cost is the merged `ctx` string plus one integer attribute per run once it is first
+resumed; §12.12 stores one relationship fewer than §12.1 (no `TRIGGERED_BY`).
 
 **Live-verified build quirks that shape §12** (`falkordb:v4.18.11`, module `41811`):
 - **The tail-pointer advance (§12.2) plans edge-anchored** — the previous `StepRun` is found by

@@ -542,7 +542,7 @@ One model, both worlds. Runtime evaluation & the run/step-run schema: §6.2; ver
 
 ```
 (:WorkflowRun {runId, defKey, defVersion, status, startedAt, endedAt,
-               ctx, trace, maxSteps, stepCount, waitingThreadId})   // status ∈ running|waiting|done|failed
+               ctx, ctxVersion, trace, maxSteps, stepCount, waitingThreadId})   // status ∈ running|waiting|done|failed
 (:WorkflowRun)-[:OF_DEF]->(:WorkflowDefSnapshot {key, version})   // local, materialized
 (:WorkflowRun)-[:AT_STEP]->(:Step)                               // current position (cleared on terminal)
 (:WorkflowRun)-[:TRIGGERED_BY]->(:Message)                       // the @mention that started it (absent on a REST-started run)
@@ -567,6 +567,12 @@ One model, both worlds. Runtime evaluation & the run/step-run schema: §6.2; ver
   the executed-step counter the atomic advance bumps. **`waitingThreadId`** denorms the parked run's
   thread so resume is an index-anchored lookup (rides the existing `status` index — no new index;
   QUERIES §12.9). `endedAt` stamps terminal.
+- **`ctxVersion`** on `WorkflowRun` — the counter the ctx-carrying resume compares (below,
+  QUERIES §12.13). A run is created without the property, and every reader takes
+  `coalesce(r.ctxVersion, 0)`, so a run never resumed reads 0 and needs no backfill. Every resume
+  (QUERIES §12.4, §12.13) and every ctx write to an existing run (§12.13, `fail_run` §12.5) bumps
+  it; a park (§12.3), an advance (§12.2) and `complete_run` (§12.5) leave it unchanged. No index:
+  it is only compared after a `runId` point lookup. RAM is one integer attribute per run.
 - **`LAST_STEP_RUN` — the tail pointer.** Mirrors the locked `Thread` HEAD/TAIL pattern (§5.2):
   `record_step_and_advance` reads it to find the previous `StepRun`, hangs `NEXT`, and moves the tail —
   all in one query → **O(1) atomic advance, no chain-walk / label scan**. One edge per run (the tail
@@ -593,37 +599,47 @@ One model, both worlds. Runtime evaluation & the run/step-run schema: §6.2; ver
   never the audit trail's own readable data. A query that starts traversing `RAN` voids this
   note.
 
-**Who writes the run `ctx`.** Every write of `WorkflowRun.ctx` that carries human or
-external input rides **inside the resume CAS itself** — `resume_run_with_ctx` (QUERIES §12.13) is
-`resume_run` (QUERIES §12.4) plus one `SET` term, one query. There is deliberately **no** standalone
-"set the ctx" write. With a split write, submitter B's ctx can land between A's ctx write and A's
-CAS, so the drive that runs is A's while the data it reads is B's — a **silent wrong branch**, and
-worse, a stale submitter could erase a key an earlier step already branched on, leaving a run whose
-own `ctx` no longer explains its own trail. Folded, only the CAS **winner's** ctx is ever written:
-"which input advanced the run" and "which input is in `ctx`" can never disagree, which is the audit
-property §6.3 exists to prove. A loser gets a visible 409 with **nothing written** — neither the
-status flip nor the ctx — never a silent loss.
+**Who writes the run `ctx`.** A run's `ctx` is written when the run is created (QUERIES §12.1,
+§12.12) and, on an existing run, by exactly two queries: `resume_run_with_ctx` (QUERIES §12.13),
+which carries human or external input, and `fail_run` (QUERIES §12.5), which stamps a diagnostic
+note on a run that faults. Input rides **inside the resume CAS itself**: one query compares the
+run's `status` and `ctxVersion` with what the service read, writes the merged ctx, flips the run to
+`running` and bumps the version. There is deliberately **no** standalone "set the ctx" write. With a
+split write, submitter B's ctx can land between A's ctx write and A's CAS, so the drive that runs is
+A's while the data it reads is B's — a **silent wrong branch**.
 
-> **Residual window, stated plainly (R-1).** The *read* before the merge is
-> non-transactional: two submitters can both read the same base ctx, merge onto it, and the
-> winner's merge may omit a key the loser intended to add. That is a lost update **on an unwritten
-> input, reported as a 409 to its submitter** — not a wrong branch and not an erased key a prior
-> step branched on. Acceptable for single-approver use; the fix (a `ctxVersion` counter CAS) is
-> unbuilt.
+The service reads the run (QUERIES §12.7), refuses it unless it is `waiting`, merges the input onto
+that read's `ctx`, and hands the CAS the `ctxVersion` from the same read. A read of
+`(waiting, v)` therefore names one wait instance, and the CAS commits only if no resume and no ctx
+write has happened since that read, including a resume whose drive re-parked the run at the same
+step or another one. A `status` compare alone cannot see that re-park: `waiting` matches again, and
+a slower submitter's merge on the pre-resume ctx would overwrite the winner's input. With the
+version compare, a submitter's merge is written only when it was built on the run's current
+ctx, so "which input advanced the run" and "which input is in `ctx`" agree, which is the audit property §6.3 exists to
+prove. A refused submitter gets a visible 409 with **nothing written** (no status flip, no ctx, no
+version bump), never a silent loss.
+
+> **A stale read is refused, not merged.** Two submitters that read the same `(waiting, v)` both
+> merge onto the same base ctx. The first CAS wins and bumps the version; the second is refused
+> with a 409 and must re-read the run and retry. A version miss and a status miss are not told
+> apart, because both mean "re-read". The version is read server-side at submit time, so a client
+> acting on a view it fetched earlier (an open form) is not protected by it.
 
 **Timer release is one more `resume_run_with_ctx` submitter, not a new write path.**
 `Services.sweep_due_workflow_runs` resumes a genuinely-due `wait`/`human` run through the same CAS,
 merging an engine-reserved `ctx.timerFired = "<parked step's own key>"` marker (in
 `RESERVED_CTX_KEYS` — no human/API caller can set or spoof it) so the run's own
 publish-time-required escalation guard fires deterministically on that resume, and only then. It
-inherits R-1's exact shape (one more racing submitter, same single-winner CAS) and adds no new
-residual class. The sweep writes no new `WorkflowRun` property (there is deliberately no `wakeAt`) and keeps
+passes the `ctxVersion` from its own fresh read of the run, the read whose `ctx` it merges onto and
+whose `atStepKey` it re-checks, so a resume landing between that read and the CAS (a human input, a
+chat reply or another sweep) leaves the run in the sweep's `raced` bucket with nothing written. The sweep adds no
+`WorkflowRun` property of its own (there is deliberately no `wakeAt`) and keeps
 no scheduler state of its own: dueness is derived fresh, every call, from `StepRun.startedAt` (via the `LAST_STEP_RUN` tail
 pointer above) and `Step.config`. Full argument: `docs/plans/workflow-timers.md` §8.
 
 > **Design rule for any automated resume caller** (the sweep is the first). Such a caller
 > carries two independent risk classes: a **CAS race** on concurrent resumers (closed generically
-> by the ctx-write-inside-CAS discipline above) and a **re-park loop** — the automated caller
+> by the ctx-write-inside-CAS discipline and the `ctxVersion` compare above) and a **re-park loop** — the automated caller
 > landing on a step whose only advance path is a guard the automation itself cannot satisfy. The
 > second class has no generic mitigation; each new automated caller needs its own
 > guard-satisfiability argument. An unconditional fallback transition is not one: it fires on
