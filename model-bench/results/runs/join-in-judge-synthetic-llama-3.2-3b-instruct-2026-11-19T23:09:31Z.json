@@ -1,0 +1,6302 @@
+{
+  "aggregates": {
+    "kind": "classification",
+    "n": 200,
+    "parseFailures": 0,
+    "perClass": [
+      {
+        "n": 100,
+        "name": "agreeWhenYes",
+        "successes": 94,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 100,
+        "name": "agreeWhenNo",
+        "successes": 83,
+        "type": "binary",
+        "unit": "item"
+      }
+    ]
+  },
+  "armKind": "model",
+  "attestationTripWire": "compared",
+  "basis": "by-construction",
+  "designEffect": 1.0,
+  "fingerprint": {
+    "arch": "llama",
+    "armKind": "model",
+    "benchSchemaVersion": 1,
+    "benchVersion": "0.1.0",
+    "callSurface": "chat",
+    "compatibilityType": "gguf",
+    "endedAt": "2026-11-19T23:10:01Z",
+    "hostOs": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "hostRamGb": 16,
+    "kvCacheSetting": "f16",
+    "lmStudioAppVersion": "0.4.24+1",
+    "loadedContextLength": 8192,
+    "maxContextLength": 131072,
+    "maxTokens": 256,
+    "modelCapabilities": [
+      "tool_use"
+    ],
+    "modelCapabilitiesPresent": true,
+    "modelKey": "llama-3.2-3b-instruct",
+    "modelPublisher": "bartowski",
+    "modelType": "llm",
+    "otherResidentWorkloads": [],
+    "packContentHash": "5ad061648458fdf23de647c3923e1c42843db4a8e151006355827ddfcebc7653",
+    "packId": "join-in-judge-synthetic",
+    "packVersion": "v1",
+    "pythonVersion": "3.12.3",
+    "quantization": "Q8_0",
+    "residencySource": "lmstudio-api-v0",
+    "residentModelsAtEnd": [
+      {
+        "id": "laya",
+        "state": "loaded"
+      },
+      {
+        "id": "llama-3.2-3b-instruct",
+        "state": "loaded"
+      }
+    ],
+    "residentModelsAtStart": [
+      {
+        "id": "laya",
+        "state": "loaded"
+      },
+      {
+        "id": "llama-3.2-3b-instruct",
+        "state": "loaded"
+      }
+    ],
+    "runtimeName": "llama.cpp-win-x86_64-nvidia-cuda12-avx2",
+    "runtimeVersion": "2.73.0",
+    "startedAt": "2026-11-19T23:09:31Z",
+    "temperature": 0.0
+  },
+  "items": [
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0002",
+      "latencyMs": 140.89994798996486,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0002"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 137.934,
+            "promptTokens": 630,
+            "tokensPerSecond": 48.24066301967254,
+            "ttftMs": 34.287,
+            "wallClockMs": 140.89994798996486
+          }
+        ],
+        "wallClockMs": 140.89994798996486,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0003",
+      "latencyMs": 145.9979879873572,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0003"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 140.199,
+            "promptTokens": 630,
+            "tokensPerSecond": 47.28132387706856,
+            "ttftMs": 34.449,
+            "wallClockMs": 145.9979879873572
+          }
+        ],
+        "wallClockMs": 145.9979879873572,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0005",
+      "latencyMs": 136.68842500192113,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0005"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.899,
+            "promptTokens": 615,
+            "tokensPerSecond": 48.581422464049744,
+            "ttftMs": 30.979,
+            "wallClockMs": 136.68842500192113
+          }
+        ],
+        "wallClockMs": 136.68842500192113,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0007",
+      "latencyMs": 134.426667005755,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0007"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.794,
+            "promptTokens": 594,
+            "tokensPerSecond": 48.578118472315325,
+            "ttftMs": 28.867,
+            "wallClockMs": 134.426667005755
+          }
+        ],
+        "wallClockMs": 134.426667005755,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0008",
+      "latencyMs": 147.91841999976896,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0008"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 145.724,
+            "promptTokens": 655,
+            "tokensPerSecond": 47.936340539763194,
+            "ttftMs": 41.419,
+            "wallClockMs": 147.91841999976896
+          }
+        ],
+        "wallClockMs": 147.91841999976896,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0010",
+      "latencyMs": 138.22864499525167,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0010"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.625,
+            "promptTokens": 624,
+            "tokensPerSecond": 48.51025021587062,
+            "ttftMs": 32.554,
+            "wallClockMs": 138.22864499525167
+          }
+        ],
+        "wallClockMs": 138.22864499525167,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0013",
+      "latencyMs": 138.03212100174278,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0013"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.668,
+            "promptTokens": 618,
+            "tokensPerSecond": 48.51072086931212,
+            "ttftMs": 32.598,
+            "wallClockMs": 138.03212100174278
+          }
+        ],
+        "wallClockMs": 138.03212100174278,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0014",
+      "latencyMs": 146.94759499980137,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0014"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 144.903,
+            "promptTokens": 652,
+            "tokensPerSecond": 48.2970461526573,
+            "ttftMs": 41.377,
+            "wallClockMs": 146.94759499980137
+          }
+        ],
+        "wallClockMs": 146.94759499980137,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 0
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0015",
+      "latencyMs": 134.03915200615302,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0015"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.567,
+            "promptTokens": 582,
+            "tokensPerSecond": 48.32879042703319,
+            "ttftMs": 28.109,
+            "wallClockMs": 134.03915200615302
+          }
+        ],
+        "wallClockMs": 134.03915200615302,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0017",
+      "latencyMs": 134.37318899377715,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0017"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.85899999999998,
+            "promptTokens": 592,
+            "tokensPerSecond": 48.54698863029527,
+            "ttftMs": 28.866,
+            "wallClockMs": 134.37318899377715
+          }
+        ],
+        "wallClockMs": 134.37318899377715,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0018",
+      "latencyMs": 134.00855199142825,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0018"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.456,
+            "promptTokens": 585,
+            "tokensPerSecond": 48.649490153343194,
+            "ttftMs": 28.68,
+            "wallClockMs": 134.00855199142825
+          }
+        ],
+        "wallClockMs": 134.00855199142825,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0019",
+      "latencyMs": 137.61220999003854,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0019"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.329,
+            "promptTokens": 617,
+            "tokensPerSecond": 48.46464019851116,
+            "ttftMs": 32.161,
+            "wallClockMs": 137.61220999003854
+          }
+        ],
+        "wallClockMs": 137.61220999003854,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0022",
+      "latencyMs": 139.50567498977762,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0022"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 137.11,
+            "promptTokens": 635,
+            "tokensPerSecond": 48.5918093646135,
+            "ttftMs": 34.212,
+            "wallClockMs": 139.50567498977762
+          }
+        ],
+        "wallClockMs": 139.50567498977762,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0023",
+      "latencyMs": 137.69368700741325,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0023"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.443,
+            "promptTokens": 620,
+            "tokensPerSecond": 48.488610025505004,
+            "ttftMs": 32.326,
+            "wallClockMs": 137.69368700741325
+          }
+        ],
+        "wallClockMs": 137.69368700741325,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0025",
+      "latencyMs": 137.01394699455705,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0025"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.397,
+            "promptTokens": 598,
+            "tokensPerSecond": 47.45183638606814,
+            "ttftMs": 29.027,
+            "wallClockMs": 137.01394699455705
+          }
+        ],
+        "wallClockMs": 137.01394699455705,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0026",
+      "latencyMs": 140.43755699822214,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0026"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.496,
+            "promptTokens": 601,
+            "tokensPerSecond": 47.88492295315897,
+            "ttftMs": 31.079,
+            "wallClockMs": 140.43755699822214
+          }
+        ],
+        "wallClockMs": 140.43755699822214,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0027",
+      "latencyMs": 135.86458801000845,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0027"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.54500000000002,
+            "promptTokens": 601,
+            "tokensPerSecond": 48.58850395996307,
+            "ttftMs": 30.64,
+            "wallClockMs": 135.86458801000845
+          }
+        ],
+        "wallClockMs": 135.86458801000845,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0030",
+      "latencyMs": 138.71927600121126,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0030"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.95999999999998,
+            "promptTokens": 622,
+            "tokensPerSecond": 48.29284782923649,
+            "ttftMs": 32.425,
+            "wallClockMs": 138.71927600121126
+          }
+        ],
+        "wallClockMs": 138.71927600121126,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0031",
+      "latencyMs": 138.40401200286578,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0031"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.92399999999998,
+            "promptTokens": 625,
+            "tokensPerSecond": 48.31524732575106,
+            "ttftMs": 32.437,
+            "wallClockMs": 138.40401200286578
+          }
+        ],
+        "wallClockMs": 138.40401200286578,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0033",
+      "latencyMs": 136.56168000306934,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0033"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.762,
+            "promptTokens": 607,
+            "tokensPerSecond": 48.507897085645546,
+            "ttftMs": 30.686,
+            "wallClockMs": 136.56168000306934
+          }
+        ],
+        "wallClockMs": 136.56168000306934,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0034",
+      "latencyMs": 147.89239699894097,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0034"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 145.54899999999998,
+            "promptTokens": 669,
+            "tokensPerSecond": 48.184875731205494,
+            "ttftMs": 41.782,
+            "wallClockMs": 147.89239699894097
+          }
+        ],
+        "wallClockMs": 147.89239699894097,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0036",
+      "latencyMs": 138.20206600939855,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0036"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.79000000000002,
+            "promptTokens": 623,
+            "tokensPerSecond": 48.29611312881539,
+            "ttftMs": 32.262,
+            "wallClockMs": 138.20206600939855
+          }
+        ],
+        "wallClockMs": 138.20206600939855,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0037",
+      "latencyMs": 140.5517230014084,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0037"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.007,
+            "promptTokens": 619,
+            "tokensPerSecond": 48.19973972140551,
+            "ttftMs": 32.272,
+            "wallClockMs": 140.5517230014084
+          }
+        ],
+        "wallClockMs": 140.5517230014084,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0039",
+      "latencyMs": 136.19613499031402,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0039"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.008,
+            "promptTokens": 593,
+            "tokensPerSecond": 48.408802656675086,
+            "ttftMs": 28.721,
+            "wallClockMs": 136.19613499031402
+          }
+        ],
+        "wallClockMs": 136.19613499031402,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0040",
+      "latencyMs": 141.0859299940057,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0040"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.409,
+            "promptTokens": 609,
+            "tokensPerSecond": 48.21414795957726,
+            "ttftMs": 30.705,
+            "wallClockMs": 141.0859299940057
+          }
+        ],
+        "wallClockMs": 141.0859299940057,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0041",
+      "latencyMs": 139.19767100014724,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0041"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.341,
+            "promptTokens": 594,
+            "tokensPerSecond": 48.25323296660876,
+            "ttftMs": 28.721,
+            "wallClockMs": 139.19767100014724
+          }
+        ],
+        "wallClockMs": 139.19767100014724,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0042",
+      "latencyMs": 144.84556400566362,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0042"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.036,
+            "promptTokens": 635,
+            "tokensPerSecond": 48.23693984853601,
+            "ttftMs": 34.381,
+            "wallClockMs": 144.84556400566362
+          }
+        ],
+        "wallClockMs": 144.84556400566362,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0043",
+      "latencyMs": 143.04198599711526,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0043"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.857,
+            "promptTokens": 624,
+            "tokensPerSecond": 48.32879042703319,
+            "ttftMs": 32.399,
+            "wallClockMs": 143.04198599711526
+          }
+        ],
+        "wallClockMs": 143.04198599711526,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0046",
+      "latencyMs": 139.05917698866688,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0046"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.213,
+            "promptTokens": 589,
+            "tokensPerSecond": 48.30591167747109,
+            "ttftMs": 28.706,
+            "wallClockMs": 139.05917698866688
+          }
+        ],
+        "wallClockMs": 139.05917698866688,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0047",
+      "latencyMs": 142.90618000086397,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0047"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.798,
+            "promptTokens": 603,
+            "tokensPerSecond": 47.99984640049152,
+            "ttftMs": 30.631,
+            "wallClockMs": 142.90618000086397
+          }
+        ],
+        "wallClockMs": 142.90618000086397,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0049",
+      "latencyMs": 145.73538600234315,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0049"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.86,
+            "promptTokens": 631,
+            "tokensPerSecond": 48.07230074031342,
+            "ttftMs": 32.85,
+            "wallClockMs": 145.73538600234315
+          }
+        ],
+        "wallClockMs": 145.73538600234315,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0050",
+      "latencyMs": 139.4696070055943,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0050"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.323,
+            "promptTokens": 596,
+            "tokensPerSecond": 48.42052255427941,
+            "ttftMs": 29.061,
+            "wallClockMs": 139.4696070055943
+          }
+        ],
+        "wallClockMs": 139.4696070055943,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0052",
+      "latencyMs": 145.54622500145342,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0052"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.566,
+            "promptTokens": 644,
+            "tokensPerSecond": 48.1069899456391,
+            "ttftMs": 34.631,
+            "wallClockMs": 145.54622500145342
+          }
+        ],
+        "wallClockMs": 145.54622500145342,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0053",
+      "latencyMs": 139.52382998832036,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0053"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.188,
+            "promptTokens": 596,
+            "tokensPerSecond": 48.412083656080554,
+            "ttftMs": 28.908,
+            "wallClockMs": 139.52382998832036
+          }
+        ],
+        "wallClockMs": 139.52382998832036,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0055",
+      "latencyMs": 141.32799100480042,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0055"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.415,
+            "promptTokens": 615,
+            "tokensPerSecond": 48.3110458375203,
+            "ttftMs": 30.919,
+            "wallClockMs": 141.32799100480042
+          }
+        ],
+        "wallClockMs": 141.32799100480042,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0056",
+      "latencyMs": 142.84243200381752,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0056"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.936,
+            "promptTokens": 618,
+            "tokensPerSecond": 48.21182346758719,
+            "ttftMs": 32.227,
+            "wallClockMs": 142.84243200381752
+          }
+        ],
+        "wallClockMs": 142.84243200381752,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0059",
+      "latencyMs": 145.27466100116726,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0059"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.446,
+            "promptTokens": 640,
+            "tokensPerSecond": 48.1056014162289,
+            "ttftMs": 34.508,
+            "wallClockMs": 145.27466100116726
+          }
+        ],
+        "wallClockMs": 145.27466100116726,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0062",
+      "latencyMs": 143.92241698806174,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0062"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.506,
+            "promptTokens": 621,
+            "tokensPerSecond": 48.10467577448528,
+            "ttftMs": 32.566,
+            "wallClockMs": 143.92241698806174
+          }
+        ],
+        "wallClockMs": 143.92241698806174,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0063",
+      "latencyMs": 142.35670799098443,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0063"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.763,
+            "promptTokens": 604,
+            "tokensPerSecond": 48.08987034970954,
+            "ttftMs": 30.791,
+            "wallClockMs": 142.35670799098443
+          }
+        ],
+        "wallClockMs": 142.35670799098443,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0064",
+      "latencyMs": 144.18134100560565,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0064"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.959,
+            "promptTokens": 603,
+            "tokensPerSecond": 47.96991327039681,
+            "ttftMs": 30.727,
+            "wallClockMs": 144.18134100560565
+          }
+        ],
+        "wallClockMs": 144.18134100560565,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0068",
+      "latencyMs": 140.5881109967595,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0068"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.06799999999998,
+            "promptTokens": 604,
+            "tokensPerSecond": 48.35122328594913,
+            "ttftMs": 30.658,
+            "wallClockMs": 140.5881109967595
+          }
+        ],
+        "wallClockMs": 140.5881109967595,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0069",
+      "latencyMs": 140.90020199364517,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0069"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.872,
+            "promptTokens": 603,
+            "tokensPerSecond": 48.40177344097888,
+            "ttftMs": 30.57,
+            "wallClockMs": 140.90020199364517
+          }
+        ],
+        "wallClockMs": 140.90020199364517,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0070",
+      "latencyMs": 138.01917700038757,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0070"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.26,
+            "promptTokens": 581,
+            "tokensPerSecond": 48.46980815649932,
+            "ttftMs": 28.103,
+            "wallClockMs": 138.01917700038757
+          }
+        ],
+        "wallClockMs": 138.01917700038757,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0075",
+      "latencyMs": 142.81999599188566,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0075"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.933,
+            "promptTokens": 620,
+            "tokensPerSecond": 48.31618108904672,
+            "ttftMs": 32.448,
+            "wallClockMs": 142.81999599188566
+          }
+        ],
+        "wallClockMs": 142.81999599188566,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0077",
+      "latencyMs": 141.87758100160863,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0077"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.642,
+            "promptTokens": 615,
+            "tokensPerSecond": 48.20531608225755,
+            "ttftMs": 30.919,
+            "wallClockMs": 141.87758100160863
+          }
+        ],
+        "wallClockMs": 141.87758100160863,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 0
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0079",
+      "latencyMs": 144.4164290005574,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0079"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.698,
+            "promptTokens": 599,
+            "tokensPerSecond": 46.60223131483535,
+            "ttftMs": 29.407,
+            "wallClockMs": 144.4164290005574
+          }
+        ],
+        "wallClockMs": 144.4164290005574,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0080",
+      "latencyMs": 143.15899700159207,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0080"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.199,
+            "promptTokens": 621,
+            "tokensPerSecond": 48.19184208497185,
+            "ttftMs": 32.447,
+            "wallClockMs": 143.15899700159207
+          }
+        ],
+        "wallClockMs": 143.15899700159207,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0083",
+      "latencyMs": 141.47707899974193,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0083"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.042,
+            "promptTokens": 604,
+            "tokensPerSecond": 48.3264548679238,
+            "ttftMs": 30.579,
+            "wallClockMs": 141.47707899974193
+          }
+        ],
+        "wallClockMs": 141.47707899974193,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0085",
+      "latencyMs": 143.0216660082806,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0085"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.712,
+            "promptTokens": 610,
+            "tokensPerSecond": 48.40130489918009,
+            "ttftMs": 32.409,
+            "wallClockMs": 143.0216660082806
+          }
+        ],
+        "wallClockMs": 143.0216660082806,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0087",
+      "latencyMs": 141.11937599955127,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0087"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.167,
+            "promptTokens": 605,
+            "tokensPerSecond": 48.2923813939113,
+            "ttftMs": 30.631,
+            "wallClockMs": 141.11937599955127
+          }
+        ],
+        "wallClockMs": 141.11937599955127,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0089",
+      "latencyMs": 143.299545001355,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0089"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.225,
+            "promptTokens": 619,
+            "tokensPerSecond": 48.17651876475406,
+            "ttftMs": 32.44,
+            "wallClockMs": 143.299545001355
+          }
+        ],
+        "wallClockMs": 143.299545001355,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0091",
+      "latencyMs": 139.504301987472,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0091"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.227,
+            "promptTokens": 624,
+            "tokensPerSecond": 48.332527791203475,
+            "ttftMs": 32.777,
+            "wallClockMs": 139.504301987472
+          }
+        ],
+        "wallClockMs": 139.504301987472,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0092",
+      "latencyMs": 134.98581299791113,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0092"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.603,
+            "promptTokens": 596,
+            "tokensPerSecond": 48.231821426504354,
+            "ttftMs": 28.937,
+            "wallClockMs": 134.98581299791113
+          }
+        ],
+        "wallClockMs": 134.98581299791113,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0093",
+      "latencyMs": 140.20938699832186,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0093"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 137.898,
+            "promptTokens": 633,
+            "tokensPerSecond": 48.29751267809708,
+            "ttftMs": 34.373,
+            "wallClockMs": 140.20938699832186
+          }
+        ],
+        "wallClockMs": 140.20938699832186,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0094",
+      "latencyMs": 138.8079500029562,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0094"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.239,
+            "promptTokens": 622,
+            "tokensPerSecond": 48.24531779190829,
+            "ttftMs": 32.602,
+            "wallClockMs": 138.8079500029562
+          }
+        ],
+        "wallClockMs": 138.8079500029562,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0096",
+      "latencyMs": 146.70085700345226,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0096"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 144.413,
+            "promptTokens": 653,
+            "tokensPerSecond": 48.51072086931212,
+            "ttftMs": 41.343,
+            "wallClockMs": 146.70085700345226
+          }
+        ],
+        "wallClockMs": 146.70085700345226,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 0
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0097",
+      "latencyMs": 139.40028299111873,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0097"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.667,
+            "promptTokens": 613,
+            "tokensPerSecond": 48.32178442685532,
+            "ttftMs": 31.194,
+            "wallClockMs": 139.40028299111873
+          }
+        ],
+        "wallClockMs": 139.40028299111873,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0099",
+      "latencyMs": 147.77357000275515,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0099"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 145.68,
+            "promptTokens": 679,
+            "tokensPerSecond": 48.243455775224085,
+            "ttftMs": 42.039,
+            "wallClockMs": 147.77357000275515
+          }
+        ],
+        "wallClockMs": 147.77357000275515,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0100",
+      "latencyMs": 144.05734500905965,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0100"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 140.812,
+            "promptTokens": 634,
+            "tokensPerSecond": 47.27730027704497,
+            "ttftMs": 35.053,
+            "wallClockMs": 144.05734500905965
+          }
+        ],
+        "wallClockMs": 144.05734500905965,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0101",
+      "latencyMs": 144.27306299330667,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0101"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.389,
+            "promptTokens": 625,
+            "tokensPerSecond": 47.97865909243569,
+            "ttftMs": 34.176,
+            "wallClockMs": 144.27306299330667
+          }
+        ],
+        "wallClockMs": 144.27306299330667,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0102",
+      "latencyMs": 138.56631000817288,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0102"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.313,
+            "promptTokens": 613,
+            "tokensPerSecond": 47.971754231108726,
+            "ttftMs": 31.085,
+            "wallClockMs": 138.56631000817288
+          }
+        ],
+        "wallClockMs": 138.56631000817288,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0103",
+      "latencyMs": 137.59722901158966,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0103"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.688,
+            "promptTokens": 614,
+            "tokensPerSecond": 48.200669025286075,
+            "ttftMs": 30.955,
+            "wallClockMs": 137.59722901158966
+          }
+        ],
+        "wallClockMs": 137.59722901158966,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0104",
+      "latencyMs": 137.98935800150502,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0104"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.703,
+            "promptTokens": 616,
+            "tokensPerSecond": 48.37976177805301,
+            "ttftMs": 32.354,
+            "wallClockMs": 137.98935800150502
+          }
+        ],
+        "wallClockMs": 137.98935800150502,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0106",
+      "latencyMs": 138.21749899943825,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0106"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.862,
+            "promptTokens": 618,
+            "tokensPerSecond": 48.277926366506705,
+            "ttftMs": 32.295,
+            "wallClockMs": 138.21749899943825
+          }
+        ],
+        "wallClockMs": 138.21749899943825,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0107",
+      "latencyMs": 139.42539700656198,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0107"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.441,
+            "promptTokens": 629,
+            "tokensPerSecond": 48.27419744146753,
+            "ttftMs": 32.866,
+            "wallClockMs": 139.42539700656198
+          }
+        ],
+        "wallClockMs": 139.42539700656198,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0109",
+      "latencyMs": 140.04098599252757,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0109"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 137.805,
+            "promptTokens": 633,
+            "tokensPerSecond": 48.27466352559523,
+            "ttftMs": 34.231,
+            "wallClockMs": 140.04098599252757
+          }
+        ],
+        "wallClockMs": 140.04098599252757,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0111",
+      "latencyMs": 135.0656419963343,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0111"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.954,
+            "promptTokens": 586,
+            "tokensPerSecond": 48.43365557858845,
+            "ttftMs": 28.72,
+            "wallClockMs": 135.0656419963343
+          }
+        ],
+        "wallClockMs": 135.0656419963343,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0115",
+      "latencyMs": 138.45231699815486,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0115"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.804,
+            "promptTokens": 619,
+            "tokensPerSecond": 48.30311168645484,
+            "ttftMs": 32.291,
+            "wallClockMs": 138.45231699815486
+          }
+        ],
+        "wallClockMs": 138.45231699815486,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0117",
+      "latencyMs": 135.37923501280602,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0117"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.189,
+            "promptTokens": 590,
+            "tokensPerSecond": 48.28958297116146,
+            "ttftMs": 28.647,
+            "wallClockMs": 135.37923501280602
+          }
+        ],
+        "wallClockMs": 135.37923501280602,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0119",
+      "latencyMs": 137.95096801186446,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0119"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.714,
+            "promptTokens": 616,
+            "tokensPerSecond": 48.33486393735802,
+            "ttftMs": 32.269,
+            "wallClockMs": 137.95096801186446
+          }
+        ],
+        "wallClockMs": 137.95096801186446,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0120",
+      "latencyMs": 135.9191439987626,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0120"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.65200000000002,
+            "promptTokens": 603,
+            "tokensPerSecond": 48.46464019851116,
+            "ttftMs": 30.484,
+            "wallClockMs": 135.9191439987626
+          }
+        ],
+        "wallClockMs": 135.9191439987626,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0123",
+      "latencyMs": 134.6733230020618,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0123"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.155,
+            "promptTokens": 594,
+            "tokensPerSecond": 48.34187373102581,
+            "ttftMs": 28.725,
+            "wallClockMs": 134.6733230020618
+          }
+        ],
+        "wallClockMs": 134.6733230020618,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0124",
+      "latencyMs": 137.45396699232515,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0124"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.993,
+            "promptTokens": 589,
+            "tokensPerSecond": 47.63719512195122,
+            "ttftMs": 29.033,
+            "wallClockMs": 137.45396699232515
+          }
+        ],
+        "wallClockMs": 137.45396699232515,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0125",
+      "latencyMs": 141.05246799590532,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0125"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.057,
+            "promptTokens": 609,
+            "tokensPerSecond": 48.508838310340145,
+            "ttftMs": 30.983,
+            "wallClockMs": 141.05246799590532
+          }
+        ],
+        "wallClockMs": 141.05246799590532,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0127",
+      "latencyMs": 137.61396300105844,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0127"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.45,
+            "promptTokens": 608,
+            "tokensPerSecond": 48.32832329715153,
+            "ttftMs": 30.991,
+            "wallClockMs": 137.61396300105844
+          }
+        ],
+        "wallClockMs": 137.61396300105844,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0128",
+      "latencyMs": 136.89766099560075,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0128"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.58599999999998,
+            "promptTokens": 610,
+            "tokensPerSecond": 48.24438676559982,
+            "ttftMs": 30.947,
+            "wallClockMs": 136.89766099560075
+          }
+        ],
+        "wallClockMs": 136.89766099560075,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0133",
+      "latencyMs": 140.62225200177636,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0133"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.24200000000002,
+            "promptTokens": 643,
+            "tokensPerSecond": 48.192306580177544,
+            "ttftMs": 34.491,
+            "wallClockMs": 140.62225200177636
+          }
+        ],
+        "wallClockMs": 140.62225200177636,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0134",
+      "latencyMs": 134.96424499317072,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0134"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.048,
+            "promptTokens": 583,
+            "tokensPerSecond": 48.2150778191356,
+            "ttftMs": 28.346,
+            "wallClockMs": 134.96424499317072
+          }
+        ],
+        "wallClockMs": 134.96424499317072,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0141",
+      "latencyMs": 136.54085500456858,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0141"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.153,
+            "promptTokens": 602,
+            "tokensPerSecond": 48.280257237210556,
+            "ttftMs": 30.591,
+            "wallClockMs": 136.54085500456858
+          }
+        ],
+        "wallClockMs": 136.54085500456858,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0145",
+      "latencyMs": 145.8667959959712,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0145"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 145.096,
+            "promptTokens": 649,
+            "tokensPerSecond": 48.1496104696513,
+            "ttftMs": 41.253,
+            "wallClockMs": 145.8667959959712
+          }
+        ],
+        "wallClockMs": 145.8667959959712,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0146",
+      "latencyMs": 137.84149200364482,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0146"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.05599999999998,
+            "promptTokens": 634,
+            "tokensPerSecond": 48.13385061178124,
+            "ttftMs": 34.179,
+            "wallClockMs": 137.84149200364482
+          }
+        ],
+        "wallClockMs": 137.84149200364482,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0148",
+      "latencyMs": 132.51571700675413,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0148"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.423,
+            "promptTokens": 597,
+            "tokensPerSecond": 48.28818388140422,
+            "ttftMs": 28.878,
+            "wallClockMs": 132.51571700675413
+          }
+        ],
+        "wallClockMs": 132.51571700675413,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0150",
+      "latencyMs": 137.42241899308283,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0150"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 137.908,
+            "promptTokens": 636,
+            "tokensPerSecond": 48.272333194952644,
+            "ttftMs": 34.329,
+            "wallClockMs": 137.42241899308283
+          }
+        ],
+        "wallClockMs": 137.42241899308283,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0152",
+      "latencyMs": 132.1971069992287,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0152"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.13,
+            "promptTokens": 593,
+            "tokensPerSecond": 48.40833397877779,
+            "ttftMs": 28.842,
+            "wallClockMs": 132.1971069992287
+          }
+        ],
+        "wallClockMs": 132.1971069992287,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0154",
+      "latencyMs": 137.81632100290153,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0154"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.449,
+            "promptTokens": 636,
+            "tokensPerSecond": 48.1486831335163,
+            "ttftMs": 34.604,
+            "wallClockMs": 137.81632100290153
+          }
+        ],
+        "wallClockMs": 137.81632100290153,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0155",
+      "latencyMs": 132.01822800328955,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0155"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.309,
+            "promptTokens": 597,
+            "tokensPerSecond": 48.40974003969599,
+            "ttftMs": 29.024,
+            "wallClockMs": 132.01822800328955
+          }
+        ],
+        "wallClockMs": 132.01822800328955,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0163",
+      "latencyMs": 132.36316801339854,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0163"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.535,
+            "promptTokens": 598,
+            "tokensPerSecond": 48.32832329715153,
+            "ttftMs": 29.076,
+            "wallClockMs": 132.36316801339854
+          }
+        ],
+        "wallClockMs": 132.36316801339854,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0164",
+      "latencyMs": 138.9664749876829,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0164"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 139.325,
+            "promptTokens": 646,
+            "tokensPerSecond": 47.871169109692,
+            "ttftMs": 34.878,
+            "wallClockMs": 138.9664749876829
+          }
+        ],
+        "wallClockMs": 138.9664749876829,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0166",
+      "latencyMs": 138.99484899593517,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0166"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.383,
+            "promptTokens": 628,
+            "tokensPerSecond": 47.78698473683708,
+            "ttftMs": 33.752,
+            "wallClockMs": 138.99484899593517
+          }
+        ],
+        "wallClockMs": 138.99484899593517,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0167",
+      "latencyMs": 138.00409299437888,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0167"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.248,
+            "promptTokens": 643,
+            "tokensPerSecond": 48.160741290129934,
+            "ttftMs": 34.429,
+            "wallClockMs": 138.00409299437888
+          }
+        ],
+        "wallClockMs": 138.00409299437888,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 0
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0170",
+      "latencyMs": 137.81777300755493,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0170"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.382,
+            "promptTokens": 582,
+            "tokensPerSecond": 47.69809016846966,
+            "ttftMs": 28.556,
+            "wallClockMs": 137.81777300755493
+          }
+        ],
+        "wallClockMs": 137.81777300755493,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0171",
+      "latencyMs": 134.90150500729214,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0171"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.148,
+            "promptTokens": 593,
+            "tokensPerSecond": 47.96117063625289,
+            "ttftMs": 29.897,
+            "wallClockMs": 134.90150500729214
+          }
+        ],
+        "wallClockMs": 134.90150500729214,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0172",
+      "latencyMs": 136.36369300365914,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0172"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.579,
+            "promptTokens": 620,
+            "tokensPerSecond": 48.04735547355474,
+            "ttftMs": 32.515,
+            "wallClockMs": 136.36369300365914
+          }
+        ],
+        "wallClockMs": 136.36369300365914,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0175",
+      "latencyMs": 138.38568099890836,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0175"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.769,
+            "promptTokens": 641,
+            "tokensPerSecond": 48.13848479305265,
+            "ttftMs": 34.902,
+            "wallClockMs": 138.38568099890836
+          }
+        ],
+        "wallClockMs": 138.38568099890836,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0176",
+      "latencyMs": 137.61879099183716,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0176"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.118,
+            "promptTokens": 636,
+            "tokensPerSecond": 48.171877258056746,
+            "ttftMs": 34.323,
+            "wallClockMs": 137.61879099183716
+          }
+        ],
+        "wallClockMs": 137.61879099183716,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0177",
+      "latencyMs": 135.89563399727922,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0177"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.215,
+            "promptTokens": 625,
+            "tokensPerSecond": 48.1820897535968,
+            "ttftMs": 32.442,
+            "wallClockMs": 135.89563399727922
+          }
+        ],
+        "wallClockMs": 135.89563399727922,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0179",
+      "latencyMs": 132.4853179976344,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0179"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.247,
+            "promptTokens": 594,
+            "tokensPerSecond": 48.32131743239848,
+            "ttftMs": 28.773,
+            "wallClockMs": 132.4853179976344
+          }
+        ],
+        "wallClockMs": 132.4853179976344,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0181",
+      "latencyMs": 131.4161860063905,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0181"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.838,
+            "promptTokens": 590,
+            "tokensPerSecond": 48.4364707249971,
+            "ttftMs": 28.61,
+            "wallClockMs": 131.4161860063905
+          }
+        ],
+        "wallClockMs": 131.4161860063905,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0186",
+      "latencyMs": 137.41495300200768,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0186"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.067,
+            "promptTokens": 647,
+            "tokensPerSecond": 48.32271844284872,
+            "ttftMs": 34.596,
+            "wallClockMs": 137.41495300200768
+          }
+        ],
+        "wallClockMs": 137.41495300200768,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0187",
+      "latencyMs": 137.10745400749147,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0187"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 137.689,
+            "promptTokens": 635,
+            "tokensPerSecond": 48.39474626634533,
+            "ttftMs": 34.372,
+            "wallClockMs": 137.10745400749147
+          }
+        ],
+        "wallClockMs": 137.10745400749147,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0189",
+      "latencyMs": 137.78701900446322,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0189"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.293,
+            "promptTokens": 639,
+            "tokensPerSecond": 48.18580446200549,
+            "ttftMs": 34.528,
+            "wallClockMs": 137.78701900446322
+          }
+        ],
+        "wallClockMs": 137.78701900446322,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0191",
+      "latencyMs": 136.79269200656563,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0191"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.91899999999998,
+            "promptTokens": 627,
+            "tokensPerSecond": 47.938638542665394,
+            "ttftMs": 32.619,
+            "wallClockMs": 136.79269200656563
+          }
+        ],
+        "wallClockMs": 136.79269200656563,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0192",
+      "latencyMs": 138.2896020077169,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0192"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 137.375,
+            "promptTokens": 588,
+            "tokensPerSecond": 46.25304113745479,
+            "ttftMs": 29.274,
+            "wallClockMs": 138.2896020077169
+          }
+        ],
+        "wallClockMs": 138.2896020077169,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0196",
+      "latencyMs": 135.99331899604294,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0196"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.505,
+            "promptTokens": 629,
+            "tokensPerSecond": 48.327856176300024,
+            "ttftMs": 33.045,
+            "wallClockMs": 135.99331899604294
+          }
+        ],
+        "wallClockMs": 135.99331899604294,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0197",
+      "latencyMs": 135.77324600191787,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0197"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.232,
+            "promptTokens": 629,
+            "tokensPerSecond": 48.272333194952644,
+            "ttftMs": 32.653,
+            "wallClockMs": 135.77324600191787
+          }
+        ],
+        "wallClockMs": 135.77324600191787,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0200",
+      "latencyMs": 131.6601550061023,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0200"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.076,
+            "promptTokens": 594,
+            "tokensPerSecond": 48.40083636645241,
+            "ttftMs": 28.772,
+            "wallClockMs": 131.6601550061023
+          }
+        ],
+        "wallClockMs": 131.6601550061023,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0201",
+      "latencyMs": 133.61343598808162,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0201"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.037,
+            "promptTokens": 605,
+            "tokensPerSecond": 48.426619144011084,
+            "ttftMs": 30.788,
+            "wallClockMs": 133.61343598808162
+          }
+        ],
+        "wallClockMs": 133.61343598808162,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0202",
+      "latencyMs": 131.5918589971261,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0202"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.022,
+            "promptTokens": 592,
+            "tokensPerSecond": 48.36338311537568,
+            "ttftMs": 28.638,
+            "wallClockMs": 131.5918589971261
+          }
+        ],
+        "wallClockMs": 131.5918589971261,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0206",
+      "latencyMs": 133.88197300082538,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0206"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.272,
+            "promptTokens": 600,
+            "tokensPerSecond": 48.266741319226576,
+            "ttftMs": 30.681,
+            "wallClockMs": 133.88197300082538
+          }
+        ],
+        "wallClockMs": 133.88197300082538,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0208",
+      "latencyMs": 132.5194810051471,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0208"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.535,
+            "promptTokens": 597,
+            "tokensPerSecond": 48.21833261005835,
+            "ttftMs": 28.84,
+            "wallClockMs": 132.5194810051471
+          }
+        ],
+        "wallClockMs": 132.5194810051471,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0209",
+      "latencyMs": 134.04626199917402,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0209"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.083,
+            "promptTokens": 610,
+            "tokensPerSecond": 48.42380514260811,
+            "ttftMs": 30.828,
+            "wallClockMs": 134.04626199917402
+          }
+        ],
+        "wallClockMs": 134.04626199917402,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0210",
+      "latencyMs": 132.32608199177776,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0210"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.123,
+            "promptTokens": 588,
+            "tokensPerSecond": 48.334396690060515,
+            "ttftMs": 28.677,
+            "wallClockMs": 132.32608199177776
+          }
+        ],
+        "wallClockMs": 132.32608199177776,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0211",
+      "latencyMs": 136.41596799425315,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0211"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.25300000000001,
+            "promptTokens": 630,
+            "tokensPerSecond": 48.43553230650005,
+            "ttftMs": 33.023,
+            "wallClockMs": 136.41596799425315
+          }
+        ],
+        "wallClockMs": 136.41596799425315,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0215",
+      "latencyMs": 135.61761900200509,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0215"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.094,
+            "promptTokens": 627,
+            "tokensPerSecond": 48.30871199312084,
+            "ttftMs": 32.593,
+            "wallClockMs": 135.61761900200509
+          }
+        ],
+        "wallClockMs": 135.61761900200509,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0220",
+      "latencyMs": 133.29468001029454,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0220"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.483,
+            "promptTokens": 585,
+            "tokensPerSecond": 48.05428211707945,
+            "ttftMs": 28.434,
+            "wallClockMs": 133.29468001029454
+          }
+        ],
+        "wallClockMs": 133.29468001029454,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0221",
+      "latencyMs": 139.6035500074504,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0221"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 139.569,
+            "promptTokens": 629,
+            "tokensPerSecond": 46.859916964227146,
+            "ttftMs": 32.868,
+            "wallClockMs": 139.6035500074504
+          }
+        ],
+        "wallClockMs": 139.6035500074504,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0223",
+      "latencyMs": 133.7664960010443,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0223"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.034,
+            "promptTokens": 607,
+            "tokensPerSecond": 48.3802299028525,
+            "ttftMs": 30.686,
+            "wallClockMs": 133.7664960010443
+          }
+        ],
+        "wallClockMs": 133.7664960010443,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0226",
+      "latencyMs": 131.3849830039544,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0226"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.889,
+            "promptTokens": 588,
+            "tokensPerSecond": 48.49801643112797,
+            "ttftMs": 28.792,
+            "wallClockMs": 131.3849830039544
+          }
+        ],
+        "wallClockMs": 131.3849830039544,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0227",
+      "latencyMs": 135.33740601269528,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0227"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.94400000000002,
+            "promptTokens": 623,
+            "tokensPerSecond": 48.28258833299535,
+            "ttftMs": 32.387,
+            "wallClockMs": 135.33740601269528
+          }
+        ],
+        "wallClockMs": 135.33740601269528,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0229",
+      "latencyMs": 134.85673199465964,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0229"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.465,
+            "promptTokens": 622,
+            "tokensPerSecond": 48.483908190871446,
+            "ttftMs": 32.338,
+            "wallClockMs": 134.85673199465964
+          }
+        ],
+        "wallClockMs": 134.85673199465964,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0231",
+      "latencyMs": 138.13993299845606,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0231"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.124,
+            "promptTokens": 636,
+            "tokensPerSecond": 48.17326961615539,
+            "ttftMs": 34.332,
+            "wallClockMs": 138.13993299845606
+          }
+        ],
+        "wallClockMs": 138.13993299845606,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0234",
+      "latencyMs": 132.3548700020183,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0234"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.439,
+            "promptTokens": 591,
+            "tokensPerSecond": 48.20392187108343,
+            "ttftMs": 28.713,
+            "wallClockMs": 132.3548700020183
+          }
+        ],
+        "wallClockMs": 132.3548700020183,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0235",
+      "latencyMs": 134.67683699855115,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0235"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.95,
+            "promptTokens": 610,
+            "tokensPerSecond": 48.05197301401195,
+            "ttftMs": 30.896,
+            "wallClockMs": 134.67683699855115
+          }
+        ],
+        "wallClockMs": 134.67683699855115,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 0
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0237",
+      "latencyMs": 132.46424699900672,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0237"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.488,
+            "promptTokens": 596,
+            "tokensPerSecond": 48.29144855029072,
+            "ttftMs": 28.95,
+            "wallClockMs": 132.46424699900672
+          }
+        ],
+        "wallClockMs": 132.46424699900672,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0240",
+      "latencyMs": 133.65275200339966,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0240"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.541,
+            "promptTokens": 598,
+            "tokensPerSecond": 48.31151263346055,
+            "ttftMs": 29.046,
+            "wallClockMs": 133.65275200339966
+          }
+        ],
+        "wallClockMs": 133.65275200339966,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0242",
+      "latencyMs": 133.67809800547548,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0242"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.092,
+            "promptTokens": 601,
+            "tokensPerSecond": 48.36010871352438,
+            "ttftMs": 30.701,
+            "wallClockMs": 133.67809800547548
+          }
+        ],
+        "wallClockMs": 133.67809800547548,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0244",
+      "latencyMs": 140.39143700210843,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0244"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.16199999999998,
+            "promptTokens": 638,
+            "tokensPerSecond": 48.215542762364876,
+            "ttftMs": 34.461,
+            "wallClockMs": 140.39143700210843
+          }
+        ],
+        "wallClockMs": 140.39143700210843,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0248",
+      "latencyMs": 133.4520680102287,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0248"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.953,
+            "promptTokens": 604,
+            "tokensPerSecond": 48.38257066274445,
+            "ttftMs": 30.61,
+            "wallClockMs": 133.4520680102287
+          }
+        ],
+        "wallClockMs": 133.4520680102287,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0249",
+      "latencyMs": 137.67584999732208,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0249"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.303,
+            "promptTokens": 638,
+            "tokensPerSecond": 48.21600771456123,
+            "ttftMs": 34.603,
+            "wallClockMs": 137.67584999732208
+          }
+        ],
+        "wallClockMs": 137.67584999732208,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0251",
+      "latencyMs": 140.54722301079892,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0251"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.47,
+            "promptTokens": 605,
+            "tokensPerSecond": 46.56794262829468,
+            "ttftMs": 31.1,
+            "wallClockMs": 140.54722301079892
+          }
+        ],
+        "wallClockMs": 140.54722301079892,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0252",
+      "latencyMs": 138.65187199553475,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0252"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.546,
+            "promptTokens": 585,
+            "tokensPerSecond": 48.443040672776945,
+            "ttftMs": 29.332,
+            "wallClockMs": 138.65187199553475
+          }
+        ],
+        "wallClockMs": 138.65187199553475,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0254",
+      "latencyMs": 147.43574000021908,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0254"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 144.946,
+            "promptTokens": 654,
+            "tokensPerSecond": 48.262548262548265,
+            "ttftMs": 41.346,
+            "wallClockMs": 147.43574000021908
+          }
+        ],
+        "wallClockMs": 147.43574000021908,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0255",
+      "latencyMs": 140.62886699684896,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0255"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.364,
+            "promptTokens": 640,
+            "tokensPerSecond": 48.113470809557256,
+            "ttftMs": 34.443,
+            "wallClockMs": 140.62886699684896
+          }
+        ],
+        "wallClockMs": 140.62886699684896,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0257",
+      "latencyMs": 138.89504499093164,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0257"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.135,
+            "promptTokens": 625,
+            "tokensPerSecond": 48.27652795210969,
+            "ttftMs": 32.565,
+            "wallClockMs": 138.89504499093164
+          }
+        ],
+        "wallClockMs": 138.89504499093164,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0258",
+      "latencyMs": 136.50498900096864,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0258"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.976,
+            "promptTokens": 605,
+            "tokensPerSecond": 48.42052255427941,
+            "ttftMs": 30.714,
+            "wallClockMs": 136.50498900096864
+          }
+        ],
+        "wallClockMs": 136.50498900096864,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0259",
+      "latencyMs": 139.18726400879677,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0259"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.422,
+            "promptTokens": 627,
+            "tokensPerSecond": 48.24531779190829,
+            "ttftMs": 32.785,
+            "wallClockMs": 139.18726400879677
+          }
+        ],
+        "wallClockMs": 139.18726400879677,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0260",
+      "latencyMs": 135.35490300273523,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0260"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.96699999999998,
+            "promptTokens": 594,
+            "tokensPerSecond": 48.0247423472573,
+            "ttftMs": 28.854,
+            "wallClockMs": 135.35490300273523
+          }
+        ],
+        "wallClockMs": 135.35490300273523,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0261",
+      "latencyMs": 134.45755299471784,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0261"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.09199999999998,
+            "promptTokens": 595,
+            "tokensPerSecond": 48.44069405826447,
+            "ttftMs": 28.873,
+            "wallClockMs": 134.45755299471784
+          }
+        ],
+        "wallClockMs": 134.45755299471784,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0262",
+      "latencyMs": 137.8573809925001,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0262"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.853,
+            "promptTokens": 625,
+            "tokensPerSecond": 48.35075572231194,
+            "ttftMs": 32.442,
+            "wallClockMs": 137.8573809925001
+          }
+        ],
+        "wallClockMs": 137.8573809925001,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0264",
+      "latencyMs": 136.79346299613826,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0264"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.977,
+            "promptTokens": 604,
+            "tokensPerSecond": 48.34093897439864,
+            "ttftMs": 30.545,
+            "wallClockMs": 136.79346299613826
+          }
+        ],
+        "wallClockMs": 136.79346299613826,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0270",
+      "latencyMs": 137.69651598704513,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0270"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.601,
+            "promptTokens": 614,
+            "tokensPerSecond": 48.30264505284309,
+            "ttftMs": 31.087,
+            "wallClockMs": 137.69651598704513
+          }
+        ],
+        "wallClockMs": 137.69651598704513,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0271",
+      "latencyMs": 139.68407901120372,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0271"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.978,
+            "promptTokens": 611,
+            "tokensPerSecond": 47.18182933388693,
+            "ttftMs": 31.005,
+            "wallClockMs": 139.68407901120372
+          }
+        ],
+        "wallClockMs": 139.68407901120372,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0278",
+      "latencyMs": 143.14535200537648,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0278"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 139.897,
+            "promptTokens": 644,
+            "tokensPerSecond": 47.575097291073966,
+            "ttftMs": 34.8,
+            "wallClockMs": 143.14535200537648
+          }
+        ],
+        "wallClockMs": 143.14535200537648,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0281",
+      "latencyMs": 146.14333599456586,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0281"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 137.692,
+            "promptTokens": 618,
+            "tokensPerSecond": 48.079234578585506,
+            "ttftMs": 33.697,
+            "wallClockMs": 146.14333599456586
+          }
+        ],
+        "wallClockMs": 146.14333599456586,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0282",
+      "latencyMs": 139.05162599985488,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0282"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.753,
+            "promptTokens": 617,
+            "tokensPerSecond": 47.92117924437885,
+            "ttftMs": 32.415,
+            "wallClockMs": 139.05162599985488
+          }
+        ],
+        "wallClockMs": 139.05162599985488,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0283",
+      "latencyMs": 136.36220899934415,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0283"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.871,
+            "promptTokens": 602,
+            "tokensPerSecond": 48.393809463893376,
+            "ttftMs": 30.552,
+            "wallClockMs": 136.36220899934415
+          }
+        ],
+        "wallClockMs": 136.36220899934415,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0288",
+      "latencyMs": 135.06227800098713,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0288"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.58499999999998,
+            "promptTokens": 599,
+            "tokensPerSecond": 48.272333194952644,
+            "ttftMs": 29.006,
+            "wallClockMs": 135.06227800098713
+          }
+        ],
+        "wallClockMs": 135.06227800098713,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0289",
+      "latencyMs": 138.71020899387076,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0289"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.357,
+            "promptTokens": 617,
+            "tokensPerSecond": 48.014135361450414,
+            "ttftMs": 32.221,
+            "wallClockMs": 138.71020899387076
+          }
+        ],
+        "wallClockMs": 138.71020899387076,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0290",
+      "latencyMs": 137.87963200593367,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0290"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.101,
+            "promptTokens": 607,
+            "tokensPerSecond": 48.125511333557924,
+            "ttftMs": 31.206,
+            "wallClockMs": 137.87963200593367
+          }
+        ],
+        "wallClockMs": 137.87963200593367,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0292",
+      "latencyMs": 147.65146099671256,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0292"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 145.401,
+            "promptTokens": 651,
+            "tokensPerSecond": 48.06074878646609,
+            "ttftMs": 41.366,
+            "wallClockMs": 147.65146099671256
+          }
+        ],
+        "wallClockMs": 147.65146099671256,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0294",
+      "latencyMs": 138.35434400243685,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0294"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.98,
+            "promptTokens": 630,
+            "tokensPerSecond": 48.41817812079367,
+            "ttftMs": 32.713,
+            "wallClockMs": 138.35434400243685
+          }
+        ],
+        "wallClockMs": 138.35434400243685,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0295",
+      "latencyMs": 135.43123898853082,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0295"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.72,
+            "promptTokens": 590,
+            "tokensPerSecond": 48.12412173477834,
+            "ttftMs": 28.822,
+            "wallClockMs": 135.43123898853082
+          }
+        ],
+        "wallClockMs": 135.43123898853082,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0297",
+      "latencyMs": 139.8854799917899,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0297"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 137.921,
+            "promptTokens": 636,
+            "tokensPerSecond": 48.260219101394725,
+            "ttftMs": 34.316,
+            "wallClockMs": 139.8854799917899
+          }
+        ],
+        "wallClockMs": 139.8854799917899,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0298",
+      "latencyMs": 134.0439210034674,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0298"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.852,
+            "promptTokens": 596,
+            "tokensPerSecond": 48.52625755796461,
+            "ttftMs": 28.815,
+            "wallClockMs": 134.0439210034674
+          }
+        ],
+        "wallClockMs": 134.0439210034674,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0300",
+      "latencyMs": 140.27443999657407,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0300"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.135,
+            "promptTokens": 647,
+            "tokensPerSecond": 48.336265733454496,
+            "ttftMs": 34.693,
+            "wallClockMs": 140.27443999657407
+          }
+        ],
+        "wallClockMs": 140.27443999657407,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0301",
+      "latencyMs": 142.53169400035404,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0301"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 139.157,
+            "promptTokens": 624,
+            "tokensPerSecond": 46.86430907949124,
+            "ttftMs": 32.466,
+            "wallClockMs": 142.53169400035404
+          }
+        ],
+        "wallClockMs": 142.53169400035404,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0302",
+      "latencyMs": 139.28769101039506,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0302"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.529,
+            "promptTokens": 612,
+            "tokensPerSecond": 48.318515655199064,
+            "ttftMs": 31.049,
+            "wallClockMs": 139.28769101039506
+          }
+        ],
+        "wallClockMs": 139.28769101039506,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0305",
+      "latencyMs": 138.33554899611045,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0305"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.10899999999998,
+            "promptTokens": 617,
+            "tokensPerSecond": 48.12273221624431,
+            "ttftMs": 32.208,
+            "wallClockMs": 138.33554899611045
+          }
+        ],
+        "wallClockMs": 138.33554899611045,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0307",
+      "latencyMs": 136.79899500857573,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0307"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.59199999999998,
+            "promptTokens": 612,
+            "tokensPerSecond": 48.377421289935555,
+            "ttftMs": 31.238,
+            "wallClockMs": 136.79899500857573
+          }
+        ],
+        "wallClockMs": 136.79899500857573,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0309",
+      "latencyMs": 136.91580700105987,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0309"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.327,
+            "promptTokens": 609,
+            "tokensPerSecond": 48.29424718927481,
+            "ttftMs": 30.795,
+            "wallClockMs": 136.91580700105987
+          }
+        ],
+        "wallClockMs": 136.91580700105987,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0310",
+      "latencyMs": 140.52704301138874,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0310"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.188,
+            "promptTokens": 640,
+            "tokensPerSecond": 48.1885908692258,
+            "ttftMs": 34.429,
+            "wallClockMs": 140.52704301138874
+          }
+        ],
+        "wallClockMs": 140.52704301138874,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0311",
+      "latencyMs": 140.1902590005193,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0311"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 137.76600000000002,
+            "promptTokens": 632,
+            "tokensPerSecond": 48.25043907899562,
+            "ttftMs": 34.14,
+            "wallClockMs": 140.1902590005193
+          }
+        ],
+        "wallClockMs": 140.1902590005193,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0312",
+      "latencyMs": 133.47782600612845,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0312"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.06099999999998,
+            "promptTokens": 589,
+            "tokensPerSecond": 48.51354498175891,
+            "ttftMs": 27.997,
+            "wallClockMs": 133.47782600612845
+          }
+        ],
+        "wallClockMs": 133.47782600612845,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0313",
+      "latencyMs": 140.9582699998282,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0313"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.28,
+            "promptTokens": 640,
+            "tokensPerSecond": 48.22809961996257,
+            "ttftMs": 34.606,
+            "wallClockMs": 140.9582699998282
+          }
+        ],
+        "wallClockMs": 140.9582699998282,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0316",
+      "latencyMs": 136.59118600480724,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0316"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.066,
+            "promptTokens": 600,
+            "tokensPerSecond": 48.266741319226576,
+            "ttftMs": 30.475,
+            "wallClockMs": 136.59118600480724
+          }
+        ],
+        "wallClockMs": 136.59118600480724,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0321",
+      "latencyMs": 135.52549699670635,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0321"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.25,
+            "promptTokens": 591,
+            "tokensPerSecond": 47.86154611938584,
+            "ttftMs": 28.782,
+            "wallClockMs": 135.52549699670635
+          }
+        ],
+        "wallClockMs": 135.52549699670635,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0323",
+      "latencyMs": 137.67918999656104,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0323"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.475,
+            "promptTokens": 618,
+            "tokensPerSecond": 48.37461300309598,
+            "ttftMs": 32.115,
+            "wallClockMs": 137.67918999656104
+          }
+        ],
+        "wallClockMs": 137.67918999656104,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0326",
+      "latencyMs": 137.82148899917956,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0326"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.763,
+            "promptTokens": 620,
+            "tokensPerSecond": 48.36057645807138,
+            "ttftMs": 32.373,
+            "wallClockMs": 137.82148899917956
+          }
+        ],
+        "wallClockMs": 137.82148899917956,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0328",
+      "latencyMs": 134.05692999367602,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0328"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.45600000000002,
+            "promptTokens": 589,
+            "tokensPerSecond": 48.59794916654516,
+            "ttftMs": 28.571,
+            "wallClockMs": 134.05692999367602
+          }
+        ],
+        "wallClockMs": 134.05692999367602,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0329",
+      "latencyMs": 144.19142999395262,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0329"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 141.074,
+            "promptTokens": 634,
+            "tokensPerSecond": 47.1666965389078,
+            "ttftMs": 35.067,
+            "wallClockMs": 144.19142999395262
+          }
+        ],
+        "wallClockMs": 144.19142999395262,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0331",
+      "latencyMs": 139.9952560022939,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0331"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.641,
+            "promptTokens": 627,
+            "tokensPerSecond": 48.08108393995634,
+            "ttftMs": 32.65,
+            "wallClockMs": 139.9952560022939
+          }
+        ],
+        "wallClockMs": 139.9952560022939,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0332",
+      "latencyMs": 138.6187419993803,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0332"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.042,
+            "promptTokens": 622,
+            "tokensPerSecond": 48.29144855029072,
+            "ttftMs": 32.504,
+            "wallClockMs": 138.6187419993803
+          }
+        ],
+        "wallClockMs": 138.6187419993803,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0333",
+      "latencyMs": 134.65125299990177,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0333"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.887,
+            "promptTokens": 588,
+            "tokensPerSecond": 48.35543176565024,
+            "ttftMs": 28.486,
+            "wallClockMs": 134.65125299990177
+          }
+        ],
+        "wallClockMs": 134.65125299990177,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0334",
+      "latencyMs": 140.17422900360543,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0334"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 137.846,
+            "promptTokens": 633,
+            "tokensPerSecond": 48.209034373041504,
+            "ttftMs": 34.131,
+            "wallClockMs": 140.17422900360543
+          }
+        ],
+        "wallClockMs": 140.17422900360543,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0335",
+      "latencyMs": 134.01068000530358,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0335"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.518,
+            "promptTokens": 583,
+            "tokensPerSecond": 48.35683475502428,
+            "ttftMs": 28.12,
+            "wallClockMs": 134.01068000530358
+          }
+        ],
+        "wallClockMs": 134.01068000530358,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0338",
+      "latencyMs": 134.03182300680783,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0338"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 131.596,
+            "promptTokens": 584,
+            "tokensPerSecond": 48.45102086300958,
+            "ttftMs": 28.399,
+            "wallClockMs": 134.03182300680783
+          }
+        ],
+        "wallClockMs": 134.03182300680783,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0339",
+      "latencyMs": 142.51914199849125,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0339"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.132,
+            "promptTokens": 641,
+            "tokensPerSecond": 48.27979104506436,
+            "ttftMs": 34.569,
+            "wallClockMs": 142.51914199849125
+          }
+        ],
+        "wallClockMs": 142.51914199849125,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0341",
+      "latencyMs": 138.6157649976667,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0341"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.152,
+            "promptTokens": 628,
+            "tokensPerSecond": 48.2755957208512,
+            "ttftMs": 32.58,
+            "wallClockMs": 138.6157649976667
+          }
+        ],
+        "wallClockMs": 138.6157649976667,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0343",
+      "latencyMs": 138.37465399410576,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0343"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.74,
+            "promptTokens": 622,
+            "tokensPerSecond": 48.35356123978531,
+            "ttftMs": 32.335,
+            "wallClockMs": 138.37465399410576
+          }
+        ],
+        "wallClockMs": 138.37465399410576,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0347",
+      "latencyMs": 139.22604100662284,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0347"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.83100000000002,
+            "promptTokens": 631,
+            "tokensPerSecond": 48.23973217300698,
+            "ttftMs": 33.182,
+            "wallClockMs": 139.22604100662284
+          }
+        ],
+        "wallClockMs": 139.22604100662284,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0351",
+      "latencyMs": 136.44378799654078,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0351"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.323,
+            "promptTokens": 612,
+            "tokensPerSecond": 48.33299500236832,
+            "ttftMs": 30.874,
+            "wallClockMs": 136.44378799654078
+          }
+        ],
+        "wallClockMs": 136.44378799654078,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0352",
+      "latencyMs": 134.2162979999557,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0352"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.03799999999998,
+            "promptTokens": 592,
+            "tokensPerSecond": 48.48955050186685,
+            "ttftMs": 28.923,
+            "wallClockMs": 134.2162979999557
+          }
+        ],
+        "wallClockMs": 134.2162979999557,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0354",
+      "latencyMs": 136.19598001241684,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0354"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.095,
+            "promptTokens": 612,
+            "tokensPerSecond": 48.457594758826545,
+            "ttftMs": 30.912,
+            "wallClockMs": 136.19598001241684
+          }
+        ],
+        "wallClockMs": 136.19598001241684,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0358",
+      "latencyMs": 136.35074500052724,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0358"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.699,
+            "promptTokens": 588,
+            "tokensPerSecond": 47.579624501603426,
+            "ttftMs": 28.612,
+            "wallClockMs": 136.35074500052724
+          }
+        ],
+        "wallClockMs": 136.35074500052724,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0365",
+      "latencyMs": 145.71869300561957,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0365"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 141.67000000000002,
+            "promptTokens": 627,
+            "tokensPerSecond": 46.635265587837516,
+            "ttftMs": 34.455,
+            "wallClockMs": 145.71869300561957
+          }
+        ],
+        "wallClockMs": 145.71869300561957,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0366",
+      "latencyMs": 136.87483700050507,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0366"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 133.84199999999998,
+            "promptTokens": 612,
+            "tokensPerSecond": 48.581894499557905,
+            "ttftMs": 30.923,
+            "wallClockMs": 136.87483700050507
+          }
+        ],
+        "wallClockMs": 136.87483700050507,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0369",
+      "latencyMs": 137.88082799874246,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0369"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.405,
+            "promptTokens": 605,
+            "tokensPerSecond": 47.7764825042521,
+            "ttftMs": 30.751,
+            "wallClockMs": 137.88082799874246
+          }
+        ],
+        "wallClockMs": 137.88082799874246,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0372",
+      "latencyMs": 138.03884900698904,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0372"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.637,
+            "promptTokens": 616,
+            "tokensPerSecond": 48.270935104554844,
+            "ttftMs": 32.055,
+            "wallClockMs": 138.03884900698904
+          }
+        ],
+        "wallClockMs": 138.03884900698904,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0375",
+      "latencyMs": 138.51297400833573,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0375"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.285,
+            "promptTokens": 627,
+            "tokensPerSecond": 48.17094906403846,
+            "ttftMs": 32.488,
+            "wallClockMs": 138.51297400833573
+          }
+        ],
+        "wallClockMs": 138.51297400833573,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0379",
+      "latencyMs": 138.3120419923216,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0379"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.962,
+            "promptTokens": 622,
+            "tokensPerSecond": 48.23368254519495,
+            "ttftMs": 32.3,
+            "wallClockMs": 138.3120419923216
+          }
+        ],
+        "wallClockMs": 138.3120419923216,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 0
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0382",
+      "latencyMs": 138.23635700100567,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0382"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.825,
+            "promptTokens": 624,
+            "tokensPerSecond": 48.35917325157409,
+            "ttftMs": 32.432,
+            "wallClockMs": 138.23635700100567
+          }
+        ],
+        "wallClockMs": 138.23635700100567,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0384",
+      "latencyMs": 138.71928400476463,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0384"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.836,
+            "promptTokens": 627,
+            "tokensPerSecond": 48.37976177805301,
+            "ttftMs": 32.487,
+            "wallClockMs": 138.71928400476463
+          }
+        ],
+        "wallClockMs": 138.71928400476463,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0385",
+      "latencyMs": 138.66181299090385,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0385"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 135.99,
+            "promptTokens": 623,
+            "tokensPerSecond": 48.346080583247115,
+            "ttftMs": 32.569,
+            "wallClockMs": 138.66181299090385
+          }
+        ],
+        "wallClockMs": 138.66181299090385,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0387",
+      "latencyMs": 147.01340399915352,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0387"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 139.71,
+            "promptTokens": 633,
+            "tokensPerSecond": 48.107452806588796,
+            "ttftMs": 35.776,
+            "wallClockMs": 147.01340399915352
+          }
+        ],
+        "wallClockMs": 147.01340399915352,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 1
+      },
+      "detail": {
+        "answer": true
+      },
+      "itemId": "ji-0391",
+      "latencyMs": 135.00669399218168,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0391"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.309,
+            "promptTokens": 594,
+            "tokensPerSecond": 48.32458658316178,
+            "ttftMs": 28.842,
+            "wallClockMs": 135.00669399218168
+          }
+        ],
+        "wallClockMs": 135.00669399218168,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenYes": 0
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0393",
+      "latencyMs": 134.4026939914329,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0393"
+      ],
+      "scoreable": {
+        "agreeWhenYes": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 132.172,
+            "promptTokens": 595,
+            "tokensPerSecond": 48.45102086300958,
+            "ttftMs": 28.975,
+            "wallClockMs": 134.4026939914329
+          }
+        ],
+        "wallClockMs": 134.4026939914329,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0394",
+      "latencyMs": 140.72814700193703,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0394"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.051,
+            "promptTokens": 637,
+            "tokensPerSecond": 48.234613158402475,
+            "ttftMs": 34.391,
+            "wallClockMs": 140.72814700193703
+          }
+        ],
+        "wallClockMs": 140.72814700193703,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0395",
+      "latencyMs": 142.04414500272833,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0395"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 138.288,
+            "promptTokens": 614,
+            "tokensPerSecond": 46.729408686062484,
+            "ttftMs": 31.289000000000005,
+            "wallClockMs": 142.04414500272833
+          }
+        ],
+        "wallClockMs": 142.04414500272833,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0397",
+      "latencyMs": 139.08923999406397,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0397"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 136.61599999999999,
+            "promptTokens": 629,
+            "tokensPerSecond": 48.08108393995634,
+            "ttftMs": 32.625,
+            "wallClockMs": 139.08923999406397
+          }
+        ],
+        "wallClockMs": 139.08923999406397,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "agreeWhenNo": 1
+      },
+      "detail": {
+        "answer": false
+      },
+      "itemId": "ji-0398",
+      "latencyMs": 137.00716198945884,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ji-0398"
+      ],
+      "scoreable": {
+        "agreeWhenNo": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 134.744,
+            "promptTokens": 607,
+            "tokensPerSecond": 48.147292196286884,
+            "ttftMs": 30.896,
+            "wallClockMs": 137.00716198945884
+          }
+        ],
+        "wallClockMs": 137.00716198945884,
+        "withheldFor": null
+      }
+    }
+  ],
+  "latency": {
+    "callCount": 200,
+    "latencyItemCount": 200,
+    "latencyMsMax": null,
+    "latencyMsP50": 138.03884900698904,
+    "latencyMsP95": 145.8667959959712,
+    "latencyTimedCount": 200,
+    "latencyWithheldForLoad": 0,
+    "latencyWithheldForNoResponse": 0,
+    "prefillMsPer1kMedian": 51.813397129186605,
+    "statsCoveredCount": 200,
+    "tokensPerSecondMedian": 48.27652795210969,
+    "ttftMsMedian": 32.115,
+    "unexplainedMsMax": -21.343822999612428
+  },
+  "requestTimeoutSeconds": 180.0,
+  "role": "join-in-judge",
+  "runId": "join-in-judge-synthetic-llama-3.2-3b-instruct-2026-11-19T23:09:31Z",
+  "sessionId": "ministral-screen"
+}
