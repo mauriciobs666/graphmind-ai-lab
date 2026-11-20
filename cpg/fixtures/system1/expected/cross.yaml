@@ -29,7 +29,7 @@ rows:
   kind: mcp_tool
   keyNorm: get_item
   status: confirmed
-  reason: key-match
+  reason: binding-confirmed
   gate: P1
   stratum: fixture-dev
   serves:
@@ -124,7 +124,7 @@ rows:
   kind: mcp_tool
   keyNorm: list_orders
   status: confirmed
-  reason: key-match
+  reason: binding-confirmed
   gate: P1
   stratum: fixture-dev
   serves:
@@ -372,7 +372,7 @@ rows:
   keyNorm: POST /mcp
   status: confirmed
   reason: binding-confirmed
-  gate: P1
+  gate: P2
   stratum: fixture-dev
   serves:
   - LNK
@@ -656,7 +656,7 @@ rows:
   keyNorm: GET /api/reports/{}
   status: possible
   reason: example-config
-  gate: P1
+  gate: P2
   stratum: fixture-dev
   serves:
   - AC-6

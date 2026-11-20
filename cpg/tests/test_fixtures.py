@@ -944,6 +944,9 @@ def plan_figures():
 
 
 AC6_GROUP_GATE = {"AC6-URL": "P1", "AC6-DYN": "P1", "AC6-EX": "P1", "AC6-PM": "P1", "AC6-TOP": "P2", "AC6-QL": "P3"}
+#: instances / shapes the floor asks of a group at its gate: 3, except `AC6-EX` at P1, which holds 2 (EX-1, EX-4) since AC6-EX-2 moved to P2
+#: (Q-CENSUS A, `docs/plans/connected-code-graph-p1-linking.md` P1-53; the shortfall is the stakeholder's).
+AC6_GROUP_FLOOR = {"AC6-EX": 2}
 
 
 def census_violations(manifests):
@@ -977,8 +980,9 @@ def census_violations(manifests):
     for grp, gate in AC6_GROUP_GATE.items():     # per gate, not per prefix: a row of the group at a later gate does not count
         g = fig["ac6"].get(grp)
         bg = (g or {}).get("by_gate", {}).get(gate, {"n": 0, "shapes": set()})
-        if bg["n"] < 3 or len(bg["shapes"]) < 3:
-            bad.append(f"{grp}: floor 3 instances / 3 shapes at {gate} not met: {(bg['n'], len(bg['shapes']))}")
+        floor = AC6_GROUP_FLOOR.get(grp, 3)
+        if bg["n"] < floor or len(bg["shapes"]) < floor:
+            bad.append(f"{grp}: floor {floor} instances / {floor} shapes at {gate} not met: {(bg['n'], len(bg['shapes']))}")
         elif g["confirmed"]:
             bad.append(f"{grp}: an AC-6 row is confirmed")
     cells = {(k, s) for k in TEN_KINDS for s in ("confirmed", "possible")}
@@ -996,17 +1000,20 @@ def test_tp004_census_equals_section_6_and_meets_every_floor(manifests):
 
 
 def test_tp004_ac6_floor_is_read_per_gate_not_per_prefix(manifests):
-    """AC6-EX-3 is gated P3, so the P1 example-config floor needs its own third row (AC6-EX-4). Planted failing inputs:
-    the third P1 row deleted (the group still holds EX-1..3 by prefix), and a P1 row moved to P3."""
+    """AC6-EX-3 is gated P3 and AC6-EX-2 P2, so the P1 example-config floor holds 2 instances (EX-1, EX-4: `AC6_GROUP_FLOOR`). Planted
+    failing inputs: the second `http` P1 row deleted (the group still holds EX-1..3 by prefix), and that row moved to P3."""
     assert census_violations(manifests) == []
     bad = copy.deepcopy(manifests)
     bad["fx-svc"]["rows"] = [r for r in bad["fx-svc"]["rows"] if r["id"] != "AC6-EX-4"]
     v = census_violations(bad)
-    assert any(x.startswith("AC6-EX: floor 3 instances / 3 shapes at P1 not met: (2,") for x in v), v
+    assert any(x.startswith("AC6-EX: floor 2 instances / 2 shapes at P1 not met: (1,") for x in v), v
     bad = copy.deepcopy(manifests)
-    row_by_id(bad["fx-svc"], "AC6-EX-2")["gate"] = "P3"
-    row_by_id(bad["fx-web"], "AC6-EX-2")["gate"] = "P3"
-    assert any(x.startswith("AC6-EX: floor 3") for x in census_violations(bad))
+    row_by_id(bad["fx-svc"], "AC6-EX-4")["gate"] = "P3"
+    assert any(x.startswith("AC6-EX: floor 2") for x in census_violations(bad))
+    bad = copy.deepcopy(manifests)                                   # the stakeholder's shortfall is 2, not 1: a 3rd shape at P1 is not required
+    row_by_id(bad["fx-svc"], "AC6-EX-2")["gate"] = "P1"
+    row_by_id(bad["fx-web"], "AC6-EX-2")["gate"] = "P1"
+    assert not any(x.startswith("AC6-EX") for x in census_violations(bad) if "floor" in x)
 
 
 def test_tp004_planted_failing_inputs(manifests):
@@ -2318,8 +2325,8 @@ def p1_form_plan_rows():
     out = {}
     for ln in text.splitlines():
         cells = [c.strip() for c in ln.strip().strip("|").split("|")]
-        if ln.startswith("|") and re.match(r"^(DF|CD|RV)-\d", cells[0]):
-            for rid in re.findall(r"(?:DF|CD|RV)-\d", cells[0]):
+        if ln.startswith("|") and re.match(r"^(DF|CD|RV|LNK|TW|AC6-EX)-\d", cells[0]):
+            for rid in re.findall(r"(?:DF|CD|RV|LNK|TW|AC6-EX)-\d+", cells[0]):
                 out[rid] = cells[1]
     return out
 
@@ -2335,8 +2342,8 @@ def _leaf_forms(form):
     """[(status, reason, locator, distance)] a `p1Form` states (full and compact dialects)."""
     out = []
     if "status" in form or "st" in form:
-        out.append((form.get("status") or form["st"], form["reason"], _qn(form.get("locator") or form["loc"]),
-                    form.get("distance", form.get("dist"))))
+        loc = form.get("locator") or form.get("loc")          # a link row's P1 form (P1-53a) names no locator: the row is its own
+        out.append((form.get("status") or form["st"], form["reason"], _qn(loc) if loc else None, form.get("distance", form.get("dist"))))
     for d in form.get("dependencies", []) + form.get("deps", []) + form.get("extras", []) + form.get("calleeRun", []):
         out.append((d.get("status") or d["st"], d["reason"], _qn(d.get("locator") or d["loc"]), d.get("distance", d.get("dist"))))
     if "caller" in form:
@@ -2365,9 +2372,16 @@ def p1_form_violations(manifests):
             bad.append(f"{rid}: manifest says not listed, plan says {cell!r}")
         if f.get("listed") == "none" and "none listed" not in cell:
             bad.append(f"{rid}: manifest says none listed, plan says {cell!r}")
+        for held in forms:                                    # every holder, not the first
+            if held.get("linked") is False and "no `Link`" not in cell:
+                bad.append(f"{rid}: manifest says no Link at P1, plan says {cell!r}")
+            if "key" in held and f"consumer key `{held['key']}`" not in cell:
+                bad.append(f"{rid}: p1Form key {held['key']!r} not in plan cell {cell!r}")
         for st, reason, loc, dist in _leaf_forms(f):
             if f"`{st}` / `{reason}`" not in cell:
                 bad.append(f"{rid}: p1Form {st}/{reason} not in plan cell {cell!r}")
+            if loc is None:
+                continue
             if f"`{loc}`" not in cell:
                 bad.append(f"{rid}: p1Form locator {loc} not in plan cell {cell!r}")
             if f"`{loc}` (d{dist})" not in cell:
@@ -2376,6 +2390,8 @@ def p1_form_violations(manifests):
         bad.append(f"{rid}: in the plan's P1-form table, no p1Form in any manifest")
     notices = p1_notice_plan_langs()
     for rid, forms in seen.items():
+        if not rid.startswith(("DF", "CD", "RV")):            # a link row's P1 form carries no `notices`
+            continue
         ask = "CF-DF3" if rid == "DF-3" else "CF-DF" if rid.startswith("DF") else "CF-CD" if rid.startswith("CD") else rid
         want = notices.get(ask)
         for f in forms:
@@ -2419,6 +2435,17 @@ def test_p1_form_planted_failing_inputs(manifests):
     bad = copy.deepcopy(manifests)
     del row_by_id(bad["fx-svc"], "RV-1")["p1Form"]
     assert any(x.startswith("RV-1") for x in p1_form_violations(bad))
+    # a link row's P1 form (P1-53a): a wrong reason, a missing form, and a `no Link` form that claims a link
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-svc"], "LNK-11")["p1Form"]["reason"] = "key-match"
+    row_by_id(bad["fx-job"], "LNK-11")["p1Form"]["reason"] = "key-match"
+    assert any(x.startswith("LNK-11") and "key-match" in x for x in p1_form_violations(bad))
+    bad = copy.deepcopy(manifests)
+    del row_by_id(bad["fx-job"], "TW-2")["p1Form"]
+    assert any(x.startswith("TW-2") and "no p1Form" in x for x in p1_form_violations(bad))
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-job"], "LNK-08")["p1Form"]["key"] = "GET /api/items/42"
+    assert any(x.startswith("LNK-08") and "p1Form key" in x for x in p1_form_violations(bad))
     # DF-3 is asked of CF-DF3 and sits at d2, inside the bound; a manifest that moves it to d3 (beyond the bound 2) is red
     bad = copy.deepcopy(manifests)
     row_by_id(bad["fx-web"], "DF-3")["p1Form"]["dist"] = 3

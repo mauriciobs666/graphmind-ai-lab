@@ -143,7 +143,7 @@ rows:
   stratum: fixture-dev
 - id: LNK-02
   kind: mcp_tool
-  item: get_item, literal callTool("get_item"); server picked by URL binding
+  item: get_item, literal callTool("get_item"); the server is picked by the URL binding of client.ts::connect (loopback 8200 is unit svc, through the launch chain `.mcp.json` fx-svc-exec to scripts/run-mcp.sh to scripts/Dockerfile)
   provider:
   - repoId: fx-svc
     path: mcp/server.py
@@ -154,7 +154,7 @@ rows:
     qname: app/src/mcp/client.ts::loadItem
   keyNorm: get_item
   status: confirmed
-  reason: key-match
+  reason: binding-confirmed
   gate: P1
   shape: exact literal
   serves:
@@ -264,7 +264,7 @@ rows:
     path: app/src/mcp/names.ts
   keyNorm: list_orders
   status: confirmed
-  reason: key-match
+  reason: binding-confirmed
   gate: P1
   shape: constant across files
   serves:
@@ -325,6 +325,11 @@ rows:
   status: confirmed
   reason: key-match
   gate: P1
+  p1Form:
+    status: possible
+    reason: partial-key
+    key: "GET /items/{?}"
+    linked: false
   shape: template literal
   serves:
   - LNK
@@ -413,6 +418,9 @@ rows:
   status: confirmed
   reason: key-match
   gate: P1
+  p1Form:
+    status: possible
+    reason: partial-key
   shape: client wrapper
   serves:
   - LNK
@@ -456,6 +464,9 @@ rows:
   status: confirmed
   reason: key-match
   gate: P1
+  p1Form:
+    status: possible
+    reason: partial-key
   shape: config-bound base URL
   serves:
   - LNK
@@ -476,6 +487,9 @@ rows:
   status: confirmed
   reason: binding-confirmed
   gate: P1
+  p1Form:
+    status: possible
+    reason: partial-key
   shape: config-bound base URL
   serves:
   - LNK
@@ -495,6 +509,9 @@ rows:
   status: confirmed
   reason: key-match
   gate: P1
+  p1Form:
+    status: possible
+    reason: partial-key
   shape: config-bound base URL
   serves:
   - LNK
@@ -544,17 +561,20 @@ rows:
   keyNorm: POST /mcp
   status: confirmed
   reason: binding-confirmed
-  gate: P1
+  gate: P2
   serves:
   - LNK
   stratum: fixture-dev
 - id: LNK-19
   kind: script_tool
-  item: scripts/refresh.sh sets MCP_URL=http://localhost:8200/mcp (bound to unit svc) and runs mcp-call reindex (literal tool name)
+  item: scripts/refresh.sh sets MCP_URL=http://localhost:8200/mcp and runs mcp-call reindex (literal tool name); no P1 path binds a shell consumer by URL (Q-NC5 A), so it links unbound to every reindex provider, the job one included
   provider:
   - repoId: fx-svc
     path: mcp/server.py
     qname: mcp/server.py::reindex
+  - repoId: fx-job
+    path: job/mcp_admin.py
+    qname: job/mcp_admin.py::reindex
   consumer:
   - repoId: fx-svc
     path: scripts/refresh.sh
@@ -594,7 +614,7 @@ rows:
   stratum: fixture-dev
 - id: LNK-21
   kind: launch
-  item: .mcp.json server fx-svc to scripts/run-mcp.sh to python -m fx_svc.mcp.server to unit svc
+  item: .mcp.json server fx-svc (command scripts/run-mcp.sh) to scripts/run-mcp.sh (the script hop is lexical and stored nowhere) to the Dockerfile beside it, scripts/Dockerfile, whose CMD mcp.server:app (targetArg, by path suffix) names unit svc; a Binder outcome, not a stored Link at P1
   provider:
   - repoId: fx-svc
     rootPath: .
@@ -632,7 +652,7 @@ rows:
   stratum: fixture-dev
 - id: LNK-45
   kind: mcp_tool
-  item: 'launch binding through the P1-11b bash -c exec form: prompt mention mcp__fx-svc-exec__list_orders; .mcp.json server fx-svc-exec (command bash, args -c exec "$CLAUDE_PROJECT_DIR/scripts/run-mcp.sh", emitted as command scripts/run-mcp.sh) to scripts/run-mcp.sh (exec python -m fx_svc.mcp.server, targetArg) to unit svc'
+  item: 'launch binding through the P1-11b bash -c exec form: prompt mention mcp__fx-svc-exec__list_orders; .mcp.json server fx-svc-exec (command bash, args -c exec "$CLAUDE_PROJECT_DIR/scripts/run-mcp.sh", emitted as command scripts/run-mcp.sh) to scripts/run-mcp.sh (lexical hop) to scripts/Dockerfile (CMD mcp.server:app, a command entry) to unit svc. A prompt mention is possible/prompt-mention whatever the chain: the chain is the BOUND_BY entries, ord 0 the .mcp.json entry (the aux locator), ord 1 the scripts/Dockerfile command entry (a locator only once the file exists)'
   provider:
   - repoId: fx-svc
     path: mcp/server.py
@@ -649,8 +669,8 @@ rows:
     path: scripts/run-mcp.sh
     qname: scripts/run-mcp.sh::<script>
   keyNorm: list_orders
-  status: confirmed
-  reason: binding-confirmed
+  status: possible
+  reason: prompt-mention
   gate: P1
   serves:
   - LNK
@@ -1153,7 +1173,7 @@ rows:
   keyNorm: GET /api/reports/{}
   status: possible
   reason: example-config
-  gate: P1
+  gate: P2
   serves:
   - AC-6
   stratum: fixture-dev
@@ -1181,6 +1201,9 @@ rows:
   status: possible
   reason: example-config
   gate: P1
+  p1Form:
+    status: possible
+    reason: partial-key
   serves:
   - AC-6
   stratum: fixture-dev
