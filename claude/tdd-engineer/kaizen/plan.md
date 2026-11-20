@@ -6,14 +6,6 @@
 
 ## Active
 
-| ID | Added | Priority | Status | Summary |
-|------|------------|----------|--------|---------|
-| K-007 | 2026-09-07 | med | 🔵 | Document the shared-`falkordb-dev` concurrency flake in `falkor-chat/docs/SERVER.md` §1.7 |
-| K-008 | 2026-09-07 | med | 🔵 | Document the bare-workspace-id contract of the seed scripts in `falkor-chat/AGENTS.md` |
-| K-009 | 2026-09-07 | low | 🔵 | Document `DatasetSchema`'s second, non-obvious construction site in `falkor-chat/docs/SERVER.md` §1.7 |
-| K-010 | 2026-09-07 | med | 🔵 | Document that `trace=True` alone traces nothing without `tracer=GraphTracer(repo)` — `falkor-chat/docs/SERVER.md` §1.7 |
-| K-011 | 2026-09-07 | low | 🔵 | Record in `model-bench/AGENTS.md` that the shared `select = ["E","F","W","I"]` ruff config cannot detect dead code |
-| K-013 | 2026-09-16 | med | 🔵 | Re-investigate the claimed 1-2-event ANN recall drop for identical embeddings — not reproduced under a minimal probe |
 
 > K-007…K-011 are project-doc writes (K-007…K-010 in `falkor-chat`, K-011 in `model-bench`),
 > **outside `cobb`'s write remit** — that is why they are kept open here rather than promoted
@@ -23,6 +15,8 @@
 > re-verification was inconclusive, not because of a remit boundary (see its own entry).
 
 ### K-007 — the shared `falkordb-dev` instance makes `pytest -q` flake across unrelated files
+
+- **Added:** 2026-09-07
 - **Status:** 🔵 proposed · **Priority:** medium
 - **Source:** `kaizen_team` entry `f3a8c9d2-…` (2026-08-25), kept open at the 2026-09-07 distillation.
 - **Fact:** when another agent session is concurrently using `falkordb-dev`, `pytest -q` on
@@ -38,7 +32,11 @@
 - **Proposed change:** one bullet in `falkor-chat/docs/SERVER.md` §1.7 ("Testing hazards specific
   to `server/`"), and bump that section's "Four gotchas" lead count.
 
+> Summary: Document the shared-`falkordb-dev` concurrency flake in `falkor-chat/docs/SERVER.md` §1.7
+
 ### K-008 — seed scripts take a **bare** workspace id; an already-prefixed one silently creates `ws:ws:<id>`
+
+- **Added:** 2026-09-07
 - **Status:** 🔵 proposed · **Priority:** medium
 - **Source:** `kaizen_team` entry `a7f3c1d2-…` (2026-08-28), kept open at the 2026-09-07 distillation.
 - **Fact (re-verified 2026-09-07):** `bootstrap_schema.sh`, `seed_demo.sh`, `seed_workflows.sh`,
@@ -54,7 +52,11 @@
   ws:*) die ...` guard in the shared script preamble would be stronger, but that is a code change,
   not a doc one — worth proposing separately.
 
+> Summary: Document the bare-workspace-id contract of the seed scripts in `falkor-chat/AGENTS.md`
+
 ### K-009 — `querygen.DatasetSchema` is hand-constructed in `test_repository.py` too, not only `test_querygen.py`
+
+- **Added:** 2026-09-07
 - **Status:** 🔵 proposed · **Priority:** low
 - **Source:** `kaizen_team` entry `d8f0c1e2-…` (2026-08-30), kept open at the 2026-09-07 distillation.
 - **Fact (re-verified 2026-09-07):** `server/tests/test_repository.py` builds its own ad hoc
@@ -69,7 +71,11 @@
   docstring naming both construction sites — a code comment, not a doc. Alternatively a `SERVER.md`
   §1.7 bullet. Whoever next touches `querygen.py` should take the docstring option.
 
+> Summary: Document `DatasetSchema`'s second, non-obvious construction site in `falkor-chat/docs/SERVER.md` §1.7
+
 ### K-010 — `trace=True` alone writes zero `TraceEvent`s from an ad-hoc in-process executor
+
+- **Added:** 2026-09-07
 - **Status:** 🔵 proposed · **Priority:** medium
 - **Source:** `kaizen_team` entry `f3a1e6b2-…` (2026-08-30), kept open at the 2026-09-07 distillation.
 - **Fact (re-verified 2026-09-07):** tracing needs **both** halves. `executor.py:605` reads
@@ -78,6 +84,9 @@
   `WorkflowExecutor(services, repo, llm=…, tool_registry=…)` without `tracer=` and then passes
   `trace=True` on the run gets `_NULL_TRACER` regardless, and `repo.read_trace(...)` returns `[]`
   with no error anywhere. Adding `tracer=GraphTracer(repo)` fixes it immediately.
+
+> Summary: Document that `trace=True` alone traces nothing without `tracer=GraphTracer(repo)` — `falkor-chat/docs/SERVER.md` §1.7
+
 - **Scope — read this before acting on it.** This is **not** the (false) claim that REST-driven runs
   write no trace events: `app.py:540-543` builds the production executor **with**
   `tracer=GraphTracer(repo)`, `POST /workflow-runs` has accepted `trace: true` since `670474a`, and
@@ -91,6 +100,8 @@
   match it. `executor.py:447`'s docstring covers the `run["trace"]` half only.
 
 ### K-011 — a `select = ["E","F","W","I"]` ruff config cannot detect dead code
+
+- **Added:** 2026-09-07
 - **Status:** 🔵 proposed · **Priority:** low
 - **Source:** `kaizen_team` entry `773f87f4-…` (2026-09-03), kept open at the 2026-09-07 distillation (chunk B).
 - **Fact (re-derived 2026-09-07):** with ruff 0.14.14, `ruff check --isolated --select E,F,W,I` on a
@@ -113,7 +124,11 @@
   detection. Optionally mirrored in `mcp-monitor/AGENTS.md`. Not a lint-config change: widening
   `select` is a separate proposal with its own cost, not this item.
 
+> Summary: Record in `model-bench/AGENTS.md` that the shared `select = ["E","F","W","I"]` ruff config cannot detect dead code
+
 ### K-013 — ANN recall drop at 1-2 churn events for identical-embedding pairs: not reproduced under a minimal probe
+
+- **Added:** 2026-09-16
 - **Status:** 🔵 proposed · **Priority:** medium
 - **Source:** `kaizen_team` entry `7e6d0a1e-…` (2026-09-13), kept open at the 2026-09-16 distillation.
 - **The raw claim:** on `ws:test`, two `Chunk`s with identical embeddings, freshly created against a
@@ -140,28 +155,54 @@
   distinct, lower-threshold mechanism or an artifact of accumulated session state. Only then promote
   (or drop) into `falkordb-quirks.md`.
 
+> Summary: Re-investigate the claimed 1-2-event ANN recall drop for identical embeddings — not reproduced under a minimal probe
+
 ### K-003 — Tool permissions decision  ⚪ DEFERRED (2026-06-05)
 - **Status:** ⚪ deferred — user chose to keep `tools` unconstrained for now.
 - **Decision:** No `tools` key; the agent continues to inherit all tools, preserving flexibility to spawn subagents and fetch docs mid-task. The focused-set restriction (`Read, Edit, Write, Bash, Grep, Glob`) was considered and declined.
 - **Revisit if:** the agent's broad tool access causes surprise or unwanted actions in practice.
 
 ## Parking lot / ideas
-- **Two general testing lessons discarded 2026-09-13 for lack of a clean home (both instances
-  already recorded in `model-bench/docs/HISTORY.md`) — worth a KB if a second instance ever
-  turns up:**
-  - A sibling validator that checks only one of two fields a dataclass's `__post_init__` enforces
-    as disjoint is a classic silent-partial-coverage bug — legal by the type, wrong by the domain
-    contract (model-bench `results.py` `_item_problems` checking only `item.counts`, never
-    `item.measures`; `HISTORY.md:543-563`). Doesn't fit `guard-testing-techniques.md` (scoped to
-    guards over other code's *text*, not runtime data-shape validators).
-  - A producer that returns a bare list where its consumer expects a label-keyed dict validates
-    and serializes fine (JSON doesn't enforce shape) and only breaks at an end-to-end run against
-    real generated data, because independently-correct unit fixtures on both ends each hand-build
-    the right shape and never exercise the mismatch (model-bench `refresh_golden.py`
-    `_catalog_rows_from_literal`; `HISTORY.md:223`). Doesn't cleanly fit either existing KB
-    (`guard-testing-techniques.md` = code-text guards; `estimator-test-fixtures.md` = computed
-    numeric estimates).
-- State explicitly that the agent does **not** auto-commit (the harness rule is "commit only when asked") — avoids surprise commits given the "commit-sized increments" language.
-- Add a one-liner that coverage % is a guide, not a goal — pin behaviors, don't chase numbers.
-- Note on flaky tests: quarantine + diagnose root cause rather than re-run until green.
-- Optional enrichment: a brief nod to advanced test techniques where they fit — table-driven/parameterized tests for boundary sweeps, property-based testing for invariants, and mutation testing as a *coverage-quality* check (does the suite actually catch injected faults?). Low priority; the prompt is deliberately lean, so only add if it earns its keep.
+
+### GAL-I02-K0077 — Two general testing lessons without a clean KB home (discarded 2026-09-13; revisit on a second instance)
+
+- **Status:** ⚪ deferred — revisit if a second instance turns up
+
+Both instances are already recorded in `model-bench/docs/HISTORY.md`; worth a KB if a second instance ever
+turns up:
+- A sibling validator that checks only one of two fields a dataclass's `__post_init__` enforces
+  as disjoint is a classic silent-partial-coverage bug — legal by the type, wrong by the domain
+  contract (model-bench `results.py` `_item_problems` checking only `item.counts`, never
+  `item.measures`; `HISTORY.md:543-563`). Doesn't fit `guard-testing-techniques.md` (scoped to
+  guards over other code's *text*, not runtime data-shape validators).
+- A producer that returns a bare list where its consumer expects a label-keyed dict validates
+  and serializes fine (JSON doesn't enforce shape) and only breaks at an end-to-end run against
+  real generated data, because independently-correct unit fixtures on both ends each hand-build
+  the right shape and never exercise the mismatch (model-bench `refresh_golden.py`
+  `_catalog_rows_from_literal`; `HISTORY.md:223`). Doesn't cleanly fit either existing KB
+  (`guard-testing-techniques.md` = code-text guards; `estimator-test-fixtures.md` = computed
+  numeric estimates).
+
+### GAL-I02-K0078 — State that the agent does not auto-commit
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+The harness rule is "commit only when asked" — avoids surprise commits given the "commit-sized increments" language.
+
+### GAL-I02-K0079 — Coverage % is a guide, not a goal
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+One-liner: pin behaviors, don't chase numbers.
+
+### GAL-I02-K0080 — Flaky-test note
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Quarantine + diagnose root cause rather than re-run until green.
+
+### GAL-I02-K0081 — Optional enrichment: advanced test techniques
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+A brief nod to them where they fit — table-driven/parameterized tests for boundary sweeps, property-based testing for invariants, and mutation testing as a *coverage-quality* check (does the suite actually catch injected faults?). Low priority; the prompt is deliberately lean, so only add if it earns its keep.
