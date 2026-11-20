@@ -159,3 +159,9 @@ def test_latest_pass_is_the_heading_number_not_the_count_of_pass_sections():
     assert d.latest_pass == 3 and d.source_props()["latestPass"] == 3
     d = review("## Pass 2\n\n**Verdict: needs changes.**\n\n## Pass 5\n\n**Verdict: approve.**\n")
     assert d.latest_pass == 5
+
+
+def test_a_review_carries_rowCount_zero():
+    from coordgraph.parse.review import parse_review
+    d = parse_review("a/docs/reviews/x.md", b"# R\n\n> **Status:** active\n\n## Pass 1\n\nVerdict: approve\n")
+    assert d.source_props()["rowCount"] == 0

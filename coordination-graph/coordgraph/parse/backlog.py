@@ -99,7 +99,7 @@ class BacklogDoc(SourceDoc):
         props = super().source_props()
         if self.scope is not None:
             props["scope"] = self.scope
-        props["itemCount"] = len(self.items)
+        props["rowCount"] = len(self.items)
         return props
 
     def item_props(self) -> list[dict]:
@@ -229,7 +229,9 @@ def parse_backlog(path: str, raw: bytes, legacy_paths: Mapping[str, str] | None 
         else:
             doc.warnings.append(f"{label}: no Status field")
         if "Priority" in fields:
-            word = fields["Priority"].split(" — ", 1)[0].strip().casefold()
+            head = fields["Priority"].split(" — ", 1)[0].strip().casefold()
+            # leading word + optional parenthesised note, like `medium (raised 2026-09-16 from low)`
+            word = head.split("(", 1)[0].strip()
             if word in PRIORITIES:
                 item.priority = word
             else:

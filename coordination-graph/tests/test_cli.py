@@ -89,3 +89,49 @@ def test_python_dash_m_and_the_shell_wrapper_dispatch_to_the_same_cli(repo, tmp_
     (home / "coordgraph.sh").chmod(0o755)
     wrapped = subprocess.run([str(home / "coordgraph.sh"), "lint", "--count"], env=env, capture_output=True, text=True)
     assert wrapped.returncode == 0 and wrapped.stdout == run.stdout
+
+
+# --- the store-backed subcommands (offline: wiring and refusals; the live suite drives a database) ---------
+
+@pytest.mark.parametrize("argv", [["bootstrap"], ["sync", "--all"], ["rebuild"], ["drift"], ["query", "RETURN 1"]])
+def test_store_backed_commands_refuse_the_shared_instance_before_connecting(repo, monkeypatch, capsys, argv):
+    monkeypatch.setenv("COORDGRAPH_FALKORDB_PORT", "6379")
+    monkeypatch.delenv("COORDGRAPH_EPHEMERAL_PORT", raising=False)
+    assert main(argv) == 1
+    assert "refusing shared FalkorDB port 6379" in capsys.readouterr().err
+
+
+def test_rebuild_dry_run_is_wired_and_needs_no_connection(repo, capsys):
+    assert main(["rebuild", "--dry-run"]) == 0
+    assert "dry-run: ok" in capsys.readouterr().out
+
+
+def test_sync_takes_paths_or_one_mode_not_both(repo):
+    with pytest.raises(SystemExit):
+        main(["sync", "--all", "--changed"])
+
+
+def test_lint_resolves_a_dependency_written_under_an_old_id_through_the_registry(tmp_path, monkeypatch, capsys):
+    """Plan3 test 8, reached from the CLI: `Depends on: falkor-chat:K-065` is met by a history heading
+    carrying the minted scheme ID, and unresolvable before the mint."""
+    from coordgraph.identity import load_wilib
+
+    load_wilib()
+    from wilib import legacy, project
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    project.init(tmp_path, "SCR", ["falkor-chat", "cpg"])
+    pj = tmp_path / ".work-items" / "project.json"
+    data = json.loads(pj.read_text())
+    data.update(legacy_namespaces={"K-": ["falkor-chat", "cpg"]}, legacy_paths=PROJECT["legacy_paths"])
+    pj.write_text(json.dumps(data))
+    put(tmp_path, "docs/BACKLOG.md", "# B\n\n### K-001 — One\n\n- **Status:** 🔵 proposed\n"
+        "- **Depends on:** falkor-chat:K-065\n")
+    put(tmp_path, "falkor-chat/docs/BACKLOG.md", "# B\n")
+    put(tmp_path, "falkor-chat/docs/HISTORY.md", "# H\n\n## 2026-01-01 — SCR-I02-K0001 delivered\n\ntext\n")
+    monkeypatch.setenv("COORDGRAPH_REPO_ROOT", str(tmp_path))
+    assert main(["lint", "docs/BACKLOG.md"]) == 1
+    assert "unresolvable-dependency" in capsys.readouterr().out
+    assert legacy.mint(tmp_path, "falkor-chat:K-065", "K") == "SCR-I02-K0001"
+    assert main(["lint", "docs/BACKLOG.md"]) == 0
+    assert "unresolvable" not in capsys.readouterr().out

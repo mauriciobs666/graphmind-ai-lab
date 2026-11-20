@@ -2,6 +2,31 @@
 
 > Dated log of actual changes to the `coordination-graph` component. Most recent first.
 
+## 2026-11-20 — S3: store, sync, rebuild, drift, query (S3a `683eb212`, S3b)
+
+Delivered base-plan step S3 (`claude/docs/plans/coordination-graph.md` §3.1-§3.3, §4; graph note v4
+§3-§5). S3a: `store.py` (bootstrap, per-source atomic replace, the ephemeral-endpoint guard),
+`dryrun.py` (`rebuild --dry-run`), `commands_store.py`. S3b: `sync.py` (`sync PATH.../--changed/--all`,
+`rebuild`, the parity proof, orphan sweep, `SyncState`), `drift.py` (the §3.3 read-time check and sync
+header), the `sync`, `rebuild`, `drift`, `query`, `bootstrap` subcommands, each taking `--graph`.
+
+- **Parser gaps closed.** Every `:Source` now carries `rowCount` (`0` for a review/requirement; the
+  backlog's `itemCount` is gone: graph note §2.2 names `rowCount` for every kind and has no `itemCount`).
+  A `Priority` of the form `medium (note)` keeps its leading word. `test_real_repo_dry_run_is_clean` is no
+  longer an expected failure. `PARSER_VERSION` stays 1: nothing was mirrored before this change.
+- **Write boundary** (graph-dba gate m1, m2). An indexed non-unique value that is empty or over 512
+  bytes is refused; a NUL in any string becomes U+FFFD and the source gains a warning. Parity expects
+  the same scrubbed form (`store.write_form`).
+- **Parity** compares a fresh parse with one export of the mirror, re-hashing every child (never the stored
+  `rowHash`/`itemHash`) and the source's property map minus `syncedAt`/`mtimeNs`.
+- **Offline path.** `sync`, `rebuild` and `drift` import neither `wilib` nor `identity`; `lint`,
+  `history-coverage` and the header's `Registry:` line load `identity` (read side) for registry-backed joins.
+- **Not yet:** the views (`inflight`, `unit`, `planned`: S7a), KB sync (S6) and the hook (S8). Every store
+  command still refuses any endpoint but an announced ephemeral one; S8a needs its own override.
+
+Live tests (ephemeral container only): AC-2, AC-4, AC-6 (the note 7.3 rows), AC-7 and plan3 section 6
+test 13 (the legs that need no S7a view).
+
 ## 2026-11-20 — S1e: backlog parser, history match, offline CLI; history coverage probe
 
 Delivered the remainder of base-plan step S1 (`claude/docs/plans/coordination-graph.md` §4, with

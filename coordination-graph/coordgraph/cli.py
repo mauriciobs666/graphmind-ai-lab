@@ -1,11 +1,15 @@
-"""The `coordgraph` command line (plan section 3.4). This step ships the offline subcommands:
-`lint`, `migrate`, `facts`, `history-coverage`; the store-backed ones land with later steps."""
+"""The `coordgraph` command line (plan section 3.4): the offline subcommands (`lint`, `migrate`, `facts`,
+`history-coverage`) and the store-backed ones (`bootstrap`, `sync`, `rebuild`, `drift`, `query`).
+
+`lint` and `history-coverage` resolve IDs through the registry (`identity`, read side); the store-backed
+handlers live in `commands_store` and the write ones (`sync`, `rebuild`) never import `wilib`."""
 from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
 
+from . import commands_store
 from .config import Config
 from .discover import discover
 from .history import coverage
@@ -27,7 +31,10 @@ def cmd_lint(args, root: Path) -> int:
             print(f"{path}\t{n}")
         print(f"total\t{sum(n for n in counts.values() if n > 0)}")
         return 1 if any(n < 0 for n in counts.values()) else 0
-    findings = lint_repo(root, paths)
+    from .identity import load_identity  # noqa: PLC0415 - read side only, deliberately lazy
+
+    identity = load_identity(root)
+    findings = lint_repo(root, paths, candidates=identity.candidates, reason=identity.reason)
     for f in findings:
         print(f.render())
     errors = sum(f.severity == "error" for f in findings)
@@ -98,7 +105,9 @@ def cmd_facts(args, root: Path) -> int:
 
 def cmd_history_coverage(args, root: Path) -> int:
     legacy_paths = load_legacy_paths(root)
-    rows = coverage(root, _backlogs(root), legacy_paths)
+    from .identity import load_identity  # noqa: PLC0415
+
+    rows = coverage(root, _backlogs(root), legacy_paths, candidates=load_identity(root).candidates)
     tm = tu = 0
     for r in rows:
         total = len(r.matched) + len(r.unmatched)
@@ -132,12 +141,34 @@ def build_parser() -> argparse.ArgumentParser:
     facts.add_argument("--like")
     hc = sub.add_parser("history-coverage", help="delivery-heading match rate over every history file")
     hc.add_argument("--verbose", "-v", action="store_true")
+    sub.add_parser("bootstrap", help="create indexes and constraints (ephemeral targets only)")
+    sync = sub.add_parser("sync", help="parse and replace the named, changed or all mirrored files")
+    group = sync.add_mutually_exclusive_group()
+    group.add_argument("--changed", action="store_true", help="every covered file whose hash moved")
+    group.add_argument("--all", action="store_true", help="--changed plus pruning sources no longer on disk")
+    sync.add_argument("--verbose", "-v", action="store_true", help="also list unchanged paths")
+    sync.add_argument("paths", nargs="*")
+    rb = sub.add_parser("rebuild", help="unconditional per-file replace, prune and parity check")
+    rb.add_argument("--dry-run", action="store_true", help="offline validation; no database connection")
+    rb.add_argument("--manifest", help="with --dry-run: write the (path, sha256) manifest here")
+    dr = sub.add_parser("drift", help="covered files whose content no longer matches what was synced")
+    dr.add_argument("paths", nargs="*")
+    q = sub.add_parser("query", help="read-only Cypher on the mirror, under the sync header")
+    q.add_argument("cypher")
+    q.add_argument("--covers", nargs="+", default=[], metavar="PATH", help="check drift for these files only")
+    for name in ("bootstrap", "sync", "rebuild", "drift", "query"):
+        sub.choices[name].add_argument("--graph", help="graph key (default: COORDGRAPH_KEY)")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Config.from_env().repo_root
+    store_backed = {"bootstrap": commands_store.bootstrap, "sync": commands_store.sync_cmd,
+                    "rebuild": commands_store.rebuild_cmd, "drift": commands_store.drift_cmd,
+                    "query": commands_store.query_cmd}
+    if args.cmd in store_backed:
+        return store_backed[args.cmd](args)
     handler = {"lint": cmd_lint, "migrate": cmd_migrate, "facts": cmd_facts,
                "history-coverage": cmd_history_coverage}[args.cmd]
     return handler(args, root)

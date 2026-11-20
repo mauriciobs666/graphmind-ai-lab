@@ -192,7 +192,7 @@ def test_item_props_order_and_hash_change_with_the_item_text_only():
     assert a.items[0].item_hash == b.items[0].item_hash
     assert a.items[1].item_hash != b.items[1].item_hash
     assert [i.ord for i in a.items] == [1, 2]
-    assert a.source_props()["itemCount"] == 2 and a.source_props()["scope"] == "falkor-chat"
+    assert a.source_props()["rowCount"] == 2 and a.source_props()["scope"] == "falkor-chat"
 
 
 def test_item_hash_ignores_trailing_whitespace_and_surrounding_blank_lines():
@@ -204,3 +204,15 @@ def test_item_hash_ignores_trailing_whitespace_and_surrounding_blank_lines():
 def test_planted_ledger_needs_tokens_are_stored_verbatim_too():
     from coordgraph.parse.ledger import parse_needs
     assert parse_needs("GAL-F42, free text, `U3`") == (["GAL-F42", "free text", "U3"], None)
+
+
+def test_priority_keeps_its_leading_word_when_a_parenthesised_note_follows():
+    d = backlog("### K-001 — T\n\n- **Status:** 🔵 proposed\n- **Priority:** medium (raised 2026-09-16 from low — see below)\n"
+                "### K-002 — T\n\n- **Status:** 🔵 proposed\n- **Priority:** urgentish\n")
+    assert [i.priority for i in d.items] == ["medium", None]
+    assert len([w for w in d.warnings if "unrecognised Priority" in w]) == 1
+
+
+def test_every_kind_carries_rowCount_and_a_childless_kind_has_zero():
+    assert backlog(item("K-001") + item("K-002")).source_props()["rowCount"] == 2
+    assert "itemCount" not in backlog(item("K-001")).source_props()

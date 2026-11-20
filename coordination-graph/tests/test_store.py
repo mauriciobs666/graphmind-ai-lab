@@ -112,6 +112,36 @@ def test_indexed_values_are_normalised_at_the_write_boundary():
     assert (row["statusToken"], row["itemId"]) == ("paused", "T1")
 
 
+@pytest.mark.parametrize("bad", ["", "   ", "x" * 513, "é" * 257])
+def test_a_non_unique_indexed_value_that_is_empty_or_over_512_bytes_is_refused(bad):
+    with pytest.raises(KeyHygieneError):
+        store.prepare_meta("ledger", {"path": "p.md", "itemId": bad})
+    with pytest.raises(KeyHygieneError):
+        store.prepare_meta("ledger", {"path": "p.md", "slug": bad})
+    with pytest.raises(KeyHygieneError):
+        store.prepare_rows("ledger", [{"key": "p#U1", "statusToken": bad}])
+    with pytest.raises(KeyHygieneError):
+        store.prepare_rows("ledger", [{"key": "p#U1", "itemId": bad}])
+    assert store.prepare_meta("ledger", {"path": "p.md", "itemId": "x" * 512})["itemId"] == "x" * 512
+
+
+def test_nul_bytes_are_replaced_everywhere_and_the_source_says_so():
+    meta, rows = store.write_form(
+        "ledger", {"path": "p.md", "warnings": ["w\x00"], "rowCount": 1},
+        [{"key": "p#U1", "statusText": "a\x00b", "cites": ["c\x00"]}])
+    assert rows == [{"key": "p#U1", "statusText": "a\ufffdb", "cites": ["c\ufffd"]}]
+    assert meta["warnings"] == ["w\ufffd", "3 NUL byte(s) replaced by U+FFFD"]
+    clean, _ = store.write_form("ledger", {"path": "p.md", "warnings": []}, [])
+    assert clean["warnings"] == []
+
+
+def test_replace_sends_the_scrubbed_form():
+    g = FakeGraph()
+    store.replace_source(g, "ledger", {"path": "p.md", "warnings": []}, [{"key": "p#U1", "statusText": "a\x00"}])
+    params = g.calls[-1][1]
+    assert params["rows"][0]["statusText"] == "a\ufffd" and params["meta"]["warnings"]
+
+
 @pytest.mark.parametrize("bad", ["set ", " a", "a\t", "a\n", "a\r", "a\v", "a\f", "x" * 513, ""])
 def test_unique_values_are_refused_not_rewritten(bad):
     with pytest.raises(KeyHygieneError):

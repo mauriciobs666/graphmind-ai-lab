@@ -12,7 +12,7 @@ def test_requirement_is_its_header_fields_and_nothing_else():
         "path": "claude/docs/requirements/coordination-graph.md", "kind": "requirement",
         "component": "claude", "slug": "coordination-graph", "sha256": hashlib.sha256(raw).hexdigest(),
         "bytes": len(raw), "parserVersion": 1, "docStatus": "Ready for design", "owner": "`tico`",
-        "tracks": "K-1 (M3)", "itemId": "GAL-F0002", "aliases": ["GAL-F0001"], "warnings": [],
+        "tracks": "K-1 (M3)", "itemId": "GAL-F0002", "aliases": ["GAL-F0001"], "warnings": [], "rowCount": 0,
     }
 
 

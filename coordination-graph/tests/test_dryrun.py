@@ -347,7 +347,7 @@ def test_list_and_enum_shapes():
 
 def test_only_note_properties_are_allowed():
     b = clean_backlog()
-    b.meta["itemCount"] = 1
+    b.meta["itemCount"] = 1  # the pre-note name: no longer a property
     b.rows[0]["milestoneOrder"] = 2
     got = [v for v in validate(one(b)).violations if v.code == "unknown-property"]
     assert {"itemCount", "milestoneOrder"} <= {v.message.split()[0] for v in got}
@@ -392,21 +392,9 @@ def test_status_tally_and_unknown_values_are_listed():
 
 # --- the real repo (read-only) ---------------------------------------------------------------
 
-@pytest.mark.xfail(strict=True, reason="parser defect: SourceDoc.source_props() never emits rowCount for "
-                   "review/requirement, BacklogDoc emits itemCount (not in note v4) and no rowCount; "
-                   "note 2.2 says the parser supplies rowCount on every kind")
 def test_real_repo_dry_run_is_clean():
     report = dryrun.rebuild_dry_run(REPO, _legacy_paths())
     assert report.ok, report.render()[-1500:]
-
-
-def test_real_repo_has_no_violation_beyond_the_known_parser_gap():
-    report = dryrun.rebuild_dry_run(REPO, _legacy_paths())
-    unexpected = [v for v in report.violations
-                  if not (v.code == "missing-property" and v.message.startswith("rowCount missing")
-                          or v.code == "unknown-property" and v.message.startswith("itemCount "))]
-    assert unexpected == [], [v.render() for v in unexpected[:5]]
-    assert report.kind_counts["ledger"] >= 50 and report.manifest
 
 
 def _legacy_paths():

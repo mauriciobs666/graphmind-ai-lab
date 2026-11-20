@@ -12,6 +12,10 @@ Write rules (note section 3.2, "the store adds nothing the parser did not decide
   `Ledger.slug`, `Backlog.scope`, `Unit.statusToken`), so whatever a parser forgot never reaches an
   index. A UNIQUE value is never rewritten here (the `~n`/hash form is the parser's), only refused:
   a bad one is an instance outage, not a query error;
+* a non-unique indexed value must be non-empty and <= 512 UTF-8 bytes, else it is refused (FalkorDB
+  silently leaves a value over 4,096 bytes unindexed, so an equality lookup would miss it);
+* a NUL byte in any string fails the whole replace (`Failed to parse query parameters`), so it is
+  replaced by U+FFFD and the source gains a warning naming how many;
 * `warnings` and `rowCount` are supplied by the parser and written as given; the store adds only
   `syncedAt` (and `mtimeNs` when the caller has it).
 
@@ -24,7 +28,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
-from .keys import KeyHygieneError, norm_value, safe_key
+from .keys import MAX_KEY_BYTES, KeyHygieneError, norm_value, safe_key
 
 SCHEMA_VERSION = 4  # the graph note version the DDL below implements
 POLL_TIMEOUT_S = 5.0
@@ -124,7 +128,24 @@ def _unique(value, what: str) -> str:
 def _indexed(props: dict, *names: str) -> None:
     for name in names:
         if name in props:
-            props[name] = norm_value(props[name])
+            props[name] = value = norm_value(props[name])
+            if not value or len(value.encode("utf-8")) > MAX_KEY_BYTES:
+                raise KeyHygieneError(f"indexed {name} must be non-empty and <= {MAX_KEY_BYTES} bytes: {value[:60]!r}")
+
+
+def _scrub(value, count: list[int]):
+    """`value` with every NUL in any string (nested in lists/maps) replaced by U+FFFD; `count[0]` tallies."""
+    if isinstance(value, str):
+        n = value.count("\x00")
+        if n:
+            count[0] += n
+            return value.replace("\x00", "\ufffd")
+        return value
+    if isinstance(value, list):
+        return [_scrub(v, count) for v in value]
+    if isinstance(value, Mapping):
+        return {k: _scrub(v, count) for k, v in value.items()}
+    return value
 
 
 def prepare_meta(kind: str, meta: Mapping) -> dict:
@@ -150,6 +171,17 @@ def prepare_rows(kind: str, rows: list[Mapping]) -> list[dict]:
             _unique(props.get("ref"), "Item.ref")
         out.append(props)
     return out
+
+
+def write_form(kind: str, meta: Mapping, rows: list[Mapping] | None = None) -> tuple[dict, list[dict]]:
+    """The exact `($meta minus syncedAt/mtimeNs, $rows)` a replace writes: NULs scrubbed (with a source
+    warning), `None`s dropped, keys asserted, indexed values normalised. Parity expects this form."""
+    count = [0]
+    props = prepare_meta(kind, _scrub(dict(meta), count))
+    out = prepare_rows(kind, _scrub(list(rows or []), count))
+    if count[0]:
+        props["warnings"] = [*props.get("warnings", []), f"{count[0]} NUL byte(s) replaced by U+FFFD"]
+    return props, out
 
 
 # --- bootstrap (note section 4.3) --------------------------------------------------------
@@ -224,11 +256,11 @@ def replace_source(graph, kind: str, meta: Mapping, rows: list[Mapping] | None =
     rows = rows or []
     if rows and KINDS[kind][1] is None:
         raise StoreError(f"a {kind} source has no children, got {len(rows)} rows")
-    props = prepare_meta(kind, meta)
+    props, prepared = write_form(kind, meta, rows)
     props["syncedAt"] = int(time.time() * 1000) if synced_at_ms is None else synced_at_ms
     if mtime_ns is not None:
         props["mtimeNs"] = mtime_ns
-    params = {"path": props["path"], "meta": props, "rows": prepare_rows(kind, list(rows))}
+    params = {"path": props["path"], "meta": props, "rows": prepared}
     try:
         res = graph.query(REPLACE[kind], params)
     except Exception as exc:  # falkordb ResponseError and friends: the statement rolled back
