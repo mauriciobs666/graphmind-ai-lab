@@ -96,3 +96,4 @@
 {"evid":"4343ac7c62b44c84","ts":1795217005599719188,"ev":"new","id":"GAL-I02-K0089","type":"K","parent":"GAL-I02","home":"claude","title":"Requirements template file instead of the inline template"}
 {"evid":"c901402b6f204901","ts":1795217005639076392,"ev":"new","id":"GAL-I02-K0090","type":"K","parent":"GAL-I02","home":"claude","title":"Non-functional requirements section"}
 {"evid":"18c0618d59b84c9d","ts":1795217005703340112,"ev":"new","id":"GAL-I02-K0091","type":"K","parent":"GAL-I02","home":"claude","title":"Project-scoped default-agent setting for tico"}
+{"evid":"ea760b6fe40844f7","ts":1795217078744055026,"ev":"new","id":"GAL-F0004","type":"F","parent":null,"home":"opencode","title":"Wire `tank`'s outer scripts into a scheduler"}
