@@ -142,3 +142,111 @@ The extension framing is accurate: restatement is now limited to the intro summa
 ## Later review
 
 The 2026-11-20 work-item alignment changes to this requirements document (terminology, FR-4/FR-5/AC-4) were re-read in Passes 5–7 of `claude/docs/reviews/coordination-graph.md` (latest verdict: approve with suggestions).
+
+## Pass 3 (2026-11-20) — the plan
+
+**Scope.** `docs/plans/cross-initiative-coordination.md` (uncommitted, `active`, 4,156 words) against requirements v4 (`FR-1..FR-7`, `AC-1..AC-6`; the brief's "FR-1..9/AC-1..10" is the v3 numbering, v4 has no more), `claude/docs/plans/coordination-graph.md` §3.6/§3.7/§4, `coordination-graph3.md` §3.1/§3.4/§4/§5, the graph note v3 §2.2, the live build ledger `claude/docs/plans/coordination-graph-coordination.md`, `coordination-graph/coordgraph/parse/ledger.py` (as built so far), `claude/teco/teco.md`, `claude/architect/architect.md`, `claude/AGENTS.md`, and the 98 `*-coordination.md` files. Static review plus counting scripts; no suite run (documents only). Stakeholder answers folded since the architect's report: AC-6 = non-terminal units only; ready-now does not flag two ready units against each other — both are reflected in the plan's text (§3.1(6), §3.4, X8) but not cleaned out of §6/§8 (m1).
+
+CPG: considered, not relevant — a plan for a component (`coordination-graph/`) with no loaded CPG; its few files were read directly.
+
+**Verdict: approve with suggestions** — 0 blockers, 3 majors, 4 minors, 1 nit. The design is grounded and covers every FR/AC; the majors are step-table ordering, an unaddressed noise source that undermines the "conditional ready" design, and the FR-6 hardening/test placement. Growth-stops: this is a new document (not a revision), so the check applies only to the residue in m1.
+
+### Check results
+
+1. **Coverage (verified by reading).** FR-1/AC-1 → §3.5 + test 6 (live); FR-2/FR-3/AC-2 → §3.5, §6, test 12 + `audit-team.sh`; FR-4/AC-3 → §3.1–3.2, test 2, 7; FR-5/AC-4 → §3.3–3.4, tests 4, 8 (matrix matches AC-4 case for case, incl. `delivered`/`gated`/`paused`/`accepted`, archived need, feature need); FR-6/AC-5 → §3.6, X3, tests 5, 9; FR-7/AC-6 → §3.1(6), X8, test 11. Every step has owner, gate and a test row. Beyond the requirements: the `overlaps` subcommand and the `lint` informational output (FR-2 asks only that agents "check the in-flight view"); proportionate given FR-4's areas, but a design call (Open question 2). The running-unit warning block is justified (see M2).
+2. **Consistency with plan3/base/note (verified).** Reuse of `Item`/`Needs`/`needsError`/`resolve_need`/`statusToken`, `—`-vs-empty semantics (`parse_needs` at `ledger.py:125-132` already treats `""`/`—` as not recorded, `none` as `[]`), RUNNING/need-met sets, archived units hidden by `docStatus` filter: no contradiction found. Plan3 §3.4 states `Touches` stays with this plan: consistent. Ordering problems: M1.
+3. **Grammar reuse (verified).** Base §3.6 L479 (`Touches` cell: `file:`/`graph:`/`fact:<token> (changes|relies)`, mode mandatory) and §3.7 step 4 (equal path / directory-or-glob / glob-vs-glob conservative literal prefix / same `graph:` / same lower-cased fact unless both `(relies)`) are as the plan quotes them, so reuse is sound. The note's gap is real: note §2.2 `:Item.touches` row says only `fact:<token>` with no mode, and `:Unit` has no `touches` row at all; so H2's "also make `:Item.touches` keep the mode" is a necessary correction of the note, not a restatement. A note/base contradiction on a field the base calls mandatory; the note's next version must carry it (X5). One more: S1e builds `backlog.py` per the base before the note is revised — the X1 brief note ("call `parse_touches`, canonical form with mode") is what keeps S1e from emitting mode-less strings, so X1 must precede S1e *and* S3 (M1).
+4. **FR-6 security (read; see M3).** Sound in outline: path only from a mirror lookup, `realpath` under `COORDGRAPH_REPO_ROOT`, 2 MiB cap (the largest real ledger, `connected-code-graph-coordination.md`, is 511,478 bytes — cap is safe), read-only. Gaps in M3.
+5. **`cobb` routing (verified against `teco.md`, `architect.md`, `claude/AGENTS.md`).** Files listed are all inside cobb's guard allowlist (`claude/*/*.md`, `skills/coordination-graph/*`, `claude/scripts/audit-team.sh`). Architect's "existing ambiguity rule" exists (`architect.md:33`). No conflict with existing prompts: none of `teco.md`/`tico.md`/`architect.md` carries an overlap check or `coordgraph` today. Gaps: M2 (double edit of the same files), and `claude/README.md`/kaizen/manual lines are named but `claude/architect/plan-authoring-techniques.md` (where a step-table `Depends on`/`Touches` convention would naturally live) is not considered.
+6. **Ids note supersession (verified).** `docs/plans/cross-initiative-coordination-ids.md` header: `Status: superseded`, `Superseded by: docs/plans/cross-initiative-coordination.md`; new plan carries `Supersedes:`; collision rule 5 satisfied. `wi check` (`python3 skills/work-items/scripts/wi.py check`): only `family-no-item: claude/docs/reviews/coordination-graph-guard.md`, as expected. Pointer pair incomplete on the extended documents: m2.
+
+### Findings
+
+**M1 (major, verified) — step table mis-orders S3 and buries a build unit in X6.**
+- Base S3's `Needs` is `S1, S1b`; the plan says in prose (§5 X5, §6) that S3 builds "H1–H4 in its brief" and must follow X5 and X1 (the store writes `touches`/`description` that X1 parses and X5 schemas), but it states no step-table dependency: S3's row cannot be read as blocked by X5 or X1 by the executor of `teco`'s ledger. Add to the §5 table (or the `teco` instruction in §6) an explicit "S3 Needs += X1, X5" edit, otherwise S3 can start the moment S1/S1b land and ship a schema without the properties — H4's "parserVersion bump covered with plan3's G6" then silently misses.
+- X6 mixes two units under one row ("`coder` (S3 for the schema, then a new unit…)"): S3's addition and new **S7c**. S7c needs S3, S7a, X3, X4 (and X5's reads); give it its own row/id with its own gate (the row says graph-dba then analyst — fine) so `teco` can put it in the ledger. Also X6's `Needs` lists X3/X4 but not X2 directly (via X4, acceptable) or X1 (via X4).
+- X9's relation to S10 is one-way ("added to S10's plan/report"); S10's `Needs` in base §4 doesn't list the X rows, so S10 can be started and reported before the AC-1..AC-6 legs exist. Add X6–X8 to S10's `Needs` for those legs.
+*Fix:* a small "edits to base §4 rows" list in §6 under `teco`: S3 Needs += X1, X5; S7c as a row; S10 Needs += X6, X7, X8; S1e Needs += X1 (already stated), S7b brief note (stated).
+
+**M2 (major, verified) — `cobb` unit X7 overlaps S5 and S9 on the same files without an order.**
+- S5 (base §4, `cobb`) writes `skills/coordination-graph/SKILL.md`; §6 then says "S5; write once with these in" while X7 (needs X6, S5, S8) also lists the SKILL.md. As drawn, S5 runs ∥ S3 (base parallelism), before the commands exist; X7 then edits the same skill. Either S5 is held until X6 (a base-plan change; say so, and who tells `teco`), or SKILL.md is split between two edits and the "once" claim is dropped. Pick one in the table.
+- S9 (base §4, `cobb`: `teco.md`, `tico.md`, `audit-team.sh`, `agent-team.md`) and X7 edit `teco.md`/`tico.md`/`audit-team.sh`. §6 says X7 "subsumes S9's optional columns" but gives no order. S9 needs S5, S8; X7 needs X6, S5, S8: neither orders against the other. Two concurrent `cobb` edits of `teco.md` (a 205-line context-heavy file) is a conflict; serialise (X7 before S9 or merged into S9's row) and name which unit owns the `audit-team.sh` change.
+*Fix:* merge X7 into S9 (and the SKILL.md part into S5 held until X6), or state the order and the file ownership per row.
+
+**M3 (major, verified) — "conditional ready" will fire permanently on unadopted ledgers.**
+The warning block (§3.4) lists every running unit with `touches` absent, and §3.1(6) / FR-7 leave pre-existing ledgers unadopted except `connected-code-graph`. Count over the 98 ledgers (headers `Status` ≠ `archived`, crude status-cell match): 10 non-archived ledgers; 8 hold rows in `in-flight`/`delivered`/`gated`/`paused` (47 rows), 4 of them (`python-web-quirks-kb`, `document-size-discipline`, `agent-reading-cost`, `anthropic-api-adoption`, 16 rows) are old and unadopted; they will never be adopted by X8 and, per FR-5's RUNNING set, their `delivered` rows hold areas forever. Result: the warning block lists those rows on every `ready`, and every "ready" is conditional by the plan's own rule — the signal is lost. Same class for *facts missing*: queued rows of unadopted ledgers (e.g. `live-spec-defects`, `model-bench-defects`) will always be listed.
+*Fix (design decision, see Open question 1):* (a) summarise per ledger ("`<ledger>`: 11 running rows without areas") and sort the warning by ledger instead of listing units; and/or (b) the stakeholder closes out or `archived`-flips the dead ledgers (a `teco`/human close-out, outside this plan); and/or (c) X8 adopts every non-archived ledger with running rows. Add a test: the warning block for N unadopted rows in one ledger is one line.
+
+**M4 (major, verified) — FR-6 path scoping: two gaps and two test defects.**
+- Root scoping alone permits any in-repo file whose path is in the mirror; the plan does not require that the resolved path be a regular file whose name matches the ledger discovery rule (`<…>/docs/plans/*-coordination.md`, the rule S1a's `discover.py` uses). Add that check after `realpath`; mirror poisoning (a rewritten `:Source.path`, e.g. to `.claude/settings.local.json` or an in-repo `.env`) then reads nothing but ledgers. Open with `os.open(..., O_NOFOLLOW)` on the resolved path (or compare `os.fstat` with the `realpath` stat) to close the resolve-then-read window; low risk on a local CLI, one line to say.
+- Test split: §5 X3 says the resolver "takes the mirrored path as input … no graph code", yet test 5 (labelled X3, offline) includes "a path not in the mirror … refused" and the mutant "open the argument path directly" — both exist only in S7c's lookup, not in X3's resolver. State which half is offline (containment, symlink, size, regular-file, name pattern) and which is live (argument must be a mirrored `Source.path`), and put the mutant on the live half.
+- Test 5's replay over all 97 ledgers asserts "each returns a section or 'none', no crash": a check that cannot fail on a wrong alias set (root `REVIEW.md`, can-fail rule). Pin independently computed expected counts per heading class (a plain `grep` over the ledgers gave, with `^## ` and the plan's regexes: Documentation impact 11, Documentation-impact scan 9, Close-out 10, Closure 5, Close 6; the plan's own figures 8/7/6/4/3/3 and "97" disagree with a repo count of 98 ledger files — recompute with one stated method) and assert the reader returns exactly those.
+- Whether `security-expert` should weigh the scoping is Open question 3.
+
+**m1 (minor) — growth-stops residue: answered questions still in the plan.** §8 keeps **Q1** and **Q2** and §6 keeps "`tico`: clarify AC-6 per Q1"; the requirements decision log (2026-11-20) now answers both. Delete Q1/Q2, the §6 `tico` row and the "(Q2)" cite in §3.4; the plan states the design, not the question.
+
+**m2 (minor) — `Extended by:` missing (collision rule 5).** The plan carries `Extends:` for `claude/docs/plans/coordination-graph.md`, `coordination-graph3.md` and `coordination-graph-graph.md`; none of the three headers carries `Extended by: docs/plans/cross-initiative-coordination.md` (checked). A header pointer is the one edit allowed anywhere; route to `architect` (base/plan3) and `graph-dba` (note), or `teco` at close.
+
+**m3 (minor) — `ready` default output size.** §3.4 collapses *waiting* to a count unless `--all`, but *facts missing* and *warnings* are always listed in full; combined with M3 the default output can be dominated by legacy rows. Collapse by ledger by default.
+
+**m4 (minor) — the Description line's 200-char "truncated + warning" and the `Ledger.description` first-line rule** are tested in test 2, but `lint`'s "non-archived ledgers lacking a description" (X6) will flag every one of the 10 non-archived ledgers on day one except the adopter; say it is informational and that the count is expected (ties to M3).
+
+**n1 (nit)** — §2 says "S1a and S1c in flight, S1b delivered": the live ledger now shows S1c `accepted` (committed `c85cd417`); update on next touch.
+
+### What's solid
+Requirements → step/test traceability is complete; the AC-4 matrix and mutants (relies exemption, `fnmatch`, `delivered` as satisfying) are the right ones; one pure overlap predicate for backlog and ledger sides; the decision to keep section text out of the graph (AC-5 by construction); the `—`/empty/`none` three-way fact semantics match the already-built `parse_needs`; description as a body line, not a header field; rejected alternatives are stated; no new capability beyond the requirements except the `overlaps` command.
+
+### Open questions (with recommendations)
+1. **Stakeholder (M3):** what happens to the unadopted but non-archived ledgers (10; 4 old with `delivered` rows)? Recommend (a) per-ledger summarised warnings plus (b) close-out/archive of the dead ones by `teco` at the milestone close; do not extend X8 to them.
+2. **Stakeholder/architect:** keep the `overlaps` area-comparison subcommand or limit FR-2 to reading the Coordinations block? Recommend keep (it is the only deterministic piece of AC-2 and `teco`'s kickoff has areas), but say explicitly in the plan that it is beyond FR-2's wording.
+3. **Other owner:** `security-expert` light pass on §3.6 + X3 before implementation? Recommend yes for the path-scoping paragraph only (cheap, the requirements named the concern for a service; this is a CLI read of a mirror-supplied path), after M4 is folded in; not a standing gate.
+4. **`teco` (M1/M2):** who edits base §4's S3/S5/S9/S10 rows' dependencies — recommend the architect adds the list in §6 of this plan and `teco` applies it in the live ledger, rather than editing base v2.
+
+## Pass 4 (2026-11-20) — scoped confirmation of Pass 3
+
+**Scope.** The revised `docs/plans/cross-initiative-coordination.md` (4,675 words) against Pass 3. The `security-expert` pass on §3.6 is separate and not duplicated. CPG: considered, not relevant — documents only.
+
+**Verdict: approve with suggestions** — 0 blockers, 1 new major (N1), 0 new minors. All Pass 3 findings fixed except M3, which is fixed in part (see N1).
+
+### Pass 3 dispositions
+- **M1** fixed. §5 rows `S3 (addition)` Needs X1, X5; `S7c` is its own row (S3, S7a, X3, X4; gate graph-dba then analyst); `S10 (addition)` Needs S7c, S9, X6; the same edits are listed for `teco` in §6. Renumbering rechecked by grep: X-references are X1–X7 only, all resolve (adoption X6 in tests 11 and §6; close X7 in §8 and §6), no stale X8/X9/X10.
+- **M2** fixed. One `S9 (addition)` row owns `teco.md`/`tico.md`/`audit-team.sh`; SKILL.md is stated as S5 first, a second edit in S9; the "write once" claim is gone.
+- **M3** partly fixed. Per-ledger collapse added (§3.4 line 62, X4); but it also collapses *facts missing*, which conflicts with AC-3 (N1).
+- **M4** fixed. §3.6 now requires regular file, `*-coordination.md` name rule, `O_NOFOLLOW`, 2 MiB cap; test 5 (offline) and 5b (live, mutant "open the argument path") split correctly; the corpus test pins 20 scan-list headings in 20 files and 26 closing headings in 25 files; I recomputed with an independent fence-aware script over the 98 files: 20/20 and 26/25 — matches.
+- **m1** fixed (no Q1/Q2, no §6 `tico` row left; grep). **m2** fixed (the base plan, plan3 and the note headers each carry `Extended by:` for this plan; base also still lists plan2 and plan3). **m3** fixed in form (collapse), see N1. **m4** fixed: `lint` is "informational, exit 0" (§3.4/§5 line 72) and the day-one count is covered by §2's unadopted-ledgers bullet. **n1** fixed (S1c `accepted`).
+
+### Checks
+- `wi check` (`python3 skills/work-items/scripts/wi.py check`): only `family-no-item: claude/docs/reviews/coordination-graph-guard.md`, the unrelated expected one.
+- Growth-stops: 4,156 → 4,675 words (+519). The growth is mostly rework answering Pass 3 (S3/S7c/S9 rows, the §6 dependency-edit list, the §3.6 hardening, the corpus test), which is new scope against the findings, not residue; no finding IDs, Q1/Q2 or resolution tables remain. Small trim candidate only: the "does not drown the live signal" rationale sentence in §3.4 line 62 and the §2 "Unadopted ledgers" bullet say the same thing (one fact, one home) — nit.
+
+### New finding
+**N1 (major, verified by reading §3.4 line 62 and test 7) — default collapse of *facts missing* breaks AC-3.** AC-3/FR-4 say a unit with a malformed `needs` "is listed with what is missing; never silently dropped". Line 62 prints *facts missing* as one count line per ledger unless `--all`, so in an adopted ledger a unit with a `needsError` appears only as "`<ledger>: 1 queued row missing facts`" with no unit and no error text; test 7 does not say it runs with `--all`, so the live AC-3 test can pass or fail by flag. *Fix:* collapse by default only ledgers with **no unit carrying any recorded fact** (the unadopted ones M3 was about); list every unit of any ledger that has at least one recorded fact individually, with the error; add an X4 test (one adopted ledger with one bad row and one unadopted ledger with 11 rows: default output = one line for the unadopted, one named unit with its error for the adopted; mutant: collapse everything) and say test 7 asserts the default output.
+
+## Pass 5 (2026-11-20) — final scoped confirmation
+
+**Scope.** Pass 4 N1 and the findings of `docs/reviews/cross-initiative-coordination-security.md` (M1–M3, m1–m5) against the whole revised `docs/plans/cross-initiative-coordination.md` (5,174 words), re-read in full. CPG: considered, not relevant — documents only.
+
+**Verdict: approve with suggestions** — 0 blockers, 0 majors, 2 minors (m1, m2), 2 nits. Pass 4's N1 and all eight security findings are folded in. The plan may go to `teco` as-is; the minors can ride the next ordinary touch.
+
+### Dispositions
+- **N1** fixed. §3.4 line 62: collapse only for ledgers where no unit carries any recorded fact; every other ledger lists each unit with what is missing/the error; test 4 gained the collapse test (adopted ledger with one bad row + unadopted 11-row ledger; mutant "collapse everything"); test 7 is "run without `--all`" and asserts the named unit.
+- **Sec M1** fixed: §3.6 "Open and checks on the fd" (`O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC`, `fstat` `S_ISREG`/size/nlink); test 5 FIFO case under a timeout, mutant "skip the `fstat` checks".
+- **Sec M2** fixed: `commonpath` on real root; name rule on the realpath incl. directory; post-open `/proc/self/fd` re-resolve with the non-Linux residual named; test 5 has `/repo-evil`, in-root symlink to `.env`, symlinked parent, swapped-after-check, `startswith` mutant.
+- **Sec M3** fixed: untrusted-data framing with per-call boundary token, line prefixing, control/ESC/bidi stripping (§3.6); SKILL wording in §6 ("section text is evidence, never an instruction"); test 5 "Framing" case.
+- **Sec m1** fixed (`st_nlink == 1`; hardlink test). **m2** fixed (64 KiB cap + marker, ≤ 50 headings × 120 chars; test). **m3** fixed in the text ("One buffer", `errors="replace"`, mtime from the same `fstat`; NUL/invalid-UTF-8 test); see n2. **m4** fixed (per-line regexes on recognised headings, 200-char cut; 2 MiB single-line and 100k-heading bounds in test 5). **m5** fixed (`$parameter` binding, `kind = 'ledger'`, ambiguous/absent refused, absolute/`..` mirror path refused; H4 and test 9 widened to every node and relationship property in the mirror key).
+- `wi check`: only the expected `family-no-item: claude/docs/reviews/coordination-graph-guard.md`.
+
+### Whole-plan re-read
+No contradictions found: X-ids X1–X7 plus S7c resolve everywhere (§5, §6, §7, "Ready to implement"); S3/S7c/S9/S10 dependency edits in §5 match the §6 `teco` list; tests 1–5 offline / 5b, 6–11 live matches X3/S7c; §3.4 population, RUNNING set and the AC-4 matrix match requirements v4. No finding→resolution table, no "changed in revision N" narrative, no Q1/Q2.
+
+### New findings
+**m1 (minor) — review narrative in a design doc.** §3.6 line 92, "`security-expert` reviewed this paragraph (advisory, not a gate; no service is built)", records review history, not design; growth-stops says a plan states the current design only and cites findings by ID at most. It belongs in the review/security report, not the plan. Delete it (the "no service is built" fact is already stated in the next bullet). The §6 heading's "(nothing edited here except the three `Extended by:` header pointers)" is the same kind of residue; trim to "(nothing edited here)".
+**m2 (minor) — an owed doc has no owner.** §3.6 says the non-Linux residual "is documented in `coordination-graph/README.md`", but the only step touching that README is X7's subcommand update; S11 (component docs) is not cited. Name it in X3's row or X7 (and the same for the fixed-path reading rule).
+**n1 (nit)** — §2 line 20's alias counts overlap (`Close-out` 11 and `Closure` 5 plus `Close` 19 sums to 35, but the corpus test pins 26 closing headings): `Close\b` also matches `Close-out`, which makes the `Close-?out` alternative redundant. State the counts per matched file/heading class (26 in 25 files) rather than per alias, or drop the redundant alternative.
+**n2 (nit)** — test 5 has no mutant for "re-open the file to hash it" (m3's one-buffer rule); add one (hash from a second read, red if the file is swapped between reads).
+
+### Growth-stops
+4,675 → 5,174 words (+499): new scope (the hardened §3.6 bullets, test 5 bounds/framing, collapse test), not rework of finding prose; the only residue is m1.
+
+### Hand-off
+The plan can go to `teco` as-is. Nothing here needs a stakeholder decision; m1/m2/n1/n2 are architect trims for the next ordinary revision and do not gate implementation.

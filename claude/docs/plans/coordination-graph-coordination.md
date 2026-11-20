@@ -73,8 +73,22 @@ Resumed from the ledger above; plan 3 (`claude/docs/plans/coordination-graph3.md
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
-| S1a Skeleton + header + parsers | `coder` | `a7f89853b17710197` | in-flight | `coordination-graph/` | `analyst` (after S1e) → — | — |
-| S1b Ephemeral fixtures | `devops` | `adb37bc40b660d102` | delivered (uncommitted; smoke observed by delegate; commit with S1a, shared dir) | `coordination-graph/tests/fixtures/live.py` | — (no gate per plan) | — |
+| S1a Skeleton + header + parsers | `coder` | `a7f89853b17710197` | gated-pending (teco re-ran 221 passed; committed 739b6ec6; S1b 6d8ff17c) | `coordination-graph/` | `analyst` `acf7c62af8d2407a3` → `claude/docs/reviews/coordination-graph-impl.md` ## S1a, in-flight | 260k tok / 77 tools |
+| S1b Ephemeral fixtures | `devops` | `adb37bc40b660d102` | accepted (committed 6d8ff17c; smoke is delegate-observed) | `coordination-graph/tests/fixtures/live.py` | — (no gate per plan) | — |
 | S1c cobb guard widening | `cobb` | `af73aec7d7092a340` | accepted (teco re-ran 3 hook probes; committed c85cd417) | `claude/cobb/hooks/guard-cobb-topic-writes.sh` (c85cd417) | `analyst` (light, `a8dbdb2623eb1817e`, `claude/docs/reviews/coordination-graph-guard.md`) → **approve-with-suggestions** (m1: `..` traversal passes `*` globs, pre-existing class in `guard-doc-writes.sh`; core fix left as follow-up for the stakeholder, not in S1c scope) | — |
-| S1e Backlog/history/lint/migrate | `coder` | — | queued (after S1a) | `coordination-graph/coordgraph/*` | `analyst` → — | — |
+| S1e Backlog/history/lint/migrate | `coder` | `abcd3b5ca1392d446` | in-flight (parallel with S1a gate) | `coordination-graph/coordgraph/*` | `analyst` → — | — |
 | S1d `identity.py` | `tdd-engineer` | — | queued (after S1a/S1e) | `coordination-graph/coordgraph/identity.py` | `analyst` → — | — |
+
+## Addendum 2 — cross-initiative coordination plan (docs-only, 2026-11-20)
+
+`GAL-F0003`; implementation sequencing against `teco`'s in-progress coordination-graph build is the plan's §5.
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| B1 Plan | `architect` | a7a9c316260538807 | accepted | `docs/plans/cross-initiative-coordination.md` (+ ids note → superseded) | B2 | — |
+| B2 Plan review | `analyst` | a90bd18ddde05a810 | gated | `docs/reviews/cross-initiative-coordination.md` Pass 3 | analyst → **approve-with-suggestions** (0 blocker, 4 major, 4 minor, 1 nit); stakeholder: dead ledgers summarised + teco closes them, `overlaps` kept | — |
+| B3 Plan fixes (Pass 3) | `architect` | a7a9c316260538807 | accepted | `docs/plans/cross-initiative-coordination.md` (3 revision rounds: Pass 3, N1 + security, Pass 5 trims) | B4, B5 | — |
+| B4 Security pass on FR-6 path scoping (§3.6, X3) | `security-expert` | a1c28d50d13490a2b | gated | `docs/reviews/cross-initiative-coordination-security.md` | security-expert → **approve-with-suggestions** (0 blocker, 3 major, 5 minor; all folded in) | — |
+| B5 Scoped confirmation of Pass 3 fixes | `analyst` | a90bd18ddde05a810 | gated | `docs/reviews/cross-initiative-coordination.md` Pass 4–5 | analyst → **approve-with-suggestions** (Pass 5: 0 blocker, 0 major, 2 minor, 2 nit; trims taken) | — |
+- 2026-11-20 — S1a delivered. Coder's calls needing owner confirmation (routed to the S1a gate): `slug_of` strips closed-set roles per kind (narrows note §2.2); status tally 72/986/`unknown` 104 vs note 74/911/41; `unitKey` leaves dashless unit cells whole; wrapper is `coordgraph.sh` (S5/S8/S11 invoke that, not `coordgraph`).
+- 2026-11-20 — Addendum 2 closed: plan accepted for `teco`. Open risk for `devops`/stakeholder: who can write to the shared FalkorDB mirror key (a poisoned `:Source.path` is the main FR-6 attack route). `teco` applies the plan §6 dependency edits to the live ledger.

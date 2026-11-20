@@ -90,8 +90,9 @@ and "touched areas" as files, graph keys or facts (FR-13, FR-14).
   units `accepted`, and not met when a non-archived ledger has an `abandoned` or unfinished unit.
 - **AC-5** (FR-6) — Given a closing report edited in the file, when a reader asks the view for it,
   then it obtains the edited text, and any copy shown carries its sync time.
-- **AC-6** (FR-7) — Given the `connected-code-graph` ledger after `teco` records FR-4 facts, then
-  its units, status and needs are queryable from the view.
+- **AC-6** (FR-7) — Given the `connected-code-graph` ledger after `teco` records FR-4 facts on every
+  non-terminal unit (finished `accepted`/`abandoned` rows may stay blank), then its units, status
+  and needs are queryable from the view.
 
 ## Open questions
 None.
@@ -186,3 +187,5 @@ the record. A need that cannot be found is listed as unresolvable. FR-5.
 2026-11-20 — Register this feature in the work-item registry? → Yes; `GAL-F0003`, `relates` `GAL-F0002`. Header `Item:`.
 2026-11-20 — Does an archived ledger make every need on its units met (AC-4 read unconditional)? → No; only on an `accepted` unit, as FR-5 says. AC-4.
 2026-11-20 — Feature need when an archived ledger holds an `abandoned` unit? → Archived wins: met. FR-5, AC-4.
+2026-11-20 — How far must the `connected-code-graph` ledger adoption go? → Every non-terminal unit carries the facts; finished rows may stay blank; no backfill. AC-6.
+2026-11-20 — Does ready-now also flag two ready units overlapping each other? → No; FR-5 stays as written (flag against running units only). FR-5.
