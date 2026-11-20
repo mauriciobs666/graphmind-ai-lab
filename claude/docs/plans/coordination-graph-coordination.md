@@ -66,3 +66,15 @@ Opened by `tico` at the stakeholder's request; touches no code. The base chain a
 
 - 2026-11-10 — `coordination-graph2.md` (scheme-ID heading regex) was delivered without a ledger row; recorded here: extends the base plan, superseded in part by `coordination-graph3.md`.
 - 2026-11-20 — A8 Pass 7: approve-with-suggestions; addendum closed. Next (implementation, plan3 S1d onward) goes to `teco`, which resumes from this ledger. Loose ends for `teco`: prune `.work-items/baseline.txt` lines for the two requirements files after a repo-wide `wi check`; flip `docs/plans/cross-initiative-coordination-ids.md` to `superseded` when `docs/plans/cross-initiative-coordination.md` (GAL-F0003) is written.
+
+## Implementation phase (`teco`, opened 2026-11-20)
+
+Resumed from the ledger above; plan 3 (`claude/docs/plans/coordination-graph3.md`) controls where it disagrees with the base plan and plan2. Base §4 step ids are reused; S1 is split (more than 5 files) into **S1a** (skeleton, config, keys, header parser, discover, ledger/review/requirements/kb parsers) and **S1e** (backlog parser, history, `lint`/`migrate`/`facts`/`history-coverage`). Carry-forward: plan3 §6 tests (12–13 included) ride S1d/S3/S7; P4-m1 (client-timed-out KB POST the server still committed = outcome-unknown) rides the S6 gate. Loose ends from the addendum: prune `.work-items/baseline.txt` lines for the two requirements files after a repo-wide `wi check`; flip `docs/plans/cross-initiative-coordination-ids.md` to `superseded` once `docs/plans/cross-initiative-coordination.md` is written. Docs in scope (scan): component `coordination-graph/{README,AGENTS,CLAUDE,docs/HISTORY}.md` (S11), `skills/coordination-graph/SKILL.md` + `skills/README.md` (S5), `teco.md`/`tico.md`/`audit-team.sh`/root+claude `AGENTS.md`/`agent-team.md` manual (S9, `tico` for the manual), `.work-items/baseline.txt`.
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| S1a Skeleton + header + parsers | `coder` | `a7f89853b17710197` | in-flight | `coordination-graph/` | `analyst` (after S1e) → — | — |
+| S1b Ephemeral fixtures | `devops` | `adb37bc40b660d102` | delivered (uncommitted; smoke observed by delegate; commit with S1a, shared dir) | `coordination-graph/tests/fixtures/live.py` | — (no gate per plan) | — |
+| S1c cobb guard widening | `cobb` | `af73aec7d7092a340` | accepted (teco re-ran 3 hook probes; committed c85cd417) | `claude/cobb/hooks/guard-cobb-topic-writes.sh` (c85cd417) | `analyst` (light, `a8dbdb2623eb1817e`, `claude/docs/reviews/coordination-graph-guard.md`) → **approve-with-suggestions** (m1: `..` traversal passes `*` globs, pre-existing class in `guard-doc-writes.sh`; core fix left as follow-up for the stakeholder, not in S1c scope) | — |
+| S1e Backlog/history/lint/migrate | `coder` | — | queued (after S1a) | `coordination-graph/coordgraph/*` | `analyst` → — | — |
+| S1d `identity.py` | `tdd-engineer` | — | queued (after S1a/S1e) | `coordination-graph/coordgraph/identity.py` | `analyst` → — | — |
