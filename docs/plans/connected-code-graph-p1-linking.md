@@ -2,6 +2,8 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1)
 
+*2026-11-20: P1-51 and P1-52 added (post-P1-50 report D1, D2, AC-5 wrapper items); P1-49's typed-verb, wrapper-leaf and Done-when (2) text revised in place.*
+
 Part of `docs/plans/connected-code-graph-p1.md` (decisions D1–D11, obligation walk §4, step index §7). Contracts:
 packs `docs/plans/connected-code-graph-rule-pack-spec.md`, graph `-graph.md` + `-p0-graph.md` (model v1, DDL,
 load protocol §4, spike decisions §6), bundle `-bundle-spec3.md` + `-bundle-spec4.md`. The slice's `assemble.py`
@@ -99,9 +101,11 @@ whose `Request(url, ...)` is seeded and lifted through `path` (and `method`) to 
 lifted fact is `confirmed`/`lifted-role`);
 `salesperson/scripts/load_demo.py::run_participant` and `language_salience_probe.py::{run_participant,_assistant_rows_since}` call
 `http_json(method, url)`, whose seed slot is the bare parameter `url`; lifted to the caller's `f"{base_url}/shop/api/..."`
-(`\x01/shop/api/...`, `base_url` a parameter: rule 2 drops the origin, `possible`). If the lifting fixpoint does not
-carry a template that mixes a parameter with another unresolved piece, that is returned to the architect as a finding before
-any engine change. The item keys above need the constant text of Python f-strings, which the stored bundles do not carry
+(`\x01/shop/api/...`, `base_url` a parameter: rule 2 drops the origin, `possible`). A caller that passes a parameter into
+an informative template of a wrapper (`_poll_until_terminal(document_id)` into `f"/documents/{document_id}"`;
+`_assistant_rows_since(..., since)` into the `/shop/api/messages?since=` template) is not the consumer, the template's site is
+(unit P1-51): the gold impacted symbols `_poll_until_terminal` (line 289) and `_assistant_rows_since` (line 367) are those
+sites, `possible`/`partial-key`. The item keys above need the constant text of Python f-strings, which the stored bundles do not carry
 (precondition S-1, below): the count is measured on bundles that have it, else reported with that cause; (3) the analyst plan-gate stopping conditions: the coverage table below
 is asserted cell by cell with its cause-axis rows committed in 49a before 49b starts; 5d's oracle mechanism is the one stated
 there; 5d's rule is the one stated there over both receiver shapes with its probe table.
@@ -114,10 +118,15 @@ shape is a lifting; the direct call is the lifting's own seed site. Recorded sha
 bundle files at `builtCommit 8377c326`; the probe is re-run in 49b and reported): `requests.<verb>(u)`, `httpx.<verb>(u)` and
 `<client>.<verb>(p)` on an untyped client all have `calleeName` = the verb, `resolution` `unresolved`, no `externalTarget`, no
 receiver; `httpx.Client(...)` is `external` `httpx.py:<module>.Client.__init__`; `Request(...)` and `urlopen(...)` are `external`
-`urllib.py:<module>.<member>(request).Request.__init__` and `...urlopen`. No `requests`/`httpx` verb call is typed anywhere in the
-stored bundles, so the pack has no typed verb seed (adding one is a leaf no test could exercise).
-- *Verbs* `get|post|put|patch|delete`: one lifting each (`py-get`...), seed `{call: {callee: <verb>, resolution: [unresolved]},
-  arg: a0, scope: {imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}}`, `ownSite: true`, `urlLike: true`; the
+`urllib.py:<module>.<member>(request).Request.__init__` and `...urlopen`. A module-level `requests.<verb>(u)` call is `external`
+`requests.py:<module>.<verb>` (observed in the fixture build: `fx-job/job/run_report.py` and `api_client.py`, `fx-svc/api/orders.py`
+and `clients/*.py`; no `externalTarget` of that form, and none of `httpx.py:<module>.<verb>`, occurs in the proving repository's
+bundles at `01cb0dba`). Each verb lifting therefore has a typed seed beside the untyped one (unit P1-51, part A).
+- *Verbs* `get|post|put|patch|delete`: one lifting each (`py-get`...), two seeds with `arg: a0` and the same `scope`
+  `{imports: [{module: {prefix: requests}}, {module: {prefix: httpx}}]}`: the untyped `{call: {callee: <verb>, resolution:
+  [unresolved]}}` and the typed `{call: {callee: <verb>, externalTarget: [{exact: "requests.py:<module>.<verb>"}, {exact:
+  "httpx.py:<module>.<verb>"}]}}` (exact, never a glob: `__builtin.dict.get` and `typing.Mapping.get` are `external` too),
+  `ownSite: true`, `urlLike: true`; the
   rule's `extract.verb` is `{literal: GET}` (the lifted `Hit` is the *leaf's* callee, so a callee group cannot carry the verb).
 - *`urllib.request.Request(url, method=...)`*: seed `externalTarget` glob `urllib.py:*Request.__init__`, `scope` the `urllib`
   prefix, `ownSite: true`; companion `kw.method`, `bareDefault: GET`, `unknown: "*"`. *`urlopen(x)`*: seed `externalTarget` glob
@@ -135,7 +144,8 @@ caller's) and this pack leaves it off: the caller of a wrapper need not import t
 `liftings[].ownSite` (boolean): a slot is a leaf when no *slot* lies beyond it on the fixpoint (today a parameter node below it also
 counts, so a seed fed by a parameter is never a consumer unless a call edge reaches its function). With it, a wrapper
 that no call edge reaches (`pool.submit(f, ...)`, an untyped receiver, an entry point) is a consumer at its own site, from its
-own template; a wrapper with at least one lifted caller is still not a leaf. `liftings[].urlLike` (boolean): a leaf keeps only
+own template; a wrapper with at least one lifted caller is not a leaf, and is the consumer only when it is a `wrapperSite` (unit
+P1-51, part B). `liftings[].urlLike` (boolean): a leaf keeps only
 the alternatives that are URL-like (`httpkey.is_url_like(alt)`: it starts with `/` or `//`, matches `scheme://`, or is a run of
 unresolved markers followed by `/`) and the wholly unresolved ones; a leaf with no URL-like alternative is dropped from
 `PackFacts.lifted` (no keyless `possible` fact either), and `partialAlternatives` is computed before the filter so `[/a, \x01]`
@@ -168,7 +178,8 @@ its URL role is not lifted from that call. With `ownSite` the wrapper's seed is 
 own site, from its own template: `possible`/`partial-key` when a path piece is unresolved (`/items/{?}`), nothing when the
 template holds no URL-like text (`self.base + path` is `\x01\x01`: a `POST /{?}` key would only match any one-segment
 provider; a `Request` wrapper with a bare parameter gives a keyless `possible` fact). A wrapper with at least one lifted
-caller is not a leaf, so its name-linked callers contribute nothing: a pinned limit, not fixed in P1; a P2 item (owner
+caller whose template is not informative (P1-51, part B) is not a leaf, so its name-linked callers contribute nothing: a
+pinned limit, not fixed in P1; a P2 item (owner
 `architect`) gives lifting the `nameLinked` candidates as weakened callers. Tests: a wrapper called through `self.` and through
 an untyped parameter (the call is not lifted; the wrapper's own site as above, for both a `/items/{?}` template and
 `self.base + path`); the same wrapper through a constructor-typed receiver (lifted, as the fixtures' `ApiClient`); a wrapper
@@ -431,6 +442,133 @@ holding an f-string stays unresolved, the mount `unresolved-part` rule and the p
 **Order inside the unit.** (a) the independent references and the JS/TS, receiver-tag and literal tests, red; (b) the `_self_rule`
 change; (c) the Part B live check, then the `Resolver.element` change, goldens regenerated; (d) the delta `0.7`, the pinned
 literals, the regenerated draw file; (e) the full run of Done when 6.
+
+## P1-51 · typed `requests`/`httpx` verb seeds and the wrapper's own site — `tdd-engineer`
+
+Two serial dispatches (both edit `packs/python-http-client/pack.yaml` and its test file): **51a** part A, then **51b** part B.
+Cause: the post-P1-50 report `docs/test-reports/connected-code-graph-p1-5d-50-report.md` (defect D1; section C items 4 and 6 and the
+`GET /0` finding). Needs P1-49 and P1-50. Briefing line as for every step of this plan.
+CPG: considered, not relevant — the subject is the `ccg` pack runtime and its stored bundles, not a Joern `cpg_<component>` graph.
+
+### Part A (51a): typed verb seeds — the fixture rows' Python consumers
+**Premise, checked on the stored data.** The claim "no `requests`/`httpx` verb call is typed" holds for the proving repository and
+fails for the fixtures. Proving repository (bundles at `01cb0dba`, 2,178 callsites named `get|post|put|patch|delete`): 816 are
+`unresolved`, none has an `externalTarget` naming `requests.py` or `httpx.py` (`httpx.py` occurs only as `Client.__init__`, 3
+times). Fixture build (QA's throwaway store, the `svc` and `job` bundles): 5 callsites per bundle (4 `get`, 1 `post`) have
+`resolution: external`, `externalTarget: "requests.py:<module>.<verb>"`; the pack's `resolution: [unresolved]` seeds match none.
+Typing only appears where a file imports `requests` at module level, so the fixtures (which all do) are the pack's only test data.
+**Decision.** Each verb lifting gets the typed second seed stated under "Pack" in P1-49 (exact `externalTarget` pair, same `scope`,
+same `urlLike`/`ownSite`). Rejected: re-gating the rows (the rows are correct: a Python `requests` consumer is the pack's purpose,
+D13); widening the seed to `resolution: [unresolved, external]` (it would seed `__builtin.dict.get` 358 times, `typing.Mapping.get`
+176, `TestClient.get` 188 in the proving repository, held back only by the import gate and URL-likeness); a glob `*get` (same hole).
+**Proving-repository risk: none by construction**, the new seeds match 0 callsites there (observed). It is asserted, not assumed.
+- **Files:** `packs/python-http-client/pack.yaml` (the five liftings), `tests/test_pack_python_http_client.py`, the leaf-harness
+  registration (`tests/test_rule_pack_leaf_mutation.py`: the new leaves `KILLED`), `tests/test_fixtures.py` (the live guard below).
+- **Done when:** (1) over synthetic records of the observed shapes (`calleeName` verb, `resolution: external`, `externalTarget`
+  `requests.py:<module>.<verb>` and `httpx.py:<module>.<verb>`, in a file whose import record is `requests`/`httpx`), each of the 5
+  verbs yields the own-site consumer in the key form P1-49's rules give; (2) the real `externalTarget` strings observed on the
+  proving repository yield nothing, with the import gate satisfied: `__builtin.dict.get`, `typing.Mapping.get`,
+  `os.py:<module>.<member>(environ).get`, `fastapi/testclient.py:<module>.TestClient...get`, `pathlib.py:<module>.Path.get`,
+  `FalkorDB.select_graph.delete`; (3) a typed call in a file importing neither library is not seeded; (4) **live guard** (`-m live`,
+  fixture build; QA recommendation 5): every Python unit of `fixture-system1` that calls `requests.<verb>` yields at least one http
+  consumer, and the consumer facts of `LNK-08`, `LNK-11`, `LNK-13`, `LNK-14`, `LNK-15`, `LNK-37`, `TW-2`, `AC6-EX-4` and `DF-3`'s
+  `requeue` exist in the forms of "Unknown-origin key rule" above (their `binding-confirmed` halves are the binding RCA's, not this
+  unit's); (5) **no regression:** over the ten Python units' stored bundles the run's `providers`, `mounts`, `consumers`, `lifted`
+  multisets are equal before and after (the Part B figures of the report: providers 91, mounts 3, consumers 128, lifted 73).
+
+### Part B (51b): a wrapper whose template is informative is the consumer, not its callers
+**Premise, checked.** AC-5's gold items are the wrapper symbols at the wrapper's own line: `impacted.qname`
+`seed_nlq_eval_corpus.py::_poll_until_terminal`, `lines [289]`, and `language_salience_probe.py::_assistant_rows_since`, `lines
+[367]` (`cpg/eval/dev/ac5-http.jsonl`; hit definition: P1-49 Done-when 2, "at any status"). AC-5's text ("every one appears in the
+answer individually, with its evidence, as confirmed or possible") is satisfied by that reading; **no requirement or gold item
+changes**. The engine is what is wrong: `lift.py:run_lifting` makes the wrapper's *callers* the consumers and takes their key from
+the leaf slot alone, which for `main:377 _poll_until_terminal(document_id)` is the bare `\x01` (a keyless `possible` fact the linker
+fans out to every `http` provider; QA observed 60), and for `run_participant:397 ..._assistant_rows_since(base_url, token, 0)` the
+constant `0` (`GET /0`). A caller that passes an *id*, a *cursor* or an *origin* into a wrapper's template has not made a request to
+that value: the template's site is the request. Observed on the ten Python units with the unit's own scratch probe (not committed;
+`py-request` only): 9 leaf facts have a non-transparent slot below them, 7 of them an informative one (`/documents/\x01` at
+`seed_nlq_eval_corpus.py:289`; `\x01/shop/api/messages?since=\x01&limit=\x01` at `language_salience_probe.py:366`; `\x01/shop/api/state`
+at `language_salience_probe.py:424`; `\x01/shop/api/presenter/session` at `load_demo.py:284`); the last two sites have **no
+consumer today** (their callers took their place), so the rule also recovers recall; the other 2 are non-informative (kept).
+**Decision.** New optional lifting word `liftings[].wrapperSite` (boolean, default off, set on the seven `python-http-client`
+liftings; the `fetch` pack and the S12 oracle stay byte-equal with it off, measured 0 opaque slots in `s14a`).
+- *Informative slot:* a slot that is non-transparent (rule 4: it has a value set with an alternative not wholly unresolved) and has
+  an alternative `a` with `is_url_like(a)` whose `normalize_key_parts("GET " + a, "consumer")` path has at least one segment other
+  than `{?}`. `/documents/\x01` (`/documents/{?}`) and `\x01/shop/api/messages?...` (origin dropped) are informative; `\x01\x01`,
+  `/api\x01` (one partial segment, `{?}`) and `\x01?q` are not. The non-informative opaque case is unchanged (LNK-11: the caller
+  is the consumer, `possible`/`partial-key`, `opaqueSlot` recorded).
+- *Rule:* for a leaf, scan its chain from the leaf toward the seed (the seed's slot included) for the first informative
+  non-transparent slot X. If X exists, **the leaf is dropped from `PackFacts.lifted`** (else `linker/link.py:_unknown_lifted`
+  re-creates the keyless fact, as the `urlLike` drop already avoids) and X becomes the consumer: `leaf: true`, its own
+  alternatives (with the `urlLike` filter), hops from X to the seed, verbs from X's chain, status by P1-49 rules 1-4 (an unresolved
+  piece in the path or an origin drop gives `possible`/`partial-key`). X is emitted once however many leaves map to it. With two
+  informative slots on a chain the nearest to the leaf wins (the slot `opaqueSlot` already names). Origins passed by callers are not
+  joined into X's key (a P2 item, owner `architect`, with the env binding).
+- *Demotion of keyless caller sites:* decided here only where an informative wrapper site exists (above), which removes the keyless
+  fan-out of the 7 observed leaves. Any other keyless leaf (a `Request` wrapper with a bare parameter and no informative template
+  anywhere) stays a keyless `possible` fact: AC-6 requires such an address to appear as `possible`, AC-5 is "never miss", and a
+  fan-out cap is a precision trade-off that belongs to P1-36's measure, not to this unit.
+- *`urlLike: true` on `py-request`* (the plan left it off): a `Request`'s first argument is a URL, so a lifted leaf that is a
+  constant non-URL (`0`) or a text with no URL shape is not one. This is the plan's own stated behaviour (a `\x01\x01` wrapper gives
+  no consumer) that `py-request` did not implement; observed effect on the proving repository after the rule above: one fact,
+  `model-bench/.../lmstudio.py:366` (`\x01\x01`, a keyless `possible`), leaves; it is not a gold item.
+- **Files:** `ccg/packrt/lift.py` (`run_lifting`; reuse `_opaque_slot`, add the informative test beside it, `httpkey` supplies the
+  predicates), `ccg/schemas/rule-pack-v1.schema.json` (the word), `packs/python-http-client/pack.yaml` (`wrapperSite: true` on the
+  seven liftings, `urlLike: true` on `py-request`), the tests below, `tests/test_packrt_generic.py` (`SERVED` already holds the
+  pack; the new format word is in the schema vocabulary the test requires), the leaf-harness registration.
+- **Done when:** (1) the behaviours below pass; (2) over the ten Python units' stored bundles, before/after: `providers` and
+  `mounts` multisets equal; every `confirmed` consumer fact equal; every other changed consumer fact `possible`; no keyless
+  consumer fact whose chain holds an informative slot remains; the removed set is the 7 observed leaf sites (modulo the stored
+  data) and the added set the observed sites `seed_nlq_eval_corpus.py:289`, `language_salience_probe.py:366` and `:424`,
+  `load_demo.py:284` (counts reported as observed, never tuned); (3) the AC-5 8-script count on dev items by the P1-49 definition
+  is reported by the store method and the bundle method (QA's two instruments), target **8 of 8**, a miss with its cause; the
+  `join` link of gold item 5 no longer carries the keyless sites `:397`/`:438`; (4) `fetch` and `s14a` conformance unchanged;
+  (5) the whole `cpg` suite and `-m "slice and live"` run, the 8 known reds named (report section B), no new failure.
+- **Behaviours (red first, in this order):** (a) wrapper with informative template and one lifted caller passing a bare parameter:
+  the wrapper site is the consumer (`GET /documents/{?}`, `possible`/`partial-key`), the caller yields no fact and the linker
+  emits no keyless fact for it (run through `link()`); (b) two callers: one fact; (c) the `_assistant_rows_since` shape (the
+  parameter feeds the query and origin, caller literal `0`, caller `cursor`): one consumer `GET /shop/api/messages` `possible`, no
+  `GET /0`; (d) non-informative opaque slot (`self.base + path`, `"/api" + path`): the caller stays the consumer, as LNK-11 and the
+  plan's `fetch_chain()` tests (rule 4 coverage) expect; `"/api/" + path` is informative; (e) two informative slots on a chain:
+  nearest to the leaf; (f) a promoted X whose own chain holds a further non-transparent slot keeps `opaqueSlot` and `possible`;
+  (g) `wrapperSite` on/off pair: off reproduces today's output (incl. `fetch`), on changes only wrapper chains; (h) `urlLike` on
+  `py-request`: `Request(0)`-shaped leaf dropped, bare `\x01` kept; (i) the fixture build (`-m live`): `LNK-11`'s `requeue` stays
+  `possible`/`partial-key` `POST /api/v1/orders`; (j) mutation check on the informative test, the leaf drop, the nearest-slot
+  choice and the `wrapperSite` gate.
+- **Must not regress:** the 5d precision work (this unit edits `packrt/` and a pack only; the bundles are byte-identical, asserted by
+  re-running on the stored bundles); Part B's key/status figures for providers and mounts; every `confirmed` consumer; the `fetch`
+  pack output; P1-36's possible-precision measure takes the new `possible` consumers like any other.
+- **Gate:** `analyst` (diff; execute the before/after comparison, do not read it). `httpkey.py` and `packrt/` are hashed by the
+  `ac5-gate-1` record, so this lands before P1-41/P1-42 and before that record.
+
+## P1-52 · TypeScript MCP-client consumer pack — `tdd-engineer` — **pending a stakeholder decision (Q-TSMCP)**
+
+**Premise, checked.** `LNK-02`, `LNK-06` and `LNK-12` are gated P1 by `docs/test-plans/connected-code-graph-fixtures.md` §5.1, and
+the P1 per-shape floors of its §6 (eval-protocol §12.2) count them: `exact literal` (LNK-01, 02, 36), `constant across files` (LNK-04,
+06, 37) and `client wrapper` (LNK-10, 11, 12) each hold exactly 3 at P1. The requirements name no TS MCP client: the phase line says
+P1 covers "Python/TS/shell/config extractors, http, mcp_tool", and AC-2's callers (`kiro/`, `mcp-monitor/`) are config and Python.
+The proving repository has none either (the only `@modelcontextprotocol` imports and `callTool` calls are in `cpg/fixtures/.../fx-web`).
+No plan step builds a pack for it (P1-46 is the shell one): the rows were gated P1 and never planned, which is the defect.
+**Design if approved (no engine change).** Pack `cpg/packs/ts-mcp-client/{pack.yaml,negatives.yaml}`: lifting `ts-call-tool`, `role:
+{kind: mcp_tool, slot: url}` (`url` is the only lifted-role name the runtime and the schema's `lifted` enum carry; it holds the tool
+name here, said in a pack comment), seed `{call: {callee: callTool, resolution: [unresolved]}, arg: a0.name, scope: {imports:
+[{module: {glob: "@modelcontextprotocol/sdk/**"}}]}}` (a `prefix` matcher would not match: its separator is `.`), `ownSite: true`;
+rule `match: {lifted: {lifting: ts-call-tool}}`, `extract: {tool: {lifted: url}}`, `emit: [{consumes: {kind: mcp_tool, key:
+"{tool}"}}]`. Observed in the fixture build: the SDK's `c.callTool({...})` calls (`client.ts` lines 19, 24, 29) are `unresolved`
+`name-match`, the wrapper call in `Admin.tsx:4` is `resolved` to the wrapper (so not seeded, and the wrapper is lifted through
+`p0` to `a0.name`), and `client.ts` imports `@modelcontextprotocol/sdk/client/index.js`. `TOOL_LIST_ORDERS` crosses files by the
+existing TS constant resolution (as `API_PREFIX`). The `urlBindings` source (`new StreamableHTTPClientTransport(new URL(<lit>))`,
+for LNK-02/12's server pick) is attempted in the same unit; if format v1.5 cannot express it, it is reported and the binding half
+waits for the binding RCA's fix.
+- **Files:** the two pack files; `tests/test_pack_ts_mcp_client.py`; `SERVED` in `tests/test_packrt_generic.py` and the leaf-harness
+  registration; `DEFAULT_PACKS` in `ccg/refresh.py` (8 to 9; grep the tests that pin the pack count and the store's `Pack` count).
+  Same shape and size as P1-46 (one pack, one test file, registrations); no `lift.py`, `run.py` or schema edit.
+- **Done when:** over the fixture build, consumers `mcp_tool` `get_item` (LNK-02, `confirmed`/`key-match`), `list_orders` (LNK-06) and
+  `reindex` (LNK-12, the wrapper lifted from `onReindex`); the first test probes that `a0.name` object-literal values resolve (the one
+  unverified clause); negatives: an unrelated `callTool` in a file without the SDK import, `callTool` of a non-string name;
+  **no regression:** the proving repository's pack facts are equal before and after (0 TS importers, observed by grep).
+- **If the stakeholder re-gates instead:** this section is deleted, the three rows move to P2 in the fixtures test plan and `-p1.md`,
+  and §6's P1 floors for the three shapes change (see the question in the hand-off); no P1 code changes.
 
 ## P1-17 · linker — `tdd-engineer`
 
