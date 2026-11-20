@@ -2,6 +2,39 @@
 
 > Dated log of actual changes to the `coordination-graph` component. Most recent first.
 
+## 2026-11-20 — S6: KB sync (`kbsync.py`, `commands_kb.py`)
+
+Delivered base-plan step S6 (`claude/docs/plans/coordination-graph.md` §3.5, P2-M3, R10; graph note v4 §2.4, §6.4).
+`coordgraph/kbsync.py`: falkor-chat REST writes (`KbHttp`, stdlib `urllib`, producer `kb-mirror`), read-only
+observation of `$COORDGRAPH_KB_GRAPH` (`Observer`, §6.4 statements verbatim), and the per-section engine
+(`KbSync`): append-before-delete with `COORDGRAPH_KB_BUDGET_S` and `pending`, the per-section lease with token
+fencing and rules L1-L3, cancel-on-re-edit, duplicate-claim refusal plus the receipt check, split modes,
+`needs-resplit`. CLI (`commands_kb.py`): `kb-sync [PATH...] [--detach-finish]`, `kb-status [--ids ID...]`,
+`kb-reconcile`, `kb-finish [--once]` (`kb-finish.lock`, single instance). Exit 0 settled, 2 an update is not
+complete, 1 the command could not run. The mirror connection is still `store.connect` (ephemeral only); the
+sync path imports no `wilib` (plan3 test 12 now also lists `kbsync` and `commands_kb`). `falkor-chat/scripts/
+seed_agent_team.sh` gains the `kb-mirror` row.
+
+- **Decisions the plan left open.** Unchanged claims are kept, not re-posted: the pending fields describe the *new*
+  documents only and the swap merges them with the kept old ones, so one edited bullet costs one POST. A heading
+  rename with an identical body is accepted as a supersede of the vanished section's document (re-embeds, never
+  refused as a duplicate). A client-timed-out POST is outcome-unknown (review P4-m1): the section fails, and the
+  retry's receipt naming an unmapped `kb-mirror` document of the same text is accepted and that twin deleted. Added
+  to graph note §2.4 (owner to fold in): `KbSection.mode`, `needsResplit`; while pending `pendingClaimTitles`,
+  `pendingKeepHashes`, `pendingMode`.
+- **Marker-stripped claims.** `kb-reconcile` adopts a stored document whose hash equals the claim text *without* its
+  list marker, mapping it under its real (stripped) hash with no `sectionHash`, so the first `kb-sync` replaces it
+  append-before-delete. Observed: `claude/graph-dba/falkordb-reference.md` parses to 17 bullets-mode claims in 3
+  sections; a live run on a scratch falkor-chat (the 17 stored stripped, adopted, then synced) created 17 new
+  documents and deleted the 17 stored ones. (`claude/frontend-engineer/frontend-quirks.md` also parses to 6
+  bullets-mode claims; the plan names only the 17.) The shared instance was not touched: whether its stored claims
+  are stripped is S8a's to confirm.
+- **Tests.** Offline: `tests/test_kbsync.py` (engine over the fakes of `tests/kbfakes.py`), `tests/test_kb_cli.py`
+  (`KbHttp` against a local stdlib server; the four subcommands). Live (ephemeral container + scratch falkor-chat,
+  workspace `coordtest`): `tests/test_kb_live.py` including the R10 contract test (the observation reads find
+  `HAS_CHUNK`, `INGESTED_BY`, `Chunk.embedding`, `Document.currentVersion`, `textNormalizedHash`; falkor-chat's
+  normaliser equals ours; the seeded roster carries `kb-mirror`).
+
 ## 2026-11-20 — S3: store, sync, rebuild, drift, query (S3a `683eb212`, S3b)
 
 Delivered base-plan step S3 (`claude/docs/plans/coordination-graph.md` §3.1-§3.3, §4; graph note v4

@@ -50,6 +50,7 @@ G="ws:${WS_ID}"
 AGENTS=(
   teco tico architect coder tdd-engineer frontend-engineer qa-engineer
   analyst data-scientist graph-dba devops security-expert cobb
+  kb-mirror   # not a subagent: the producer identity of coordination-graph's KB mirror (`coordgraph kb-sync`)
 )
 
 echo "Checking FalkorDB at ${HOST}:${PORT}..."

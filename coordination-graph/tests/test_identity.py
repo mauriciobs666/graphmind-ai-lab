@@ -636,7 +636,8 @@ class TestSyncPathStaysOffline:
     SYNC = ["coordgraph.discover", "coordgraph.keys", "coordgraph.config", "coordgraph.scope",
             "coordgraph.history", "coordgraph.migrate", "coordgraph.shapes",
             "coordgraph.parse.backlog", "coordgraph.parse.ledger", "coordgraph.parse.review",
-            "coordgraph.parse.requirements", "coordgraph.parse.kb", "coordgraph.parse.header"]
+            "coordgraph.parse.requirements", "coordgraph.parse.kb", "coordgraph.parse.header",
+            "coordgraph.kbsync", "coordgraph.commands_kb"]
 
     def test_importing_the_sync_modules_loads_neither_identity_nor_wilib(self):
         import subprocess

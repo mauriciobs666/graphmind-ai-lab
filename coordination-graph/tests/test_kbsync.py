@@ -1,0 +1,524 @@
+"""The KB mirror engine (`kbsync`) against in-memory fakes (`tests/kbfakes.py`): append-before-delete, the
+budget and `pending`, the per-section lease with L1-L3, cancel-on-re-edit, duplicate refusal and the receipt
+check, split modes, `needs-resplit`, reconcile, status. Each test names the alternative it rules out."""
+from __future__ import annotations
+
+import pytest
+
+from coordgraph import kbsync
+from coordgraph.kbsync import Context, KbHttpError, section_key, status
+from coordgraph.parse.kb import claim_hash, parse_kb
+from tests.kbfakes import make_engine
+
+P = "claude/a/kb.md"
+ONE = "# T\n\n## Alpha\n\nAlpha body.\n"
+TWO = "# T\n\n## Alpha\n\nAlpha body.\n\n## Beta\n\nBeta body.\n"
+BULLETS = ("# T\n\n## Facts\n<!-- kb-split: bullets -->\n\n- one fact\n- two fact\n- three fact\n")
+
+
+def kb(text, path=P):
+    return parse_kb(path, text.encode())
+
+
+def sync(engine, mirror, text, path=P):
+    doc = kb(text, path)
+    rows, _ = engine.read_all()
+    outcomes = engine.sync_file(doc, Context.build([doc], rows), rows)
+    return {o.heading: o for o in outcomes}, doc
+
+
+def row(mirror, doc, heading):
+    s = next(s for s in doc.sections if s.heading == heading)
+    return mirror.sections[section_key(doc.path, s)]
+
+
+def test_a_new_section_is_posted_once_under_the_kb_mirror_identity_and_mapped():
+    engine, mirror, chat, _ = make_engine()
+    out, doc = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "synced"
+    assert chat.posts() == ["Alpha"] and chat.deletes() == []
+    [d] = chat.current()
+    r = row(mirror, doc, "Alpha")
+    assert r["documentIds"] == [d["id"]] and r["claimHashes"] == [claim_hash("Alpha body.")]
+    assert r["state"] == "synced" and "leaseToken" not in r and "pendingDocumentIds" not in r
+    assert mirror.files[P]["sha256"] == doc.sha256
+
+
+def test_an_unchanged_section_makes_no_falkor_chat_call():
+    engine, mirror, chat, _ = make_engine()
+    sync(engine, mirror, ONE)
+    before = list(chat.calls)
+    out, _ = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "unchanged" and chat.calls == before
+
+
+def test_a_changed_section_posts_before_it_deletes_exactly_the_old_id():
+    engine, mirror, chat, _ = make_engine()
+    out, doc = sync(engine, mirror, TWO)
+    old_alpha = row(mirror, doc, "Alpha")["documentIds"][0]
+    old_beta = row(mirror, doc, "Beta")["documentIds"][0]
+    chat.calls.clear()
+    out, doc = sync(engine, mirror, TWO.replace("Alpha body.", "Alpha body, edited."))
+    assert [c[0] for c in chat.calls] == ["post", "delete"]  # append before delete
+    assert chat.deletes() == [old_alpha] and old_beta in chat.docs  # not the other section's, not the new one
+    assert row(mirror, doc, "Alpha")["documentIds"] == [d["id"] for d in chat.current() if d["title"] == "Alpha"]
+    assert len(chat.current()) == 2
+
+
+def test_a_whitespace_or_case_only_edit_keeps_the_document_and_updates_the_hash():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    chat.calls.clear()
+    out, doc2 = sync(engine, mirror, ONE.replace("Alpha body.", "ALPHA   body.\n"))
+    assert out["Alpha"].status == "synced" and chat.calls == []
+    assert row(mirror, doc2, "Alpha")["sectionHash"] == doc2.sections[0].section_hash
+
+
+# --- split modes -------------------------------------------------------------------------------
+
+def test_bullets_mode_posts_one_document_per_bullet_keeping_the_list_marker():
+    engine, mirror, chat, _ = make_engine()
+    sync(engine, mirror, BULLETS)
+    texts = sorted(d["text"] for d in chat.current())
+    assert texts == ["- one fact", "- three fact", "- two fact"]
+    assert all(t.startswith("Facts") is False for t in chat.posts()) and chat.posts()[0].startswith("kb — one fact")
+
+
+def test_editing_one_bullet_posts_one_document_and_deletes_only_that_bullets_old_id():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, BULLETS)
+    ids = dict(zip(row(mirror, doc, "Facts")["claimHashes"], row(mirror, doc, "Facts")["documentIds"], strict=True))
+    chat.calls.clear()
+    _, doc = sync(engine, mirror, BULLETS.replace("- two fact", "- two fact, revised"))
+    assert len(chat.posts()) == 1 and chat.deletes() == [ids[claim_hash("- two fact")]]
+    r = row(mirror, doc, "Facts")
+    assert len(r["documentIds"]) == 3 and ids[claim_hash("- one fact")] in r["documentIds"]
+    assert sorted(d["text"] for d in chat.current()) == ["- one fact", "- three fact", "- two fact, revised"]
+
+
+def test_dropping_the_split_marker_reingests_whole_deletes_the_siblings_and_flags_needs_resplit():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, BULLETS)
+    old = set(row(mirror, doc, "Facts")["documentIds"])
+    chat.calls.clear()
+    out, doc = sync(engine, mirror, BULLETS.replace("<!-- kb-split: bullets -->\n", ""))
+    assert out["Facts"].status == "synced" and set(chat.deletes()) == old
+    r = row(mirror, doc, "Facts")
+    assert len(r["documentIds"]) == 1 and r["needsResplit"] is True
+    report = status([doc], list(mirror.sections.values()), 1)
+    assert [line.kind for line in report.lines] == ["coarse"] and report.clean  # coarse, not stale
+    out, doc = sync(engine, mirror, BULLETS)  # declared bullets again
+    assert "needsResplit" not in row(mirror, doc, "Facts") and len(chat.current()) == 3
+
+
+# --- budget, pending, finish -------------------------------------------------------------------
+
+def edited_pending(engine, mirror, chat):
+    _, doc = sync(engine, mirror, ONE)
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+    chat.hold_new = True
+    out, doc = sync(engine, mirror, ONE.replace("body.", "body v2."))
+    return doc, old, out["Alpha"]
+
+
+def test_over_budget_the_section_stays_pending_with_the_old_claim_served_and_flagged():
+    engine, mirror, chat, clock = make_engine(budget_s=2.0)
+    doc, old, outcome = edited_pending(engine, mirror, chat)
+    assert outcome.status == "pending" and "not yet searchable" in outcome.detail
+    assert old in chat.docs and chat.docs[old]["current"] and chat.deletes() == []
+    r = row(mirror, doc, "Alpha")
+    assert r["state"] == "pending" and r["documentIds"] == [old] and len(r["pendingDocumentIds"]) == 1
+    assert "leaseToken" not in r  # released
+    [line] = status([doc], list(mirror.sections.values()), 1, ids=[old]).lines
+    assert line.kind == "pending" and "stale — read `claude/a/kb.md` § `Alpha`" in line.detail
+    assert clock.t >= 2.0  # it waited the whole budget, polling
+
+
+def test_finish_completes_the_swap_and_deletes_the_old_id_only_then():
+    engine, mirror, chat, _ = make_engine()
+    doc, old, _ = edited_pending(engine, mirror, chat)
+    pending = row(mirror, doc, "Alpha")["pendingDocumentIds"]
+    [early] = engine.finish(once=True)
+    assert early.status == "pending" and chat.deletes() == [] and old in chat.docs  # embeds not landed
+    chat.release_embeds()
+    [done] = engine.finish(once=True)
+    assert done.status == "synced" and chat.deletes() == [old]
+    r = row(mirror, doc, "Alpha")
+    assert r["documentIds"] == pending and r["state"] == "synced" and "pendingDocumentIds" not in r
+    assert r["sectionHash"] == doc.sections[0].section_hash
+
+
+def test_finish_keeps_unchanged_bullets_and_swaps_in_only_the_new_one():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, BULLETS)
+    r0 = row(mirror, doc, "Facts")
+    ids = dict(zip(r0["claimHashes"], r0["documentIds"], strict=True))
+    chat.hold_new = True
+    _, doc = sync(engine, mirror, BULLETS.replace("- two fact", "- two fact v2"))
+    chat.release_embeds()
+    engine.finish(once=True)
+    r = row(mirror, doc, "Facts")
+    assert len(r["documentIds"]) == 3 and ids[claim_hash("- one fact")] in r["documentIds"]
+    assert ids[claim_hash("- two fact")] not in chat.docs and ids[claim_hash("- one fact")] in chat.docs
+    assert sorted(d["text"] for d in chat.current()) == ["- one fact", "- three fact", "- two fact v2"]
+
+
+def test_a_failed_embed_deletes_the_new_document_and_leaves_the_old_claim_mapped_and_stale():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+    chat.during_post = lambda: chat.failed.update(d for d in chat.docs if d != old)
+    out, doc = sync(engine, mirror, ONE.replace("body.", "body v2."))
+    assert out["Alpha"].status == "failed"
+    assert old in chat.docs and len(chat.docs) == 1  # the new one is gone
+    r = row(mirror, doc, "Alpha")
+    assert r["documentIds"] == [old] and r["state"] == "synced" and "pendingDocumentIds" not in r
+    assert [line.kind for line in status([doc], list(mirror.sections.values()), 1).lines] == ["stale"]
+
+
+def test_finish_gives_up_past_the_cap_deleting_the_new_document_never_the_old():
+    engine, mirror, chat, _ = make_engine(cap_ms=10_000)
+    doc, old, _ = edited_pending(engine, mirror, chat)
+    pending = row(mirror, doc, "Alpha")["pendingDocumentIds"]
+    mirror.now += 11_000
+    [res] = engine.finish(once=True)
+    assert res.status == "failed" and chat.deletes() == pending and old in chat.docs
+    r = row(mirror, doc, "Alpha")
+    assert r["documentIds"] == [old] and r["state"] == "synced" and r["sectionHash"] != doc.sections[0].section_hash
+
+
+# --- cancel on re-edit, the lease ---------------------------------------------------------------
+
+def test_a_re_edit_of_a_pending_section_cancels_the_pending_submission_first():
+    engine, mirror, chat, _ = make_engine()
+    doc, old, _ = edited_pending(engine, mirror, chat)
+    stale_pending = row(mirror, doc, "Alpha")["pendingDocumentIds"][0]
+    chat.hold_new = False
+    chat.calls.clear()
+    out, doc = sync(engine, mirror, ONE.replace("body.", "body v3."))
+    assert out["Alpha"].status == "synced"
+    assert [c[0] for c in chat.calls][:2] == ["delete", "post"] and chat.calls[0][1] == stale_pending
+    assert [d["text"] for d in chat.current()] == ["Alpha body v3."]  # one document per section
+    mapped = {i for s in mirror.sections.values() for i in s.get("documentIds", [])}
+    assert {d["id"] for d in chat.current()} == mapped  # no unmapped kb-mirror document
+    assert old not in chat.docs and stale_pending not in chat.docs
+
+
+def test_a_held_lease_reports_pending_at_once_and_other_sections_proceed():
+    engine, mirror, chat, _ = make_engine()
+    d = kb(TWO)
+    key_alpha = section_key(P, d.sections[0])
+    engine._acquire(key_alpha, P, "Alpha")  # another actor holds Alpha
+    out, _ = sync(engine, mirror, TWO)
+    assert out["Alpha"].status == "pending" and "lease is held" in out["Alpha"].detail
+    assert out["Beta"].status == "synced" and chat.posts() == ["Beta"]
+    assert mirror.files == {}  # an incomplete file is not stamped as synced
+
+
+def test_l1_a_lease_lost_before_the_post_makes_no_falkor_chat_call():
+    engine, mirror, chat, _ = make_engine()
+    key = section_key(P, kb(ONE).sections[0])
+    mirror.after["MARK"] = lambda p: mirror.steal(key)
+    out, _ = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "pending" and chat.calls == []
+
+
+def test_l2_a_lease_lost_after_the_post_deletes_that_posts_own_document_and_stops():
+    engine, mirror, chat, _ = make_engine()
+    key = section_key(P, kb(ONE).sections[0])
+    chat.during_post = lambda: mirror.steal(key)
+    out, _ = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "pending"
+    assert [c[0] for c in chat.calls] == ["post", "delete"] and chat.docs == {}
+    assert mirror.sections[key]["leaseToken"] == "other"  # the new holder's lease is untouched
+
+
+def test_l3_a_stale_holder_never_deletes_old_ids():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    key = section_key(P, doc.sections[0])
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+    mirror.after["RECORD"] = lambda p: mirror.steal(key)  # expired between the record and the swap
+    chat.calls.clear()
+    out, _ = sync(engine, mirror, ONE.replace("body.", "body v2."))
+    assert out["Alpha"].status == "pending" and chat.deletes() == [] and old in chat.docs
+
+
+def test_a_lease_lost_during_the_swap_deletes_report_pending_not_synced():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    key = section_key(P, doc.sections[0])
+    chat.on_delete = lambda i: mirror.steal(key)
+    out, _ = sync(engine, mirror, ONE.replace("body.", "body v2."))
+    assert out["Alpha"].status == "pending" and "swap" in out["Alpha"].detail
+
+
+# --- duplicate claims, receipts -----------------------------------------------------------------
+
+DUP = "# T\n\n## Alpha\n\nSame claim.\n\n## Beta\n\nsame   CLAIM.\n"
+
+
+def test_a_second_heading_with_the_same_claim_text_is_refused_naming_both_and_the_first_stays_current():
+    engine, mirror, chat, _ = make_engine()
+    out, doc = sync(engine, mirror, DUP)
+    assert out["Alpha"].status == "synced" and out["Beta"].status == "refused"
+    assert "'Alpha'" in out["Beta"].detail and chat.posts() == ["Alpha"]
+    [d] = chat.current()
+    assert d["current"] and row(mirror, doc, "Alpha")["documentIds"] == [d["id"]]
+    kinds = [(line.kind, line.heading) for line in status([doc], list(mirror.sections.values()), 1).lines]
+    assert ("duplicate", "Alpha") in kinds
+
+
+def test_a_new_heading_duplicating_an_already_mapped_claim_is_refused_naming_the_owner():
+    engine, mirror, chat, _ = make_engine()
+    sync(engine, mirror, ONE)
+    out, _ = sync(engine, mirror, ONE + "\n## Gamma\n\nalpha body.\n")
+    assert out["Gamma"].status == "refused" and "'Alpha'" in out["Gamma"].detail
+    assert out["Alpha"].status == "unchanged" and chat.posts() == ["Alpha"]
+
+
+def test_a_claim_already_mapped_in_another_file_is_refused_even_when_this_file_is_registered_first():
+    engine, mirror, chat, _ = make_engine()
+    other = kb("# T\n\n## Owner\n\nShared claim.\n", "claude/z/other.md")
+    sync(engine, mirror, "# T\n\n## Owner\n\nShared claim.\n", "claude/z/other.md")
+    mine = kb("# T\n\n## Mine\n\nshared claim.\n", "claude/a/mine.md")  # parse order alone would own it
+    rows, _ = engine.read_all()
+    outcomes = engine.sync_file(mine, Context.build([mine, other], rows), rows)
+    assert [(o.status, "'Owner'" in o.detail) for o in outcomes] == [("refused", True)]
+    assert len(chat.current()) == 1 and chat.posts() == ["Owner"]
+
+
+def test_a_receipt_superseding_a_document_this_section_does_not_own_is_reported_not_accepted():
+    engine, mirror, chat, _ = make_engine()
+    foreign = chat.plant("Alpha body.", producer="cobb")
+    chat.supersede_foreign = foreign
+    out, doc = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "failed" and foreign in out["Alpha"].detail
+    assert chat.docs.keys() == {foreign}  # the new POST was deleted again
+    assert "documentIds" not in row(mirror, doc, "Alpha")
+
+
+def test_a_receipt_superseding_this_sections_own_old_id_proceeds():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+    section = doc.sections[0]
+    out = engine.sync_section(P, section, Context.build([doc], engine.read_all()[0]), force=True,
+                              bad_ids=frozenset({old}))
+    assert out.status == "synced" and chat.deletes() == [old] and len(chat.current()) == 1
+
+
+def test_a_timed_out_post_the_server_still_committed_is_superseded_on_retry_without_an_orphan():
+    """Review P4-m1: outcome unknown on a client timeout; the retry's receipt names our own earlier document."""
+    engine, mirror, chat, _ = make_engine()
+    chat.timeout_mode = "late"
+    out, doc = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "failed" and "outcome unknown" in out["Alpha"].detail
+    chat.flush_late()  # the server commits after the client gave up
+    assert len(chat.current()) == 1 and "documentIds" not in row(mirror, doc, "Alpha")  # an unmapped orphan
+    chat.timeout_mode = None
+    out, doc = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "synced"
+    [d] = chat.current()
+    assert row(mirror, doc, "Alpha")["documentIds"] == [d["id"]] and len(chat.docs) == 1  # twin deleted
+
+
+def test_a_superseded_twin_of_another_producer_is_not_adopted_as_ours():
+    engine, mirror, chat, _ = make_engine()
+    foreign = chat.plant("Alpha body.", producer="cobb")
+    out, _ = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "failed" and foreign in chat.docs and chat.docs[foreign]["producer"] == "cobb"
+
+
+# --- removal, rename, per-section failure -------------------------------------------------------
+
+def test_a_removed_heading_deletes_its_own_documents_and_drops_its_record():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, TWO)
+    alpha, beta = (row(mirror, doc, h)["documentIds"][0] for h in ("Alpha", "Beta"))
+    chat.calls.clear()
+    out, doc = sync(engine, mirror, ONE)
+    assert out["Beta"].status == "removed" and chat.deletes() == [beta] and alpha in chat.docs
+    assert [s["heading"] for s in mirror.sections.values()] == ["Alpha"]
+
+
+def test_a_renamed_heading_with_the_same_body_ends_with_one_document():
+    engine, mirror, chat, _ = make_engine()
+    sync(engine, mirror, ONE)
+    out, doc = sync(engine, mirror, ONE.replace("## Alpha", "## Alpha renamed"))
+    assert out["Alpha renamed"].status == "synced" and out["Alpha"].status == "removed"
+    [d] = chat.current()
+    assert [s["documentIds"] for s in mirror.sections.values()] == [[d["id"]]] and len(chat.docs) == 1
+
+
+def test_one_sections_failure_never_aborts_the_others(monkeypatch):
+    engine, mirror, chat, _ = make_engine()
+    real = kbsync.section_key
+
+    def key(path, section):
+        if section.heading == "Alpha":
+            raise kbsync.KeyHygieneError("whitespace edge survived normalisation")
+        return real(path, section)
+
+    monkeypatch.setattr(kbsync, "section_key", key)
+    out, _ = sync(engine, mirror, TWO)
+    assert out["Alpha"].status == "failed" and "whitespace edge" in out["Alpha"].detail
+    assert out["Beta"].status == "synced"
+
+
+def test_a_mirror_error_on_one_section_is_that_sections_failure_only():
+    engine, mirror, chat, _ = make_engine()
+    mirror.fail["ACQUIRE"] = RuntimeError("boom")
+    out, _ = sync(engine, mirror, TWO)
+    assert out["Alpha"].status == "failed" and "boom" in out["Alpha"].detail and out["Beta"].status == "synced"
+
+
+def test_a_post_http_error_fails_the_section_and_leaves_the_old_claim():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+
+    def boom(title, text):
+        raise KbHttpError("POST /documents: HTTP 503", status=503)
+
+    chat.post_document = boom
+    out, doc = sync(engine, mirror, ONE.replace("body.", "body v2."))
+    assert out["Alpha"].status == "failed" and "503" in out["Alpha"].detail
+    assert old in chat.docs and row(mirror, doc, "Alpha")["documentIds"] == [old]
+
+
+# --- reconcile -------------------------------------------------------------------------------------
+
+def test_reconcile_reingests_a_mapped_document_that_is_gone():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, TWO)
+    gone = row(mirror, doc, "Alpha")["documentIds"][0]
+    keep = row(mirror, doc, "Beta")["documentIds"][0]
+    del chat.docs[gone]
+    chat.calls.clear()
+    results = {o.heading: o for o in engine.reconcile([doc])}
+    assert results["Alpha"].status == "re-ingested" and chat.posts() == ["Alpha"] and keep in chat.docs
+    assert row(mirror, doc, "Alpha")["documentIds"] != [gone]
+
+
+def test_reconcile_reingests_a_hash_mismatch_and_deletes_the_stale_id():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+    chat.docs[old]["hash"] = "0" * 64  # edited behind the mirror's back
+    [res] = [o for o in engine.reconcile([doc]) if o.heading == "Alpha"]
+    assert res.status == "re-ingested" and old in chat.deletes() and old not in chat.docs
+
+
+def test_reconcile_reports_a_non_current_mapped_id_and_does_not_reingest_it():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+    chat.docs[old]["current"] = False
+    chat.calls.clear()
+    results = engine.reconcile([doc])
+    assert [o.status for o in results if o.heading == "Alpha"] == ["non-current"] and chat.calls == []
+
+
+def test_reconcile_adopts_unmapped_documents_whose_hash_equals_a_claim_without_a_post():
+    engine, mirror, chat, _ = make_engine()
+    a = chat.plant("Alpha body.", producer="cobb")
+    b = chat.plant("Beta body.", producer="cobb")
+    doc = kb(TWO)
+    results = {o.heading: o for o in engine.reconcile([doc])}
+    assert results["Alpha"].status == "adopted" and results["Beta"].status == "adopted" and chat.calls == []
+    assert row(mirror, doc, "Alpha")["documentIds"] == [a] and row(mirror, doc, "Beta")["documentIds"] == [b]
+    out, _ = sync(engine, mirror, TWO)  # nothing left to do
+    assert {o.status for o in out.values()} == {"unchanged"}
+
+
+def test_reconcile_does_not_adopt_a_partial_match_and_adopts_nothing_twice():
+    engine, mirror, chat, _ = make_engine()
+    a = chat.plant("- one fact")
+    chat.plant("- two fact")
+    doc = kb(BULLETS)
+    [res] = [o for o in engine.reconcile([doc]) if o.heading == "Facts"]
+    assert res.status == "unadopted" and "2 of 3" in res.detail
+    assert "Facts" not in {s["heading"] for s in mirror.sections.values()} or "documentIds" not in next(
+        iter(mirror.sections.values()))
+    assert a in chat.docs
+
+
+def test_marker_stripped_claims_are_adopted_then_reingested_under_append_before_delete():
+    """The 17 of `falkordb-reference.md`: stored without the list marker; the first sync replaces each."""
+    engine, mirror, chat, _ = make_engine()
+    old = [chat.plant(t, title="falkordb-reference — x") for t in ("one fact", "two fact", "three fact")]
+    doc = kb(BULLETS)
+    [res] = [o for o in engine.reconcile([doc]) if o.heading == "Facts"]
+    assert res.status == "adopted" and "re-ingests" in res.detail
+    assert row(mirror, doc, "Facts")["documentIds"] == old and "sectionHash" not in row(mirror, doc, "Facts")
+    chat.calls.clear()
+    out, doc = sync(engine, mirror, BULLETS)
+    assert out["Facts"].status == "synced" and len(chat.posts()) == 3 and sorted(chat.deletes()) == sorted(old)
+    first_delete = next(i for i, c in enumerate(chat.calls) if c[0] == "delete")
+    assert all(c[0] == "post" for c in chat.calls[:first_delete]) and first_delete == 3  # all appended first
+    assert sorted(d["text"] for d in chat.current()) == ["- one fact", "- three fact", "- two fact"]
+
+
+def test_reconcile_reports_kb_mirror_documents_no_section_maps():
+    engine, mirror, chat, _ = make_engine()
+    sync(engine, mirror, ONE)
+    orphan = chat.plant("stray", producer=kbsync.PRODUCER, title="stray claim")
+    results = engine.reconcile([kb(ONE)])
+    assert [(o.status, o.heading) for o in results if o.status == "orphan"] == [("orphan", "stray claim")]
+    assert orphan in chat.docs  # reported, never deleted
+
+
+def test_reconcile_gives_up_a_pending_section_past_the_cap():
+    engine, mirror, chat, _ = make_engine(cap_ms=10_000)
+    doc, old, _ = edited_pending(engine, mirror, chat)
+    mirror.now += 11_000
+    results = engine.reconcile([doc])
+    assert any(o.status == "failed" for o in results) and row(mirror, doc, "Alpha")["state"] == "synced"
+
+
+# --- status ---------------------------------------------------------------------------------------------
+
+def test_status_flags_stale_unmirrored_unmapped_ids_and_filters_by_ids():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, TWO)
+    rows = list(mirror.sections.values())
+    a = row(mirror, doc, "Alpha")["documentIds"][0]
+    edited = kb(TWO.replace("Alpha body.", "changed").replace("Beta body.", "also changed")
+                + "\n## Gamma\n\nnew claim\n")
+    full = {(line.kind, line.heading) for line in status([edited], rows, 5).lines}
+    assert full == {("stale", "Alpha"), ("stale", "Beta"), ("unmirrored", "Gamma")}
+    only = status([edited], rows, 5, ids=[a, "ghost"])
+    assert {(line.kind, line.heading) for line in only.lines} == {("stale", "Alpha"), ("unmirrored", "Gamma"),
+                                                                   ("unmapped-id", "")}
+    assert not only.clean and status([doc], rows, 5).clean
+    assert status([doc], rows, None).header() == "KB mirror: last sync never"
+    assert status([doc], rows, 0).header() == "KB mirror: last sync 1970-01-01T00:00:00Z"
+
+
+def test_make_plan_removes_what_is_not_wanted_and_excludes_bad_ids():
+    section = kb(BULLETS).sections[0]
+    row_ = {"documentIds": ["a", "b", "c"], "claimHashes": [claim_hash("- one fact"), claim_hash("- gone"),
+                                                              claim_hash("- two fact")]}
+    plan = kbsync.make_plan(section, row_, frozenset({"c"}))
+    assert [k[0] for k in plan.keep] == ["a"] and plan.remove == ["b", "c"]
+    assert [c.text for c in plan.new] == ["- two fact", "- three fact"]
+
+
+def test_claim_title_cuts_the_claim_part_never_the_family_slug():
+    from coordgraph.parse.kb import Claim
+
+    section = kb("# T\n\n## H\n<!-- kb-split: bullets -->\n\n- x\n").sections[0]
+    long_claim = Claim("- x", "x" * 400, "h", "b-h")  # `parse_kb` cuts a lead at 80; the bound is the title's
+    title = kbsync.claim_title("claude/graph-dba/falkordb-reference.md", section, long_claim)
+    assert title.startswith("falkordb-reference — x") and len(title) == kbsync.TITLE_LIMIT
+    whole = kb("# T\n\n## " + "h" * 300 + "\n\nbody\n").sections[0]
+    assert len(kbsync.claim_title(P, whole, whole.claims[0])) == kbsync.TITLE_LIMIT
+
+
+@pytest.mark.parametrize("budget", [0.0])
+def test_a_zero_budget_still_submits_and_reports_pending_never_blocks(budget):
+    engine, mirror, chat, clock = make_engine(budget_s=budget)
+    chat.hold_new = True
+    out, _ = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "pending" and clock.t == 0 and len(chat.docs) == 1

@@ -1,5 +1,6 @@
 """The `coordgraph` command line (plan section 3.4): the offline subcommands (`lint`, `migrate`, `facts`,
-`history-coverage`) and the store-backed ones (`bootstrap`, `sync`, `rebuild`, `drift`, `query`).
+`history-coverage`) and the store-backed ones (`bootstrap`, `sync`, `rebuild`, `drift`, `query`, and the KB
+mirror's `kb-sync`, `kb-status`, `kb-reconcile`, `kb-finish`).
 
 `lint` and `history-coverage` resolve IDs through the registry (`identity`, read side); the store-backed
 handlers live in `commands_store` and the write ones (`sync`, `rebuild`) never import `wilib`."""
@@ -9,7 +10,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import commands_store
+from . import commands_kb, commands_store
 from .config import Config
 from .discover import discover
 from .history import coverage
@@ -156,7 +157,17 @@ def build_parser() -> argparse.ArgumentParser:
     q = sub.add_parser("query", help="read-only Cypher on the mirror, under the sync header")
     q.add_argument("cypher")
     q.add_argument("--covers", nargs="+", default=[], metavar="PATH", help="check drift for these files only")
-    for name in ("bootstrap", "sync", "rebuild", "drift", "query"):
+    ks = sub.add_parser("kb-sync", help="mirror registered KB files into ws:agent-team, section by section")
+    ks.add_argument("--detach-finish", action="store_true",
+                    help="launch a detached kb-finish when a section is pending")
+    ks.add_argument("--verbose", "-v", action="store_true", help="also list unchanged sections")
+    ks.add_argument("paths", nargs="*")
+    kt = sub.add_parser("kb-status", help="KB mirror last sync time; stale, pending, unmirrored, duplicate claims")
+    kt.add_argument("--ids", nargs="+", default=[], metavar="ID", help="only the sections holding these document ids")
+    sub.add_parser("kb-reconcile", help="check every mapped KB document against ws:agent-team")
+    kf = sub.add_parser("kb-finish", help="complete or give up pending KB sections (one instance at a time)")
+    kf.add_argument("--once", action="store_true", help="a single pass instead of looping until settled")
+    for name in ("bootstrap", "sync", "rebuild", "drift", "query", "kb-sync", "kb-status", "kb-reconcile", "kb-finish"):
         sub.choices[name].add_argument("--graph", help="graph key (default: COORDGRAPH_KEY)")
     return p
 
@@ -166,7 +177,9 @@ def main(argv: list[str] | None = None) -> int:
     root = Config.from_env().repo_root
     store_backed = {"bootstrap": commands_store.bootstrap, "sync": commands_store.sync_cmd,
                     "rebuild": commands_store.rebuild_cmd, "drift": commands_store.drift_cmd,
-                    "query": commands_store.query_cmd}
+                    "query": commands_store.query_cmd, "kb-sync": commands_kb.kb_sync_cmd,
+                    "kb-status": commands_kb.kb_status_cmd, "kb-reconcile": commands_kb.kb_reconcile_cmd,
+                    "kb-finish": commands_kb.kb_finish_cmd}
     if args.cmd in store_backed:
         return store_backed[args.cmd](args)
     handler = {"lint": cmd_lint, "migrate": cmd_migrate, "facts": cmd_facts,
