@@ -6,12 +6,10 @@
 
 ## Active
 
-| ID | Added | Priority | Status | Summary |
-|------|------------|----------|--------|---------|
-| K-016 | 2026-08-21 | **blocking** | 🔵 | Consolidation pass on `teco.md` (dedicated `cobb` pass): merge same-family incident bullets, split rare-path rules into an on-demand `coordination-techniques.md` knowledge base |
-| K-017 | 2026-09-06 | medium | 🔵 | Move the environment-readiness bring-up mechanics into a `devops`-owned idempotent script, leaving a one-line trigger in `teco.md` |
 
 ### K-016 — consolidate teco.md + split rare-path rules into an on-demand knowledge base
+
+- **Added:** 2026-08-21
 - **Status:** 🔵 proposed · **Priority:** high
 - **Rationale:** an in-depth analysis (2026-08-21, stakeholder-requested) found `teco.md` at
   ~4.7k words — the team's heaviest prompt, regrowing after two slimming passes because each
@@ -113,6 +111,8 @@
     default rather than to the prompt.
 
 ### K-017 — a `devops`-owned `ensure-services.sh`, so the trigger costs one line
+
+- **Added:** 2026-09-06
 - **Status:** 🔵 proposed · **Priority:** medium
 - **Rationale:** the 2026-09-06 environment-readiness change (history) added 370 words of
   always-loaded prompt, most of which is *mechanics* — which probe, which script, why not
@@ -133,33 +133,83 @@
   K-017 first — it is a mechanical extraction, and K-016's editorial floor should be measured on
   the post-extraction text, not before it.
 
+> Summary: Move the environment-readiness bring-up mechanics into a `devops`-owned idempotent script, leaving a one-line trigger in `teco.md`
+
 ## Parking lot / ideas
-- **ccg seam: confirm on first live use (2026-11-19).** On the first `ccg`-covered dispatch check the brief carries stamp + staleness + `notices` verbatim and no "safe/complete" wording. Open: give `teco` `mcp__ccg__ask` (frontmatter `tools`) instead of the Bash CLI — a tool-grant decision, not taken in P1-27; also `refresh` cost/failure behaviour on a real multi-repo system is unmeasured.
-- **Growth-stops check: confirm on first live use (2026-10-29).** The re-gate brief asks for the growth-stops check (root `REVIEW.md`), judgment-enforced (`docs/plans/document-size-discipline.md` D6). On the first in-scope revision/gate, check the brief actually asked for it; if not, sharpen the clause rather than restating `REVIEW.md`.
-- **Feature close: confirm on first live use (2026-10-31).** On the first feature close after live-specs L3c, check `teco` ran root `AGENTS.md`'s five steps with this prompt's how (delegation default, slug-less review home, two-way integrity check, effect-based narrowing) and that the `HISTORY.md` entry cites the spec sections and the check (plan AC-4). If a step was skipped or a narrowing line went ungated, sharpen the "Feature close" bullet rather than restating root `AGENTS.md`.
-- **A delegation-summary table cites, it does not restate (routed here 2026-08-25, prompt-waste
-  Stage D).** The plan (`claude/docs/plans/prompt-waste-reduction.md`) specified this rule for
-  `architect.md`, but `architect` authors no delegation-summary table — the unit/step ledger in
-  `plans/<slug>-coordination.md` is **this** agent's artifact, so the rule was generalized to "a
-  recap table" there and its specific instance lands here. Not added to `teco.md` in that unit: it
-  is a rule change, and §4.0's rollback contract keeps those out of a compression commit. Worth
-  weighing on the next `teco.md` pass — a coordination ledger that restates each unit's decisions
-  rather than citing the plan section is the highest-volume instance of the duplication the whole
-  plan targets, and `teco.md` is the largest file on the team (5,377 w).
-- **Grant `SendMessage` to dispatched specialists for self-reporting — resolved 2026-08-25, `cobb`
-  distillation, not adopted.** Live-reverified: a fresh `coder` probe (declares no `tools:`
-  restriction, nominally "all tools") also lacks `SendMessage` at runtime, so the gap is
-  team-wide, not just `architect`/`analyst`. But the K-028 evidence's real mechanism is the
-  already-documented nested-notification-bubbling behavior (a background `teco`'s own turn had
-  ended, so `architect`/`analyst` completions bubbled to the live ancestor instead of to `teco` —
-  `skills/agent-standards/claude-code.md` "Nested-delegation notification routing", entry
-  `7994edd7…`, promoted 2026-08-21) — a specialist's `SendMessage` access is orthogonal to that;
-  teco's real signal is always the platform's own completion notification, never a delegate
-  self-report, so granting the tool wouldn't change teco's behavior. Tool-inventory fact promoted
-  to the same knowledge-base section instead of a `tools:` grant. Superseded raw entry
-  `teco-20260821-specialist-sendmessage-gap` cleared from `kaizen_team`.
-- **Architect plans annotate dispatch-unit boundaries (noted 2026-08-21).** The dispatch-sizing rule (K-015) asks teco to derive unit boundaries from a step table under pressure; if `architect`'s plan template instead marked suggested dispatch clusters in the step table itself, teco's job becomes verification, and K-015 gets exercised far more easily. Cross-agent change — belongs to `architect`'s prompt/handoff contract; raise when K-015 or K-016 is worked.
-- **Cross-session addressing hygiene (noted 2026-08-21).** The 2026-08-16 misrouting incident is mitigated by a pause-and-confirm rule; a cheaper preventive convention would be: the coordination doc records its session's identity, and any inter-session `SendMessage` must echo the coordination slug — a message without a matching slug is declined without analysis. Decide from the next incident, not now.
-- **Watch the milestone-close freeze in a real close (noted 2026-07-27).** The new curation bullet is prompt-level only — nothing enforces that the `Status: archived` flips actually land, and the owners performing them (`architect`, `analyst`, `tico`, `qa-engineer`, `data-scientist`, `graph-dba`) have no matching instruction in their own prompts yet; they learn it from the brief. If a close ships with documents left `active`, the fix is either a line in each owner's prompt or the optional checker (step 7 of `docs/plans/doc-reference-convention.md`, which today gates nothing) — decide from evidence, not now.
-- Guard against over-orchestration: a heuristic for "this is a single-specialist job, skip the breakdown."
-- Minor §7-lint nits (2026-07-16, low value — noted not filed): (a) the Guardrail "`Write`/`Edit` is for the **coordination doc only**" is stricter than the enforcement it describes (the hook escalates only writes *outside* `docs/plans/`, permitting any file there) — prose and backstop are intentionally different scopes but read as if aligned. (b) The implementer-routing efficiency rule is stated three times (description, routing table, How-you-work) — deliberate reinforcement, some redundancy. (c) The Handoff-contracts list restates specialist doc paths that also live in each specialist's injected `description`, mild tension with teco's own "don't re-derive [descriptions]" line — but this is the §4 handoff-symmetry pattern (state on both sides), so it's a feature with a drift cost, not a defect.
+
+### GAL-I02-K0067 — ccg seam: confirm on first live use (2026-11-19)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+On the first `ccg`-covered dispatch check the brief carries stamp + staleness + `notices` verbatim and no "safe/complete" wording. Open: give `teco` `mcp__ccg__ask` (frontmatter `tools`) instead of the Bash CLI — a tool-grant decision, not taken in P1-27; also `refresh` cost/failure behaviour on a real multi-repo system is unmeasured.
+
+### GAL-I02-K0068 — Growth-stops check: confirm on first live use (2026-10-29)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+The re-gate brief asks for the growth-stops check (root `REVIEW.md`), judgment-enforced (`docs/plans/document-size-discipline.md` D6). On the first in-scope revision/gate, check the brief actually asked for it; if not, sharpen the clause rather than restating `REVIEW.md`.
+
+### GAL-I02-K0069 — Feature close: confirm on first live use (2026-10-31)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+On the first feature close after live-specs L3c, check `teco` ran root `AGENTS.md`'s five steps with this prompt's how (delegation default, slug-less review home, two-way integrity check, effect-based narrowing) and that the `HISTORY.md` entry cites the spec sections and the check (plan AC-4). If a step was skipped or a narrowing line went ungated, sharpen the "Feature close" bullet rather than restating root `AGENTS.md`.
+
+### GAL-I02-K0070 — A delegation-summary table cites, it does not restate (routed here 2026-08-25, prompt-waste Stage D)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+The plan (`claude/docs/plans/prompt-waste-reduction.md`) specified this rule for
+`architect.md`, but `architect` authors no delegation-summary table — the unit/step ledger in
+`plans/<slug>-coordination.md` is **this** agent's artifact, so the rule was generalized to "a
+recap table" there and its specific instance lands here. Not added to `teco.md` in that unit: it
+is a rule change, and §4.0's rollback contract keeps those out of a compression commit. Worth
+weighing on the next `teco.md` pass — a coordination ledger that restates each unit's decisions
+rather than citing the plan section is the highest-volume instance of the duplication the whole
+plan targets, and `teco.md` is the largest file on the team (5,377 w).
+
+### GAL-I02-K0071 — Granting `SendMessage` to dispatched specialists for self-reporting: not adopted (`cobb` distillation, 2026-08-25)
+
+- **Status:** ⚪ rejected — not adopted (decided 2026-08-25)
+
+Live-reverified: a fresh `coder` probe (declares no `tools:`
+restriction, nominally "all tools") also lacks `SendMessage` at runtime, so the gap is
+team-wide, not just `architect`/`analyst`. But the K-028 evidence's real mechanism is the
+already-documented nested-notification-bubbling behavior (a background `teco`'s own turn had
+ended, so `architect`/`analyst` completions bubbled to the live ancestor instead of to `teco` —
+`skills/agent-standards/claude-code.md` "Nested-delegation notification routing", entry
+`7994edd7…`, promoted 2026-08-21) — a specialist's `SendMessage` access is orthogonal to that;
+teco's real signal is always the platform's own completion notification, never a delegate
+self-report, so granting the tool wouldn't change teco's behavior. Tool-inventory fact promoted
+to the same knowledge-base section instead of a `tools:` grant. Superseded raw entry
+`teco-20260821-specialist-sendmessage-gap` cleared from `kaizen_team`.
+
+### GAL-I02-K0072 — Architect plans annotate dispatch-unit boundaries (noted 2026-08-21)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+The dispatch-sizing rule (K-015) asks teco to derive unit boundaries from a step table under pressure; if `architect`'s plan template instead marked suggested dispatch clusters in the step table itself, teco's job becomes verification, and K-015 gets exercised far more easily. Cross-agent change — belongs to `architect`'s prompt/handoff contract; raise when K-015 or K-016 is worked.
+
+### GAL-I02-K0073 — Cross-session addressing hygiene (noted 2026-08-21)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+The 2026-08-16 misrouting incident is mitigated by a pause-and-confirm rule; a cheaper preventive convention would be: the coordination doc records its session's identity, and any inter-session `SendMessage` must echo the coordination slug — a message without a matching slug is declined without analysis. Decide from the next incident, not now.
+
+### GAL-I02-K0074 — Watch the milestone-close freeze in a real close (noted 2026-07-27)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+The new curation bullet is prompt-level only — nothing enforces that the `Status: archived` flips actually land, and the owners performing them (`architect`, `analyst`, `tico`, `qa-engineer`, `data-scientist`, `graph-dba`) have no matching instruction in their own prompts yet; they learn it from the brief. If a close ships with documents left `active`, the fix is either a line in each owner's prompt or the optional checker (step 7 of `docs/plans/doc-reference-convention.md`, which today gates nothing) — decide from evidence, not now.
+
+### GAL-I02-K0075 — Over-orchestration guard
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+A heuristic for "this is a single-specialist job, skip the breakdown."
+
+### GAL-I02-K0076 — Minor §7-lint nits (2026-07-16, low value — noted not filed)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Minor §7-lint nits (2026-07-16, low value — noted not filed): (a) the Guardrail "`Write`/`Edit` is for the **coordination doc only**" is stricter than the enforcement it describes (the hook escalates only writes *outside* `docs/plans/`, permitting any file there) — prose and backstop are intentionally different scopes but read as if aligned. (b) The implementer-routing efficiency rule is stated three times (description, routing table, How-you-work) — deliberate reinforcement, some redundancy. (c) The Handoff-contracts list restates specialist doc paths that also live in each specialist's injected `description`, mild tension with teco's own "don't re-derive [descriptions]" line — but this is the §4 handoff-symmetry pattern (state on both sides), so it's a feature with a drift cost, not a defect.
