@@ -1,0 +1,40 @@
+[project]
+name = "coordination-graph"
+version = "0.1.0"
+description = "Mirror of the team's in-flight work, backlogs and reference lookup in FalkorDB, with read views."
+requires-python = ">=3.12"
+# One runtime dependency, the pin cypher-mcp/ already verified (plan section 3.1).
+# Parsers, discovery, keys and config are stdlib only.
+dependencies = [
+    "falkordb>=1.6,<1.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1,<10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# `live` tests need an ephemeral FalkorDB container (never the shared instance);
+# the default run stays offline.
+addopts = "-ra -m 'not live'"
+markers = [
+    "live: needs the ephemeral FalkorDB container; deselected by default",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["coordgraph*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+# Same small rule set as mcp-monitor and falkor-chat/server: pyflakes, pycodestyle, import order.
+select = ["E", "F", "W", "I"]
