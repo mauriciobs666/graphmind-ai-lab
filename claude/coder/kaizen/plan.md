@@ -6,12 +6,10 @@
 
 ## Active
 
-| ID | Added | Priority | Status | Summary |
-|------|------------|----------|--------|---------|
-| K-002 | 2026-06-20 | medium | 🔵 | Validate the architect→coder handoff end-to-end and confirm the coder can execute an architect plan without re-investigating. |
-| K-006 | 2026-09-07 | medium | 🔵 | Six verified `falkor-chat` behaviour facts distilled out of `kaizen_team` have no home yet — each needs one addition to a component doc outside cobb's write remit. |
 
 ### K-006 — Six distilled `falkor-chat` facts need a home in that component's docs
+
+- **Added:** 2026-09-07
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Rationale:** `agent-maintenance` §5 distillation of `coder`'s `kaizen_team` capture
@@ -22,6 +20,8 @@
   shared shape of the last two: the mechanism *is* already written down at the point of use, and
   the point of use is a place nobody consults before trusting the gate.
 - **Proposed change:** route to `teco` to assign each to the doc's owner. One row per fact:
+
+> Summary: Six verified `falkor-chat` behaviour facts distilled out of `kaizen_team` have no home yet — each needs one addition to a component doc outside cobb's write remit.
 
   | Source entry | Fact (verified by re-derivation) | Target |
   |---|---|---|
@@ -40,33 +40,56 @@
   target: one addition each to `docs/SERVER.md` §1.7, routed through `teco` to that doc's owner.
 
 ### K-002 — End-to-end handoff validation
+
+- **Added:** 2026-06-20
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Rationale:** The architect→coder contract is designed but unproven; the coder should be able to pick up an architect plan cold (isolated context) and build it.
 - **Proposed change:** Run a real feature through architect→coder; capture what the plan was missing; feed back into both prompts.
 - **Notes:** The transport is settled — the implementer receives the plan as a document path (`<component>/docs/plans/<slug>.md`) and reads the file itself — and the *contract* is proven, but by the wrong agent: `architect` K-002 closed on a teco K-001 run where **`tdd-engineer`** executed an architect plan cold with no re-investigation. What remains is coder-specific. The `coder` has since run as the implementer half repeatedly in falkor-chat (K-022 Landing 2 M-2, K-024 U2/U4/U4b), reading plan docs by path and reporting blockers rather than guessing (the zero-transition `IndexError` was *"not fixed (out of unit scope); reported to teco"* — correct scope discipline). That is strong circumstantial evidence and not a review: those run reports were never read against the plan. **Close on one deliberate read of a completed architect→coder run.**
 
+> Summary: Validate the architect→coder handoff end-to-end and confirm the coder can execute an architect plan without re-investigating.
+
 ## Parking lot / ideas
-- **Judged and kept, do not re-litigate (2026-08-24, C6 lint).** Three restatements will read as class-7 duplicates to a future dedup sweep; all are keeps under finding 5 ("needed twice", not "said twice"):
-  - **"Don't claim what you didn't run" vs. step 5's report procedure** — prohibition vs. the mechanics of an honest report (show output; report `passed`/`skipped`/`deselected`). Same pair `qa-engineer` certified at C5.
-  - **"Ask before destructive or environment-changing actions" vs. step 2's bootstrap ask** — two decision points, each carrying its own subagent carve-out. The carve-out duplication is an `agent-maintenance` §4 check-3 **certification requirement**, not style.
-  - **"Minimal blast radius" vs. "Don't silently exceed scope"** — scope of edits vs. reporting obligation. (The *third* member of that trio, `:11`, is a genuine contradiction — see K-003.)
-- **A mutant must be proven to change behavior before its survival is read as a coverage gap.**
-  From distilled entry `a1b2c3d4-e5f6-…` (2026-08-29, re-verified on CPython 3.12.3): stripping
-  `^`/`$` from a regex whose call site is `re.fullmatch()` is a **no-op mutant** — `fullmatch`
-  enforces whole-string matching regardless of anchors in the pattern text, so the intended
-  "unanchored regex" regression only appears once the call is also switched to `.match()`. The
-  general rule is worth stating somewhere the implementers read. **A home now exists** — U11
-  (2026-09-07) promoted a sibling mutation technique (mutating a class-level Cypher constant via a
-  pytest `-p` plugin, no source edit) into `claude/analyst/review-techniques.md`, whose stated scope
-  is verification technique; that file, not a new mutation-testing knowledge base, is where this
-  lesson should land. U11 did not move it, to stay inside its own eight-entry scope. The homes ruled
-  out at U10 still are: `skills/python-web-quirks/` (web/async + pytest import-timing) and
-  `claude/qa-engineer/qa-testing-techniques.md` (black-box QA mechanics). **What actually remains
-  is smaller than this item says (U39, 2026-09-09):** the *general* rule — a surviving mutant is
-  not evidence of a coverage gap until the mutant is shown to change behaviour — has stood in
-  `claude/tdd-engineer/tdd-engineer.md`'s mutation bullet all along, as the equivalent-by-construction
-  case, and U39 extended that same bullet again. Only the `re.fullmatch`/anchor **instance** is
-  unhomed, and it is an instance, not a rule.
-- A "definition of done" checklist (suite green, behavior covered, no scope creep, honest run report) the coder self-checks before reporting completion.
-- Consider whether the coder should delegate the test-writing step to `tdd-engineer` when strict TDD is required, rather than doing it itself.
+
+### GAL-I02-K0027 — Three restatements kept on purpose (judged and kept, C6 lint 2026-08-24; do not re-litigate)
+
+- **Status:** ⚪ rejected — record, not work (judged and kept 2026-08-24)
+
+Three restatements will read as class-7 duplicates to a future dedup sweep; all are keeps under finding 5 ("needed twice", not "said twice"):
+- **"Don't claim what you didn't run" vs. step 5's report procedure** — prohibition vs. the mechanics of an honest report (show output; report `passed`/`skipped`/`deselected`). Same pair `qa-engineer` certified at C5.
+- **"Ask before destructive or environment-changing actions" vs. step 2's bootstrap ask** — two decision points, each carrying its own subagent carve-out. The carve-out duplication is an `agent-maintenance` §4 check-3 **certification requirement**, not style.
+- **"Minimal blast radius" vs. "Don't silently exceed scope"** — scope of edits vs. reporting obligation. (The *third* member of that trio, `:11`, is a genuine contradiction — see K-003.)
+
+### GAL-I02-K0028 — A mutant must be proven to change behavior before its survival is read as a coverage gap
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+From distilled entry `a1b2c3d4-e5f6-…` (2026-08-29, re-verified on CPython 3.12.3): stripping
+`^`/`$` from a regex whose call site is `re.fullmatch()` is a **no-op mutant** — `fullmatch`
+enforces whole-string matching regardless of anchors in the pattern text, so the intended
+"unanchored regex" regression only appears once the call is also switched to `.match()`. The
+general rule is worth stating somewhere the implementers read. **A home now exists** — U11
+(2026-09-07) promoted a sibling mutation technique (mutating a class-level Cypher constant via a
+pytest `-p` plugin, no source edit) into `claude/analyst/review-techniques.md`, whose stated scope
+is verification technique; that file, not a new mutation-testing knowledge base, is where this
+lesson should land. U11 did not move it, to stay inside its own eight-entry scope. The homes ruled
+out at U10 still are: `skills/python-web-quirks/` (web/async + pytest import-timing) and
+`claude/qa-engineer/qa-testing-techniques.md` (black-box QA mechanics). **What actually remains
+is smaller than this item says (U39, 2026-09-09):** the *general* rule — a surviving mutant is
+not evidence of a coverage gap until the mutant is shown to change behaviour — has stood in
+`claude/tdd-engineer/tdd-engineer.md`'s mutation bullet all along, as the equivalent-by-construction
+case, and U39 extended that same bullet again. Only the `re.fullmatch`/anchor **instance** is
+unhomed, and it is an instance, not a rule.
+
+### GAL-I02-K0029 — "Definition of done" self-check checklist
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Suite green, behavior covered, no scope creep, honest run report — the coder self-checks it before reporting completion.
+
+### GAL-I02-K0030 — Delegating test-writing to `tdd-engineer` under strict TDD
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Consider whether the coder should hand the test-writing step to `tdd-engineer` when strict TDD is required, rather than doing it itself.
