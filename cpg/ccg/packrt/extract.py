@@ -1,8 +1,9 @@
 """Indexes over the unit bundles and the evaluation of ``extract`` expressions (rule-pack spec §1.2, §1.4).
 
 :class:`Corpus` is the S12 recognizer's ``Corpus`` (``cpg/spikes/vertical-slice/assemble.py``, the conformance oracle) widened
-with the file, import and launch/config records the declarations need. Values are *alternatives*: strings with
-:data:`~ccg.packrt.httpkey.UNKNOWN` standing for an unresolved piece.
+with the file, import and launch/config records the declarations need. Values are *alternatives*: strings in which an unresolved piece is
+a marker: :data:`~ccg.packrt.httpkey.UNKNOWN` for a name that should have resolved, :data:`~ccg.packrt.httpkey.UNKNOWN_VALUE` for a
+value that is not statically known.
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 
-from ccg.packrt.httpkey import UNKNOWN
+from ccg.packrt.httpkey import UNKNOWN, UNKNOWN_VALUE
 
 MAX_ALTERNATIVES = 64
 MAX_REF_DEPTH = 8
@@ -96,13 +97,17 @@ class Corpus:
 
     # -- values --------------------------------------------------------------------------------
     def alternatives(self, element: dict, _seen: tuple = (), _depth: int = 0) -> list[str]:
-        """Strings an ``element`` can take; ``UNKNOWN`` marks an unresolved piece."""
+        """Strings an ``element`` can take. An unresolved piece is ``UNKNOWN`` for an ``importRef`` (a name the resolver could not
+        map), a ``ref`` cycle or the depth cap; ``UNKNOWN_VALUE`` for an ``unknown`` element, a ``ref`` whose constant has no record
+        (a call-valued or unrecorded constant) and the alternatives cap."""
         if "const" in element:
             return [str(element["const"])]
         if "ref" in element:
             qn = element["ref"]
             const = self.constants.get(qn)
-            if const is None or qn in _seen or _depth >= MAX_REF_DEPTH:
+            if const is None:
+                return [UNKNOWN_VALUE]
+            if qn in _seen or _depth >= MAX_REF_DEPTH:
                 return [UNKNOWN]
             return self.value_alternatives(const["values"], _seen + (qn,), _depth + 1)
         if "concat" in element or "template" in element:
@@ -111,9 +116,11 @@ class Corpus:
             for combo in itertools.product(*parts):
                 out.append("".join(combo))
                 if len(out) >= MAX_ALTERNATIVES:
-                    return sorted(set(out)) + [UNKNOWN]
+                    return sorted(set(out)) + [UNKNOWN_VALUE]
             return sorted(set(out))
-        return [UNKNOWN]  # importRef, unknown
+        if "importRef" in element:
+            return [UNKNOWN]
+        return [UNKNOWN_VALUE]  # unknown
 
     def value_alternatives(self, values: list[dict], _seen: tuple = (), _depth: int = 0) -> list[str]:
         out: set[str] = set()

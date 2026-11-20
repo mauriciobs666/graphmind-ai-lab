@@ -1,0 +1,27 @@
+# Call-site shapes the pack must NOT turn into a consumer, per lifting id (P1-49). Each case is a hand-built Python file
+# (`imports`) holding one call `callee` (`resolution`, optional `external` target) whose first argument is the constant `a0`
+# (or, with `a0: null`, none). Run by `negatives_failures` in tests/test_pack_python_http_client.py. A string or a comment naming
+# `requests.get` has no call record at all, so it is the empty-file case `no-call-record`. Not a negative but a pinned residual
+# limit (a URL-like argument of an untyped `.get(...)` in a file importing `requests` IS a consumer): see the test file.
+negatives:
+  py-get:
+    dict-get-key: {imports: [requests], callee: get, resolution: external, external: "__builtin.dict.get", a0: key}
+    dict-get-with-a-path-string: {imports: [requests], callee: get, resolution: external, external: "__builtin.dict.get", a0: /looks/like/a/path}
+    environ-get: {imports: [requests], callee: get, resolution: external, external: "os.py:<module>.<member>(environ).get", a0: FX_PEER_BASE}
+    untyped-get-of-a-config-key: {imports: [requests], callee: get, resolution: unresolved, a0: timeout}
+    untyped-get-in-a-file-importing-no-http-client: {imports: [os, json], callee: get, resolution: unresolved, a0: /health}
+    string-naming-requests-get: {imports: [requests], callee: print, resolution: unresolved, a0: "requests.get('/x')"}
+    no-call-record: {imports: [requests], callee: null}
+    get-without-an-argument: {imports: [requests], callee: get, resolution: unresolved, a0: null}
+    other-verb-name: {imports: [requests], callee: getter, resolution: unresolved, a0: /health}
+  py-post:
+    untyped-post-of-a-non-url-string: {imports: [httpx], callee: post, resolution: unresolved, a0: payload}
+    untyped-post-in-a-file-importing-no-http-client: {imports: [os], callee: post, resolution: unresolved, a0: /jobs}
+  py-delete:
+    untyped-delete-of-a-non-url-string: {imports: [requests], callee: delete, resolution: unresolved, a0: key}
+  py-request:
+    request-in-a-file-importing-no-urllib: {imports: [requests], callee: Request, resolution: external, external: "urllib.py:<module>.<member>(request).Request.__init__", a0: /x}
+    another-library-request: {imports: [urllib.request], callee: Request, resolution: external, external: "fastapi.py:<module>.Request", a0: /x}
+  py-urlopen:
+    urlopen-of-a-non-url-string: {imports: [urllib.request], callee: urlopen, resolution: external, external: "urllib.py:<module>.<member>(request).urlopen", a0: payload}
+    urlopen-in-a-file-importing-no-urllib: {imports: [requests], callee: urlopen, resolution: external, external: "urllib.py:<module>.<member>(request).urlopen", a0: /x}

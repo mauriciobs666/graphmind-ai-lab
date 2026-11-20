@@ -420,7 +420,7 @@ def test_the_pack_file_is_marked_paper(pid):
 
 
 # Packs that are files only, with no block in the rule-pack spec: id -> the files beside `pack.yaml` (P1-46).
-NON_SPEC_PACKS = {"shell-mcp-call": {NEGATIVES_FILE}}
+NON_SPEC_PACKS = {"shell-mcp-call": {NEGATIVES_FILE}, "python-http-client": {NEGATIVES_FILE}}
 
 
 def test_the_packs_directory_holds_exactly_the_seven_spec_packs_and_the_files_only_packs():

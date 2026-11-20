@@ -1126,6 +1126,9 @@
        },
        "arg": {
         "$ref": "#/$defs/argPath"
+       },
+       "scope": {
+        "$ref": "#/$defs/scope"
        }
       },
       "required": [
@@ -1160,6 +1163,12 @@
        "arg"
       ]
      }
+    },
+    "ownSite": {
+     "type": "boolean"
+    },
+    "urlLike": {
+     "type": "boolean"
     }
    },
    "required": [

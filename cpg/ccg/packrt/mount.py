@@ -13,7 +13,7 @@ import itertools
 from collections import defaultdict
 
 from ccg.packrt.extract import Corpus, Ctx, eval_expr
-from ccg.packrt.httpkey import UNKNOWN
+from ccg.packrt.httpkey import UNKNOWN, UNKNOWN_VALUE, has_unresolved
 from ccg.packrt.match import clause_hit, scope_ok
 
 
@@ -57,11 +57,11 @@ class MountIndex:
         for sid, f in sorted(seen.items()):
             s = f["site"]
             prefixes = self.prefix_alternatives(s)
-            resolved = not any(UNKNOWN in p for p in prefixes)
+            resolved = not any(has_unresolved(p) for p in prefixes)
             out.append({
                 "packId": self.pack_id, "mountId": self.decl["id"], "siteId": sid, "symbolId": s["symbolId"],
                 "path": self.corpus.symbols[s["symbolId"]]["path"], "line": s["line"],
-                "factoryIds": sorted(set(f["factoryIds"])), "prefixes": [p.replace(UNKNOWN, "{?}") for p in prefixes],
+                "factoryIds": sorted(set(f["factoryIds"])), "prefixes": [p.replace(UNKNOWN, "{?}").replace(UNKNOWN_VALUE, "{?}") for p in prefixes],
                 "conditions": self.conditions(s) if self.decl.get("recordConditions") else [],
                 "status": "confirmed" if resolved else "possible", "reason": "key-match" if resolved else "partial-key",
             })

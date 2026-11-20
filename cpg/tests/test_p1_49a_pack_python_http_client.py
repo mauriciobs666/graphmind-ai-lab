@@ -84,9 +84,31 @@ def test_the_pack_declares_the_httpx_client_base_url_as_a_file_scoped_callsite_u
                for kinds, s in sources), sources
 
 
-def test_every_rule_is_gated_by_scope_imports():
+def test_every_lifting_seed_carries_scope_imports_and_no_rule_needs_one():
+    """The gate lives on the seed (`seeds[].scope`, plan P1-49 Format additions): a lifted fact's rule `scope` would name the
+    leaf's file, which for a lifted caller is not the wrapper's file."""
     p = the_pack()
-    assert p["rules"] and all(r.get("scope", {}).get("imports") for r in p["rules"])
+    assert p["liftings"] and all(s.get("scope", {}).get("imports") for lf in p["liftings"] for s in lf["seeds"])
+    assert p["rules"] and not any(r.get("scope") for r in p["rules"])
+
+
+def two_files(wrapper_imports, caller_imports):
+    """``w`` (a wrapper over an untyped ``<verb>(path)``) in ``svc/w.py`` and its type-backed caller ``m`` in ``svc/m.py``."""
+    return ([file_("f1", "svc/w.py")] + [imp("f1", m) for m in wrapper_imports]
+            + [file_("f2", "svc/m.py")] + [imp("f2", m) for m in caller_imports]
+            + [sym("w", "_get", fid="f1", path="svc/w.py", start=30), param("p0", "w", 0, "path", line=31),
+               site("rq", SHAPES["verb"]("get"), owner="w", line=32), data("rq", "p0", "a0", "p0"), vs("rq", "a0", UNK),
+               sym("m", "run", fid="f2", path="svc/m.py", start=50),
+               call("cs", "m", "_get", line=51, resolution="resolved", targets=("w",)), vs("cs", "a0", "/items")])
+
+
+def test_a_wrapper_in_a_file_without_an_http_import_called_from_a_file_with_one_is_dropped_the_seeds_file_decides():
+    assert consumers(two_files(wrapper_imports=(), caller_imports=("requests",))) == []
+
+
+def test_a_wrapper_in_an_importing_file_called_from_a_non_importing_file_is_kept_at_the_caller():
+    (c,) = consumers(two_files(wrapper_imports=("requests",), caller_imports=()))
+    assert (c["siteId"], c["anchorId"], c["key"], c["status"]) == ("cs", "m", "GET /items", "confirmed")
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -163,17 +185,14 @@ def test_a_request_takes_its_verb_from_the_method_keyword_and_defaults_to_get():
     assert [c["key"] for c in consumers(bare)] == ["GET /documents"]
 
 
-def test_pinned_limit_data_without_method_stays_get():
-    recs = urllib_module(site("r1", SHAPES["Request"]), vs("r1", "a0", "http://svc:8200/documents"), vs("r1", "kw.data", UNK))
-    assert [c["key"] for c in consumers(recs)] == ["GET /documents"]
-
-
-@pytest.mark.parametrize("kw", ["kw.headers", "kw.timeout"])
-def test_another_keyword_on_request_does_not_defeat_the_bare_get_default(kw):
-    """FINDING (see the report): `lift._verbs_at` withholds `bareDefault` when the seed has any value set whose path starts with the
-    companion's head `kw`, so `Request(url, headers=h)` would be `*`, not `GET`. The plan's pinned `data=` limit implies it is `GET`."""
+@pytest.mark.parametrize("kw", ["kw.data", "kw.headers", "kw.timeout"])
+def test_another_keyword_on_request_withholds_the_bare_get_default_and_the_verb_is_any(kw):
+    """RULING (plan P1-49, "Tests that 49b changes or adds" (b)): `lift._verbs_at` withholds `bareDefault` when the seed's
+    container argument (`kw`) holds any value set or flow, deliberately: `data=` makes a urllib `Request` a POST, and `headers=`
+    cannot be told apart from it by a `kw.*` head. The earlier "stays GET" expectation was wrong, not a limit. The bare
+    `Request(url)` stays GET and `Request(url, method="POST")` stays POST (tests above)."""
     recs = urllib_module(site("r1", SHAPES["Request"]), vs("r1", "a0", "http://svc:8200/documents"), vs("r1", kw, UNK))
-    assert [c["key"] for c in consumers(recs)] == ["GET /documents"]
+    assert [c["key"] for c in consumers(recs)] == ["* /documents"]
 
 
 def test_a_literal_urlopen_is_a_get_consumer():
@@ -205,6 +224,26 @@ def test_an_untyped_dot_get_with_a_non_url_string_key_is_not_a_consumer_in_a_fil
     assert consumers(recs) == []
 
 
+def dict_get_wrapper(arg):
+    """``def lookup(name): return d.get(name)`` (untyped ``d``) called with ``arg``: the leaf is the caller's slot."""
+    return module(("requests",)) + [
+        sym("w", "lookup", fid="f1", path="svc/client.py", start=30), param("p0", "w", 0, "name", line=31),
+        site("rq", SHAPES["verb"]("get"), owner="w", line=32), data("rq", "p0", "a0", "p0"), vs("rq", "a0", UNK),
+        sym("m", "run", fid="f1", path="svc/client.py", start=50),
+        call("cs", "m", "lookup", line=51, resolution="resolved", targets=("w",)), vs("cs", "a0", arg)]
+
+
+def test_a_parameter_fed_dot_get_called_with_a_non_url_string_is_dropped_at_the_leaf():
+    assert consumers(dict_get_wrapper("timeout")) == []
+
+
+def test_RESIDUAL_LIMIT_a_parameter_fed_dot_get_called_with_a_url_like_string_is_a_consumer():
+    """Pinned by name (plan P1-49 "Untyped verbs"): `routes.get("/health")` in a file importing `requests` cannot be told from
+    `requests.get("/health")` in the stored bundles, so a URL-like argument is kept; it enters P1-36's precision measure."""
+    (c,) = consumers(dict_get_wrapper("/x"))
+    assert (c["siteId"], c["key"]) == ("cs", "GET /x")
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 # wrappers: carried by the lifting fixpoint when 5d keeps the call that reaches them
 # ---------------------------------------------------------------------------------------------------------------------
@@ -233,13 +272,19 @@ def test_a_wrapper_called_through_an_untyped_receiver_is_not_lifted_to_the_calle
     assert "cs" not in {c["siteId"] for c in consumers(UNTYPED_CALL())}, receiver
 
 
-def test_a_wrapper_with_no_lifted_caller_is_itself_the_possible_partial_key_consumer_PLAN_STATEMENT():
-    """The plan says (P1-49, "Wrapper reached through a name-linked caller"): "the consumer is the wrapper's own site,
-    `possible`/`partial-key`". FINDING (see the report): `lift.run_lifting` marks a slot `leaf` only if it has no lifted child, and a
-    seed whose URL slot is fed by a parameter always has the parameter as a child, so today the wrapper's own site is NOT a
-    consumer when no caller is lifted. Red until 49b (or the architect) settles which one the plan means."""
-    got = consumers(UNTYPED_CALL())
-    assert [(c["siteId"], c["status"], c["reason"]) for c in got] == [("rq", "possible", "partial-key")]
+def test_a_wrapper_with_no_lifted_caller_and_a_partly_known_template_is_itself_the_possible_partial_key_consumer():
+    """`ownSite` (plan P1-49 Format additions): the seed slot `f"/items/{x}"` is the wrapper's own template, so its own site is
+    the consumer, `possible`/`partial-key` because a path piece is unresolved (`/items/{?}`); it holds for a call through an
+    untyped receiver (not lifted) exactly as for a wrapper nobody calls."""
+    recs = wrapper(seed_slot={"template": [{"const": "/items/"}, UNK]}) + [call("cs", "m", "_get", line=51, resolution="unresolved"),
+                                                                           vs("cs", "a0", "/items")]
+    got = consumers(recs)
+    assert [(c["siteId"], c["key"], c["status"], c["reason"]) for c in got] == [("rq", "POST /items/{?}", "possible", "partial-key")]
+
+
+def test_a_wrapper_with_no_lifted_caller_and_a_template_with_no_url_like_text_is_no_consumer():
+    """`self.base + path` is `\\x01\\x01` at the seed slot: a `POST /{?}` key would only match any one-segment provider."""
+    assert consumers(UNTYPED_CALL()) == []
 
 
 def test_the_same_wrapper_through_a_constructor_typed_receiver_is_lifted_to_the_caller():

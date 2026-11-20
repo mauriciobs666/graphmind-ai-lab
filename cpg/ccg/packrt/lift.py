@@ -15,8 +15,8 @@ import re
 from collections import defaultdict
 
 from ccg.packrt.extract import Corpus
-from ccg.packrt.httpkey import UNKNOWN, VERBS
-from ccg.packrt.match import clause_hit
+from ccg.packrt.httpkey import VERBS, is_url_like, is_wholly_unresolved
+from ccg.packrt.match import clause_hit, scope_ok
 
 _PARAM_PATH = re.compile(r"^p(\d+)(.*)$")
 _RESULT_PATH = re.compile(r"^r(.*)$")
@@ -138,33 +138,76 @@ def _verb_paths(verb_pred: dict | None) -> dict:
 def _verbs_at(corpus: Corpus, chain_slots: list[str], verb_nodes: dict, seed_ids: set, comp: dict) -> tuple[list[str], bool]:
     """``(verbs, partial)`` for a consumer: the first call on its lifting chain (consumer side first) whose lifted companion
     slot resolves; else the companion's ``bareDefault`` for a seed call with no second argument; else its ``unknown``.
-    ``partial`` is true when that slot also holds an unresolved alternative (``[GET, unknown]``)."""
+    ``partial`` is true when that slot also holds a wholly unresolved alternative (``[GET, unknown]``), or, for the ``unknown`` fallback, when a slot on the chain held only such alternatives (``[unknown]``)."""
     unknown = comp.get("unknown", "*")
+    any_partial = False
     for cid in chain_slots:
         alts: set[str] = set()
         partial = False
         for _, _, path in sorted(verb_nodes.get(cid, ())):
             for a in corpus.slot_alternatives(cid, path) or ():
-                if a == UNKNOWN:
+                if is_wholly_unresolved(a):
                     partial = True
                 else:
                     v = a.upper()
                     alts.add(v if v in VERBS else unknown)
         if alts:
             return sorted(alts), partial
+        any_partial |= partial
     seed = chain_slots[-1]
     head = comp["arg"].split(".")[0]
     if "bareDefault" in comp and seed in seed_ids \
             and not any(k[0] == seed and k[1].startswith(head) for k in corpus.value_sets) \
             and not any(d["toPath"].startswith(head) for d in corpus.data_by_use.get(seed, ())):
         return [comp["bareDefault"]], False
-    return [unknown], False
+    return [unknown], any_partial
+
+
+def _slot_descendants_of(pred: dict) -> set[tuple]:
+    """Every slot node that has a *slot* beyond it on the fixpoint (through any number of parameter nodes)."""
+    out: set[tuple] = set()
+    for node, p in pred.items():
+        if node[0] != "slot":
+            continue
+        cur = p[0] if p else None
+        while cur is not None:
+            if cur[0] == "slot":
+                out.add(cur)
+            cur = pred[cur][0] if pred[cur] else None
+    return out
+
+
+def _opaque_slot(corpus: Corpus, pred: dict, node: tuple) -> dict | None:
+    """The first slot below the leaf ``node`` on its chain (consumer side first, the seed's own slot included) that is not
+    transparent (rule 4): a slot is transparent when it has no value set or every alternative is wholly unresolved, so it is
+    the bare parameter. A slot with a sibling piece (``self.base + path``) holds text the caller's slot cannot see."""
+    for n in chain_of(pred, node)[1:]:
+        if n[0] != "slot":
+            continue
+        alts = corpus.slot_alternatives(n[1], n[2])
+        if alts is not None and not all(is_wholly_unresolved(a) for a in alts):
+            return {"siteId": n[1], "arg": n[2]}
+    return None
+
+
+def _url_like_alternatives(alts: list[str]) -> list[str] | None:
+    """``alts`` without the alternatives that are neither URL-like nor wholly unresolved; ``None`` when none is URL-like."""
+    if not any(is_url_like(a) for a in alts):
+        return None
+    return [a for a in alts if is_url_like(a) or is_wholly_unresolved(a)]
 
 
 def run_lifting(corpus: Corpus, pack_id: str, lifting: dict) -> list[dict]:
-    """Every lifted ``slot`` node of ``lifting`` (sorted), resolved or not, with its hops, verbs and weakest link."""
-    seeds = [(c["id"], seed["arg"]) for seed in lifting["seeds"] for c in sorted(corpus.callsites.values(), key=lambda c: c["id"])
-             if clause_hit("callsite", seed["call"], c, corpus)]
+    """Every lifted ``slot`` node of ``lifting`` (sorted), resolved or not, with its hops, verbs and weakest link.
+
+    Optional format words: a seed's ``scope`` gates the seed call's own file; ``ownSite`` makes a slot a leaf when no slot lies
+    beyond it (a wrapper no call edge reaches is a consumer at its own site); ``urlLike`` keeps at a leaf only the URL-like
+    alternatives (``partialAlternatives`` is decided before the filter) and drops a leaf with none. A lifted fact whose chain
+    below the leaf is not transparent records ``opaqueSlot`` and is ``possible``/``partial-key``.
+    """
+    calls = sorted(corpus.callsites.values(), key=lambda c: c["id"])
+    seeds = [(c["id"], seed["arg"]) for seed in lifting["seeds"] for c in calls
+             if clause_hit("callsite", seed["call"], c, corpus) and scope_ok(seed.get("scope"), corpus.file_id_of(c), corpus)]
     seed_ids = {cid for cid, _ in seeds}
     url_pred = lift_role(corpus, seeds)
     companion = next((c for c in lifting.get("companions", ()) if c["role"] == "verb"), None)
@@ -175,28 +218,37 @@ def run_lifting(corpus: Corpus, pack_id: str, lifting: dict) -> list[dict]:
         for n in verb_pred:
             if n[0] == "slot":
                 verb_slots[n[1]].append(n)
-    has_child = {p[0] for p in url_pred.values() if p}
+    has_child = _slot_descendants_of(url_pred) if lifting.get("ownSite") else {p[0] for p in url_pred.values() if p}
     out = []
     for node in sorted(n for n in url_pred if n[0] == "slot"):
         _, cid, path = node
         site = corpus.callsites[cid]
         alts = corpus.slot_alternatives(cid, path)
-        resolved = alts is not None and not all(a == UNKNOWN for a in alts)
+        resolved = alts is not None and not all(is_wholly_unresolved(a) for a in alts)
+        leaf = node not in has_child
+        partial = any(is_wholly_unresolved(a) for a in alts or ())
+        if lifting.get("urlLike") and leaf:
+            kept = _url_like_alternatives(alts or [])
+            if kept is None:
+                continue
+            alts, resolved = kept, True
         item = {
             "packId": pack_id, "lifting": lifting["id"], "siteId": cid, "symbolId": site["symbolId"],
             "path": corpus.symbols[site["symbolId"]]["path"], "line": site["line"], "urlPath": path,
-            "alternatives": alts or [], "resolved": resolved, "leaf": node not in has_child,
+            "alternatives": alts or [], "resolved": resolved, "leaf": leaf,
             "hops": lifted_hops(corpus, url_pred, node, verb_pred), "verbs": None, "partialAlternatives": False,
             "weakenedBy": weakest(url_pred, node),
         }
+        if opaque := _opaque_slot(corpus, url_pred, node):
+            item["opaqueSlot"] = opaque
         if resolved and companion:
             chain_slots = [n[1] for n in chain_of(url_pred, node) if n[0] == "slot"]
             verbs, verb_partial = _verbs_at(corpus, chain_slots, verb_slots, seed_ids, companion)
             item["verbs"] = verbs
-            item["partialAlternatives"] = verb_partial or UNKNOWN in alts
+            item["partialAlternatives"] = verb_partial or partial
         elif resolved:
-            item["partialAlternatives"] = UNKNOWN in alts
+            item["partialAlternatives"] = partial
         item["status"], item["reason"] = ("possible", "partial-key") if (
-            not resolved or item["partialAlternatives"] or item["weakenedBy"]) else ("confirmed", "lifted-role")
+            not resolved or item["partialAlternatives"] or item["weakenedBy"] or opaque) else ("confirmed", "lifted-role")
         out.append(item)
     return out

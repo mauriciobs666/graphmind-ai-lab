@@ -8,7 +8,7 @@ from packrt_helpers import call, constant, dec, file_, sym, vs
 from ccg import keynorm
 from ccg.packrt import httpkey
 from ccg.packrt.extract import Corpus, Ctx, UnsupportedExpression, eval_expr, slot_mode
-from ccg.packrt.httpkey import UNKNOWN
+from ccg.packrt.httpkey import UNKNOWN, UNKNOWN_VALUE
 
 
 def corpus(*records):
@@ -22,11 +22,11 @@ def test_const_ref_concat_and_the_unresolved_pieces():
     assert c.alternatives({"const": 7}) == ["7"]
     assert c.alternatives({"ref": "m::BASE"}) == ["/api"]
     assert c.alternatives({"concat": [{"ref": "m::BASE"}, {"const": "/x"}]}) == ["/api/x"]
-    assert c.alternatives({"unknown": "point-derived"}) == [UNKNOWN]
-    assert c.alternatives({"importRef": "q"}) == [UNKNOWN]
-    assert c.alternatives({"ref": "m::missing"}) == [UNKNOWN]
-    assert c.alternatives({"ref": "m::A"}) == [UNKNOWN]                    # a cycle stops, it does not loop
-    assert c.alternatives({"concat": [{"const": "/a"}, {"unknown": "x"}]}) == ["/a" + UNKNOWN]
+    assert c.alternatives({"unknown": "point-derived"}) == [UNKNOWN_VALUE]      # not statically known
+    assert c.alternatives({"importRef": "q"}) == [UNKNOWN]                      # a name that should resolve
+    assert c.alternatives({"ref": "m::missing"}) == [UNKNOWN_VALUE]             # a ref with no constant record
+    assert c.alternatives({"ref": "m::A"}) == [UNKNOWN]                        # a cycle stops, it does not loop
+    assert c.alternatives({"concat": [{"const": "/a"}, {"unknown": "x"}]}) == ["/a" + UNKNOWN_VALUE]
 
 
 def test_a_value_set_is_the_union_of_its_elements_and_a_product_is_capped_at_64():
@@ -35,7 +35,7 @@ def test_a_value_set_is_the_union_of_its_elements_and_a_product_is_capped_at_64(
     wide = {"concat": [{"ref": "m::W"}, {"ref": "m::W"}]}
     c2 = corpus(constant("m::W", *[str(i) for i in range(9)]))
     got = c2.alternatives(wide)
-    assert len(got) == 65 and got[-1] == UNKNOWN                            # 64 products, then the unresolved marker
+    assert len(got) == 65 and got[-1] == UNKNOWN_VALUE                      # 64 products, then the not-statically-known marker
 
 
 def test_arg_values_read_a_decorators_args_and_a_callsites_value_sets():
@@ -73,7 +73,7 @@ def test_firstof_takes_the_first_non_empty_expression_left_to_right():
 def test_an_unresolved_first_alternative_is_still_non_empty_so_firstof_stops_there():
     c = corpus(file_("f1", "a.py"), sym("h", "h"), dec("d", "h", "mcp.tool", ("a0", {"unknown": "point-derived"})))
     e = {"firstOf": [{"arg": "a0"}, {"target": "name"}]}
-    assert eval_expr(e, ctx(c, c.decorators[0], target=c.symbols["h"])) == [UNKNOWN]
+    assert eval_expr(e, ctx(c, c.decorators[0], target=c.symbols["h"])) == [UNKNOWN_VALUE]
 
 
 def test_group_literal_target_qname_and_default():

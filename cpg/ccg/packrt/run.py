@@ -13,7 +13,7 @@ import re
 from typing import NamedTuple
 
 from ccg.packrt.extract import Corpus, Ctx, arg_paths, eval_expr, slot_mode
-from ccg.packrt.httpkey import UNKNOWN, normalize_key
+from ccg.packrt.httpkey import has_unresolved, is_wholly_unresolved, normalize_key_parts
 from ccg.packrt.launch import launch_facts
 from ccg.packrt.lift import run_lifting
 from ccg.packrt.match import Hit, UnsupportedSubject, clause_hit, scope_ok
@@ -108,7 +108,7 @@ class _Run:
         c = self.corpus
         anchor = c.symbols[rec.get("targetId") or rec["symbolId"]]
         ctx = Ctx(c, rec, hit, anchor, None if item is None else {
-            "url": [a for a in item["alternatives"] if a != UNKNOWN], "verb": item["verbs"] or []})
+            "url": [a for a in item["alternatives"] if not is_wholly_unresolved(a)], "verb": item["verbs"] or []})
         for emit in rule["emit"]:
             ((name, body),) = emit.items()
             if name == "mark":
@@ -144,7 +144,7 @@ class _Run:
     def _one(self, pack, rule, rec, anchor, item, mounts, edge, body, names, modes, variant, combo, slots) -> None:
         kind = body["kind"]
         values = {"mount": combo[0], **dict(zip(slots, combo[1:]))}
-        unresolved = [n for n in names if UNKNOWN in values[n]]
+        unresolved = [n for n in names if has_unresolved(values[n])]
         used_modes = {"drop" if n == "mount" else modes[n] for n in unresolved}
         base = self._item(pack, rule, rec, anchor)
         if "drop" in used_modes:
@@ -157,8 +157,9 @@ class _Run:
         if unresolved and (kind != "http" or "runtime-built" in used_modes):
             key, status, reason = None, "possible", self._keyless_reason(rule, rec, unresolved, modes)
         elif kind == "http":
-            key = normalize_key(raw, "provider" if edge == "PROVIDES" else "consumer")
-            if "{?}" in key and unresolved:
+            parts = normalize_key_parts(raw, "provider" if edge == "PROVIDES" else "consumer")
+            key = parts.key
+            if unresolved and (parts.unresolved_in_path or parts.origin_dropped):
                 status, reason = "possible", "partial-key"
         if item and item["status"] != "confirmed" and status == "confirmed":
             status, reason = item["status"], item["reason"]
@@ -171,6 +172,8 @@ class _Run:
             evidence["hops"] = item["hops"]
             if item["weakenedBy"]:
                 evidence["weakenedBy"] = item["weakenedBy"]
+            if item.get("opaqueSlot"):
+                evidence["opaqueSlot"] = item["opaqueSlot"]
         if "status" in body or "reason" in body:
             status, reason = body.get("status", status), body.get("reason", reason)
         fact = base | {"edge": edge, "kind": kind, "key": key, "keyForm": body.get("keyForm", "literal"),

@@ -16,7 +16,7 @@ from collections import defaultdict
 
 from ccg.bundle import REDACTED
 from ccg.packrt.extract import Corpus
-from ccg.packrt.httpkey import UNKNOWN
+from ccg.packrt.httpkey import has_unresolved
 from ccg.packrt.match import clause_hit, text_hit
 
 _MODULE_ATTR = re.compile(r"^([A-Za-z_][\w.]*):[A-Za-z_]\w*$")
@@ -114,7 +114,7 @@ def launch_facts(corpus: Corpus, pack: dict) -> list[dict]:
             if not fed or unit is None:
                 continue
             for path in corpus.arg_alternatives(site, mp["path"]["arg"]) or ():
-                if UNKNOWN in path:
+                if has_unresolved(path):
                     continue
                 conds = [{"siteId": cid, "line": corpus.conds[k]["line"], "code": corpus.conds[k]["code"]}
                          for k in sorted(corpus.controlled_by.get(cid, ()))]

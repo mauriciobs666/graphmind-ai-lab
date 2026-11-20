@@ -795,9 +795,15 @@ def _file_pack_mutant(pack: dict, path: tuple):
     return out
 
 
+# The packs that are files only: id -> (the test module whose `behaviour_failures` is the pack's contract, the leaf count).
+# P1-49 registers `python-http-client`: its contract also carries the `httpx.Client` base-URL binding and `negatives.yaml`.
+FILE_PACKS = {"shell-mcp-call": ("test_pack_shell_mcp_call", 24), "python-http-client": ("test_pack_python_http_client", 125)}
+
+
 def file_pack_survivors(pid: str = "shell-mcp-call") -> tuple[int, set[str]]:
     """``(leaf count, leaves whose mutation leaves the pack's behavioural contract green)``."""
-    import test_pack_shell_mcp_call as shell
+    import importlib
+    shell = importlib.import_module(FILE_PACKS[pid][0])
     from ccg.rulepack import load_pack
     base = load_pack(CPG / "packs" / pid / "pack.yaml")
     assert shell.behaviour_failures(base) == []          # the unmutated pack passes: a failure below is the edit's
@@ -805,7 +811,8 @@ def file_pack_survivors(pid: str = "shell-mcp-call") -> tuple[int, set[str]]:
     return len(found), {name for name, p in found if shell.behaviour_failures(_file_pack_mutant(base, p)) == []}
 
 
-def test_every_leaf_of_the_files_only_shell_pack_is_caught_by_its_behavioural_contract():
-    count, alive = file_pack_survivors()
-    assert count == 24
+@pytest.mark.parametrize("pid", sorted(FILE_PACKS))
+def test_every_leaf_of_a_files_only_pack_is_caught_by_its_behavioural_contract(pid):
+    count, alive = file_pack_survivors(pid)
+    assert count == FILE_PACKS[pid][1]
     assert alive == FILE_PACK_SURVIVORS, sorted(alive ^ FILE_PACK_SURVIVORS)

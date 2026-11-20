@@ -344,7 +344,7 @@ def test_split_url_returns_the_path_and_whether_the_origin_was_dropped():
 
 def test_the_provider_form_is_not_touched_by_the_origin_rules():
     nk = need("normalize_key_parts")("GET /api/items/{id}", "provider")
-    assert (nk.key, nk.origin_dropped, nk.unresolved_in_path) == ("GET /api/items/{#}", False, False)
+    assert (nk.key, nk.origin_dropped, nk.unresolved_in_path) == ("GET /api/items/{}", False, False)
     assert httpkey.normalize_key("GET /api/items/{id}", "provider") == nk.key
 
 

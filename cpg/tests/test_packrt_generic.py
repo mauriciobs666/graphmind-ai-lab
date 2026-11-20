@@ -19,7 +19,7 @@ from packrt_helpers import CPG, PACKS
 from ccg.rulepack import load_pack
 
 SRC = sorted((CPG / "ccg" / "packrt").glob("*.py"))
-SERVED = ("fastapi", "fetch", "fastmcp", "shell-mcp-call")
+SERVED = ("fastapi", "fetch", "fastmcp", "shell-mcp-call", "python-http-client")
 SCHEMA = CPG / "ccg" / "schemas" / "rule-pack-v1.schema.json"
 TOKEN = re.compile(r"[A-Za-z_]\w*")
 # Tokens the runtime has to spell although a served pack also spells them: (file, kind, token); "*" is any file.
@@ -33,6 +33,8 @@ ALLOWED = {
     ("run.py", "str", "partial-key"),     # a registry reason code (`ccg.rulepack.reason_row`), not a pack's word; the pack names it
     ("lift.py", "str", "partial-key"),    # as above: the lifted hop's status reason
     ("mount.py", "str", "partial-key"),   # as above: the `unmounted` default's reason
+    ("*", "name", "__init__"),            # the Python constructor name every class defines; the `python-http-client` seed globs spell `Client.__init__`
+    ("launch.py", "str", "py"),           # the `.py` source-file suffix of a `module:attr` launch target; the same pack's globs spell `httpx.py:`
     ("mount.py", "str", "router"),        # the `unmounted-router` evidence token the spec's mount evidence names (`how`)
 }
 
