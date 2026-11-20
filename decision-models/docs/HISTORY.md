@@ -1162,3 +1162,16 @@ FR-8 test; v1.3's `labeler.py` is void and not scaffolded).
 reddened `test_decisionmodels_reaches_only_stdlib_and_itself`; the file was restored `cmp`-equal
 each time.
 - Review Pass 1 fixes (`docs/reviews/typed-decision-models4-impl.md` F1–F3, F5, F6): a string-literal planted case per fragment (dropping any one fragment reddens the suite), word-bounded `redis` with "predisposition"/"redistribuir" in the negative control, bytes literals and `from importlib import import_module as …` aliases scanned, the docstring's list of what the tripwire cannot see, `AGENTS.md`'s side-check-reader wording, and the root bullet naming the requirements doc; 26 passed.
+
+## 2026-11-20 — Re-run of the assumed-basis hand-off candidates
+
+Message-type hand-off f3 and f4 and join-in hand-off f3 were re-run with every decision model resident
+(session `u7-message-type-2026-11-19`, `u7-joinin-2026-11-19`; LM Studio 0.4.28+2, `model-bench/host.json`
+re-attested first, KV cache `f16`). Reports: `model-bench/reports/message-type-classifier-synthetic-20261120-01.md`,
+`model-bench/reports/join-in-judge-synthetic-20261120-01.md`. Basis is by-construction on all three new runs.
+**The no-ship verdict is unchanged; no candidate meets FR-10.**
+
+- Message-type hand-off f3: per-class agreement not met; mean latency 341 ms (met), one non-assumed load, so latency is not assessable.
+- Message-type hand-off f4: per-class agreement not met; mean latency 1370 ms, not met.
+- Join-in hand-off f3: per-class agreement met over 3 replicates; mean latency 1026, 146 and 799 ms, unstable, not met.
+- Attestation: the three runs from 17:17–17:22 UTC recorded app version 0.4.24+1; the f4 run (23:05 UTC) recorded 0.4.28+2, the installed version at re-attest. When the app was updated is not known, so the 17:xx runs may have run on either.

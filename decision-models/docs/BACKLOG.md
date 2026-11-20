@@ -21,15 +21,6 @@ type classifier have no runtime prompt yet, so `fit/join-in-judge/handoff.md` an
   fails when the file exists and the name is not a module-level assignment), covers each prompt
   that unit adds.
 
-### Re-run the hand-off candidates whose U7 basis was assumed
-
-Message-type hand-off f3 and f4 (`model-bench/reports/message-type-classifier-synthetic-20261119-01.md`)
-and join-in hand-off f3 (latency unstable across replicates) lack a by-construction basis: LM Studio
-swapped models mid-run. Hand-off f1 (message type) misses only `other` (48/54).
-
-- **Done when:** each runs with both models resident and a by-construction basis, and the per-class
-  and latency verdicts are read from that run.
-
 ### Per-label `minConfidence` (former U6a)
 
 Message type fails per class (`escalation`, `other`); a per-label confidence policy is the
