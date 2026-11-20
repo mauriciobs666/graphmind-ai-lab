@@ -70,6 +70,9 @@ def test_unparseable_numbers_name_the_variable():
         Config.from_env({"COORDGRAPH_KB_BUDGET_S": "soon"})
 
 
-@pytest.mark.parametrize("value,expected", [("", False), ("0", False), ("1", True), ("yes", True)])
+@pytest.mark.parametrize("value,expected", [
+    ("", False), ("0", False), ("false", False), ("False", False), ("no", False), ("off", False),
+    ("garbage", False), ("1", True), ("yes", True), ("true", True), (" TRUE ", True), ("On", True),
+])
 def test_hook_disabled_flag(value, expected):
     assert Config.from_env({"COORDGRAPH_HOOK_DISABLED": value}).hook_disabled is expected

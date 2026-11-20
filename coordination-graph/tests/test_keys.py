@@ -59,3 +59,12 @@ def test_norm_value_never_hashes_or_truncates():
 def test_safe_key_requires_a_part():
     with pytest.raises(KeyHygieneError):
         safe_key()
+
+
+def test_two_part_key_over_the_limit_hashes_the_whole_joined_string_not_the_path_alone():
+    path, unit = "docs/plans/x-coordination.md", "U1 " + "é" * 300
+    joined = f"{path}#{unit}"
+    expected = "h:" + hashlib.sha256(joined.encode("utf-8")).hexdigest()
+    assert safe_key(path, unit) == expected
+    assert safe_key(path, unit) != safe_key(path, unit + "b")
+    assert safe_key(path, unit) != "h:" + hashlib.sha256(path.encode()).hexdigest()

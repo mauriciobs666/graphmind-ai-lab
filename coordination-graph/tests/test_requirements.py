@@ -12,7 +12,7 @@ def test_requirement_is_its_header_fields_and_nothing_else():
         "path": "claude/docs/requirements/coordination-graph.md", "kind": "requirement",
         "component": "claude", "slug": "coordination-graph", "sha256": hashlib.sha256(raw).hexdigest(),
         "bytes": len(raw), "parserVersion": 1, "docStatus": "Ready for design", "owner": "`tico`",
-        "tracks": "K-1 (M3)", "itemId": "GAL-F0002", "aliases": ["GAL-F0001"],
+        "tracks": "K-1 (M3)", "itemId": "GAL-F0002", "aliases": ["GAL-F0001"], "warnings": [],
     }
 
 
@@ -37,3 +37,24 @@ def test_headerless_requirement_has_no_status_fields():
 def test_unusable_item_adds_a_source_warning():
     d = parse_requirements("docs/requirements/r.md", b"# R\n\n> **Status:** active \xc2\xb7 **Item:** `  `\n")
     assert d.warnings and "itemId" not in d.source_props()
+
+
+def test_every_source_kind_stores_warnings_even_when_clean_or_unusable():
+    """Graph note 2.2: `warnings` is on every `:Source`, never absent (clean != not parsed)."""
+    from coordgraph.parse.backlog import parse_backlog
+    from coordgraph.parse.ledger import parse_ledger
+    from coordgraph.parse.review import parse_review
+    hdr = "# T\n\n> **Status:** active · **Owner:** `x` · **Tracks:** —{extra}\n\n"
+    clean = (hdr.format(extra="") + "| Unit | Status |\n|---|---|\n| U1 | queued |\n").encode()
+    parsers = {
+        "requirement": ("docs/requirements/t.md", parse_requirements),
+        "review": ("docs/reviews/t.md", parse_review),
+        "ledger": ("docs/plans/t-coordination.md", parse_ledger),
+        "backlog": ("docs/BACKLOG.md", parse_backlog),
+    }
+    for kind, (path, parse) in parsers.items():
+        assert parse(path, clean).source_props()["warnings"] is not None, kind
+        assert "warnings" in parse(path, clean).source_props(), kind
+    bad = hdr.format(extra=" · **Item:** ` `").encode()
+    p = parse_requirements("docs/requirements/t.md", bad).source_props()
+    assert p["warnings"] and "Item" in p["warnings"][0]

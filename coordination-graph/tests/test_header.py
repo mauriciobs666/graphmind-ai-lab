@@ -168,3 +168,9 @@ def test_importing_the_sync_path_modules_loads_no_wilib():
     )
     root = Path(__file__).resolve().parents[1]
     assert subprocess.run([sys.executable, "-c", code], cwd=root).returncode == 0
+
+
+def test_item_bound_counts_bytes_not_characters():
+    cjk = "漢" * 200  # 200 characters, 600 bytes: over the 512-byte key bound
+    h = parse_header(f"# T\n\n> **Status:** active · **Item:** `{cjk}`\n")
+    assert h.item_id is None and any("Item" in w for w in h.warnings)

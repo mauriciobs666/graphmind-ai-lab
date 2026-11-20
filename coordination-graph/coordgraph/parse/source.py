@@ -36,6 +36,8 @@ class SourceDoc:
     def source_props(self) -> dict:
         """The `:Source` properties a parse determines (graph note section 2.2).
 
+        `warnings` is stored for every kind, never absent, so a clean parse differs from no parse.
+
         Absent-vs-empty follows the note: `docStatus`/`owner`/`tracks`/`itemId` are left out
         when not recorded, `aliases` is `[]` for a header block without `Aliases:` and left
         out when the file has no header block.
@@ -49,6 +51,7 @@ class SourceDoc:
             "sha256": self.sha256,
             "bytes": self.size,
             "parserVersion": PARSER_VERSION,
+            "warnings": list(self.warnings),
         }
         if h is not None:
             for name, value in (

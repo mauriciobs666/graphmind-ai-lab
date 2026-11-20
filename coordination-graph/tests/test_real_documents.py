@@ -76,3 +76,51 @@ def test_every_kb_file_in_the_claude_tree_parses():
     assert len(sections) > 100
     for s in sections:
         assert s.section_hash and (s.mode == "bullets" or s.claims or s.body == "")
+
+
+def _lookup(props, u):
+    """Plan3 3.4 `Unit label` precedence: rows whose `unitKey` equals `u` (all repeats of that
+    identical key) if there are any, else every row whose `unitLabel` equals `u`."""
+    exact = [q for q in props if q["unitKey"] == u]
+    return exact or [q for q in props if q["unitLabel"] == u]
+
+
+def _live_ledger_props(found):
+    reviews = {f.path for f in found if f.kind == "review"}
+    for f in (f for f in found if f.kind == "ledger"):
+        yield f.path, parse_ledger(f.path, (REPO / f.path).read_bytes(), reviews).unit_props()
+
+
+def test_label_coverage_probe_over_every_live_ledger(found, capsys):
+    """Every unit is reachable by its key and by its label; a key lookup returns only the rows of
+    that identical key; a label lookup returns the key's rows when a key equals the label, else
+    every label match. Counts the repeated-label cases of each kind."""
+    exact_cases = label_only_cases = 0
+    for path, props in _live_ledger_props(found):
+        for p in props:
+            label = p["unitLabel"]
+            assert label and label[-1] not in ":,;" and not any(c.isspace() for c in label), (path, p)
+            by_key = _lookup(props, p["unitKey"])
+            assert by_key and p in by_key, (path, p["key"])
+            assert all(q["unitKey"] == p["unitKey"] for q in by_key), (path, p["key"])
+            assert len(by_key) == sum(q["unitKey"] == p["unitKey"] for q in props)
+            by_label = _lookup(props, label)
+            assert by_label, (path, label)
+            if any(q["unitKey"] == label for q in props):
+                assert all(q["unitKey"] == label for q in by_label), (path, label)
+            else:
+                assert p in by_label, (path, p["key"])
+                assert by_label == [q for q in props if q["unitLabel"] == label], (path, label)
+        for label in {p["unitLabel"] for p in props}:
+            union = [q for q in props if label in (q["unitKey"], q["unitLabel"])]
+            if len(union) < 2:
+                continue
+            if any(q["unitKey"] == label for q in props):
+                exact_cases += 1
+                assert _lookup(props, label) == [q for q in props if q["unitKey"] == label]
+            else:
+                label_only_cases += 1
+                assert _lookup(props, label) == union
+    with capsys.disabled():
+        print(f"\nlabel probe: exact-key precedence {exact_cases}, label-only {label_only_cases}")
+    assert exact_cases + label_only_cases > 0

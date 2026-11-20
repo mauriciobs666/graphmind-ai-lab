@@ -14,6 +14,10 @@ from pathlib import Path
 # under a renewed lease must time out well inside it: asserted < TTL/3 at start-up.
 LEASE_TTL_S = 60
 
+# `COORDGRAPH_HOOK_DISABLED` disables the hook only for one of these (case-insensitive,
+# surrounding whitespace ignored); `false`, `0`, `no`, `off`, empty and anything else leave it on.
+HOOK_DISABLED_VALUES = frozenset({"1", "true", "yes", "on"})
+
 DEFAULT_KB_URL = "http://localhost:8200"
 DEFAULT_KB_GRAPH = "ws:agent-team"
 # `start_agent_team.sh` supplies no embedder URL (the model gateway reads it from the
@@ -83,7 +87,7 @@ class Config:
                 f"COORDGRAPH_KB_HTTP_TIMEOUT_S={timeout} must be > 0 and < lease TTL/3 "
                 f"({LEASE_TTL_S / 3:g} s): a renewed lease must not expire inside a call"
             )
-        disabled = env.get("COORDGRAPH_HOOK_DISABLED", "").strip() not in ("", "0")
+        disabled = env.get("COORDGRAPH_HOOK_DISABLED", "").strip().casefold() in HOOK_DISABLED_VALUES
         return cls(
             repo_root=repo_root,
             falkordb_host=_text(env, "COORDGRAPH_FALKORDB_HOST", "localhost"),

@@ -99,7 +99,6 @@ class BacklogDoc(SourceDoc):
         props = super().source_props()
         if self.scope is not None:
             props["scope"] = self.scope
-        props["warnings"] = list(self.warnings)
         props["itemCount"] = len(self.items)
         return props
 

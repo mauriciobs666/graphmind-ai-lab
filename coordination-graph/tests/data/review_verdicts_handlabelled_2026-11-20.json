@@ -1,0 +1,24 @@
+{
+  "_about": "Hand-labelled final verdict class of the 19 corpus reviews whose class changes between 'first verdict in the last Pass section / whole file' and 'last statement in document order'. Each label was read from the file itself (the document's last real verdict statement, not a quote of another document and not prose). Frozen 2026-11-20; the files are archived or settled, so the expected values do not move with the parser.",
+  "labels": {
+    "docs/reviews/connected-code-graph-p1-5d-49-ml.md": {"expected": "approve", "evidence": "line 78 '## Re-audit after P1-50': Verdict: approve (stop condition met); line 7 needs-changes is the superseded first audit"},
+    "docs/reviews/cpg-followups-skills-impl.md": {"expected": "approve-with-suggestions", "evidence": "line 169 '## Overall verdict: approve with suggestions' after per-unit approves"},
+    "docs/reviews/cpg-mcp-containerization.md": {"expected": "approve-with-suggestions", "evidence": "line 913 Part III verdict approve with suggestions; header says read Part III for the current position"},
+    "docs/reviews/cpg-query-access.md": {"expected": "approve-with-suggestions", "evidence": "line 387 '## Verdict' (v2): Approve with suggestions; line 12 first verdict was needs changes"},
+    "docs/reviews/doc-reference-convention.md": {"expected": "approve", "evidence": "line 1259 'Verdict (v1.5.1, rechecked below): APPROVE' and the section 30 clean recheck; the line-1258 original-pass and line-1061 verdicts are earlier. Needs the parenthetical aside to be accepted"},
+    "docs/reviews/generic-cypher-mcp.md": {"expected": "approve-with-suggestions", "evidence": "line 849 '### Verdict' of the last re-gate: Approve with suggestions; lines 533/702 are quotes of the plan-gate verdict"},
+    "docs/reviews/kaizen-team-distillation2.md": {"expected": "approve", "evidence": "line 594 U4 verdict approve and line 703 'No re-gate needed - verdict is approve outright'; U1 needs-changes (line 24) is an earlier unit"},
+    "docs/reviews/live-specs-security.md": {"expected": "approve-with-suggestions", "evidence": "line 149 Pass 2 verdict approve with suggestions; line 245 'every review and gate verdict passes through it' is prose, not a verdict"},
+    "falkor-chat/docs/reviews/document-ingestion-impl.md": {"expected": "approve", "evidence": "line 1510 'Updated verdict: approve' closes the Pass 6 needs-changes blocker"},
+    "falkor-chat/docs/reviews/document-status-terminal.md": {"expected": "approve", "evidence": "line 148 '2026-08-25 - Pass 2' Verdict: approve"},
+    "falkor-chat/docs/reviews/k027-parse-robustness.md": {"expected": "approve", "evidence": "line 756 '## Round-3 verdict: approve'"},
+    "falkor-chat/docs/reviews/llm-provider-config.md": {"expected": "approve", "evidence": "line 2418 last landing: Verdict: approve"},
+    "falkor-chat/docs/reviews/must-post-engine-contract-impl.md": {"expected": "approve", "evidence": "line 22 Verdict: approve; line 10 quotes the plan review's verdict"},
+    "falkor-chat/docs/reviews/step-budget-reporting-impl.md": {"expected": "approve", "evidence": "line 239 'Verdict: approve. The close may proceed.' (live-spec close step 3); line 15 is the earlier code gate"},
+    "falkor-chat/docs/reviews/workflow-cart-and-totals-impl.md": {"expected": "approve-with-suggestions", "evidence": "line 37 Verdict: approve with suggestions; line 19 quotes the plan review's verdict"},
+    "falkor-chat/docs/reviews/workflow-def-structure-read.md": {"expected": "approve-with-suggestions", "evidence": "line 447 '## R1. Verdict': Approve with suggestions closes the round-1 needs changes"},
+    "falkor-chat/docs/reviews/workflow-nl-query-generation.md": {"expected": "approve-with-suggestions", "evidence": "line 18 Verdict: approve with suggestions; line 36 quotes a different document's Pass 2 verdict inside quotation marks"},
+    "mcp-monitor/docs/reviews/mcp-monitor-impl.md": {"expected": "approve", "evidence": "line 13 '## Verdict: Approve'; line 9 quotes the plan review's verdict"},
+    "model-bench/docs/reviews/small-model-catalog-sweep-impl.md": {"expected": "needs-changes", "evidence": "line 1142 last explicit verdict (data-scientist Defect 1 gate): needs changes; the tail 'Verification round 2' states no new verdict (finds the fix correct but a residual gap, 'not a blocker for the current reports'). Judgement call: last explicit verdict wins"}
+  }
+}

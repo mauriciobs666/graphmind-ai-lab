@@ -37,6 +37,7 @@ _REPO_PATH = re.compile(r"^[\w.\-]+(?:/[\w.\-]+)+\.\w{1,6}(?:#\S*)?$")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _QUOTED = re.compile(r"[\"“](.+?)[\"”]", re.DOTALL)
 _PARSE_NAME = re.compile(r"[*`]")
+_LABEL = re.compile(r"[^\s(]*")
 
 
 def _strip_markup(cell: str) -> str:
@@ -114,6 +115,12 @@ def unit_key_of(cell: str) -> str:
     return text.split(" — ", 1)[0].strip()
 
 
+def unit_label_of(unit_key: str) -> str:
+    """The derived `unitLabel` (plan3 section 3.4): `unit_key` up to the first whitespace or `(`,
+    trailing `:`, `,`, `;` trimmed. Not indexed; lookup is `unitKey = $u OR unitLabel = $u`."""
+    return _LABEL.match(unit_key).group(0).rstrip(":,;")
+
+
 def _norm_cells(cells: list[str]) -> list[str]:
     return [" ".join(c.split()) for c in cells]
 
@@ -187,7 +194,8 @@ class Unit:
     def props(self, archived: bool = False) -> dict:
         """Properties as written to the graph; an archived ledger's unit is minimal."""
         p: dict = {
-            "key": self.key, "unitKey": self.unit_key, "statusToken": self.status_token,
+            "key": self.key, "unitKey": self.unit_key,
+            "unitLabel": unit_label_of(self.unit_key), "statusToken": self.status_token,
             "ledgerPath": self.ledger_path, "slug": self.slug, "component": self.component,
             "tableIdx": self.table_idx, "rowIdx": self.row_idx,
         }
@@ -223,7 +231,6 @@ class LedgerDoc(SourceDoc):
         props = super().source_props()
         props["citedReviews"] = list(self.cited_reviews)
         props["resolvedReviews"] = list(self.resolved_reviews)
-        props["warnings"] = list(self.warnings)
         props["rowCount"] = len(self.units)
         return props
 

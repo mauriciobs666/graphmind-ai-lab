@@ -1,3 +1,5 @@
+import pytest
+
 from coordgraph.parse.ledger import (
     map_columns,
     parse_ledger,
@@ -251,7 +253,7 @@ def test_archived_unit_props_are_minimal():
                status="archived", cols=ITEM_COLS)
     (props,) = d.unit_props()
     assert set(props) == {
-        "key", "unitKey", "statusToken", "itemId", "ledgerPath", "slug", "component",
+        "key", "unitKey", "unitLabel", "statusToken", "itemId", "ledgerPath", "slug", "component",
         "tableIdx", "rowIdx",
     }
     # the row was still parsed in full
@@ -301,3 +303,73 @@ def test_a_ledger_without_a_header_block_has_no_status_and_no_aliases():
     d = parse_ledger("docs/plans/x-coordination.md", text.encode())
     p = d.source_props()
     assert not d.archived and "docStatus" not in p and "aliases" not in p
+
+
+# --- unitLabel (plan3 section 3.4 `Unit label`) ---
+
+@pytest.mark.parametrize("key,label", [
+    ("U1", "U1"),
+    ("U1 (LM Studio backend fix)", "U1"),
+    ("U1(x)", "U1"),
+    ("U1 K-091 band write + backfill", "U1"),
+    ("U10b Note: later", "U10b"),
+    ("A7 Note: x", "A7"),
+    ("U2.3 between", "U2.3"),
+    ("C-graph-dba (data half)", "C-graph-dba"),
+    ("Queued: foo", "Queued"),
+    ("U3:", "U3"),
+    ("U3,;", "U3"),
+    ("", ""),
+])
+def test_unit_label_rule(key, label):
+    from coordgraph.parse.ledger import unit_label_of
+    assert unit_label_of(key) == label
+
+
+def test_every_unit_carries_a_label_archived_or_not():
+    text = ("# L\n\n> **Status:** {s} · **Owner:** `teco` · **Tracks:** —\n\n"
+            "| Unit | Status |\n|---|---|\n| U1 (a) — x | accepted |\n| U1 (b) — y | accepted |\n")
+    for status, archived in (("active", False), ("archived", True)):
+        d = parse_ledger("docs/plans/x-coordination.md", text.format(s=status).encode())
+        assert d.archived is archived
+        assert [p["unitLabel"] for p in d.unit_props()] == ["U1", "U1"]
+        assert [p["unitKey"] for p in d.unit_props()] == ["U1 (a)", "U1 (b)"]
+
+
+# --- pins for the row hash, the width cut, the item bound ---------------------------------
+
+def test_row_hash_is_sha256_of_the_normalised_cells_as_json_including_the_last_cell():
+    import hashlib
+    import json
+    d = ledger(["| U1  — é | `a` | `id`  | accepted |  `d` | gate | 10k /\t3 |"])
+    cells = ["U1 — é", "`a`", "`id`", "accepted", "`d`", "gate", "10k / 3"]
+    expected = hashlib.sha256(json.dumps(cells, ensure_ascii=False).encode("utf-8")).hexdigest()
+    assert d.units[0].row_hash == expected
+    d2 = ledger(["| U1  — é | `a` | `id`  | accepted |  `d` | gate | 20k |"])
+    assert d2.units[0].row_hash != expected  # a last-column edit is visible to row-level drift
+
+
+def test_an_over_wide_row_is_cut_to_the_header_width_with_a_warning():
+    import hashlib
+    import json
+    d = ledger(["| U1 | `a` | `id` | accepted | `d` | gate | 5k | stray | more |"])
+    cells = ["U1", "`a`", "`id`", "accepted", "`d`", "gate", "5k"]
+    assert d.units[0].row_hash == hashlib.sha256(
+        json.dumps(cells, ensure_ascii=False).encode("utf-8")).hexdigest()
+    assert d.units[0].cost == "5k"
+    assert any("9 cells, header has 7" in w for w in d.warnings)
+
+
+def test_an_item_cell_is_bounded_by_bytes_not_characters():
+    d = ledger(["| U1 | a | queued | — | — |"], cols=ITEM_COLS)
+    assert d.units[0].item_id is None  # sanity: no value, no warning
+    cjk = "漢" * 200  # 200 characters, 600 bytes
+    d = ledger([f"| U1 | a | queued | `{cjk}` | — |"], cols=ITEM_COLS)
+    assert d.units[0].item_id is None and any("unusable Item" in w for w in d.warnings)
+
+
+def test_a_row_without_a_status_column_has_no_status_text_but_an_unknown_token():
+    d = ledger(["| U1 | `a` | x |"], cols="| Unit | Owner | Deliverable |\n|---|---|---|\n")
+    u = d.units[0]
+    assert u.status_text is None and u.status_token == "unknown"
+    assert "statusText" not in u.props() and u.props()["statusToken"] == "unknown"
