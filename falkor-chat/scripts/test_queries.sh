@@ -28,7 +28,7 @@ gp()  { redis-cli -h "$HOST" -p "$PORT" GRAPH.PROFILE  "$1" "$2"; }
 
 assert_contains() {
   local label="$1" expected="$2" actual="$3"
-  if echo "$actual" | grep -qF "$expected"; then
+  if grep -qF -- "$expected" <<<"$actual"; then
     echo "  ✓ ${label}"
     PASS=$((PASS+1))
   else
@@ -41,7 +41,7 @@ assert_contains() {
 
 assert_not_contains() {
   local label="$1" unexpected="$2" actual="$3"
-  if echo "$actual" | grep -qF "$unexpected"; then
+  if grep -qF -- "$unexpected" <<<"$actual"; then
     echo "  ✗ ${label}"
     echo "    expected NOT to contain: ${unexpected}"
     echo "    got: ${actual}"
@@ -81,7 +81,7 @@ assert_no_data_row() {
   # remaining header-only output has no data row beneath it.
   local label="$1" header="$2" actual="$3"
   local trimmed
-  trimmed=$(printf '%s\n' "$actual" | awk '/^$/{exit} {print}')
+  trimmed=$(awk '/^$/{exit} {print}' <<<"$actual")
   if [ "$trimmed" = "$header" ]; then
     echo "  ✓ ${label}"
     PASS=$((PASS+1))
@@ -102,7 +102,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 echo ""
 echo "▶ connectivity"
-redis-cli -h "$HOST" -p "$PORT" PING | grep -q PONG && echo "  ✓ FalkorDB reachable" || { echo "  ✗ cannot reach FalkorDB"; exit 1; }
+grep -q PONG <<<"$(redis-cli -h "$HOST" -p "$PORT" PING)" && echo "  ✓ FalkorDB reachable" || { echo "  ✗ cannot reach FalkorDB"; exit 1; }
 
 echo ""
 echo "▶ teardown (clean slate)"
@@ -159,9 +159,9 @@ assert_contains "constraint blocks duplicate channelId" "unique constraint viola
 # list channels in the workspace (newest-first by createdAt, index-anchored on channelId)
 out=$(gq "$WS" "MATCH (c:Channel) WHERE c.channelId > '' RETURN c.channelId AS channelId, c.name AS name, c.createdAt AS createdAt ORDER BY c.createdAt DESC LIMIT 100")
 # ch2 (createdAt 1001) newest-first before ch1 (createdAt 1000); both present
-ch2_line=$(echo "$out" | grep -n "ch2" | head -1 | cut -d: -f1)
-ch1_line=$(echo "$out" | grep -n "ch1" | head -1 | cut -d: -f1)
-if echo "$out" | grep -qF "general" && echo "$out" | grep -qF "random" \
+ch2_line=$(grep -n -m1 "ch2" <<<"$out" | cut -d: -f1)
+ch1_line=$(grep -n -m1 "ch1" <<<"$out" | cut -d: -f1)
+if grep -qF -- "general" <<<"$out" && grep -qF -- "random" <<<"$out" \
    && [ -n "$ch2_line" ] && [ -n "$ch1_line" ] && [ "$ch2_line" -lt "$ch1_line" ]; then
   echo "  ✓ list channels: both channels listed, newest-first (ch2 before ch1)"
   PASS=$((PASS+1))
@@ -286,8 +286,8 @@ assert_contains "thread read: Alice present" "Alice" "$out"
 assert_contains "thread read: Bob present" "Bob" "$out"
 
 # verify order: m1 appears before m4 in output
-m1_line=$(echo "$out" | grep -n "m1" | head -1 | cut -d: -f1)
-m4_line=$(echo "$out" | grep -n "m4" | head -1 | cut -d: -f1)
+m1_line=$(grep -n -m1 "m1" <<<"$out" | cut -d: -f1)
+m4_line=$(grep -n -m1 "m4" <<<"$out" | cut -d: -f1)
 if [ "$m1_line" -lt "$m4_line" ]; then
   echo "  ✓ thread read: messages in chronological order"
   PASS=$((PASS+1))
@@ -384,8 +384,8 @@ else
 fi
 
 # ranking is strictly ASC by distance: m1 (identical) sorts before m2 (near)
-m1_line=$(echo "$out" | grep -n "m1" | head -1 | cut -d: -f1)
-m2_line=$(echo "$out" | grep -n "m2" | head -1 | cut -d: -f1)
+m1_line=$(grep -n -m1 "m1" <<<"$out" | cut -d: -f1)
+m2_line=$(grep -n -m1 "m2" <<<"$out" | cut -d: -f1)
 if [ -n "$m1_line" ] && [ -n "$m2_line" ] && [ "$m1_line" -lt "$m2_line" ]; then
   echo "  ✓ §6 ANN ranks by cosine distance ASC (m1 identical before m2 near)"
   PASS=$((PASS+1))
@@ -575,8 +575,8 @@ assert_contains "§9.1 returns mn2" "mn2" "$out"
 # chronological order — the cursor-pagination invariant: a LIMIT-truncated page
 # must be the earliest rows (mention-first sorting + LIMIT loses messages);
 # mn2's mention of the reader is carried by the isMention flag instead
-mn1_line=$(echo "$out" | grep -n "mn1" | head -1 | cut -d: -f1)
-mn2_line=$(echo "$out" | grep -n "mn2" | head -1 | cut -d: -f1)
+mn1_line=$(grep -n -m1 "mn1" <<<"$out" | cut -d: -f1)
+mn2_line=$(grep -n -m1 "mn2" <<<"$out" | cut -d: -f1)
 if [ -n "$mn1_line" ] && [ -n "$mn2_line" ] && [ "$mn1_line" -lt "$mn2_line" ]; then
   echo "  ✓ §9.1 chronological order (mn1 before mn2; mention flagged, not resorted)"
   PASS=$((PASS+1))
@@ -604,7 +604,7 @@ gq "$WS" "MATCH (c:Channel {channelId:'ch1'}) MATCH (u:User {userId:'u1'}) CREAT
 
 # page 1 (limit 2) ends exactly on the tie boundary: k1,k2
 out=$(rq "$WS" "CYPHER threadId='th3' since=0 sinceMsgId='' meId='u1' limit=2 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId ORDER BY m.createdAt, m.msgId LIMIT \$limit")
-if echo "$out" | grep -qF "k2" && ! echo "$out" | grep -qF "k3"; then
+if grep -qF -- "k2" <<<"$out" && ! grep -qF -- "k3" <<<"$out"; then
   echo "  ✓ §9 keyset page 1 (limit 2) ends at the tie boundary (k1,k2)"
   PASS=$((PASS+1))
 else
@@ -616,7 +616,7 @@ fi
 # page 2 resumes from the composite pair (5001,'k2') → the tied sibling k3 is delivered
 out=$(rq "$WS" "CYPHER threadId='th3' since=5001 sinceMsgId='k2' meId='u1' limit=50 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId ORDER BY m.createdAt, m.msgId LIMIT \$limit")
 assert_contains "§9 keyset page 2 delivers the tied sibling k3 (tie-skip regression)" "k3" "$out"
-if echo "$out" | grep -qF "k4" && ! echo "$out" | grep -qF "k2"; then
+if grep -qF -- "k4" <<<"$out" && ! grep -qF -- "k2" <<<"$out"; then
   echo "  ✓ §9 keyset page 2 completes the set (k4 in, boundary k2 excluded — nothing skipped)"
   PASS=$((PASS+1))
 else
@@ -1146,8 +1146,8 @@ out=$(gq "$WS" "$RSR")
 assert_contains "§12.8 read_step_runs returns wsr1 (start)" "wsr1" "$out"
 assert_contains "§12.8 read_step_runs returns wsr2 (gather)" "wsr2" "$out"
 assert_not_contains "§12.8 read_step_runs: wr1's steps carry no resolvedModel (NULL params)" "lmstudio" "$out"
-wsr1_line=$(echo "$out" | grep -n "wsr1" | head -1 | cut -d: -f1)
-wsr2_line=$(echo "$out" | grep -n "wsr2" | head -1 | cut -d: -f1)
+wsr1_line=$(grep -n -m1 "wsr1" <<<"$out" | cut -d: -f1)
+wsr2_line=$(grep -n -m1 "wsr2" <<<"$out" | cut -d: -f1)
 if [ -n "$wsr1_line" ] && [ -n "$wsr2_line" ] && [ "$wsr1_line" -lt "$wsr2_line" ]; then
   echo "  ✓ §12.8 read_step_runs is NEXT-ordered (wsr1 before wsr2)"
   PASS=$((PASS+1))
@@ -1176,8 +1176,8 @@ RT='CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId})-[:HAS_STEP_RUN]->(sr
 out=$(gq "$WS" "$RT")
 assert_contains "§12.11 read_trace returns guard_judgment event" "guard_judgment" "$out"
 assert_contains "§12.11 read_trace returns node_rationale event" "node_rationale" "$out"
-gj_line=$(echo "$out" | grep -n "guard_judgment" | head -1 | cut -d: -f1)
-nr_line=$(echo "$out" | grep -n "node_rationale" | head -1 | cut -d: -f1)
+gj_line=$(grep -n -m1 "guard_judgment" <<<"$out" | cut -d: -f1)
+nr_line=$(grep -n -m1 "node_rationale" <<<"$out" | cut -d: -f1)
 if [ -n "$gj_line" ] && [ -n "$nr_line" ] && [ "$gj_line" -lt "$nr_line" ]; then
   echo "  ✓ §12.11 read_trace ordered by seq (guard_judgment seq0 before node_rationale seq1)"
   PASS=$((PASS+1))
@@ -1247,9 +1247,9 @@ assert_contains "find_runs_for_thread(th1): earlier wr1 also present" "wr1" "$ou
 assert_contains "find_runs_for_thread(th1): earlier wr3 also present" "wr3" "$out"
 
 # newest-first: rft2 (8050) before rft3 (8025) before rft1 (8000)
-rft2_line=$(echo "$out" | grep -n "rft2" | head -1 | cut -d: -f1)
-rft3_line=$(echo "$out" | grep -n "rft3" | head -1 | cut -d: -f1)
-rft1_line=$(echo "$out" | grep -n "rft1" | head -1 | cut -d: -f1)
+rft2_line=$(grep -n -m1 "rft2" <<<"$out" | cut -d: -f1)
+rft3_line=$(grep -n -m1 "rft3" <<<"$out" | cut -d: -f1)
+rft1_line=$(grep -n -m1 "rft1" <<<"$out" | cut -d: -f1)
 if [ -n "$rft2_line" ] && [ -n "$rft3_line" ] && [ -n "$rft1_line" ] \
    && [ "$rft2_line" -lt "$rft3_line" ] && [ "$rft3_line" -lt "$rft1_line" ]; then
   echo "  ✓ find_runs_for_thread(th1): newest-first order (rft2 > rft3 > rft1 by startedAt)"

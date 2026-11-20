@@ -1,0 +1,622 @@
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ falkor-chat query tests
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶ connectivity
+  ✓ FalkorDB reachable
+
+▶ teardown (clean slate)
+ERR Invalid graph operation on empty key
+
+ERR Invalid graph operation on empty key
+
+
+▶ bootstrap schema
+done: ws:test
+
+▶ §2 users & membership
+  ✓ ensure user Alice (v2 fresh create)
+  ✓ ensure user Bob (v2 fresh create)
+  ✓ re-ensure user idempotent (existed, no write)
+  ✓ re-ensure user creates no node
+  ✓ re-ensure left exactly one Alice node
+  ✓ constraint blocks duplicate userId
+
+▶ §3 channels & threads
+  ✓ create channel general
+  ✓ create channel random
+  ✓ constraint blocks duplicate channelId
+  ✓ list channels: both channels listed, newest-first (ch2 before ch1)
+  ✓ add Alice to general
+  ✓ add Bob to general
+  ✓ no threads yet
+  ✓ create thread th1
+  ✓ create thread th2
+  ✓ constraint blocks duplicate threadId
+  ✓ list threads returns th1
+  ✓ list threads returns th2
+
+▶ §4 messages — write path (v2)
+  ✓ post first message m1: status row written
+  ✓ post first message m1: node exists
+  ✓ post second message m2 (v2 subsequent)
+  ✓ post third message m3 (v2 subsequent)
+  ✓ post reply m4 (v2 subsequent + REPLY_TO in guard)
+  ✓ m4 REPLY_TO edge exists (created inside guarded FOREACH)
+  ✓ TAIL points to last message
+  ✓ HEAD still points to first message
+  ✓ constraint blocks duplicate msgId
+
+▶ §4 write-path v2 guards (retry replay / first-post race / unknown author)
+  ✓ replay of subsequent write reports dupMsg=true (idempotent)
+  ✓ replay left NEXT chain intact (3 edges, no self-loop)
+  ✓ replay created no message node (still 4)
+  ✓ late first-post refused with hadHead=true
+  ✓ thread still has exactly one HEAD
+  ✓ unknown author refused with authorFound=false
+  ✓ unknown-author message was not written
+  ✓ v2 write stamped threadId on m1
+  ✓ v2 subsequent write has no All Node Scan
+
+▶ §4 messages — read path
+  ✓ thread read: m1 present
+  ✓ thread read: m2 present
+  ✓ thread read: m3 present
+  ✓ thread read: m4 present
+  ✓ thread read: Alice present
+  ✓ thread read: Bob present
+  ✓ thread read: messages in chronological order
+  ✓ cursor pagination: m3 after m2
+  ✓ cursor pagination: m4 after m2
+  ✓ cursor pagination: m1 not in result
+  ✓ cursor pagination: m2 not in result
+  ✓ get single message m4: text
+  ✓ get single message m4: author
+  ✓ get single message m4: quotedId
+  ✓ thread updatedAt bumped to last msg createdAt
+
+▶ §4.x threadId backfill (one-off ops query)
+  ✓ backfill run 1 stamps the 2 stripped messages
+  ✓ backfill run 2 is idempotent (0)
+
+▶ §3 list recent threads (after messages posted)
+  ✓ recent threads: th1 most recent
+
+▶ §5 full-text search
+  ✓ fulltext: 'welcome' finds m3
+  ✓ fulltext: 'welcome' no error
+  ✓ fulltext: 'Hello' finds m1
+  ✓ fulltext rows carry threadId
+
+▶ §6 GraphRAG — set embeddings and query
+  ✓ §6 set-embedding write commits (Properties set)
+  ✓ vector query: m1 in top-2
+  ✓ vector query: m2 in top-2
+  ✓ vector query: m3 not in top-2 (different direction)
+  ✓ vector query: identical vector scores 0 (cosine distance)
+  ✓ §6 ANN ranks by cosine distance ASC (m1 identical before m2 near)
+  ✓ hybrid retrieval: returns results
+  ✓ §6 hybrid returns seed text
+  ✓ hybrid retrieval: no error
+  ✓ §6 Entity expansion no-ops (empty relatedContext [])
+  ✓ §6 Entity graph is empty (no entity pipeline in M2)
+  ✓ §6 ANN retrieval uses the vector index (ProcedureCall)
+  ✓ §6 ANN retrieval has no All Node Scan
+  ✓ §6 workspace-wide variant returns m1
+  ✓ §6 workspace-wide variant no error
+
+▶ §6.1 read_index_dimension — vector-index introspection (K-042 Landing 2, FR-19)
+  ✓ §6.1 Message vector index reports dimension 4
+  ✓ §6.1 RANGE-only label (User) reports no numeric dimension
+  ✓ §6.1 RANGE-only label (User) is not an error
+  ✓ §6.1 unknown label returns no dim value
+  ✓ §6.1 unknown label is not an error
+
+▶ §7 agents
+  ✓ ensure agent bot1 (v2 fresh create)
+  ✓ agent bot1 node exists
+
+▶ §2/§7 member-id namespace guards (DEF-1)
+  ✓ re-ensure agent idempotent (existed, no write)
+  ✓ re-ensure agent creates no node
+  ✓ ensure_user blocked by existing Agent (collided)
+  ✓ no shadow User written for bot1
+  ✓ ensure_agent blocked by existing User (collided)
+  ✓ no shadow Agent written for u1
+  ✓ corrupted both-exist state flagged (existed AND collided)
+  ✓ guarded ensure existence checks
+  ✓ guarded ensure existence checks (no label scan)
+  ✓ add agent to channel
+  ✓ channel members: Alice
+  ✓ channel members: Bob
+  ✓ channel members: bot1
+  ✓ channel members: Agent label visible
+  ✓ thread participants (th1): Alice
+  ✓ thread participants (th1): Bob
+  ✓ thread participants (th1): bot1
+  ✓ thread participants (th1): Agent label visible
+  ✓ thread participants anchors on Thread.threadId index
+  ✓ thread participants anchors on Thread.threadId index (no label scan)
+  ✓ create channel ch3 (zero members, for empty-roster test)
+  ✓ create thread th4 under ch3
+  ✓ thread participants (th4, zero-member channel): empty result
+  ✓ agent posts assistant message (v2 write commits)
+
+▶ §9 mentions — write path (MENTIONS_MEMBER)
+  ✓ mentions=[] v2 first-post commits (guard keeps the write alive)
+  ✓ mentions=[] creates zero MENTIONS_MEMBER edges
+  ✓ mention post mn2 commits (v2)
+  ✓ mn2 has exactly 2 MENTIONS_MEMBER edges
+  ✓ mn2 mentions User u2 (resolved via User index)
+  ✓ mn2 mentions Agent bot1 (resolved via Agent index)
+  ✓ dedup post mn3 commits (v2)
+  ✓ mn3 dedups duplicate mention to a single edge
+  ✓ mn3 drops unknown mention 'nope'
+
+▶ §9.1/§9.2 since-reads with mention flag (chronological, (createdAt,msgId) order)
+  ✓ §9.1 returns mn1 (after since)
+  ✓ §9.1 returns mn2
+  ✓ §9.1 chronological order (mn1 before mn2; mention flagged, not resorted)
+  ✓ §9.1 since=4001 includes mn3
+  ✓ §9.1 since=4001 excludes mn1
+  ✓ §9.1 since=4001 excludes mn2
+  ✓ §9.2 composite keyset since-read uses Message.createdAt index
+  ✓ §9.2 composite keyset since-read uses Message.createdAt index (no label scan)
+
+▶ §9 keyset paging across a millisecond tie (K-007 tie-skip regression)
+  ✓ §9 keyset page 1 (limit 2) ends at the tie boundary (k1,k2)
+  ✓ §9 keyset page 2 delivers the tied sibling k3 (tie-skip regression)
+  ✓ §9 keyset page 2 completes the set (k4 in, boundary k2 excluded — nothing skipped)
+  ✓ §9.2 rows carry threadId
+
+▶ §9.3/§9.4 read-cursors (composite monotonic)
+  ✓ §9.3 cursor advances to (4001,'mn2')
+  ✓ §9.3 tie with larger msgId advances to 'mn3'
+  ✓ §9.3 tie with smaller msgId refused (stays 'mn3')
+  ✓ §9.3 backward advance is a no-op (stays 4001)
+  ✓ §9.3 forward advance moves cursor to 4002
+  ✓ §9.3 exactly one ReadCursor node (MERGE idempotent)
+  ✓ ReadCursor constraint blocks duplicate cursorId
+  ✓ §9.4 reads back cursor lastReadAt
+  ✓ §9.4 reads back cursor lastReadMsgId (composite pair)
+  ✓ §9.4 cursor read uses ReadCursor.cursorId index
+  ✓ §9.4 cursor read uses ReadCursor.cursorId index (no label scan)
+
+▶ §8 index usage (GRAPH.PROFILE)
+  ✓ Message lookup by msgId uses index
+  ✓ Message lookup by msgId uses index (no label scan)
+  ✓ User lookup by userId uses index
+  ✓ User lookup by userId uses index (no label scan)
+  ✓ Thread lookup by threadId uses index
+  ✓ Thread lookup by threadId uses index (no label scan)
+  ✓ Channel lookup by channelId uses index
+  ✓ Channel lookup by channelId uses index (no label scan)
+  ✓ list channels uses index
+  ✓ list channels uses index (no label scan)
+
+▶ reference graph — WorkflowDef composite constraint
+  ✓ create WorkflowDef v1
+  ✓ composite constraint blocks duplicate key+version
+  ✓ different version allowed
+
+▶ §EMITTED agent answer provenance (K-013)
+  ✓ §EMITTED agent answer ag1 commits (agent-authored)
+  ✓ §EMITTED ag1 role derived assistant (K-007 invariant)
+  ✓ §EMITTED ag1 author resolves to Agent
+  ✓ §EMITTED provenance read cites m1
+  ✓ §EMITTED provenance read cites m2
+  ✓ §EMITTED ag1 has exactly 2 provenance edges (unknown seed skipped)
+  ✓ §EMITTED edge carries rank + score props
+  ✓ §EMITTED reverse read: m1 cited by ag1
+  ✓ §EMITTED empty seedIds=[] still commits the write
+  ✓ §EMITTED empty seedIds=[] creates zero provenance edges
+  ✓ §EMITTED dupMsg replay no-ops (idempotent)
+  ✓ §EMITTED provenance written exactly once (still 2 after replay)
+  ✓ §EMITTED provenance read uses Message.msgId index
+  ✓ §EMITTED provenance read uses Message.msgId index (no label scan)
+
+▶ §11 workflow definitions (reference — K-020)
+  ✓ §11.1 publish wf_review v1 authors 5 nodes
+  ✓ §11.1 publish wf_review v1 authors 9 rels
+  ✓ §11.1 publish creates 4 steps (HAS_STEP)
+  ✓ §11.1 publish creates exactly one START edge
+  ✓ §11.1 START points at 'start' step
+  ✓ §11.1 publish creates 4 TRANSITION edges
+  ✓ §11 Step.stepUid constraint blocks duplicate (reference)
+  ✓ §11.1 idempotent re-publish creates no nodes
+  ✓ §11.1 idempotent re-publish creates no rels
+  ✓ §11.1 re-publish left exactly 4 steps
+  ✓ §11.2a read-def returns startKey 'start'
+  ✓ §11.2a read-def returns kind 'process'
+  ✓ §11.2a read-def carries a step (gather)
+  ✓ §11.2b read-def transitions include 'approve'
+  ✓ §11.2b read-def transitions carry guard verbatim (ctx.ok)
+  ✓ §11.3 get-def latest returns version 2
+  ✓ §11.3 get-def latest returns 'Review v2'
+  ✓ §11.3 get-def specific version 1 returns 'Review'
+  ✓ §11.3 list-defs includes wf_review
+  ✓ §11.3 list-defs includes wf_triage
+  ✓ §11.2a read-def steps anchors on WorkflowDef index
+  ✓ §11.2a read-def steps anchors on WorkflowDef index (no label scan)
+  ✓ §11.2b read-def transitions anchors on WorkflowDef index
+  ✓ §11.2b read-def transitions anchors on WorkflowDef index (no label scan)
+  ✓ §11.3 list-defs uses WorkflowDef.key index
+  ✓ §11.3 list-defs uses WorkflowDef.key index (no label scan)
+
+▶ §11 snapshot materialization (workspace — K-021)
+  ✓ §11.4 materialize wf_review v1 authors 5 local nodes
+  ✓ §11.4 materialize wf_review v1 authors 9 local rels
+  ✓ §11.4 materialize creates 4 local steps
+  ✓ §11.4 materialize creates one local START
+  ✓ §11.4 materialize creates 4 local TRANSITION edges
+  ✓ §11 WorkflowDefSnapshot composite constraint blocks dup {key,version}
+  ✓ §11 Step.stepUid constraint blocks duplicate (workspace)
+  ✓ §11.5 read-snapshot returns startKey 'start'
+  ✓ §11.5 read-snapshot carries a step (decide)
+  ✓ §11.5 read-snapshot transitions include 'approve'
+  ✓ §11.6 get-snapshot specific version returns 'Review'
+  ✓ §11.6 list-snapshots includes wf_review
+  ✓ §11.4 idempotent re-materialize creates no nodes
+  ✓ §11.4 idempotent re-materialize creates no rels
+  ✓ §11.5 read-snapshot steps anchors on WorkflowDefSnapshot index
+  ✓ §11.5 read-snapshot steps anchors on WorkflowDefSnapshot index (no label scan)
+  ✓ §11.5 read-snapshot transitions anchors on WorkflowDefSnapshot index
+  ✓ §11.5 read-snapshot transitions anchors on WorkflowDefSnapshot index (no label scan)
+
+▶ §12 workflow execution — start_run
+  ✓ §12.1 start_run creates wr1 at START step, running, stepCount 0
+  ✓ §12.1 start subgraph: OF_DEF + AT_STEP + TRIGGERED_BY
+  ✓ §12.1 start_run anchoring MATCHes use indexes
+  ✓ §12.1 start_run anchoring MATCHes use indexes (no label scan)
+  ✓ §12.1 WorkflowRun.runId constraint blocks duplicate
+
+▶ §12.2 record_step_and_advance (M4 tail-anchored atomic advance)
+  ✓ §12.2 advance 1: start ran, stepCount 1
+  ✓ §12.2 after adv1: exactly one AT_STEP=gather, tail=wsr1
+  ✓ §12.2 after adv1: zero NEXT edges (first step-run)
+  ✓ §12.2 advance 2: gather ran, stepCount 2
+  ✓ §12.2 after adv2: AT_STEP moved to decide
+  ✓ §12.2 after adv2: NEXT appended wsr1->wsr2
+  ✓ §12.2 after adv2: exactly one tail, moved to wsr2
+  ✓ §12.2 after adv2: 2 HAS_STEP_RUN members
+  ✓ §12.2 RAN edges: wsr1 ran start
+  ✓ §12.2 RAN edges: wsr2 ran gather
+  ✓ §12.2 wr_model advance 1: start ran, stepCount 1
+  ✓ §12.2 wmsr1 (LLM step) carries resolvedModel/modelSource/modelFallback
+  ✓ §12.2 wmsr1 keys() includes resolvedModel
+  ✓ §12.2 wmsr1 keys() includes modelSource
+  ✓ §12.2 wmsr1 keys() includes modelFallback
+  ✓ §12.2 wr_model advance 2: gather ran, stepCount 2
+  ✓ §12.2 wmsr2 (NULL model params) keys() query succeeds
+  ✓ §12.2 wmsr2 (NULL model params) keys() omits resolvedModel
+  ✓ §12.2 wmsr2 (NULL model params) keys() omits modelSource
+  ✓ §12.2 wmsr2 (NULL model params) keys() omits modelFallback
+  ✓ §12.8 wr_model read projection surfaces resolvedModel
+  ✓ §12.8 wr_model read projection surfaces modelSource
+  ✓ §12.2 record_step_and_advance is edge/index-anchored
+  ✓ §12.2 record_step_and_advance is edge/index-anchored (no label scan)
+
+▶ §12.3/§12.4 suspend / resume — guarded single-flight CAS
+  ✓ §12.3 suspend_run CAS running->waiting
+  ✓ §12.3 second suspend is a no-op (zero rows)
+  ✓ §12.9 find_waiting_run_for_thread finds wr1
+  ✓ §12.9 resume lookup anchors on WorkflowRun.status index (no label scan)
+  ✓ §12.9 resume lookup anchors on WorkflowRun.status index (no label scan) (no label scan)
+  ✓ §12.4 resume_run CAS waiting->running (winner)
+  ✓ §12.4 resume_run bumps ctxVersion from absent to 1
+  ✓ §12.4 second concurrent resume is a no-op (single-flight)
+  ✓ §12.4 the refused resume did not bump ctxVersion
+
+▶ §12.12/§12.13 untriggered start + resume-with-ctx (K-024 process flow, U0)
+  ✓ §12.12 start_run_untriggered creates wru1 at START, running, stepCount 0
+  ✓ §12.12 untriggered subgraph: OF_DEF + AT_STEP, zero TRIGGERED_BY
+  ✓ §12.12 untriggered run starts with empty waitingThreadId and its own budget
+  ✓ §12.12 snapshot without START -> zero rows
+  ✓ §12.12 snapshot without START writes nothing
+  ✓ §12.12 no WorkflowRun left behind by the missed anchor
+  ✓ §12.12 start_run_untriggered anchors on WorkflowDefSnapshot index
+  ✓ §12.12 start_run_untriggered anchors on WorkflowDefSnapshot index (no label scan)
+  ✓ §12.13 a START_UNTRIG run carries no ctxVersion
+  ✓ §12.13 CAS at ctxVersion=0 on a run with no ctxVersion flips AND writes ctx
+  ✓ §12.13 the winning CAS sets the raw ctxVersion to 1
+  ✗ §12.13 resume-with-ctx of a non-waiting run is zero rows
+    expected NOT to contain: status=running
+    got: s
+status=running ctx={"decision":"LOSER"}
+Properties set: 2
+Properties removed: 2
+Cached execution: 1
+Query internal execution time: 0.160208 milliseconds
+  ✗ §12.13 CAS loser wrote no ctx (nothing written, not just no flip)
+    expected NOT to contain: LOSER
+    got: s
+v=2 ctx={"decision":"LOSER"}
+Cached execution: 1
+Query internal execution time: 0.116641 milliseconds
+  ✗ §12.13 winner ctx survives the loser attempt
+    expected to contain: ctx={"request":1,"decision":"approve"}
+    got: s
+v=2 ctx={"decision":"LOSER"}
+Cached execution: 1
+Query internal execution time: 0.116641 milliseconds
+  ✓ §12.13 ABA: a stale ctxVersion on a re-parked run is zero rows
+  ✓ §12.13 ABA: the stale CAS sets no property
+  ✗ §12.13 ABA: the stale CAS wrote no ctx
+    expected NOT to contain: LOSER
+    got: s
+v=2 ctx={"decision":"LOSER"}
+Cached execution: 1
+Query internal execution time: 0.114282 milliseconds
+  ✗ §12.13 ABA: the version stays 1 and the winner's ctx survives
+    expected to contain: v=1 ctx={"request":1,"decision":"approve"}
+    got: s
+v=2 ctx={"decision":"LOSER"}
+Cached execution: 1
+Query internal execution time: 0.114282 milliseconds
+  ✗ §12.13 a CAS at the current ctxVersion wins
+    expected to contain: status=running ctx={"decision":"fresh"}
+    got: s
+
+Cached execution: 1
+Query internal execution time: 0.104599 milliseconds
+  ✓ §12.13 the fresh CAS bumps ctxVersion to 2
+  ✓ §12.13 resume-with-ctx of a missing run is zero rows
+  ✓ §12.13 resume_run_with_ctx anchors on WorkflowRun.runId index
+  ✓ §12.13 resume_run_with_ctx anchors on WorkflowRun.runId index (no label scan)
+
+▶ §12.6 link_step_emission — StepRun -[:PRODUCED]-> Message (D2, distinct from EMITTED)
+  ✓ §12.6 link_step_emission wsr2 PRODUCED ag2
+  ✓ §12.6 PRODUCED link is idempotent (exactly one edge)
+  ✓ §12.6 PRODUCED distinct from EMITTED (no StepRun EMITTED edge)
+
+▶ §12.7/§12.8 get_run + read_step_runs (NEXT-ordered audit trail)
+  ✓ §12.7 get_run returns status, stepCount, atStep, def
+  ✓ §12.8 read_step_runs returns wsr1 (start)
+  ✓ §12.8 read_step_runs returns wsr2 (gather)
+  ✓ §12.8 read_step_runs: wr1's steps carry no resolvedModel (NULL params)
+  ✓ §12.8 read_step_runs is NEXT-ordered (wsr1 before wsr2)
+  ✓ §12.8 read_step_runs anchors on WorkflowRun.runId index
+  ✓ §12.8 read_step_runs anchors on WorkflowRun.runId index (no label scan)
+
+▶ §12.10/§12.11 trace write/read (debug) + non-debug is empty
+  ✓ §12.10 append_trace_event writes a TraceEvent
+  ✓ §12.10 TraceEvent.traceId constraint blocks duplicate
+  ✓ §12.11 read_trace returns guard_judgment event
+  ✓ §12.11 read_trace returns node_rationale event
+  ✓ §12.11 read_trace ordered by seq (guard_judgment seq0 before node_rationale seq1)
+  ✓ §12.11 read_trace anchors on WorkflowRun.runId index
+  ✓ §12.11 read_trace anchors on WorkflowRun.runId index (no label scan)
+  ✓ §12.11 non-debug run read_trace is empty (AC-5 negative)
+
+▶ §12.5 fail_run (step budget) + complete_run — terminal clears AT_STEP, retains trail
+  ✓ §12.5 fail_run (step budget) sets failed
+  ✓ §12.5 fail_run bumps ctxVersion (a ctx write to an existing run)
+  ✓ §12.5 fail_run clears AT_STEP
+  ✓ §12.5 complete_run sets done
+  ✓ §12.5 complete_run clears AT_STEP
+  ✓ §12.5 complete_run retains the StepRun audit trail (2)
+  ✓ §12.5 re-complete with null AT_STEP is a no-op (no error)
+  ✓ §12.5 complete of a missing run is zero rows
+
+▶ §12.14 find_runs_for_thread (FR-2, K-036) — every run a thread has ever had
+  ✓ find_runs_for_thread(th1): rft1 present
+  ✓ find_runs_for_thread(th1): rft2 present
+  ✓ find_runs_for_thread(th1): rft3 present
+  ✓ find_runs_for_thread(th1): earlier wr1 also present
+  ✓ find_runs_for_thread(th1): earlier wr3 also present
+  ✓ find_runs_for_thread(th1): newest-first order (rft2 > rft3 > rft1 by startedAt)
+  ✓ find_runs_for_thread(th1) LIMIT 1: returns only the newest (rft2)
+  ✓ find_runs_for_thread(th1) LIMIT 1: excludes rft3
+  ✓ find_runs_for_thread(th2): zero runs (empty, not an error)
+  ✓ find_runs_for_thread anchors on WorkflowRun.startedAt index
+  ✓ find_runs_for_thread anchors on WorkflowRun.startedAt index (no label scan)
+
+▶ §12.15 read_recent_post_success (K-039 item 3) — recent triage post-success sample
+  ✓ §12.15 sample of 3 terminal runs (psp4 waiting excluded), 1 posted
+  ✓ §12.15 LIMIT 2: newest 2 sampled (psp1 excluded), neither posted
+  ✓ §12.15 zero-sample (unknown defKey): sampleSize=0, postedCount=0
+  ✓ §12.15 read_recent_post_success anchors on a WorkflowRun index scan
+  ✓ §12.15 read_recent_post_success anchors on a WorkflowRun index scan (no label scan)
+  ✓ §12.15 PROFILE shows the residual Filter above the index scan
+
+▶ §13 workspace configuration — model overrides (K-042 Landing 2, FR-16/FR-17)
+  ✓ §13.2 read before any write: zero WorkspaceConfig nodes exist yet
+  ✓ §13.2 read before any write: no override value present
+  ✓ §13.1 first write returns the written agent value
+  ✓ §13.1 first write returns the written guard value
+  ✓ §13.2 after first write: agent override present
+  ✓ §13.2 after first write: guard override present
+  ✓ §13.1 first write: keys() has agentModelOverride
+  ✓ §13.1 first write: keys() has guardModelOverride
+  ✓ §13.1 first write: keys() omits embeddingModelOverride (NULL param)
+  ✓ §13.1 first write: keys() omits responderModelOverride (NULL param)
+  ✓ §13.1 exactly one WorkspaceConfig node after first write
+  ✓ §13.1 second write returns the newly-set embedding value
+  ✓ §13.1 second write CLEARS a previously-set kind (guardModelOverride gone)
+  ✓ §13.1 second write: agentModelOverride still present (re-set)
+  ✓ §13.1 second write: embeddingModelOverride now present
+  ✓ §13.1 still exactly one WorkspaceConfig node (constraint-backed MERGE, no dupe)
+  ✓ §13.2 after clear: agent still present
+  ✓ §13.2 after clear: embedding now present
+  ✓ §13.2 read_model_overrides anchors on WorkspaceConfig index
+  ✓ §13.2 read_model_overrides anchors on WorkspaceConfig index (no label scan)
+
+▶ §15 product catalog — lookup_product / filter_products (K-052 M6)
+  ✓ §15 constraint blocks duplicate productId
+  ✓ §15.1 lookup_product exact-name hit returns Bluetooth Speaker
+  ✓ §15.1 lookup_product hit returns its category
+  ✓ §15.1 lookup_product hit returns its price
+  ✓ §15.1 lookup_product unknown name returns no row (abstention)
+  ✓ §15.1 lookup_product anchors on Product.nameNormalized index
+  ✓ §15.1 lookup_product anchors on Product.nameNormalized index (no label scan)
+  ✓ §15.2 filter_products unfiltered includes all 5 products
+  ✓ §15.2 filter_products unfiltered includes 4K Monitor
+  ✓ §15.2 filter_products category=accessories includes Wireless Mouse
+  ✓ §15.2 filter_products category=accessories includes USB-C Hub
+  ✓ §15.2 filter_products category=accessories excludes 4K Monitor
+  ✓ §15.2 filter_products lowercase 'audio' argument matches Title-Case 'Audio' rows (Bluetooth Speaker)
+  ✓ §15.2 filter_products lowercase 'audio' argument matches Title-Case 'Audio' rows (Noise Cancelling Headphones)
+  ✓ §15.2 filter_products lowercase 'audio' argument excludes non-audio rows
+  ✓ §15.2 filter_products price 50-250 includes Bluetooth Speaker
+  ✓ §15.2 filter_products price 50-250 includes Noise Cancelling Headphones
+  ✓ §15.2 filter_products price 50-250 excludes 4K Monitor (too expensive)
+  ✓ §15.2 filter_products price 50-250 excludes Wireless Mouse (too cheap)
+  ✓ §15.2 filter_products audio+minPrice=100 includes Noise Cancelling Headphones
+  ✓ §15.2 filter_products audio+minPrice=100 excludes Bluetooth Speaker (below min)
+  ✓ §15.2 filter_products nonexistent category returns no row (abstention)
+  ✓ §15.2 filter_products unfiltered still anchors on Product.price index
+  ✓ §15.2 filter_products unfiltered still anchors on Product.price index (no label scan)
+  ✓ §15.2 filter_products category+price anchors on Product.price index
+  ✓ §15.2 filter_products category+price anchors on Product.price index (no label scan)
+
+▶ §16 cart / order — Customer/Cart/CartItem/Order lifecycle (K-053 M6)
+  ✓ §16.1 ensure_customer first call creates with createdAt=1000
+  ✓ §16.1 ensure_customer second call (different now) leaves createdAt at first value
+  ✓ §16.1 ensure_customer second call did NOT re-set createdAt to 9999
+  ✓ §16.1 exactly one Customer node after two ensure_customer calls
+  ✓ §16.1 Customer.customerId constraint blocks duplicate
+  ✓ §16.3 add_to_cart before ensure_cart returns zero rows (no Cart yet)
+  ✓ §16.2 ensure_cart creates the Cart
+  ✓ §16.2 exactly one Cart node after two ensure_cart calls
+  ✓ §16.3 add_to_cart first call: quantity=2
+  ✓ §16.3 add_to_cart second call: quantity=4 (increment, not replace)
+  ✓ §16.3 exactly one CartItem after two add_to_cart calls
+  ✓ §16 CartItem constraint blocks duplicate (customerId, productId)
+  ✓ §16.3 add_to_cart anchors on Cart.customerId index
+  ✓ §16.3 add_to_cart anchors on Cart.customerId index (no label scan)
+  ✓ §16.3 add_to_cart second product line: quantity=5
+  ✓ §16.5 read_cart includes p1
+  ✓ §16.5 read_cart includes p2
+  ✓ §16.4 adjust_cart_item decrement in place: quantity=3
+  ✓ §16.4 adjust_cart_item decrement in place: removed=false
+  ✓ §16.4 adjust_cart_item decrement to zero: removed=true
+  ✓ §16.4 CartItem p2 gone after decrement-to-zero (count=0)
+  ✓ §16.4 adjust_cart_item on an already-removed line returns zero rows (no-op)
+  ✓ §16.6 clear_cart empties the cart (count=0)
+  ✓ §16.7 place_order first call: created=true
+  ✓ §16.7 place_order first call: lineCount=2
+  ✓ §16.7 Order created with status=placed
+  ✓ §16.7 exactly 2 OrderLines snapshotted
+  ✓ §16.7 cart emptied after place_order (count=0)
+  ✓ §16.7 place_order retry with same orderId: created=false (idempotent no-op)
+  ✓ §16.7 still exactly 2 OrderLines after idempotent retry (no duplicates)
+  ✓ §16.8 get_order returns status=placed
+  ✓ §16.8 get_order returns computed total=24.98
+  ✓ §16.10 fulfill: placed -> fulfilled
+  ✓ §16.10 cancel after fulfill returns zero rows (AC-8: cannot cancel once fulfilled)
+  ✓ §16.10 status unchanged (still fulfilled) after the blocked cancel
+  ✓ §16.10 deliver: fulfilled -> delivered
+  ✓ §16.10 lifecycle CAS anchors on Order.orderId index
+  ✓ §16.10 lifecycle CAS anchors on Order.orderId index (no label scan)
+  ✓ §16.10 PROFILE shows the residual Filter above the index scan
+  ✓ §16 Order.orderId constraint blocks duplicate
+  ✓ §16 Cart.customerId constraint blocks duplicate
+
+▶ §17 durable customer profile — Customer.name/deliveryAddress (K-054 M6)
+  ✓ §17.2 read_profile with no Customer node yet returns zero rows
+  ✓ §17.1 upsert_profile full write returns name=Alice
+  ✓ §17.1 upsert_profile full write returns deliveryAddress=123 Main St
+  ✓ §17.1 exactly one Customer node after the full write
+  ✓ §17.1 upsert_profile anchors on Customer.customerId index
+  ✓ §17.1 upsert_profile anchors on Customer.customerId index (no label scan)
+  ✓ §17.2 read_profile after full write: name=Alice
+  ✓ §17.2 read_profile after full write: deliveryAddress=123 Main St
+  ✓ §17.2 read_profile after full write: profileUpdatedAt=1000
+  ✓ §17.1 partial update (name omitted): name=Alice (preserved)
+  ✓ §17.1 partial update (name omitted): deliveryAddress=456 New Ave (updated)
+  ✓ §17.2 read-back confirms name=Alice preserved
+  ✓ §17.2 read-back confirms deliveryAddress=456 New Ave updated
+  ✓ §17.2 read-back confirms profileUpdatedAt=2000 (bumped on partial call too)
+  ✓ §17.1 still exactly one Customer node after partial update #1 (no duplicate from MERGE)
+  ✓ §17.1 partial update (address omitted): name=Bob (updated)
+  ✓ §17.1 partial update (address omitted): deliveryAddress=456 New Ave (preserved)
+  ✓ §17.2 read-back confirms name=Bob updated
+  ✓ §17.2 read-back confirms deliveryAddress=456 New Ave still preserved
+  ✓ §17.2 read-back confirms profileUpdatedAt=3000
+  ✓ §17.1 still exactly one Customer node after partial update #2
+
+▶ §14.7 delete_document (document-ingestion2 Stage A)
+  ✓ §14.7 delete_document returns the deleted documentId
+  ✓ §14.7 Document node is gone
+  ✓ §14.7 Chunk node is gone too (FOREACH-collected delete)
+  ✓ §14.7 DocumentDeletion audit node recorded (deletedBy)
+  ✓ §14.7 DocumentDeletion audit node recorded (deletedAt)
+  ✓ §14.7 delete_document is a no-op for an already-deleted id
+  ✓ §14.7 exactly one DocumentDeletion node after a repeat delete attempt
+
+▶ §14.8 SUPERSEDES (document-ingestion2 Stage B)
+  ✓ §14.8 create_or_reopen_supersede_suggestion creates a pending edge
+  ✓ §14.8 SUPERSEDES.matchId lookup (unlabeled endpoints) uses the relationship index, no label scan
+  ✓ §14.8 SUPERSEDES.matchId lookup (unlabeled endpoints) uses the relationship index, no label scan (no label scan)
+  ✓ §14.8 list_pending_document_updates shows the pending suggestion
+  ✓ §14.8 confirm_document_update returns the confirmed matchId
+  ✓ §14.8 confirm_document_update flips the old document non-current
+  ✓ §14.8 confirm_document_update stamps supersededBy on the old document
+  ✓ §14.8 confirm_document_update bulk-flips the old document's chunks
+  ✓ §14.8 confirm_document_update leaves the NEW document untouched
+  ✓ §14.8 reject_document_update flips status to rejected
+  ✓ §14.8 reject_document_update leaves the old document current
+  ✓ §14.8 re-deriving a rejected pair reopens (created=false)
+  ✓ §14.8 re-deriving a rejected pair reopens to pending, never confirmed
+  ✓ §14.8 reopen bumps resuggestCount on the ORIGINAL matchId
+  ✓ §14.8 reopen never creates a duplicate edge for the same pair
+  ✓ §14.8 get_document_history's older-direction step finds the confirmed predecessor
+  ✓ §14.8 get_document_history's newer-direction step finds the confirmed successor
+  ✓ §14.8 get_document_history's older step ignores a pending suggestion (sd3->sd4 is pending, not confirmed)
+
+▶ §14.9 search_chunks documentCurrent filter (document-ingestion2 Stage C)
+  ✓ §14.9 search_chunks includes the current-version chunk
+  ✓ §14.9 search_chunks excludes the superseded chunk
+  ✓ §14.9 filtered search_chunks still uses the vector index (ProcedureCall)
+  ✓ §14.9 filtered search_chunks has no All Node Scan
+  ✓ §14.9 direct lookup still returns the superseded document's text
+  ✓ §14.9 ...and reports currentVersion=false (excluded from search only)
+
+▶ §14.9 update-detection (document-ingestion2 Stage D)
+  ✓ §14.9 create_document_with_auto_supersede returns autoSuperseded=true
+  ✓ §14.9 create_document_with_auto_supersede returns the new documentId
+  ✓ §14.9 old document flips non-current
+  ✓ §14.9 old document stamped supersededAt
+  ✓ §14.9 old document stamped supersededBy='system'
+  ✓ §14.9 old document's chunk bulk-flipped documentCurrent=false
+  ✓ §14.9 new document is current
+  ✓ §14.9 auto-superseding ingest stores lshBand0
+  ✓ §14.9 auto-superseding ingest stores lshBand3
+  ✓ §14.9 auto-superseding ingest stores lshBand7
+  ✓ §14.9 SUPERSEDES edge status='confirmed'
+  ✓ §14.9 SUPERSEDES edge decidedBy='system'
+  ✓ §14.9 SUPERSEDES edge confidence=1.0
+  ✓ §14.9 a document with no real candidate never self-supersedes (autoSuperseded=false)
+  ✓ §14.9 no SUPERSEDES edge was created for the self-match probe
+  ✓ §14.9 plain (non-superseding) ingest stores lshBand0
+  ✓ §14.9 plain (non-superseding) ingest stores lshBand7
+  ✓ §14.9 a band written at ingest is found by the band-OR shortlist read
+  ✓ §14.9 backfill listing includes a band-less (non-current) document (asd1)
+  ✓ §14.9 backfill listing excludes a document the ingest write banded (asd2)
+  ✓ §14.9 backfill band write anchors on Document.documentId's index
+  ✓ §14.9 backfill band write anchors on Document.documentId's index (no label scan)
+  ✓ §14.9 backfill band write reports the document it stamped
+  ✓ §14.9 backfill band write stores lshBand0
+  ✓ §14.9 backfill band write stores lshBand7
+  ✓ §14.9 backfill listing is empty of asd1 once stamped (idempotent)
+  ✓ §14.9 find_update_shortlist band-OR anchors on a single Node By Index Scan
+  ✓ §14.9 find_update_shortlist band-OR anchors on a single Node By Index Scan (no label scan)
+  ✓ §14.9 band-OR shortlist includes the current-version band match (lsd1)
+  ✓ §14.9 band-OR shortlist excludes the non-current band match (lsd2)
+  ✓ §14.9 band-OR shortlist excludes a document sharing no band (lsd5)
+  ✓ §14.9 title-fuzzy shortlist includes the current-version title match (lsd3)
+  ✓ §14.9 title-fuzzy shortlist excludes the non-current title match (lsd4)
+  ✓ §14.9 title-fuzzy shortlist excludes a document with no title match (lsd5)
+  ✓ §14.9 escaped title-fuzzy query for a metacharacter-bearing title raises no RediSearch syntax error
+  ✓ §14.9 escaped title-fuzzy query still matches the metacharacter-bearing title (lsd6)
+
+▶ teardown
+  ✓ ws:test deleted
+  ✓ reference-test deleted
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Results: 480/486 passed
+ FAILED: 6 assertion(s)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+exit=1

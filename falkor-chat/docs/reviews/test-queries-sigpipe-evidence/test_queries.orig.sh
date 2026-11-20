@@ -1,0 +1,2024 @@
+#!/usr/bin/env bash
+# test_queries.sh — end-to-end test of every canonical query in docs/QUERIES.md.
+#
+# Usage:
+#   ./scripts/test_queries.sh
+#
+# Uses an isolated graph (ws:test + reference) wiped at start and end.
+# Exits non-zero on the first unexpected result.
+
+set -euo pipefail
+
+HOST="${FALKORDB_HOST:-127.0.0.1}"
+PORT="${FALKORDB_PORT:-6379}"
+WS="ws:test"
+# Throwaway reference graph — never the live `reference` (GAL-I01-D0001). Exported so the
+# bootstrap script (and any Python it spawns) targets the same name.
+REF="reference-test"
+export FALKORCHAT_REFERENCE_GRAPH="$REF"
+
+PASS=0
+FAIL=0
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+gq()  { redis-cli -h "$HOST" -p "$PORT" GRAPH.QUERY    "$1" "$2"; }
+rq()  { redis-cli -h "$HOST" -p "$PORT" GRAPH.RO_QUERY "$1" "$2"; }
+gp()  { redis-cli -h "$HOST" -p "$PORT" GRAPH.PROFILE  "$1" "$2"; }
+
+assert_contains() {
+  local label="$1" expected="$2" actual="$3"
+  if echo "$actual" | grep -qF "$expected"; then
+    echo "  ✓ ${label}"
+    PASS=$((PASS+1))
+  else
+    echo "  ✗ ${label}"
+    echo "    expected to contain: ${expected}"
+    echo "    got: ${actual}"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+assert_not_contains() {
+  local label="$1" unexpected="$2" actual="$3"
+  if echo "$actual" | grep -qF "$unexpected"; then
+    echo "  ✗ ${label}"
+    echo "    expected NOT to contain: ${unexpected}"
+    echo "    got: ${actual}"
+    FAIL=$((FAIL+1))
+  else
+    echo "  ✓ ${label}"
+    PASS=$((PASS+1))
+  fi
+}
+
+assert_index_scan() {
+  local label="$1" profile="$2"
+  assert_contains "$label" "Node By Index Scan" "$profile"
+  # Bug fix (K-036/U1, 2026-07-28): FalkorDB's PROFILE text is "Node By Label Scan"
+  # (spaced) — the un-spaced "NodeByLabelScan" this previously checked for can never
+  # match, so this half of the helper was a silent no-op across every existing call
+  # site. Fixed here; re-ran the full 256-case baseline with the corrected string and
+  # every case still passed (no query was secretly hiding a label scan), so this is a
+  # pure correctness fix, not a behavior change to any query.
+  assert_not_contains "$label (no label scan)" "Node By Label Scan" "$profile"
+}
+
+assert_edge_index_scan() {
+  # Relationship-index twin of assert_index_scan: an indexed edge lookup plans as
+  # "Edge By Index Scan | [r:TYPE]", never "Node By Index Scan" (QUERIES.md §14.8).
+  local label="$1" profile="$2"
+  assert_contains "$label" "Edge By Index Scan" "$profile"
+  assert_not_contains "$label (no label scan)" "Node By Label Scan" "$profile"
+}
+
+assert_no_data_row() {
+  # redis-cli always appends a "Cached execution: N / Query internal execution
+  # time: X milliseconds" footer after a blank line; X is a float whose digits
+  # are effectively random, so asserting "does not contain <bare digit>"
+  # against the raw reply is flaky (X can coincidentally contain that digit).
+  # Trims everything from the first blank line onward, then checks the
+  # remaining header-only output has no data row beneath it.
+  local label="$1" header="$2" actual="$3"
+  local trimmed
+  trimmed=$(printf '%s\n' "$actual" | awk '/^$/{exit} {print}')
+  if [ "$trimmed" = "$header" ]; then
+    echo "  ✓ ${label}"
+    PASS=$((PASS+1))
+  else
+    echo "  ✗ ${label}"
+    echo "    expected exactly the header '${header}' with no data row"
+    echo "    got: ${trimmed}"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ── setup ────────────────────────────────────────────────────────────────────
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " falkor-chat query tests"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+echo ""
+echo "▶ connectivity"
+redis-cli -h "$HOST" -p "$PORT" PING | grep -q PONG && echo "  ✓ FalkorDB reachable" || { echo "  ✗ cannot reach FalkorDB"; exit 1; }
+
+echo ""
+echo "▶ teardown (clean slate)"
+redis-cli -h "$HOST" -p "$PORT" GRAPH.DELETE "$WS"  2>/dev/null || true
+redis-cli -h "$HOST" -p "$PORT" GRAPH.DELETE "$REF" 2>/dev/null || true
+
+echo ""
+echo "▶ bootstrap schema"
+EMBEDDING_DIM=4 ./scripts/bootstrap_schema.sh test 2>&1 | grep -E "done:|ERROR" || true
+
+# ── §2: users & membership ───────────────────────────────────────────────────
+
+echo ""
+echo "▶ §2 users & membership"
+
+# v2 guarded ensures (DEF-1): canonical bodies in QUERIES.md §2/§7; as with §4, the
+# test copies keep every clause verbatim except the final RETURN, which composes the
+# three status booleans into one grep-able string ("c=… e=… col=…").
+
+out=$(gq "$WS" "OPTIONAL MATCH (u:User {userId:'u1'}) OPTIONAL MATCH (a:Agent {agentId:'u1'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'u1', displayName:'Alice', email:'alice@example.com'})) RETURN 'c='+toString(ok)+' e='+toString(u IS NOT NULL)+' col='+toString(a IS NOT NULL) AS status")
+assert_contains "ensure user Alice (v2 fresh create)" "c=true e=false col=false" "$out"
+
+out=$(gq "$WS" "OPTIONAL MATCH (u:User {userId:'u2'}) OPTIONAL MATCH (a:Agent {agentId:'u2'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'u2', displayName:'Bob', email:'bob@example.com'})) RETURN 'c='+toString(ok)+' e='+toString(u IS NOT NULL)+' col='+toString(a IS NOT NULL) AS status")
+assert_contains "ensure user Bob (v2 fresh create)" "c=true e=false col=false" "$out"
+
+# idempotency: re-ensure same user — status row says existed, nothing written
+out=$(gq "$WS" "OPTIONAL MATCH (u:User {userId:'u1'}) OPTIONAL MATCH (a:Agent {agentId:'u1'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'u1', displayName:'Alice', email:'alice@example.com'})) RETURN 'c='+toString(ok)+' e='+toString(u IS NOT NULL)+' col='+toString(a IS NOT NULL) AS status")
+assert_contains "re-ensure user idempotent (existed, no write)" "c=false e=true col=false" "$out"
+assert_not_contains "re-ensure user creates no node" "Nodes created" "$out"
+
+out=$(gq "$WS" "MATCH (u:User {userId:'u1'}) RETURN count(u) AS n")
+assert_contains "re-ensure left exactly one Alice node" "1" "$out"
+
+# uniqueness constraint: duplicate userId must fail
+out=$(gq "$WS" "CREATE (:User {userId:'u1', displayName:'Imposter'})" 2>&1)
+assert_contains "constraint blocks duplicate userId" "unique constraint violation" "$out"
+
+# ── §3: channels & threads ───────────────────────────────────────────────────
+
+echo ""
+echo "▶ §3 channels & threads"
+
+# plain CREATE (K-007): ids are server-minted, MERGE could never match; the
+# uniqueness constraint is the backstop — creates are non-idempotent.
+out=$(gq "$WS" "CREATE (c:Channel {channelId:'ch1', name:'general', createdAt:1000}) RETURN c.name")
+assert_contains "create channel general" "general" "$out"
+
+out=$(gq "$WS" "CREATE (c:Channel {channelId:'ch2', name:'random', createdAt:1001}) RETURN c.name")
+assert_contains "create channel random" "random" "$out"
+
+out=$(gq "$WS" "CREATE (:Channel {channelId:'ch1', name:'imposter'})" 2>&1)
+assert_contains "constraint blocks duplicate channelId" "unique constraint violation" "$out"
+
+# list channels in the workspace (newest-first by createdAt, index-anchored on channelId)
+out=$(gq "$WS" "MATCH (c:Channel) WHERE c.channelId > '' RETURN c.channelId AS channelId, c.name AS name, c.createdAt AS createdAt ORDER BY c.createdAt DESC LIMIT 100")
+# ch2 (createdAt 1001) newest-first before ch1 (createdAt 1000); both present
+ch2_line=$(echo "$out" | grep -n "ch2" | head -1 | cut -d: -f1)
+ch1_line=$(echo "$out" | grep -n "ch1" | head -1 | cut -d: -f1)
+if echo "$out" | grep -qF "general" && echo "$out" | grep -qF "random" \
+   && [ -n "$ch2_line" ] && [ -n "$ch1_line" ] && [ "$ch2_line" -lt "$ch1_line" ]; then
+  echo "  ✓ list channels: both channels listed, newest-first (ch2 before ch1)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ list channels: missing channel or wrong order"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+
+out=$(gq "$WS" "MATCH (u:User {userId:'u1'}) MATCH (c:Channel {channelId:'ch1'}) MERGE (u)-[r:MEMBER_OF]->(c) ON CREATE SET r.role='member', r.joinedAt=1000 RETURN r.role")
+assert_contains "add Alice to general" "member" "$out"
+
+out=$(gq "$WS" "MATCH (u:User {userId:'u2'}) MATCH (c:Channel {channelId:'ch1'}) MERGE (u)-[r:MEMBER_OF]->(c) ON CREATE SET r.role='member', r.joinedAt=1001 RETURN r.role")
+assert_contains "add Bob to general" "member" "$out"
+
+out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t:Thread) RETURN count(t) AS n")
+assert_contains "no threads yet" "0" "$out"
+
+# create two threads (plain CREATE anchored on the channel; zero rows = nothing written)
+out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'}) CREATE (t:Thread {threadId:'th1', title:'First thread', createdAt:1000, updatedAt:1000}) CREATE (c)-[:HAS_THREAD]->(t) RETURN t.threadId")
+assert_contains "create thread th1" "th1" "$out"
+
+out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'}) CREATE (t:Thread {threadId:'th2', title:'Second thread', createdAt:1001, updatedAt:1001}) CREATE (c)-[:HAS_THREAD]->(t) RETURN t.threadId")
+assert_contains "create thread th2" "th2" "$out"
+
+out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'}) CREATE (:Thread {threadId:'th1', title:'dupe'})" 2>&1)
+assert_contains "constraint blocks duplicate threadId" "unique constraint violation" "$out"
+
+out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t:Thread) RETURN t.threadId ORDER BY t.updatedAt DESC LIMIT 10")
+assert_contains "list threads returns th1" "th1" "$out"
+assert_contains "list threads returns th2" "th2" "$out"
+
+# ── §4: messages (v2 self-guarding write paths) ──────────────────────────────
+#
+# The canonical v2 bodies live in docs/QUERIES.md §4. The test copies keep every
+# clause verbatim except the final RETURN, which composes the four status
+# booleans into one grep-able string ("w=… hh=… dup=… auth=…") — same values,
+# assert-friendly shape.
+
+echo ""
+echo "▶ §4 messages — write path (v2)"
+
+# first message in th1 (v2 first-path; status row + guarded CREATE)
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'}) OPTIONAL MATCH (t)-[:HEAD]->(h) OPTIONAL MATCH (dup:Message {msgId:'m1'}) OPTIONAL MATCH (ua:User {userId:'u1'}) OPTIONAL MATCH (aa:Agent {agentId:'u1'}) WITH t, h, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, h, dup, author, mems, (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m1', text:'Hello thread', role:'user', createdAt:2000, threadId:'th1'}) CREATE (t)-[:HEAD]->(m) CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2000 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh='+toString(h IS NOT NULL)+' dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "post first message m1: status row written" "w=true hh=false dup=false auth=true" "$out"
+
+out=$(gq "$WS" "MATCH (m:Message {msgId:'m1'}) RETURN m.msgId")
+assert_contains "post first message m1: node exists" "m1" "$out"
+
+# second message (v2 subsequent-path)
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'m2'}) OPTIONAL MATCH (ua:User {userId:'u2'}) OPTIONAL MATCH (aa:Agent {agentId:'u2'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m2', text:'Hi Alice!', role:'user', createdAt:2001, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2001 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh=false dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "post second message m2 (v2 subsequent)" "w=true hh=false dup=false auth=true" "$out"
+
+# third message
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'m3'}) OPTIONAL MATCH (ua:User {userId:'u1'}) OPTIONAL MATCH (aa:Agent {agentId:'u1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m3', text:'Welcome Bob, great to have you here', role:'user', createdAt:2002, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2002 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh=false dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "post third message m3 (v2 subsequent)" "w=true hh=false dup=false auth=true" "$out"
+
+# reply m4 — REPLY_TO created INSIDE the guarded FOREACH (OQ4 live verification)
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) MATCH (quoted:Message {msgId:'m3'}) OPTIONAL MATCH (dup:Message {msgId:'m4'}) OPTIONAL MATCH (ua:User {userId:'u2'}) OPTIONAL MATCH (aa:Agent {agentId:'u2'}) WITH t, tailRel, prev, quoted, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, quoted, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, quoted, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m4', text:'Thanks Alice!', role:'user', createdAt:2003, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) CREATE (m)-[:REPLY_TO]->(quoted) SET t.updatedAt=2003 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh=false dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "post reply m4 (v2 subsequent + REPLY_TO in guard)" "w=true hh=false dup=false auth=true" "$out"
+
+out=$(gq "$WS" "MATCH (:Message {msgId:'m4'})-[r:REPLY_TO]->(q:Message) RETURN count(r) AS n, q.msgId")
+assert_contains "m4 REPLY_TO edge exists (created inside guarded FOREACH)" "m3" "$out"
+
+# verify TAIL points to m4
+out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'})-[:TAIL]->(tail:Message) RETURN tail.msgId")
+assert_contains "TAIL points to last message" "m4" "$out"
+
+# verify HEAD still points to m1
+out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'})-[:HEAD]->(head:Message) RETURN head.msgId")
+assert_contains "HEAD still points to first message" "m1" "$out"
+
+# uniqueness: duplicate msgId must fail (constraint = concurrency backstop)
+out=$(gq "$WS" "CREATE (:Message {msgId:'m1', text:'duplicate'})" 2>&1)
+assert_contains "constraint blocks duplicate msgId" "unique constraint violation" "$out"
+
+echo ""
+echo "▶ §4 write-path v2 guards (retry replay / first-post race / unknown author)"
+
+# defect A regression: exact replay of the m2 subsequent write is a structural no-op
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'m2'}) OPTIONAL MATCH (ua:User {userId:'u2'}) OPTIONAL MATCH (aa:Agent {agentId:'u2'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m2', text:'Hi Alice!', role:'user', createdAt:2001, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2001 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh=false dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "replay of subsequent write reports dupMsg=true (idempotent)" "w=false hh=false dup=true auth=true" "$out"
+
+out=$(gq "$WS" "MATCH (a:Message)-[r:NEXT]->(b:Message) RETURN 'next='+toString(count(r))+' self='+toString(sum(CASE WHEN a.msgId = b.msgId THEN 1 ELSE 0 END)) AS s")
+assert_contains "replay left NEXT chain intact (3 edges, no self-loop)" "next=3 self=0" "$out"
+
+out=$(gq "$WS" "MATCH (m:Message) RETURN count(m) AS n")
+assert_contains "replay created no message node (still 4)" "4" "$out"
+
+# defect B regression: late first-post on a headed thread refuses (hadHead=true)
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'}) OPTIONAL MATCH (t)-[:HEAD]->(h) OPTIONAL MATCH (dup:Message {msgId:'mX'}) OPTIONAL MATCH (ua:User {userId:'u1'}) OPTIONAL MATCH (aa:Agent {agentId:'u1'}) WITH t, h, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, h, dup, author, mems, (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'mX', text:'late first', role:'user', createdAt:2004, threadId:'th1'}) CREATE (t)-[:HEAD]->(m) CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2004 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh='+toString(h IS NOT NULL)+' dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "late first-post refused with hadHead=true" "w=false hh=true dup=false auth=true" "$out"
+
+out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'})-[r:HEAD]->() RETURN count(r) AS n")
+assert_contains "thread still has exactly one HEAD" "1" "$out"
+
+# unknown author refuses with authorFound=false, nothing written
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'mY'}) OPTIONAL MATCH (ua:User {userId:'ghost'}) OPTIONAL MATCH (aa:Agent {agentId:'ghost'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'mY', text:'ghost post', role:'user', createdAt:2005, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2005 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh=false dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "unknown author refused with authorFound=false" "w=false hh=false dup=false auth=false" "$out"
+
+out=$(gq "$WS" "OPTIONAL MATCH (m:Message {msgId:'mY'}) RETURN 'exists='+toString(m IS NOT NULL) AS s")
+assert_contains "unknown-author message was not written" "exists=false" "$out"
+
+# threadId denorm: v2 write stamped it inline
+out=$(gq "$WS" "MATCH (m:Message {msgId:'m1'}) RETURN m.threadId")
+assert_contains "v2 write stamped threadId on m1" "th1" "$out"
+
+# v2 subsequent write plans with indexed anchors only (dup msgId → guarded no-op)
+prof=$(gp "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'m2'}) OPTIONAL MATCH (ua:User {userId:'u2'}) OPTIONAL MATCH (aa:Agent {agentId:'u2'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m2', text:'Hi Alice!', role:'user', createdAt:2001, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2001 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN ok")
+assert_not_contains "v2 subsequent write has no All Node Scan" "All Node Scan" "$prof"
+
+echo ""
+echo "▶ §4 messages — read path"
+
+# read full thread in order
+out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId, m.text, m.createdAt, author.displayName ORDER BY m.createdAt")
+assert_contains "thread read: m1 present" "m1" "$out"
+assert_contains "thread read: m2 present" "m2" "$out"
+assert_contains "thread read: m3 present" "m3" "$out"
+assert_contains "thread read: m4 present" "m4" "$out"
+assert_contains "thread read: Alice present" "Alice" "$out"
+assert_contains "thread read: Bob present" "Bob" "$out"
+
+# verify order: m1 appears before m4 in output
+m1_line=$(echo "$out" | grep -n "m1" | head -1 | cut -d: -f1)
+m4_line=$(echo "$out" | grep -n "m4" | head -1 | cut -d: -f1)
+if [ "$m1_line" -lt "$m4_line" ]; then
+  echo "  ✓ thread read: messages in chronological order"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ thread read: wrong order (m1 line ${m1_line}, m4 line ${m4_line})"
+  FAIL=$((FAIL+1))
+fi
+
+# cursor pagination: messages after m2
+out=$(gq "$WS" "MATCH (cursor:Message {msgId:'m2'})-[:NEXT*1..]->(m:Message) RETURN m.msgId ORDER BY m.createdAt LIMIT 10")
+assert_contains     "cursor pagination: m3 after m2" "m3" "$out"
+assert_contains     "cursor pagination: m4 after m2" "m4" "$out"
+assert_not_contains "cursor pagination: m1 not in result" "m1" "$out"
+assert_not_contains "cursor pagination: m2 not in result" "m2" "$out"
+
+# get single message
+out=$(gq "$WS" "MATCH (m:Message {msgId:'m4'}) OPTIONAL MATCH (m)-[:POSTED_BY]->(author) OPTIONAL MATCH (m)-[:REPLY_TO]->(quoted:Message) RETURN m.text, author.displayName, quoted.msgId AS quotedId")
+assert_contains "get single message m4: text" "Thanks Alice" "$out"
+assert_contains "get single message m4: author" "Bob" "$out"
+assert_contains "get single message m4: quotedId" "m3" "$out"
+
+# thread.updatedAt updated after messages
+out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'}) RETURN t.updatedAt")
+assert_contains "thread updatedAt bumped to last msg createdAt" "2003" "$out"
+
+echo ""
+echo "▶ §4.x threadId backfill (one-off ops query)"
+
+# simulate pre-K-007 rows: strip threadId from m2 and m3
+gq "$WS" "MATCH (m:Message) WHERE m.msgId IN ['m2','m3'] SET m.threadId = null" > /dev/null
+
+out=$(gq "$WS" "MATCH (t:Thread)-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.threadId IS NULL SET m.threadId = t.threadId RETURN 'backfilled='+toString(count(m)) AS s")
+assert_contains "backfill run 1 stamps the 2 stripped messages" "backfilled=2" "$out"
+
+out=$(gq "$WS" "MATCH (t:Thread)-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.threadId IS NULL SET m.threadId = t.threadId RETURN 'backfilled='+toString(count(m)) AS s")
+assert_contains "backfill run 2 is idempotent (0)" "backfilled=0" "$out"
+
+echo ""
+echo "▶ §3 list recent threads (after messages posted)"
+out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t:Thread) RETURN t.threadId, t.updatedAt ORDER BY t.updatedAt DESC LIMIT 10")
+assert_contains "recent threads: th1 most recent" "th1" "$out"
+
+# ── §5: full-text search ─────────────────────────────────────────────────────
+
+echo ""
+echo "▶ §5 full-text search"
+
+# allow a moment for the fulltext index to pick up the nodes
+sleep 1
+
+out=$(gq "$WS" "CALL db.idx.fulltext.queryNodes('Message', 'welcome') YIELD node AS m, score RETURN m.msgId, m.text, score ORDER BY score DESC LIMIT 5" 2>&1)
+assert_contains "fulltext: 'welcome' finds m3" "m3" "$out"
+assert_not_contains "fulltext: 'welcome' no error" "ERR" "$out"
+
+out=$(gq "$WS" "CALL db.idx.fulltext.queryNodes('Message', 'Hello') YIELD node AS m, score RETURN m.msgId ORDER BY score DESC LIMIT 5" 2>&1)
+assert_contains "fulltext: 'Hello' finds m1" "m1" "$out"
+
+# §5 RETURN carries threadId (denormalized navigation metadata)
+out=$(gq "$WS" "CALL db.idx.fulltext.queryNodes('Message', 'welcome') YIELD node AS m, score RETURN m.msgId, m.threadId AS threadId, m.text, m.createdAt, score ORDER BY score DESC LIMIT 5" 2>&1)
+assert_contains "fulltext rows carry threadId" "th1" "$out"
+
+# ── §6: GraphRAG vector retrieval ────────────────────────────────────────────
+#
+# Exercised here at the isolated-suite dim (EMBEDDING_DIM=4). The dim-1024
+# verification (real embedding size, wrong-dim quirk, RAM line) lives in the
+# graph-dba deliverable docs/archive/plans/m2-graphrag.md — do not re-encode 1024 here.
+# Score is cosine distance: 0 = identical, ASC = most similar first (DESIGN §7.1).
+# There is NO Entity pipeline in M2 — the §6 Entity expansion must no-op cleanly.
+
+echo ""
+echo "▶ §6 GraphRAG — set embeddings and query"
+
+# §6 set-embedding write path (SET m.embedding = vecf32($embedding)) — must commit
+out=$(gq "$WS" "MATCH (m:Message {msgId:'m1'}) SET m.embedding = vecf32([1.0, 0.0, 0.0, 0.0]) RETURN m.msgId")
+assert_contains "§6 set-embedding write commits (Properties set)" "Properties set" "$out"
+gq "$WS" "MATCH (m:Message {msgId:'m2'}) SET m.embedding = vecf32([0.9, 0.1, 0.0, 0.0])" > /dev/null
+gq "$WS" "MATCH (m:Message {msgId:'m3'}) SET m.embedding = vecf32([0.0, 0.0, 1.0, 0.0])" > /dev/null
+gq "$WS" "MATCH (m:Message {msgId:'m4'}) SET m.embedding = vecf32([0.0, 0.0, 0.9, 0.1])" > /dev/null
+
+# ANN retrieval (route via RO_QUERY): nearest to [1,0,0,0] → m1 first (score 0), m2 close
+out=$(rq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score RETURN seed.msgId, score ORDER BY score ASC")
+assert_contains "vector query: m1 in top-2" "m1" "$out"
+assert_contains "vector query: m2 in top-2" "m2" "$out"
+assert_not_contains "vector query: m3 not in top-2 (different direction)" "m3" "$out"
+
+# score for identical vector should be 0
+m1_score=$(echo "$out" | grep -A1 "m1" | tail -1 | tr -d ' ')
+if [ "$m1_score" = "0" ]; then
+  echo "  ✓ vector query: identical vector scores 0 (cosine distance)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ vector query: expected score 0 for identical vector, got '${m1_score}'"
+  FAIL=$((FAIL+1))
+fi
+
+# ranking is strictly ASC by distance: m1 (identical) sorts before m2 (near)
+m1_line=$(echo "$out" | grep -n "m1" | head -1 | cut -d: -f1)
+m2_line=$(echo "$out" | grep -n "m2" | head -1 | cut -d: -f1)
+if [ -n "$m1_line" ] && [ -n "$m2_line" ] && [ "$m1_line" -lt "$m2_line" ]; then
+  echo "  ✓ §6 ANN ranks by cosine distance ASC (m1 identical before m2 near)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ §6 ANN ranking wrong (m1 line ${m1_line}, m2 line ${m2_line})"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+
+# full §6 hybrid retrieval: vector seed + thread/channel scope + Entity expansion
+out=$(rq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed) MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t) OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) WITH seed, score, collect(DISTINCT related)[..5] AS expanded RETURN seed.msgId, seed.text, seed.role, score, [m IN expanded | m.text] AS relatedContext ORDER BY score ASC LIMIT 5" 2>&1)
+assert_contains "hybrid retrieval: returns results" "m1" "$out"
+assert_contains "§6 hybrid returns seed text" "Hello thread" "$out"
+assert_not_contains "hybrid retrieval: no error" "ERR" "$out"
+
+# Entity expansion no-ops cleanly: there is no Entity pipeline in M2, so
+# relatedContext must be the empty list [] (not an error, not missing).
+assert_contains "§6 Entity expansion no-ops (empty relatedContext [])" "[]" "$out"
+out=$(rq "$WS" "MATCH (e:Entity) RETURN count(e) AS entities")
+assert_contains "§6 Entity graph is empty (no entity pipeline in M2)" "0" "$out"
+
+# PROFILE: the ANN retrieval must anchor on the vector index (ProcedureCall),
+# never a whole-graph scan of Message.
+prof=$(gp "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed) MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t) OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) WITH seed, score, collect(DISTINCT related)[..5] AS expanded RETURN seed.msgId, score ORDER BY score ASC LIMIT 5")
+assert_contains     "§6 ANN retrieval uses the vector index (ProcedureCall)" "ProcedureCall" "$prof"
+assert_not_contains "§6 ANN retrieval has no All Node Scan"                  "All Node Scan" "$prof"
+
+# workspace-wide variant (channel MATCH omitted) still retrieves via the index
+out=$(rq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) WITH seed, score, collect(DISTINCT related)[..5] AS expanded RETURN seed.msgId, score, [m IN expanded | m.text] AS relatedContext ORDER BY score ASC LIMIT 5" 2>&1)
+assert_contains     "§6 workspace-wide variant returns m1" "m1" "$out"
+assert_not_contains "§6 workspace-wide variant no error"   "ERR" "$out"
+
+echo ""
+echo "▶ §6.1 read_index_dimension — vector-index introspection (K-042 Landing 2, FR-19)"
+
+# Normal read: ws:test was bootstrapped EMBEDDING_DIM=4 above — Message carries a
+# real dim-4 vector index.
+IDXQ='CALL db.indexes() YIELD label, types, options WHERE label = $label AND types[$prop] = ["VECTOR"] RETURN options[$prop].dimension AS dim'
+out=$(rq "$WS" "CYPHER label=\"Message\" prop=\"embedding\" $IDXQ")
+assert_contains "§6.1 Message vector index reports dimension 4" "4" "$out"
+
+# RANGE-only label: User carries range indexes (bootstrap_schema.sh) but none on
+# 'embedding' at all — [live-verified deviation from -graph.md §3.2's own table,
+# see below] `types['embedding']` is then a missing-key map access (NULL), so
+# `WHERE ... AND NULL = ['VECTOR']` is NULL, not true, and the row is filtered
+# out entirely: zero rows, same shape as the unknown-label case just below, not
+# "one row, dim NULL" as §3.2's illustrative example names it. Both sub-cases
+# still collapse to the same `None` at the repository layer (`read_index_dimension`
+# treats "zero rows" and "one row, NULL" identically — see docs/QUERIES.md §6.1),
+# so this is a documentation-precision note, not a behaviour gap: a label with an
+# actual RANGE index on the literal `embedding` property (which nothing in this
+# schema has) would be the one that produces the one-row/NULL shape.
+out=$(rq "$WS" "CYPHER label=\"User\" prop=\"embedding\" $IDXQ")
+assert_no_data_row "§6.1 RANGE-only label (User) reports no numeric dimension" "dim" "$out"
+assert_not_contains "§6.1 RANGE-only label (User) is not an error" "ERR" "$out"
+
+# Unknown label: zero rows, not an error.
+out=$(rq "$WS" "CYPHER label=\"NoSuchLabelAtAll\" prop=\"embedding\" $IDXQ")
+assert_no_data_row "§6.1 unknown label returns no dim value" "dim" "$out"
+assert_not_contains "§6.1 unknown label is not an error" "ERR" "$out"
+
+# The fourth edge case (-graph.md §3.2) — the graph key not existing at all
+# (`ERR Invalid graph operation on empty key`) doesn't fit this script (it runs
+# entirely inside the one already-bootstrapped ws:test graph); covered instead by
+# the offline suite's
+# test_read_index_dimension_none_when_the_graph_key_does_not_exist
+# (server/tests/test_graphrag.py), which also asserts the probe never creates the
+# graph as a side effect.
+
+# ── §7: agents ───────────────────────────────────────────────────────────────
+
+echo ""
+echo "▶ §7 agents"
+
+out=$(gq "$WS" "OPTIONAL MATCH (a:Agent {agentId:'bot1'}) OPTIONAL MATCH (u:User {userId:'bot1'}) WITH a, u, (a IS NULL AND u IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:Agent {agentId:'bot1', name:'FalkorBot', model:'gpt-4o', createdAt:1000})) RETURN 'c='+toString(ok)+' e='+toString(a IS NOT NULL)+' col='+toString(u IS NOT NULL) AS status")
+assert_contains "ensure agent bot1 (v2 fresh create)" "c=true e=false col=false" "$out"
+
+out=$(gq "$WS" "MATCH (a:Agent {agentId:'bot1'}) RETURN a.agentId")
+assert_contains "agent bot1 node exists" "bot1" "$out"
+
+# ── §2/§7 guarded-ensure cross-label guards (DEF-1) ──────────────────────────
+
+echo ""
+echo "▶ §2/§7 member-id namespace guards (DEF-1)"
+
+# idempotent re-ensure of the agent — existed, nothing written
+out=$(gq "$WS" "OPTIONAL MATCH (a:Agent {agentId:'bot1'}) OPTIONAL MATCH (u:User {userId:'bot1'}) WITH a, u, (a IS NULL AND u IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:Agent {agentId:'bot1', name:'FalkorBot', model:'gpt-4o', createdAt:1000})) RETURN 'c='+toString(ok)+' e='+toString(a IS NOT NULL)+' col='+toString(u IS NOT NULL) AS status")
+assert_contains "re-ensure agent idempotent (existed, no write)" "c=false e=true col=false" "$out"
+assert_not_contains "re-ensure agent creates no node" "Nodes created" "$out"
+
+# DEF-1 repro direction 1: ensure_user on an id held by an Agent → refused, nothing written
+out=$(gq "$WS" "OPTIONAL MATCH (u:User {userId:'bot1'}) OPTIONAL MATCH (a:Agent {agentId:'bot1'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'bot1', displayName:'Shadow', email:'shadow@example.com'})) RETURN 'c='+toString(ok)+' e='+toString(u IS NOT NULL)+' col='+toString(a IS NOT NULL) AS status")
+assert_contains "ensure_user blocked by existing Agent (collided)" "c=false e=false col=true" "$out"
+
+out=$(gq "$WS" "MATCH (u:User {userId:'bot1'}) RETURN count(u) AS n")
+assert_contains "no shadow User written for bot1" "0" "$out"
+
+# DEF-1 repro direction 2: ensure_agent on an id held by a User → refused, nothing written
+out=$(gq "$WS" "OPTIONAL MATCH (a:Agent {agentId:'u1'}) OPTIONAL MATCH (u:User {userId:'u1'}) WITH a, u, (a IS NULL AND u IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:Agent {agentId:'u1', name:'EvilTwin', model:'x', createdAt:1}) ) RETURN 'c='+toString(ok)+' e='+toString(a IS NOT NULL)+' col='+toString(u IS NOT NULL) AS status")
+assert_contains "ensure_agent blocked by existing User (collided)" "c=false e=false col=true" "$out"
+
+out=$(gq "$WS" "MATCH (a:Agent {agentId:'u1'}) RETURN count(a) AS n")
+assert_contains "no shadow Agent written for u1" "0" "$out"
+
+# status-row shape on pre-guard corrupted state: both labels hold the id → existed AND collided
+gq "$WS" "CREATE (:User {userId:'shdw'}), (:Agent {agentId:'shdw'})" > /dev/null
+out=$(gq "$WS" "OPTIONAL MATCH (u:User {userId:'shdw'}) OPTIONAL MATCH (a:Agent {agentId:'shdw'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'shdw', displayName:'x', email:'x'})) RETURN 'c='+toString(ok)+' e='+toString(u IS NOT NULL)+' col='+toString(a IS NOT NULL) AS status")
+assert_contains "corrupted both-exist state flagged (existed AND collided)" "c=false e=true col=true" "$out"
+gq "$WS" "MATCH (n) WHERE n.userId = 'shdw' OR n.agentId = 'shdw' DELETE n" > /dev/null
+
+# PROFILE: both cross-label existence checks must be index scans
+prof=$(gp "$WS" "OPTIONAL MATCH (u:User {userId:'probe'}) OPTIONAL MATCH (a:Agent {agentId:'probe'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'probe', displayName:'p', email:'p'})) RETURN ok, u IS NOT NULL, a IS NOT NULL")
+assert_index_scan "guarded ensure existence checks" "$prof"
+gq "$WS" "MATCH (u:User {userId:'probe'}) DELETE u" > /dev/null
+
+out=$(gq "$WS" "MATCH (a:Agent {agentId:'bot1'}) MATCH (c:Channel {channelId:'ch1'}) MERGE (a)-[r:MEMBER_OF]->(c) ON CREATE SET r.role='assistant', r.joinedAt=1000 RETURN r.role")
+assert_contains "add agent to channel" "assistant" "$out"
+
+out=$(gq "$WS" "MATCH (u)-[:MEMBER_OF]->(c:Channel {channelId:'ch1'}) RETURN coalesce(u.userId, u.agentId) AS memberId, u.displayName AS displayName, labels(u) AS type ORDER BY u.displayName")
+assert_contains "channel members: Alice" "u1" "$out"
+assert_contains "channel members: Bob" "u2" "$out"
+assert_contains "channel members: bot1" "bot1" "$out"
+assert_contains "channel members: Agent label visible" "Agent" "$out"
+
+# ── §2 (new, K-036/U1): thread participants — extends "List channel members" by ──
+#    one leading hop: Thread -> HAS_THREAD (backward) -> Channel -> MEMBER_OF -> member.
+#    th1 is HAS_THREAD-linked to ch1 (§3 setup), whose roster is u1/u2/bot1 above.
+out=$(gq "$WS" "CYPHER threadId='th1' MATCH (c:Channel)-[:HAS_THREAD]->(t:Thread {threadId: \$threadId}) MATCH (u)-[:MEMBER_OF]->(c) RETURN coalesce(u.userId, u.agentId) AS memberId, u.displayName AS displayName, labels(u) AS type ORDER BY u.displayName")
+assert_contains "thread participants (th1): Alice" "u1" "$out"
+assert_contains "thread participants (th1): Bob" "u2" "$out"
+assert_contains "thread participants (th1): bot1" "bot1" "$out"
+assert_contains "thread participants (th1): Agent label visible" "Agent" "$out"
+
+prof=$(gp "$WS" "CYPHER threadId='th1' MATCH (c:Channel)-[:HAS_THREAD]->(t:Thread {threadId: \$threadId}) MATCH (u)-[:MEMBER_OF]->(c) RETURN coalesce(u.userId, u.agentId) AS memberId, u.displayName AS displayName, labels(u) AS type ORDER BY u.displayName")
+assert_index_scan "thread participants anchors on Thread.threadId index" "$prof"
+
+# a thread whose channel has zero members — empty list, not an error (plan §5.2 edge case,
+# possible via the demo seed script's timing)
+out=$(gq "$WS" "CREATE (c:Channel {channelId:'ch3', name:'ghost-channel', createdAt:1002}) RETURN c.channelId")
+assert_contains "create channel ch3 (zero members, for empty-roster test)" "ch3" "$out"
+out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch3'}) CREATE (t:Thread {threadId:'th4', title:'orphan roster', createdAt:1002, updatedAt:1002}) CREATE (c)-[:HAS_THREAD]->(t) RETURN t.threadId")
+assert_contains "create thread th4 under ch3" "th4" "$out"
+out=$(gq "$WS" "CYPHER threadId='th4' MATCH (c:Channel)-[:HAS_THREAD]->(t:Thread {threadId: \$threadId}) MATCH (u)-[:MEMBER_OF]->(c) RETURN count(u) AS n")
+assert_contains "thread participants (th4, zero-member channel): empty result" "0" "$out"
+
+# agent posts a message (assistant role) — v2 path resolves Agent authors via agentId index
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'m5'}) OPTIONAL MATCH (ua:User {userId:'bot1'}) OPTIONAL MATCH (aa:Agent {agentId:'bot1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m5', text:'I am the AI assistant', role:'assistant', createdAt:3000, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=3000 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "agent posts assistant message (v2 write commits)" "w=true auth=true" "$out"
+
+# ── §9: mentions & read-cursors (MCP transport) ──────────────────────────────
+
+echo ""
+echo "▶ §9 mentions — write path (MENTIONS_MEMBER)"
+
+# first message in th2 with EMPTY mentions — the CASE guard is load-bearing for the
+# write itself in v2: a bare UNWIND [] would collapse the stream before the FOREACH.
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th2'}) OPTIONAL MATCH (t)-[:HEAD]->(h) OPTIONAL MATCH (dup:Message {msgId:'mn1'}) OPTIONAL MATCH (ua:User {userId:'u1'}) OPTIONAL MATCH (aa:Agent {agentId:'u1'}) WITH t, h, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, h, dup, author, mems, (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'mn1', text:'mentions probe first', role:'user', createdAt:4000, threadId:'th2'}) CREATE (t)-[:HEAD]->(m) CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=4000 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok) AS status")
+assert_contains "mentions=[] v2 first-post commits (guard keeps the write alive)" "w=true" "$out"
+
+out=$(gq "$WS" "MATCH (:Message {msgId:'mn1'})-[r:MENTIONS_MEMBER]->() RETURN count(r) AS n")
+assert_contains "mentions=[] creates zero MENTIONS_MEMBER edges" "0" "$out"
+
+# subsequent message mentioning u2 AND agent bot1 (mixed User/Agent resolution)
+out=$(gq "$WS" "CYPHER mentions=['u2','bot1'] MATCH (t:Thread {threadId:'th2'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'mn2'}) OPTIONAL MATCH (ua:User {userId:'u1'}) OPTIONAL MATCH (aa:Agent {agentId:'u1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'mn2', text:'ping u2 and bot1', role:'user', createdAt:4001, threadId:'th2'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=4001 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok) AS status")
+assert_contains "mention post mn2 commits (v2)" "w=true" "$out"
+
+out=$(gq "$WS" "MATCH (:Message {msgId:'mn2'})-[:MENTIONS_MEMBER]->(x) RETURN count(x) AS n, collect(coalesce(x.userId,x.agentId)) AS who")
+assert_contains "mn2 has exactly 2 MENTIONS_MEMBER edges" "2" "$out"
+assert_contains "mn2 mentions User u2 (resolved via User index)" "u2" "$out"
+assert_contains "mn2 mentions Agent bot1 (resolved via Agent index)" "bot1" "$out"
+
+# dedup + unknown-skip: ['u1','u1','nope'] → one edge to u1, 'nope' dropped
+out=$(gq "$WS" "CYPHER mentions=['u1','u1','nope'] MATCH (t:Thread {threadId:'th2'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'mn3'}) OPTIONAL MATCH (ua:User {userId:'u2'}) OPTIONAL MATCH (aa:Agent {agentId:'u2'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'mn3', text:'dup and unknown mentions', role:'user', createdAt:4002, threadId:'th2'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=4002 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok) AS status")
+assert_contains "dedup post mn3 commits (v2)" "w=true" "$out"
+
+out=$(gq "$WS" "MATCH (:Message {msgId:'mn3'})-[:MENTIONS_MEMBER]->(x) RETURN count(x) AS n, collect(coalesce(x.userId,x.agentId)) AS who")
+assert_contains "mn3 dedups duplicate mention to a single edge" "1" "$out"
+assert_not_contains "mn3 drops unknown mention 'nope'" "nope" "$out"
+
+echo ""
+echo "▶ §9.1/§9.2 since-reads with mention flag (chronological, (createdAt,msgId) order)"
+
+# §9.1 thread-scoped, reader = bot1, since 3999 → mn1,mn2,mn3 chronological; mn2 (mentions bot1) flagged
+out=$(rq "$WS" "CYPHER threadId='th2' since=3999 sinceMsgId='' meId='bot1' limit=50 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) WHERE me.userId=\$meId OR me.agentId=\$meId WITH m, author, count(me) > 0 AS isMention RETURN m.msgId, coalesce(author.userId,author.agentId) AS authorId, isMention ORDER BY m.createdAt, m.msgId LIMIT \$limit")
+assert_contains "§9.1 returns mn1 (after since)" "mn1" "$out"
+assert_contains "§9.1 returns mn2" "mn2" "$out"
+# chronological order — the cursor-pagination invariant: a LIMIT-truncated page
+# must be the earliest rows (mention-first sorting + LIMIT loses messages);
+# mn2's mention of the reader is carried by the isMention flag instead
+mn1_line=$(echo "$out" | grep -n "mn1" | head -1 | cut -d: -f1)
+mn2_line=$(echo "$out" | grep -n "mn2" | head -1 | cut -d: -f1)
+if [ -n "$mn1_line" ] && [ -n "$mn2_line" ] && [ "$mn1_line" -lt "$mn2_line" ]; then
+  echo "  ✓ §9.1 chronological order (mn1 before mn2; mention flagged, not resorted)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ §9.1 chronological ordering wrong (mn1 line ${mn1_line}, mn2 line ${mn2_line})"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+
+# §9.1 explicit since keeps plain-`>` semantics — excludes earlier messages
+out=$(rq "$WS" "CYPHER threadId='th2' since=4001 meId='bot1' limit=50 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId ORDER BY m.createdAt, m.msgId LIMIT \$limit")
+assert_contains     "§9.1 since=4001 includes mn3" "mn3" "$out"
+assert_not_contains "§9.1 since=4001 excludes mn1" "mn1" "$out"
+assert_not_contains "§9.1 since=4001 excludes mn2" "mn2" "$out"
+
+# §9.2 workspace-wide since read (composite keyset) must stay an index scan on Message.createdAt
+prof=$(gp "$WS" "CYPHER since=3999 sinceMsgId='' meId='bot1' limit=50 MATCH (m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) WHERE me.userId=\$meId OR me.agentId=\$meId WITH m, author, count(me) > 0 AS isMention RETURN m.msgId, isMention ORDER BY m.createdAt, m.msgId LIMIT \$limit")
+assert_index_scan "§9.2 composite keyset since-read uses Message.createdAt index" "$prof"
+
+echo ""
+echo "▶ §9 keyset paging across a millisecond tie (K-007 tie-skip regression)"
+
+# seed th3: k1@5000, k2@5001, k3@5001 (tie), k4@5002 — structural seed of a v2-shaped chain
+gq "$WS" "MATCH (c:Channel {channelId:'ch1'}) MATCH (u:User {userId:'u1'}) CREATE (t:Thread {threadId:'th3', title:'tie probe', createdAt:5000, updatedAt:5002}) CREATE (c)-[:HAS_THREAD]->(t) CREATE (k1:Message {msgId:'k1', text:'tie one', role:'user', createdAt:5000, threadId:'th3'}) CREATE (k2:Message {msgId:'k2', text:'tie two', role:'user', createdAt:5001, threadId:'th3'}) CREATE (k3:Message {msgId:'k3', text:'tie three', role:'user', createdAt:5001, threadId:'th3'}) CREATE (k4:Message {msgId:'k4', text:'tie four', role:'user', createdAt:5002, threadId:'th3'}) CREATE (t)-[:HEAD]->(k1) CREATE (t)-[:TAIL]->(k4) CREATE (k1)-[:NEXT]->(k2) CREATE (k2)-[:NEXT]->(k3) CREATE (k3)-[:NEXT]->(k4) CREATE (k1)-[:POSTED_BY]->(u) CREATE (k2)-[:POSTED_BY]->(u) CREATE (k3)-[:POSTED_BY]->(u) CREATE (k4)-[:POSTED_BY]->(u)" > /dev/null
+
+# page 1 (limit 2) ends exactly on the tie boundary: k1,k2
+out=$(rq "$WS" "CYPHER threadId='th3' since=0 sinceMsgId='' meId='u1' limit=2 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId ORDER BY m.createdAt, m.msgId LIMIT \$limit")
+if echo "$out" | grep -qF "k2" && ! echo "$out" | grep -qF "k3"; then
+  echo "  ✓ §9 keyset page 1 (limit 2) ends at the tie boundary (k1,k2)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ §9 keyset page 1 wrong"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+
+# page 2 resumes from the composite pair (5001,'k2') → the tied sibling k3 is delivered
+out=$(rq "$WS" "CYPHER threadId='th3' since=5001 sinceMsgId='k2' meId='u1' limit=50 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId ORDER BY m.createdAt, m.msgId LIMIT \$limit")
+assert_contains "§9 keyset page 2 delivers the tied sibling k3 (tie-skip regression)" "k3" "$out"
+if echo "$out" | grep -qF "k4" && ! echo "$out" | grep -qF "k2"; then
+  echo "  ✓ §9 keyset page 2 completes the set (k4 in, boundary k2 excluded — nothing skipped)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ §9 keyset page 2 wrong (expected k3,k4 only)"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+
+# §9.2 RETURN carries threadId (denormalized navigation metadata)
+out=$(rq "$WS" "CYPHER since=4999 sinceMsgId='' meId='bot1' limit=50 MATCH (m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId, m.threadId AS threadId ORDER BY m.createdAt, m.msgId LIMIT \$limit")
+assert_contains "§9.2 rows carry threadId" "th3" "$out"
+
+echo ""
+echo "▶ §9.3/§9.4 read-cursors (composite monotonic)"
+
+# §9.3 v2 create: advance bot1:th2 to (4001,'mn2')
+out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4001 nowMsgId='mn2' MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId WITH rc, (\$now > coalesce(rc.lastReadAt,0) OR (\$now = coalesce(rc.lastReadAt,0) AND \$nowMsgId > coalesce(rc.lastReadMsgId,''))) AS adv SET rc.lastReadAt = CASE WHEN adv THEN \$now ELSE rc.lastReadAt END, rc.lastReadMsgId = CASE WHEN adv THEN \$nowMsgId ELSE rc.lastReadMsgId END RETURN rc.lastReadAt, rc.lastReadMsgId")
+assert_contains "§9.3 cursor advances to (4001,'mn2')" "mn2" "$out"
+
+# tie, larger msgId → advances to (4001,'mn3')
+out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4001 nowMsgId='mn3' MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId WITH rc, (\$now > coalesce(rc.lastReadAt,0) OR (\$now = coalesce(rc.lastReadAt,0) AND \$nowMsgId > coalesce(rc.lastReadMsgId,''))) AS adv SET rc.lastReadAt = CASE WHEN adv THEN \$now ELSE rc.lastReadAt END, rc.lastReadMsgId = CASE WHEN adv THEN \$nowMsgId ELSE rc.lastReadMsgId END RETURN rc.lastReadAt, rc.lastReadMsgId")
+assert_contains "§9.3 tie with larger msgId advances to 'mn3'" "mn3" "$out"
+
+# tie, smaller msgId (stale replay) → refused, stays 'mn3'
+out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4001 nowMsgId='mn2' MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId WITH rc, (\$now > coalesce(rc.lastReadAt,0) OR (\$now = coalesce(rc.lastReadAt,0) AND \$nowMsgId > coalesce(rc.lastReadMsgId,''))) AS adv SET rc.lastReadAt = CASE WHEN adv THEN \$now ELSE rc.lastReadAt END, rc.lastReadMsgId = CASE WHEN adv THEN \$nowMsgId ELSE rc.lastReadMsgId END RETURN rc.lastReadAt, rc.lastReadMsgId")
+assert_contains "§9.3 tie with smaller msgId refused (stays 'mn3')" "mn3" "$out"
+
+# backward timestamp → refused (stays 4001)
+out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4000 nowMsgId='zz9' MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId WITH rc, (\$now > coalesce(rc.lastReadAt,0) OR (\$now = coalesce(rc.lastReadAt,0) AND \$nowMsgId > coalesce(rc.lastReadMsgId,''))) AS adv SET rc.lastReadAt = CASE WHEN adv THEN \$now ELSE rc.lastReadAt END, rc.lastReadMsgId = CASE WHEN adv THEN \$nowMsgId ELSE rc.lastReadMsgId END RETURN rc.lastReadAt, rc.lastReadMsgId")
+assert_contains "§9.3 backward advance is a no-op (stays 4001)" "4001" "$out"
+
+# forward → advances to (4002,'mn9')
+out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4002 nowMsgId='mn9' MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId WITH rc, (\$now > coalesce(rc.lastReadAt,0) OR (\$now = coalesce(rc.lastReadAt,0) AND \$nowMsgId > coalesce(rc.lastReadMsgId,''))) AS adv SET rc.lastReadAt = CASE WHEN adv THEN \$now ELSE rc.lastReadAt END, rc.lastReadMsgId = CASE WHEN adv THEN \$nowMsgId ELSE rc.lastReadMsgId END RETURN rc.lastReadAt, rc.lastReadMsgId")
+assert_contains "§9.3 forward advance moves cursor to 4002" "4002" "$out"
+
+# MERGE is idempotent — exactly one ReadCursor for this (member, thread)
+out=$(gq "$WS" "MATCH (rc:ReadCursor {cursorId:'bot1:th2'}) RETURN count(rc) AS n")
+assert_contains "§9.3 exactly one ReadCursor node (MERGE idempotent)" "1" "$out"
+
+# ReadCursor uniqueness constraint blocks a duplicate cursorId
+out=$(gq "$WS" "CREATE (:ReadCursor {cursorId:'bot1:th2'})" 2>&1)
+assert_contains "ReadCursor constraint blocks duplicate cursorId" "unique constraint violation" "$out"
+
+# §9.4 read the cursor back (point lookup on cursorId) — returns the composite pair
+out=$(rq "$WS" "CYPHER cursorId='bot1:th2' MATCH (rc:ReadCursor {cursorId:\$cursorId}) RETURN rc.lastReadAt, rc.lastReadMsgId")
+assert_contains "§9.4 reads back cursor lastReadAt" "4002" "$out"
+assert_contains "§9.4 reads back cursor lastReadMsgId (composite pair)" "mn9" "$out"
+
+prof=$(gp "$WS" "MATCH (rc:ReadCursor {cursorId:'bot1:th2'}) RETURN rc.lastReadAt, rc.lastReadMsgId")
+assert_index_scan "§9.4 cursor read uses ReadCursor.cursorId index" "$prof"
+
+# ── §8: diagnostics / index usage ────────────────────────────────────────────
+
+echo ""
+echo "▶ §8 index usage (GRAPH.PROFILE)"
+
+prof=$(gp "$WS" "MATCH (m:Message {msgId:'m1'}) RETURN m")
+assert_index_scan "Message lookup by msgId uses index" "$prof"
+
+prof=$(gp "$WS" "MATCH (u:User {userId:'u1'}) RETURN u")
+assert_index_scan "User lookup by userId uses index" "$prof"
+
+prof=$(gp "$WS" "MATCH (t:Thread {threadId:'th1'}) RETURN t")
+assert_index_scan "Thread lookup by threadId uses index" "$prof"
+
+prof=$(gp "$WS" "MATCH (c:Channel {channelId:'ch1'}) RETURN c")
+assert_index_scan "Channel lookup by channelId uses index" "$prof"
+
+prof=$(gp "$WS" "MATCH (c:Channel) WHERE c.channelId > '' RETURN c.channelId, c.name, c.createdAt ORDER BY c.createdAt DESC LIMIT 100")
+assert_index_scan "list channels uses index" "$prof"
+
+# ── §ref: reference graph ────────────────────────────────────────────────────
+
+echo ""
+echo "▶ reference graph — WorkflowDef composite constraint"
+
+out=$(gq "$REF" "CREATE (:WorkflowDef {key:'onboard', version:'1', name:'Onboarding', kind:'process'})" 2>&1)
+assert_contains "create WorkflowDef v1" "Nodes created: 1" "$out"
+
+# same key+version must fail
+out=$(gq "$REF" "CREATE (:WorkflowDef {key:'onboard', version:'1', name:'Dupe'})" 2>&1)
+assert_contains "composite constraint blocks duplicate key+version" "unique constraint violation" "$out"
+
+# different version is allowed
+out=$(gq "$REF" "CREATE (:WorkflowDef {key:'onboard', version:'2', name:'Onboarding v2', kind:'process'})" 2>&1)
+assert_contains "different version allowed" "Nodes created: 1" "$out"
+
+# ── §EMITTED: agent answer provenance (K-013) ────────────────────────────────
+#
+# The AI responder posts its answer as the Agent (role derived = assistant) via the
+# §4 subsequent write path, and in the SAME GRAPH.QUERY creates
+# (answer)-[:EMITTED {score, rank}]->(seed) provenance edges to the retrieval seeds.
+# EMITTED rides inside the guarded FOREACH exactly like MENTIONS_MEMBER: same
+# empty-UNWIND CASE guard, so $seedIds=[] is a true no-op and a dupMsg replay writes
+# provenance exactly once. Per-edge score/rank come from map params keyed by the
+# seed's msgId — a map-projection cannot be a CREATE endpoint on this build, so the
+# seed must be a bound node var (collect(DISTINCT s)); the props are looked up via
+# $scoreBy[seed.msgId] / $rankBy[seed.msgId]. Canonical bodies: QUERIES.md §4/§10.
+
+echo ""
+echo "▶ §EMITTED agent answer provenance (K-013)"
+
+# agent bot1 answers into th1 (subsequent path; TAIL=m5), mentions u1,
+# cites m1,m2 as provenance (+ unknown 'nope' which must be skipped)
+out=$(gq "$WS" "CYPHER mentions=['u1'] seedIds=['m1','m2','nope'] scoreBy={m1:0.0,m2:0.006} rankBy={m1:0,m2:1} MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'ag1'}) OPTIONAL MATCH (ua:User {userId:'bot1'}) OPTIONAL MATCH (aa:Agent {agentId:'bot1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems UNWIND (CASE WHEN \$seedIds = [] THEN [null] ELSE \$seedIds END) AS sid OPTIONAL MATCH (s:Message {msgId: sid}) WITH t, tailRel, prev, dup, author, mems, collect(DISTINCT s) AS seeds WITH t, tailRel, prev, dup, author, mems, seeds, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'ag1', text:'grounded answer', role:'assistant', createdAt:6000, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=6000 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) FOREACH (seed IN seeds | CREATE (m)-[:EMITTED {score: \$scoreBy[seed.msgId], rank: \$rankBy[seed.msgId]}]->(seed))) RETURN 'w='+toString(ok)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "§EMITTED agent answer ag1 commits (agent-authored)" "w=true auth=true" "$out"
+
+# K-007 invariant: agent answer reads role assistant, author resolves to an Agent
+out=$(rq "$WS" "MATCH (m:Message {msgId:'ag1'})-[:POSTED_BY]->(a) RETURN m.role, labels(a) AS authorType")
+assert_contains "§EMITTED ag1 role derived assistant (K-007 invariant)" "assistant" "$out"
+assert_contains "§EMITTED ag1 author resolves to Agent" "Agent" "$out"
+
+# provenance read: given the answer, what did it cite (ordered by rank)?
+out=$(rq "$WS" "MATCH (a:Message {msgId:'ag1'})-[e:EMITTED]->(s:Message) RETURN s.msgId, s.text, e.score, e.rank ORDER BY e.rank")
+assert_contains "§EMITTED provenance read cites m1" "m1" "$out"
+assert_contains "§EMITTED provenance read cites m2" "m2" "$out"
+
+# unknown seed 'nope' skipped → exactly 2 provenance edges (collect drops the null)
+out=$(rq "$WS" "MATCH (:Message {msgId:'ag1'})-[e:EMITTED]->() RETURN count(e) AS n")
+assert_contains "§EMITTED ag1 has exactly 2 provenance edges (unknown seed skipped)" "2" "$out"
+
+# each EMITTED edge carries score + rank; the top seed m1 is rank 0
+out=$(rq "$WS" "MATCH (:Message {msgId:'ag1'})-[e:EMITTED]->(:Message {msgId:'m1'}) RETURN 'rank='+toString(e.rank)+' hasScore='+toString(e.score IS NOT NULL) AS p")
+assert_contains "§EMITTED edge carries rank + score props" "rank=0 hasScore=true" "$out"
+
+# reverse read: given a seed, which answers cited it?
+out=$(rq "$WS" "MATCH (a:Message)-[e:EMITTED]->(:Message {msgId:'m1'}) RETURN a.msgId, e.rank")
+assert_contains "§EMITTED reverse read: m1 cited by ag1" "ag1" "$out"
+
+# empty seedIds=[] is a true no-op — a non-answer message still commits with ZERO
+# EMITTED edges (the CASE guard keeps the write itself alive)
+out=$(gq "$WS" "CYPHER mentions=[] seedIds=[] scoreBy={} rankBy={} MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'ag2'}) OPTIONAL MATCH (ua:User {userId:'bot1'}) OPTIONAL MATCH (aa:Agent {agentId:'bot1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems UNWIND (CASE WHEN \$seedIds = [] THEN [null] ELSE \$seedIds END) AS sid OPTIONAL MATCH (s:Message {msgId: sid}) WITH t, tailRel, prev, dup, author, mems, collect(DISTINCT s) AS seeds WITH t, tailRel, prev, dup, author, mems, seeds, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'ag2', text:'no provenance msg', role:'assistant', createdAt:6001, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=6001 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) FOREACH (seed IN seeds | CREATE (m)-[:EMITTED {score: \$scoreBy[seed.msgId], rank: \$rankBy[seed.msgId]}]->(seed))) RETURN 'w='+toString(ok) AS status")
+assert_contains "§EMITTED empty seedIds=[] still commits the write" "w=true" "$out"
+out=$(rq "$WS" "MATCH (:Message {msgId:'ag2'})-[e:EMITTED]->() RETURN count(e) AS n")
+assert_contains "§EMITTED empty seedIds=[] creates zero provenance edges" "0" "$out"
+
+# dupMsg replay of ag1 → whole write no-ops; provenance stays exactly 2 (exactly-once)
+out=$(gq "$WS" "CYPHER mentions=['u1'] seedIds=['m1','m2'] scoreBy={m1:0.0,m2:0.006} rankBy={m1:0,m2:1} MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'ag1'}) OPTIONAL MATCH (ua:User {userId:'bot1'}) OPTIONAL MATCH (aa:Agent {agentId:'bot1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems UNWIND (CASE WHEN \$seedIds = [] THEN [null] ELSE \$seedIds END) AS sid OPTIONAL MATCH (s:Message {msgId: sid}) WITH t, tailRel, prev, dup, author, mems, collect(DISTINCT s) AS seeds WITH t, tailRel, prev, dup, author, mems, seeds, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'ag1', text:'grounded answer', role:'assistant', createdAt:6000, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=6000 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) FOREACH (seed IN seeds | CREATE (m)-[:EMITTED {score: \$scoreBy[seed.msgId], rank: \$rankBy[seed.msgId]}]->(seed))) RETURN 'w='+toString(ok)+' dup='+toString(dup IS NOT NULL) AS status")
+assert_contains "§EMITTED dupMsg replay no-ops (idempotent)" "w=false dup=true" "$out"
+out=$(rq "$WS" "MATCH (:Message {msgId:'ag1'})-[e:EMITTED]->() RETURN count(e) AS n")
+assert_contains "§EMITTED provenance written exactly once (still 2 after replay)" "2" "$out"
+
+# provenance read anchors on the Message.msgId index (no label scan)
+prof=$(gp "$WS" "MATCH (a:Message {msgId:'ag1'})-[e:EMITTED]->(s:Message) RETURN s.msgId, e.score, e.rank ORDER BY e.rank")
+assert_index_scan "§EMITTED provenance read uses Message.msgId index" "$prof"
+
+# ── §11: workflow definitions & snapshots (M3 Slice 1) ───────────────────────
+#
+# Canonical bodies: QUERIES.md §11. Defs live in `reference`; publishing then
+# materializing into ws:{id} are the two write paths. Step identity is the
+# synthetic stepUid = "{defKey}:{version}:{stepKey}" (index + UNIQUE, both graphs);
+# HAS_STEP gives the def/snapshot an index-anchored handle on all its steps (the
+# §B8 STARTS-WITH-degrades-to-label-scan resolution). config/guard are opaque.
+# Distinct def keys (wf_review / wf_triage) keep these independent of the §ref
+# WorkflowDef composite-constraint block above.
+
+# publish query (reference) — the K-020 write path, verbatim from QUERIES.md §11.1
+PUBLISH='CYPHER key="wf_review" version="1" name="Review" kind="process" startKey="start" steps=[{key:"start",type:"message",config:"{}"},{key:"gather",type:"human",config:"{\"form\":\"x\"}"},{key:"decide",type:"decision",config:"{}"},{key:"done",type:"message",config:"{}"}] transitions=[{from:"start",to:"gather",on:"submit",guard:"",order:0},{from:"gather",to:"decide",on:"submit",guard:"",order:0},{from:"decide",to:"done",on:"approve",guard:"ctx.ok",order:0},{from:"decide",to:"gather",on:"reject",guard:"",order:1}]
+MERGE (d:WorkflowDef {key: $key, version: $version}) ON CREATE SET d.name = $name, d.kind = $kind
+WITH d UNWIND $steps AS s MERGE (st:Step {stepUid: $key + ":" + $version + ":" + s.key}) ON CREATE SET st.key = s.key, st.type = s.type, st.config = s.config MERGE (d)-[:HAS_STEP]->(st)
+WITH d, count(st) AS stepCount MATCH (start:Step {stepUid: $key + ":" + $version + ":" + $startKey}) MERGE (d)-[:START]->(start)
+WITH d, stepCount UNWIND $transitions AS tr MATCH (from:Step {stepUid: $key + ":" + $version + ":" + tr.from}) MATCH (to:Step {stepUid: $key + ":" + $version + ":" + tr.to}) MERGE (from)-[rel:TRANSITION {on: tr.on, order: tr.order}]->(to) ON CREATE SET rel.guard = tr.guard
+WITH d, stepCount, count(rel) AS transitionCount RETURN d.key AS key, d.version AS version, stepCount, transitionCount'
+
+echo ""
+echo "▶ §11 workflow definitions (reference — K-020)"
+
+# publish authors the full subgraph: 5 nodes (def + 4 steps), 9 rels (4 HAS_STEP + START + 4 TRANSITION)
+out=$(gq "$REF" "$PUBLISH")
+assert_contains "§11.1 publish wf_review v1 authors 5 nodes"       "Nodes created: 5"          "$out"
+assert_contains "§11.1 publish wf_review v1 authors 9 rels"        "Relationships created: 9"  "$out"
+
+out=$(gq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(s:Step) RETURN count(s) AS n")
+assert_contains "§11.1 publish creates 4 steps (HAS_STEP)" "4" "$out"
+out=$(gq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:START]->(s:Step) RETURN count(s) AS n, collect(s.key) AS startKey")
+assert_contains "§11.1 publish creates exactly one START edge" "1" "$out"
+assert_contains "§11.1 START points at 'start' step" "start" "$out"
+out=$(gq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(:Step)-[r:TRANSITION]->(:Step) RETURN count(r) AS n")
+assert_contains "§11.1 publish creates 4 TRANSITION edges" "4" "$out"
+
+# stepUid UNIQUE constraint (reference) blocks a duplicate step identity
+out=$(gq "$REF" "CREATE (:Step {stepUid:'wf_review:1:start', key:'start', type:'message', config:'{}'})" 2>&1)
+assert_contains "§11 Step.stepUid constraint blocks duplicate (reference)" "unique constraint violation" "$out"
+
+# idempotent re-publish is a structural no-op (0 nodes/rels created)
+out=$(gq "$REF" "$PUBLISH")
+assert_not_contains "§11.1 idempotent re-publish creates no nodes" "Nodes created" "$out"
+assert_not_contains "§11.1 idempotent re-publish creates no rels"  "Relationships created" "$out"
+out=$(gq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(s:Step) RETURN count(s) AS n")
+assert_contains "§11.1 re-publish left exactly 4 steps" "4" "$out"
+
+# read-def subgraph (§11.2): meta + steps, then transitions
+out=$(rq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'}) OPTIONAL MATCH (d)-[:START]->(start:Step) OPTIONAL MATCH (d)-[:HAS_STEP]->(s:Step) RETURN d.name AS name, d.kind AS kind, start.key AS startKey, collect(DISTINCT {key:s.key, type:s.type, config:s.config}) AS steps")
+assert_contains "§11.2a read-def returns startKey 'start'" "start" "$out"
+assert_contains "§11.2a read-def returns kind 'process'"   "process" "$out"
+assert_contains "§11.2a read-def carries a step (gather)"   "gather" "$out"
+out=$(rq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step) RETURN collect({from:from.key, to:to.key, on:tr.on, guard:tr.guard, order:tr.order}) AS transitions")
+assert_contains "§11.2b read-def transitions include 'approve'" "approve" "$out"
+assert_contains "§11.2b read-def transitions carry guard verbatim (ctx.ok)" "ctx.ok" "$out"
+
+# publish a v2 (meta-only MERGE) so get-latest has something to rank
+gq "$REF" 'CYPHER key="wf_review" version="2" name="Review v2" kind="process" MERGE (d:WorkflowDef {key:$key,version:$version}) ON CREATE SET d.name=$name, d.kind=$kind RETURN d.version' > /dev/null
+# publish a second def key for the list test
+gq "$REF" 'CYPHER key="wf_triage" version="1" name="Triage" kind="conversation" MERGE (d:WorkflowDef {key:$key,version:$version}) ON CREATE SET d.name=$name, d.kind=$kind RETURN d.version' > /dev/null
+
+out=$(rq "$REF" "MATCH (d:WorkflowDef {key:'wf_review'}) RETURN d.key, d.version, d.name ORDER BY d.version DESC LIMIT 1")
+assert_contains "§11.3 get-def latest returns version 2" "2" "$out"
+assert_contains "§11.3 get-def latest returns 'Review v2'" "Review v2" "$out"
+out=$(rq "$REF" "MATCH (d:WorkflowDef {key:'wf_review', version:'1'}) RETURN d.name, d.kind")
+assert_contains "§11.3 get-def specific version 1 returns 'Review'" "Review" "$out"
+out=$(rq "$REF" "CYPHER limit=50 MATCH (d:WorkflowDef) WHERE d.key > '' RETURN d.key, d.version, d.name, d.kind ORDER BY d.key, d.version DESC LIMIT \$limit")
+assert_contains "§11.3 list-defs includes wf_review" "wf_review" "$out"
+assert_contains "§11.3 list-defs includes wf_triage" "wf_triage" "$out"
+
+# PROFILE: reads anchor on WorkflowDef.key index, no label scan
+prof=$(gp "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(s:Step) RETURN s.key, s.type")
+assert_index_scan "§11.2a read-def steps anchors on WorkflowDef index" "$prof"
+prof=$(gp "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step) RETURN from.key, to.key, tr.on")
+assert_index_scan "§11.2b read-def transitions anchors on WorkflowDef index" "$prof"
+prof=$(gp "$REF" "CYPHER limit=50 MATCH (d:WorkflowDef) WHERE d.key > '' RETURN d.key, d.version ORDER BY d.key, d.version DESC LIMIT \$limit")
+assert_index_scan "§11.3 list-defs uses WorkflowDef.key index" "$prof"
+
+# ── §11 materialization (workspace — K-021) ──────────────────────────────────
+#
+# Same shape scoped to ws:{id} with the WorkflowDefSnapshot root label. In the app
+# this is two-phase (read reference §11.2 → write workspace §11.4); the test drives
+# the write directly with the def structure as params.
+
+MATERIALIZE='CYPHER key="wf_review" version="1" name="Review" kind="process" startKey="start" steps=[{key:"start",type:"message",config:"{}"},{key:"gather",type:"human",config:"{\"form\":\"x\"}"},{key:"decide",type:"decision",config:"{}"},{key:"done",type:"message",config:"{}"}] transitions=[{from:"start",to:"gather",on:"submit",guard:"",order:0},{from:"gather",to:"decide",on:"submit",guard:"",order:0},{from:"decide",to:"done",on:"approve",guard:"ctx.ok",order:0},{from:"decide",to:"gather",on:"reject",guard:"",order:1}]
+MERGE (snap:WorkflowDefSnapshot {key: $key, version: $version}) ON CREATE SET snap.name = $name, snap.kind = $kind
+WITH snap UNWIND $steps AS s MERGE (st:Step {stepUid: $key + ":" + $version + ":" + s.key}) ON CREATE SET st.key = s.key, st.type = s.type, st.config = s.config MERGE (snap)-[:HAS_STEP]->(st)
+WITH snap, count(st) AS stepCount MATCH (start:Step {stepUid: $key + ":" + $version + ":" + $startKey}) MERGE (snap)-[:START]->(start)
+WITH snap, stepCount UNWIND $transitions AS tr MATCH (from:Step {stepUid: $key + ":" + $version + ":" + tr.from}) MATCH (to:Step {stepUid: $key + ":" + $version + ":" + tr.to}) MERGE (from)-[rel:TRANSITION {on: tr.on, order: tr.order}]->(to) ON CREATE SET rel.guard = tr.guard
+WITH snap, stepCount, count(rel) AS transitionCount RETURN snap.key AS key, snap.version AS version, stepCount, transitionCount'
+
+echo ""
+echo "▶ §11 snapshot materialization (workspace — K-021)"
+
+out=$(gq "$WS" "$MATERIALIZE")
+assert_contains "§11.4 materialize wf_review v1 authors 5 local nodes" "Nodes created: 5"         "$out"
+assert_contains "§11.4 materialize wf_review v1 authors 9 local rels"  "Relationships created: 9" "$out"
+
+out=$(gq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:HAS_STEP]->(s:Step) RETURN count(s) AS n")
+assert_contains "§11.4 materialize creates 4 local steps" "4" "$out"
+out=$(gq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:START]->(s:Step) RETURN count(s) AS n")
+assert_contains "§11.4 materialize creates one local START" "1" "$out"
+out=$(gq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:HAS_STEP]->(:Step)-[r:TRANSITION]->(:Step) RETURN count(r) AS n")
+assert_contains "§11.4 materialize creates 4 local TRANSITION edges" "4" "$out"
+
+# workspace composite {key,version} constraint (not asserted before this slice)
+out=$(gq "$WS" "CREATE (:WorkflowDefSnapshot {key:'wf_review', version:'1', name:'dupe'})" 2>&1)
+assert_contains "§11 WorkflowDefSnapshot composite constraint blocks dup {key,version}" "unique constraint violation" "$out"
+# workspace Step.stepUid constraint
+out=$(gq "$WS" "CREATE (:Step {stepUid:'wf_review:1:start', key:'start', type:'message', config:'{}'})" 2>&1)
+assert_contains "§11 Step.stepUid constraint blocks duplicate (workspace)" "unique constraint violation" "$out"
+
+# read-snapshot subgraph (§11.5)
+out=$(rq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'}) OPTIONAL MATCH (snap)-[:START]->(start:Step) OPTIONAL MATCH (snap)-[:HAS_STEP]->(s:Step) RETURN snap.name AS name, snap.kind AS kind, start.key AS startKey, collect(DISTINCT {key:s.key, type:s.type, config:s.config}) AS steps")
+assert_contains "§11.5 read-snapshot returns startKey 'start'" "start" "$out"
+assert_contains "§11.5 read-snapshot carries a step (decide)"  "decide" "$out"
+out=$(rq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step) RETURN collect({from:from.key, to:to.key, on:tr.on, guard:tr.guard, order:tr.order}) AS transitions")
+assert_contains "§11.5 read-snapshot transitions include 'approve'" "approve" "$out"
+
+# list / get snapshot (§11.6)
+out=$(rq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review', version:'1'}) RETURN snap.name, snap.kind")
+assert_contains "§11.6 get-snapshot specific version returns 'Review'" "Review" "$out"
+out=$(rq "$WS" "CYPHER limit=50 MATCH (snap:WorkflowDefSnapshot) WHERE snap.key > '' RETURN snap.key, snap.version, snap.name ORDER BY snap.key, snap.version DESC LIMIT \$limit")
+assert_contains "§11.6 list-snapshots includes wf_review" "wf_review" "$out"
+
+# idempotent re-materialize is a structural no-op
+out=$(gq "$WS" "$MATERIALIZE")
+assert_not_contains "§11.4 idempotent re-materialize creates no nodes" "Nodes created" "$out"
+assert_not_contains "§11.4 idempotent re-materialize creates no rels"  "Relationships created" "$out"
+
+# PROFILE: snapshot reads anchor on WorkflowDefSnapshot.key index, no label scan
+prof=$(gp "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:HAS_STEP]->(s:Step) RETURN s.key, s.type")
+assert_index_scan "§11.5 read-snapshot steps anchors on WorkflowDefSnapshot index" "$prof"
+prof=$(gp "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step) RETURN from.key, to.key, tr.on")
+assert_index_scan "§11.5 read-snapshot transitions anchors on WorkflowDefSnapshot index" "$prof"
+
+# ── §12: workflow execution — runs, step-runs & traces (M3 executor — K-022) ──
+#
+# Canonical bodies: QUERIES.md §12 (1:1 with repository.py, U3). Runs against the
+# wf_review snapshot materialized into ws:test by the §11 block above (steps
+# start→gather→decide→done). Uses th1 + m1 as the run's thread + trigger message.
+# Every state-move is a single GRAPH.QUERY; each read anchors on an index (asserted
+# via PROFILE). PRODUCED (StepRun→Message) is DISTINCT from EMITTED (Message→Message,
+# §10) — D2. record_step_and_advance is the M4 tail-anchored O(1) atomic advance.
+
+echo ""
+echo "▶ §12 workflow execution — start_run"
+
+# 12.1 start_run: create wr1 OF_DEF wf_review, AT_STEP start, TRIGGERED_BY m1
+out=$(gq "$WS" 'CYPHER runId="wr1" defKey="wf_review" defVersion="1" startedAt=7000 ctx="{}" trace=true maxSteps=12 triggerMsgId="m1" MATCH (snap:WorkflowDefSnapshot {key:$defKey, version:$defVersion})-[:START]->(start:Step) MATCH (trigger:Message {msgId:$triggerMsgId}) CREATE (r:WorkflowRun {runId:$runId, defKey:$defKey, defVersion:$defVersion, status:"running", startedAt:$startedAt, ctx:$ctx, trace:$trace, maxSteps:$maxSteps, stepCount:0, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger) RETURN "start="+start.key+" status="+r.status+" sc="+toString(r.stepCount) AS s')
+assert_contains "§12.1 start_run creates wr1 at START step, running, stepCount 0" "start=start status=running sc=0" "$out"
+
+# start subgraph: OF_DEF + AT_STEP + TRIGGERED_BY all present
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"}) OPTIONAL MATCH (r)-[:OF_DEF]->(d:WorkflowDefSnapshot) OPTIONAL MATCH (r)-[:AT_STEP]->(a:Step) OPTIONAL MATCH (r)-[:TRIGGERED_BY]->(m:Message) RETURN "def="+d.key+" at="+a.key+" trig="+m.msgId AS s')
+assert_contains "§12.1 start subgraph: OF_DEF + AT_STEP + TRIGGERED_BY" "def=wf_review at=start trig=m1" "$out"
+
+# start_run anchors on indexes (snapshot.key + message.msgId), no label scan
+prof=$(gp "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) RETURN start.key, trigger.msgId')
+assert_index_scan "§12.1 start_run anchoring MATCHes use indexes" "$prof"
+
+# runId UNIQUE constraint backstop
+out=$(gq "$WS" 'CREATE (:WorkflowRun {runId:"wr1"})' 2>&1)
+assert_contains "§12.1 WorkflowRun.runId constraint blocks duplicate" "unique constraint violation" "$out"
+
+echo ""
+echo "▶ §12.2 record_step_and_advance (M4 tail-anchored atomic advance)"
+
+# resolvedModel/modelSource/modelFallback (K-042 Landing 2, FR-8, -graph.md §1.4) ride the
+# same CREATE as three additional nullable properties — NULL for the pre-existing
+# advance1/advance2 calls below (a non-LLM step's shape, unchanged), real values on the
+# dedicated advance3 case further down.
+ADV='MATCH (r:WorkflowRun {runId:$runId})-[atRel:AT_STEP]->(cur:Step) MATCH (to:Step {stepUid:$toStepUid}) OPTIONAL MATCH (r)-[lastRel:LAST_STEP_RUN]->(prevSR:StepRun) CREATE (sr:StepRun {stepRunId:$stepRunId, stepKey:cur.key, status:$stepStatus, startedAt:$startedAt, endedAt:$endedAt, input:$input, output:$output, resolvedModel:$resolvedModel, modelSource:$modelSource, modelFallback:$modelFallback}) CREATE (r)-[:HAS_STEP_RUN]->(sr) CREATE (sr)-[:RAN]->(cur) FOREACH (p IN CASE WHEN prevSR IS NULL THEN [] ELSE [prevSR] END | CREATE (p)-[:NEXT]->(sr)) FOREACH (lr IN CASE WHEN lastRel IS NULL THEN [] ELSE [lastRel] END | DELETE lr) CREATE (r)-[:LAST_STEP_RUN]->(sr) DELETE atRel CREATE (r)-[:AT_STEP]->(to) SET r.stepCount = r.stepCount + 1 RETURN "sc="+toString(r.stepCount)+" ran="+cur.key+" sr="+sr.stepRunId AS s'
+
+# advance 1: start ran -> move to gather (first advance: seeds the tail, no NEXT)
+out=$(gq "$WS" "CYPHER runId=\"wr1\" stepRunId=\"wsr1\" stepStatus=\"done\" startedAt=7001 endedAt=7002 input=\"{}\" output=\"start out\" toStepUid=\"wf_review:1:gather\" resolvedModel=null modelSource=null modelFallback=null $ADV")
+assert_contains "§12.2 advance 1: start ran, stepCount 1" "sc=1 ran=start sr=wsr1" "$out"
+
+# state after advance 1: AT_STEP moved to gather (exactly one), tail=wsr1, zero NEXT
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[:AT_STEP]->(a:Step) WITH r, count(a) AS atc, collect(a.key)[0] AS atk MATCH (r)-[:LAST_STEP_RUN]->(l:StepRun) RETURN "atc="+toString(atc)+" at="+atk+" tail="+l.stepRunId AS s')
+assert_contains "§12.2 after adv1: exactly one AT_STEP=gather, tail=wsr1" "atc=1 at=gather tail=wsr1" "$out"
+out=$(gq "$WS" 'MATCH (:StepRun)-[n:NEXT]->(:StepRun) RETURN count(n) AS n')
+assert_contains "§12.2 after adv1: zero NEXT edges (first step-run)" "0" "$out"
+
+# advance 2: gather ran -> move to decide (tail relink: NEXT wsr1->wsr2, tail moves)
+out=$(gq "$WS" "CYPHER runId=\"wr1\" stepRunId=\"wsr2\" stepStatus=\"done\" startedAt=7003 endedAt=7004 input=\"{}\" output=\"gather out\" toStepUid=\"wf_review:1:decide\" resolvedModel=null modelSource=null modelFallback=null $ADV")
+assert_contains "§12.2 advance 2: gather ran, stepCount 2" "sc=2 ran=gather sr=wsr2" "$out"
+
+# state after advance 2: AT_STEP=decide, NEXT wsr1->wsr2, exactly one tail=wsr2, 2 HAS_STEP_RUN
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[:AT_STEP]->(a:Step) RETURN a.key AS at')
+assert_contains "§12.2 after adv2: AT_STEP moved to decide" "decide" "$out"
+out=$(gq "$WS" 'MATCH (a:StepRun)-[:NEXT]->(b:StepRun) RETURN "next="+a.stepRunId+"->"+b.stepRunId AS s')
+assert_contains "§12.2 after adv2: NEXT appended wsr1->wsr2" "next=wsr1->wsr2" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[l:LAST_STEP_RUN]->(sr) RETURN "tailc="+toString(count(l))+" tail="+collect(sr.stepRunId)[0] AS s')
+assert_contains "§12.2 after adv2: exactly one tail, moved to wsr2" "tailc=1 tail=wsr2" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[:HAS_STEP_RUN]->(sr) RETURN count(sr) AS n')
+assert_contains "§12.2 after adv2: 2 HAS_STEP_RUN members" "2" "$out"
+out=$(gq "$WS" 'MATCH (sr:StepRun)-[:RAN]->(s:Step) RETURN collect(sr.stepRunId+":"+s.key) AS ran ORDER BY ran')
+assert_contains "§12.2 RAN edges: wsr1 ran start" "wsr1:start" "$out"
+assert_contains "§12.2 RAN edges: wsr2 ran gather" "wsr2:gather" "$out"
+
+# resolvedModel/modelSource/modelFallback (K-042 Landing 2, FR-8) — a dedicated throwaway
+# run (never touches wr1's stepCount/AT_STEP narrative the rest of this file pins on).
+gq "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"wr_model", defKey:"wf_review", defVersion:"1", status:"running", startedAt:7000, ctx:"{}", trace:false, maxSteps:12, stepCount:0, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger)' > /dev/null
+
+# advance with real resolvedModel/modelSource/modelFallback values — the LLM-executing-step shape
+out=$(gq "$WS" "CYPHER runId=\"wr_model\" stepRunId=\"wmsr1\" stepStatus=\"done\" startedAt=7001 endedAt=7002 input=\"{}\" output=\"o\" toStepUid=\"wf_review:1:gather\" resolvedModel=\"lmstudio/qwen3-4b\" modelSource=\"step\" modelFallback=true $ADV")
+assert_contains "§12.2 wr_model advance 1: start ran, stepCount 1" "sc=1 ran=start sr=wmsr1" "$out"
+
+# a StepRun created WITH resolvedModel/modelSource/modelFallback returns them, and keys()
+# includes all three
+out=$(gq "$WS" 'MATCH (sr:StepRun {stepRunId:"wmsr1"}) RETURN "rm="+sr.resolvedModel+" ms="+sr.modelSource+" mf="+toString(sr.modelFallback) AS s, keys(sr) AS k')
+assert_contains "§12.2 wmsr1 (LLM step) carries resolvedModel/modelSource/modelFallback" "rm=lmstudio/qwen3-4b ms=step mf=true" "$out"
+assert_contains "§12.2 wmsr1 keys() includes resolvedModel" "resolvedModel" "$out"
+assert_contains "§12.2 wmsr1 keys() includes modelSource" "modelSource" "$out"
+assert_contains "§12.2 wmsr1 keys() includes modelFallback" "modelFallback" "$out"
+
+# advance 2 in the SAME throwaway run with NULL model params — the non-LLM-step shape.
+# OMITS the three properties entirely, never writes a literal null (-graph.md §1.4's
+# verified NULL-omits-property behaviour, the regression case for FalkorDB's generic
+# `CREATE {prop: NULL}` handling)
+out=$(gq "$WS" "CYPHER runId=\"wr_model\" stepRunId=\"wmsr2\" stepStatus=\"done\" startedAt=7003 endedAt=7004 input=\"{}\" output=\"o2\" toStepUid=\"wf_review:1:decide\" resolvedModel=null modelSource=null modelFallback=null $ADV")
+assert_contains "§12.2 wr_model advance 2: gather ran, stepCount 2" "sc=2 ran=gather sr=wmsr2" "$out"
+out=$(gq "$WS" 'MATCH (sr:StepRun {stepRunId:"wmsr2"}) RETURN keys(sr) AS k')
+assert_contains "§12.2 wmsr2 (NULL model params) keys() query succeeds" "k" "$out"
+assert_not_contains "§12.2 wmsr2 (NULL model params) keys() omits resolvedModel" "resolvedModel" "$out"
+assert_not_contains "§12.2 wmsr2 (NULL model params) keys() omits modelSource" "modelSource" "$out"
+assert_not_contains "§12.2 wmsr2 (NULL model params) keys() omits modelFallback" "modelFallback" "$out"
+
+# §12.8 read_step_runs-shaped projection surfaces the three new columns too (not just a
+# raw MATCH on the node) — checked here, before wr_model's teardown.
+out=$(gq "$WS" 'CYPHER runId="wr_model" MATCH (r:WorkflowRun {runId:$runId})-[:HAS_STEP_RUN]->(sr:StepRun) OPTIONAL MATCH (pv:StepRun)-[:NEXT]->(sr) WITH sr, pv WHERE pv IS NULL MATCH (sr)-[:NEXT*0..]->(x:StepRun) RETURN x.stepRunId AS stepRunId, x.resolvedModel AS resolvedModel, x.modelSource AS modelSource, x.modelFallback AS modelFallback ORDER BY x.startedAt')
+assert_contains "§12.8 wr_model read projection surfaces resolvedModel" "lmstudio/qwen3-4b" "$out"
+assert_contains "§12.8 wr_model read projection surfaces modelSource" "step" "$out"
+
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr_model"}) OPTIONAL MATCH (r)-[:HAS_STEP_RUN]->(sr) DETACH DELETE r, sr' > /dev/null
+
+# advance is edge-anchored: index scan on WorkflowRun + Step, no label scan (profiled on a throwaway run)
+gq "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"wr_prof", defKey:"wf_review", defVersion:"1", status:"running", startedAt:7000, ctx:"{}", trace:false, maxSteps:12, stepCount:0, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger)' > /dev/null
+prof=$(gp "$WS" "CYPHER runId=\"wr_prof\" stepRunId=\"wpsr1\" stepStatus=\"done\" startedAt=7001 endedAt=7002 input=\"{}\" output=\"o\" toStepUid=\"wf_review:1:gather\" resolvedModel=null modelSource=null modelFallback=null $ADV")
+assert_index_scan "§12.2 record_step_and_advance is edge/index-anchored" "$prof"
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr_prof"}) OPTIONAL MATCH (r)-[:HAS_STEP_RUN]->(sr) DETACH DELETE r, sr' > /dev/null
+
+echo ""
+echo "▶ §12.3/§12.4 suspend / resume — guarded single-flight CAS"
+
+# 12.3 suspend_run: running -> waiting
+out=$(gq "$WS" 'CYPHER runId="wr1" threadId="th1" MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "running" SET r.status="waiting", r.waitingThreadId=$threadId RETURN "status="+r.status AS s')
+assert_contains "§12.3 suspend_run CAS running->waiting" "status=waiting" "$out"
+
+# suspend again (already waiting) -> zero rows (CAS no-op)
+out=$(gq "$WS" 'CYPHER runId="wr1" threadId="th1" MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "running" SET r.status="waiting", r.waitingThreadId=$threadId RETURN "status="+r.status AS s')
+assert_not_contains "§12.3 second suspend is a no-op (zero rows)" "status=waiting" "$out"
+
+# 12.9 find_waiting_run_for_thread: th1 -> wr1, index-anchored
+out=$(gq "$WS" 'CYPHER threadId="th1" MATCH (r:WorkflowRun {status:"waiting"}) WHERE r.waitingThreadId = $threadId RETURN r.runId AS runId LIMIT 1')
+assert_contains "§12.9 find_waiting_run_for_thread finds wr1" "wr1" "$out"
+prof=$(gp "$WS" 'CYPHER threadId="th1" MATCH (r:WorkflowRun {status:"waiting"}) WHERE r.waitingThreadId = $threadId RETURN r.runId LIMIT 1')
+assert_index_scan "§12.9 resume lookup anchors on WorkflowRun.status index (no label scan)" "$prof"
+
+# 12.4 resume_run: waiting -> running (single-flight); bumps ctxVersion (K-097), compares nothing
+RESUME='MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "waiting" SET r.status="running", r.waitingThreadId="", r.ctxVersion = coalesce(r.ctxVersion, 0) + 1 RETURN "status="+r.status AS s'
+out=$(gq "$WS" "CYPHER runId=\"wr1\" $RESUME")
+assert_contains "§12.4 resume_run CAS waiting->running (winner)" "status=running" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"}) RETURN "v="+coalesce(toString(r.ctxVersion),"absent") AS s')
+assert_contains "§12.4 resume_run bumps ctxVersion from absent to 1" "v=1" "$out"
+
+# concurrent second resume -> zero rows (single-flight guard), and no second bump
+out=$(gq "$WS" "CYPHER runId=\"wr1\" $RESUME")
+assert_not_contains "§12.4 second concurrent resume is a no-op (single-flight)" "status=running" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"}) RETURN "v="+coalesce(toString(r.ctxVersion),"absent") AS s')
+assert_contains "§12.4 the refused resume did not bump ctxVersion" "v=1" "$out"
+
+echo ""
+echo "▶ §12.12/§12.13 untriggered start + resume-with-ctx (K-024 process flow, U0)"
+
+# A `kind:'process'` run has no chat trigger message and no thread: it is started by
+# REST/API (§12.12) and advanced by a human/signal input that rides INSIDE the resume
+# CAS (§12.13, decision D-F). Both are additive — no new label, property, index or DDL.
+
+# 12.12 start_run_untriggered: §12.1 minus the Message anchor and the TRIGGERED_BY edge
+START_UNTRIG='MATCH (snap:WorkflowDefSnapshot {key:$defKey, version:$defVersion})-[:START]->(start:Step) CREATE (r:WorkflowRun {runId:$runId, defKey:$defKey, defVersion:$defVersion, status:"running", startedAt:$startedAt, ctx:$ctx, trace:$trace, maxSteps:$maxSteps, stepCount:0, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) RETURN "start="+start.key+" status="+r.status+" sc="+toString(r.stepCount) AS s'
+
+out=$(gq "$WS" "CYPHER runId=\"wru1\" defKey=\"wf_review\" defVersion=\"1\" startedAt=7300 ctx=\"{}\" trace=false maxSteps=24 $START_UNTRIG")
+assert_contains "§12.12 start_run_untriggered creates wru1 at START, running, stepCount 0" "start=start status=running sc=0" "$out"
+
+# the run subgraph is OF_DEF + AT_STEP and NOTHING else — no TRIGGERED_BY, no Message
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) OPTIONAL MATCH (r)-[:OF_DEF]->(d:WorkflowDefSnapshot) OPTIONAL MATCH (r)-[:AT_STEP]->(a:Step) OPTIONAL MATCH (r)-[:TRIGGERED_BY]->(m:Message) RETURN "trigc="+toString(count(m))+" def="+collect(d.key)[0]+" at="+collect(a.key)[0] AS s')
+assert_contains "§12.12 untriggered subgraph: OF_DEF + AT_STEP, zero TRIGGERED_BY" "trigc=0 def=wf_review at=start" "$out"
+
+# untriggered start also parks with waitingThreadId '' (there is no thread — F-5/F-6)
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) RETURN "wt=["+r.waitingThreadId+"] ms="+toString(r.maxSteps) AS s')
+assert_contains "§12.12 untriggered run starts with empty waitingThreadId and its own budget" "wt=[] ms=24" "$out"
+
+# snapshot without a START -> zero rows AND nothing written (single-anchor contract)
+gq "$WS" 'CREATE (:WorkflowDefSnapshot {key:"wf_nostart", version:"1", name:"No Start", kind:"process"})' > /dev/null
+out=$(gq "$WS" "CYPHER runId=\"wru_ghost\" defKey=\"wf_nostart\" defVersion=\"1\" startedAt=7301 ctx=\"{}\" trace=false maxSteps=24 $START_UNTRIG")
+assert_not_contains "§12.12 snapshot without START -> zero rows" "status=running" "$out"
+assert_not_contains "§12.12 snapshot without START writes nothing" "Nodes created" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru_ghost"}) RETURN count(r) AS n')
+assert_contains "§12.12 no WorkflowRun left behind by the missed anchor" "0" "$out"
+
+# PROFILE: the single anchor is a Node By Index Scan on WorkflowDefSnapshot.key
+prof=$(gp "$WS" "CYPHER runId=\"wru_prof\" defKey=\"wf_review\" defVersion=\"1\" startedAt=7302 ctx=\"{}\" trace=false maxSteps=24 $START_UNTRIG")
+assert_index_scan "§12.12 start_run_untriggered anchors on WorkflowDefSnapshot index" "$prof"
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru_prof"}) DETACH DELETE r' > /dev/null
+
+# 12.13 resume_run_with_ctx: the versioned CAS (K-097) — compares coalesce(ctxVersion, 0)
+# with the version the service read together with the ctx it merged onto, writes the
+# merged ctx inside the flip (D-F), and bumps the version
+RESUME_CTX='MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "waiting" AND coalesce(r.ctxVersion, 0) = $ctxVersion SET r.status="running", r.waitingThreadId="", r.ctx=$ctx, r.ctxVersion = $ctxVersion + 1 RETURN "status="+r.status+" ctx="+r.ctx AS s'
+VERSION_OF='MATCH (r:WorkflowRun {runId:"wru1"}) RETURN "v="+coalesce(toString(r.ctxVersion),"absent")+" ctx="+r.ctx AS s'
+
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) SET r.status="waiting", r.waitingThreadId="", r.ctx="{\"request\":1}"' > /dev/null
+out=$(gq "$WS" "$VERSION_OF")
+assert_contains "§12.13 a START_UNTRIG run carries no ctxVersion" "v=absent" "$out"
+out=$(gq "$WS" "CYPHER runId=\"wru1\" ctxVersion=0 ctx=\"{\\\"request\\\":1,\\\"decision\\\":\\\"approve\\\"}\" $RESUME_CTX")
+assert_contains "§12.13 CAS at ctxVersion=0 on a run with no ctxVersion flips AND writes ctx" 'status=running ctx={"request":1,"decision":"approve"}' "$out"
+out=$(gq "$WS" "$VERSION_OF")
+assert_contains "§12.13 the winning CAS sets the raw ctxVersion to 1" "v=1" "$out"
+
+# the CAS loser on a running run (version matches): the status guard alone refuses it
+out=$(gq "$WS" "CYPHER runId=\"wru1\" ctxVersion=1 ctx=\"{\\\"decision\\\":\\\"LOSER\\\"}\" $RESUME_CTX")
+assert_not_contains "§12.13 resume-with-ctx of a non-waiting run is zero rows" "status=running" "$out"
+out=$(gq "$WS" "$VERSION_OF")
+assert_not_contains "§12.13 CAS loser wrote no ctx (nothing written, not just no flip)" "LOSER" "$out"
+assert_contains "§12.13 winner ctx survives the loser attempt" 'ctx={"request":1,"decision":"approve"}' "$out"
+
+# the ABA replay: the winner's drive re-parks the run (§12.3); a CAS carrying the stale
+# version read before the win is refused, even though the status is `waiting` again
+gq "$WS" 'CYPHER runId="wru1" threadId="" MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "running" SET r.status="waiting", r.waitingThreadId=$threadId RETURN r.status' > /dev/null
+out=$(gq "$WS" "CYPHER runId=\"wru1\" ctxVersion=0 ctx=\"{\\\"decision\\\":\\\"LOSER\\\"}\" $RESUME_CTX")
+assert_not_contains "§12.13 ABA: a stale ctxVersion on a re-parked run is zero rows" "status=running" "$out"
+assert_not_contains "§12.13 ABA: the stale CAS sets no property" "Properties set" "$out"
+out=$(gq "$WS" "$VERSION_OF")
+assert_not_contains "§12.13 ABA: the stale CAS wrote no ctx" "LOSER" "$out"
+assert_contains "§12.13 ABA: the version stays 1 and the winner's ctx survives" 'v=1 ctx={"request":1,"decision":"approve"}' "$out"
+
+# a CAS with the fresh version is accepted (no false refusal)
+out=$(gq "$WS" "CYPHER runId=\"wru1\" ctxVersion=1 ctx=\"{\\\"decision\\\":\\\"fresh\\\"}\" $RESUME_CTX")
+assert_contains "§12.13 a CAS at the current ctxVersion wins" 'status=running ctx={"decision":"fresh"}' "$out"
+out=$(gq "$WS" "$VERSION_OF")
+assert_contains "§12.13 the fresh CAS bumps ctxVersion to 2" "v=2" "$out"
+
+# missing run -> zero rows (WorkflowRunNotFound is the service's business, not the query's)
+out=$(gq "$WS" "CYPHER runId=\"ghost\" ctxVersion=0 ctx=\"{}\" $RESUME_CTX")
+assert_not_contains "§12.13 resume-with-ctx of a missing run is zero rows" "status=running" "$out"
+
+# PROFILE: point lookup on WorkflowRun.runId, no label scan (the compare is a residual Filter)
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) SET r.status="waiting"' > /dev/null
+prof=$(gp "$WS" "CYPHER runId=\"wru1\" ctxVersion=2 ctx=\"{}\" $RESUME_CTX")
+assert_index_scan "§12.13 resume_run_with_ctx anchors on WorkflowRun.runId index" "$prof"
+
+echo ""
+echo "▶ §12.6 link_step_emission — StepRun -[:PRODUCED]-> Message (D2, distinct from EMITTED)"
+
+# wsr2 produced the ag2 message (any existing message in th1)
+out=$(gq "$WS" 'CYPHER stepRunId="wsr2" msgId="ag2" MATCH (sr:StepRun {stepRunId:$stepRunId}) MATCH (m:Message {msgId:$msgId}) MERGE (sr)-[:PRODUCED]->(m) RETURN sr.stepRunId+"->"+m.msgId AS s')
+assert_contains "§12.6 link_step_emission wsr2 PRODUCED ag2" "wsr2->ag2" "$out"
+
+# idempotent MERGE: re-link creates no duplicate
+gq "$WS" 'CYPHER stepRunId="wsr2" msgId="ag2" MATCH (sr:StepRun {stepRunId:$stepRunId}) MATCH (m:Message {msgId:$msgId}) MERGE (sr)-[:PRODUCED]->(m) RETURN 1' > /dev/null
+out=$(gq "$WS" 'MATCH (:StepRun {stepRunId:"wsr2"})-[e:PRODUCED]->(:Message {msgId:"ag2"}) RETURN count(e) AS n')
+assert_contains "§12.6 PRODUCED link is idempotent (exactly one edge)" "1" "$out"
+
+# PRODUCED is distinct from EMITTED: no StepRun has an EMITTED edge (EMITTED is Message->Message, §10)
+out=$(gq "$WS" 'MATCH (sr:StepRun)-[e:EMITTED]->() RETURN count(e) AS n')
+assert_contains "§12.6 PRODUCED distinct from EMITTED (no StepRun EMITTED edge)" "0" "$out"
+
+echo ""
+echo "▶ §12.7/§12.8 get_run + read_step_runs (NEXT-ordered audit trail)"
+
+# 12.7 get_run
+out=$(gq "$WS" 'CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[:AT_STEP]->(cur:Step) OPTIONAL MATCH (r)-[:OF_DEF]->(snap:WorkflowDefSnapshot) RETURN "status="+r.status+" sc="+toString(r.stepCount)+" at="+cur.key+" def="+snap.key AS s')
+assert_contains "§12.7 get_run returns status, stepCount, atStep, def" "status=running sc=2 at=decide def=wf_review" "$out"
+
+# 12.8 read_step_runs: NEXT-ordered (head-find via OPTIONAL MATCH + IS NULL, then walk).
+# Projects resolvedModel/modelSource/modelFallback too (K-042 Landing 2, FR-8) — all
+# NULL here since wr1's advances above passed NULL model params (the non-LLM-step
+# shape); wr_model above already pins the WITH-values case through this same
+# query shape.
+RSR='CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId})-[:HAS_STEP_RUN]->(sr:StepRun) OPTIONAL MATCH (pv:StepRun)-[:NEXT]->(sr) WITH sr, pv WHERE pv IS NULL MATCH (sr)-[:NEXT*0..]->(x:StepRun) RETURN x.stepRunId AS stepRunId, x.stepKey AS stepKey, x.resolvedModel AS resolvedModel, x.modelSource AS modelSource, x.modelFallback AS modelFallback ORDER BY x.startedAt'
+out=$(gq "$WS" "$RSR")
+assert_contains "§12.8 read_step_runs returns wsr1 (start)" "wsr1" "$out"
+assert_contains "§12.8 read_step_runs returns wsr2 (gather)" "wsr2" "$out"
+assert_not_contains "§12.8 read_step_runs: wr1's steps carry no resolvedModel (NULL params)" "lmstudio" "$out"
+wsr1_line=$(echo "$out" | grep -n "wsr1" | head -1 | cut -d: -f1)
+wsr2_line=$(echo "$out" | grep -n "wsr2" | head -1 | cut -d: -f1)
+if [ -n "$wsr1_line" ] && [ -n "$wsr2_line" ] && [ "$wsr1_line" -lt "$wsr2_line" ]; then
+  echo "  ✓ §12.8 read_step_runs is NEXT-ordered (wsr1 before wsr2)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ §12.8 read_step_runs order wrong (wsr1 ${wsr1_line}, wsr2 ${wsr2_line})"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+prof=$(gp "$WS" "$RSR")
+assert_index_scan "§12.8 read_step_runs anchors on WorkflowRun.runId index" "$prof"
+
+echo ""
+echo "▶ §12.10/§12.11 trace write/read (debug) + non-debug is empty"
+
+# 12.10 append_trace_event x2 on wsr1
+gq "$WS" 'CYPHER stepRunId="wsr1" traceId="wtr1" seq=0 kind="guard_judgment" at=7001 payload="verdict=false; needs more info" MATCH (sr:StepRun {stepRunId:$stepRunId}) CREATE (te:TraceEvent {traceId:$traceId, seq:$seq, kind:$kind, at:$at, payload:$payload}) CREATE (sr)-[:TRACED]->(te) RETURN te.traceId' > /dev/null
+out=$(gq "$WS" 'CYPHER stepRunId="wsr1" traceId="wtr2" seq=1 kind="node_rationale" at=7002 payload="asked clarifying question" MATCH (sr:StepRun {stepRunId:$stepRunId}) CREATE (te:TraceEvent {traceId:$traceId, seq:$seq, kind:$kind, at:$at, payload:$payload}) CREATE (sr)-[:TRACED]->(te) RETURN te.traceId AS t')
+assert_contains "§12.10 append_trace_event writes a TraceEvent" "wtr2" "$out"
+
+# TraceEvent.traceId UNIQUE constraint blocks a duplicate
+out=$(gq "$WS" 'CREATE (:TraceEvent {traceId:"wtr1"})' 2>&1)
+assert_contains "§12.10 TraceEvent.traceId constraint blocks duplicate" "unique constraint violation" "$out"
+
+# 12.11 read_trace: ordered by (StepRun.startedAt, TraceEvent.seq)
+RT='CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId})-[:HAS_STEP_RUN]->(sr:StepRun)-[:TRACED]->(te:TraceEvent) RETURN te.kind AS kind, te.payload AS payload ORDER BY sr.startedAt, te.seq'
+out=$(gq "$WS" "$RT")
+assert_contains "§12.11 read_trace returns guard_judgment event" "guard_judgment" "$out"
+assert_contains "§12.11 read_trace returns node_rationale event" "node_rationale" "$out"
+gj_line=$(echo "$out" | grep -n "guard_judgment" | head -1 | cut -d: -f1)
+nr_line=$(echo "$out" | grep -n "node_rationale" | head -1 | cut -d: -f1)
+if [ -n "$gj_line" ] && [ -n "$nr_line" ] && [ "$gj_line" -lt "$nr_line" ]; then
+  echo "  ✓ §12.11 read_trace ordered by seq (guard_judgment seq0 before node_rationale seq1)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ §12.11 read_trace order wrong"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+prof=$(gp "$WS" "$RT")
+assert_index_scan "§12.11 read_trace anchors on WorkflowRun.runId index" "$prof"
+
+# non-debug run records zero trace: a fresh run with no append writes no TraceEvent (AC-5 negative)
+gq "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"wr_lean", defKey:"wf_review", defVersion:"1", status:"running", startedAt:7000, ctx:"{}", trace:false, maxSteps:12, stepCount:0, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger)' > /dev/null
+out=$(gq "$WS" 'CYPHER runId="wr_lean" MATCH (r:WorkflowRun {runId:$runId})-[:HAS_STEP_RUN]->(:StepRun)-[:TRACED]->(te:TraceEvent) RETURN count(te) AS n')
+assert_contains "§12.11 non-debug run read_trace is empty (AC-5 negative)" "0" "$out"
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr_lean"}) DETACH DELETE r' > /dev/null
+
+echo ""
+echo "▶ §12.5 fail_run (step budget) + complete_run — terminal clears AT_STEP, retains trail"
+
+# step-budget fail: seed wr3 with stepCount 13 > maxSteps 12, fail_run
+gq "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"wr3", defKey:"wf_review", defVersion:"1", status:"running", startedAt:7000, ctx:"{}", trace:false, maxSteps:12, stepCount:13, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger)' > /dev/null
+out=$(gq "$WS" 'CYPHER runId="wr3" endedAt=7100 ctx="{\"error\":\"step budget exceeded\"}" MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[atRel:AT_STEP]->() DELETE atRel SET r.status="failed", r.endedAt=$endedAt, r.ctx=$ctx, r.ctxVersion = coalesce(r.ctxVersion, 0) + 1 RETURN "status="+r.status AS s')
+assert_contains "§12.5 fail_run (step budget) sets failed" "status=failed" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr3"}) RETURN "v="+coalesce(toString(r.ctxVersion),"absent") AS s')
+assert_contains "§12.5 fail_run bumps ctxVersion (a ctx write to an existing run)" "v=1" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr3"})-[:AT_STEP]->() RETURN count(*) AS n')
+assert_contains "§12.5 fail_run clears AT_STEP" "0" "$out"
+
+# complete_run: wr1 (at decide) -> done, AT_STEP cleared, StepRun trail retained
+out=$(gq "$WS" 'CYPHER runId="wr1" endedAt=7200 MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[atRel:AT_STEP]->() DELETE atRel SET r.status="done", r.endedAt=$endedAt RETURN "status="+r.status AS s')
+assert_contains "§12.5 complete_run sets done" "status=done" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[:AT_STEP]->() RETURN count(*) AS n')
+assert_contains "§12.5 complete_run clears AT_STEP" "0" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[:HAS_STEP_RUN]->(sr) RETURN count(sr) AS n')
+assert_contains "§12.5 complete_run retains the StepRun audit trail (2)" "2" "$out"
+
+# re-complete (AT_STEP already null) — DELETE of a null OPTIONAL edge must not error
+out=$(gq "$WS" 'CYPHER runId="wr1" endedAt=7201 MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[atRel:AT_STEP]->() DELETE atRel SET r.status="done", r.endedAt=$endedAt RETURN "status="+r.status AS s' 2>&1)
+assert_contains "§12.5 re-complete with null AT_STEP is a no-op (no error)" "status=done" "$out"
+
+# terminal-move on a missing run -> zero rows (WorkflowRunNotFound)
+out=$(gq "$WS" 'CYPHER runId="ghost" endedAt=1 MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[atRel:AT_STEP]->() DELETE atRel SET r.status="done" RETURN "status="+r.status AS s')
+assert_not_contains "§12.5 complete of a missing run is zero rows" "status=done" "$out"
+
+echo ""
+echo "▶ §12.14 find_runs_for_thread (FR-2, K-036) — every run a thread has ever had"
+
+# Dedicated runs with distinct startedAt (for a clean DESC-order + LIMIT test), triggered
+# by messages already in th1 (m1/m2/m3). wr1 (done) and wr3 (failed), both startedAt=7000
+# and both TRIGGERED_BY m1, are still live from earlier in §12 — they surface too, older
+# than all three of these.
+gq "$WS" 'MATCH (m:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"rft1", defKey:"triage", defVersion:"v1", status:"done", startedAt:8000, endedAt:8100, ctx:"{}", trace:false, maxSteps:12, stepCount:2, waitingThreadId:""}) CREATE (r)-[:TRIGGERED_BY]->(m)' > /dev/null
+gq "$WS" 'MATCH (m:Message {msgId:"m2"}) CREATE (r:WorkflowRun {runId:"rft2", defKey:"triage", defVersion:"v1", status:"waiting", startedAt:8050, endedAt:0, ctx:"{}", trace:false, maxSteps:12, stepCount:1, waitingThreadId:"th1"}) CREATE (r)-[:TRIGGERED_BY]->(m)' > /dev/null
+gq "$WS" 'MATCH (m:Message {msgId:"m3"}) CREATE (r:WorkflowRun {runId:"rft3", defKey:"triage", defVersion:"v1", status:"failed", startedAt:8025, endedAt:8060, ctx:"{}", trace:false, maxSteps:12, stepCount:3, waitingThreadId:""}) CREATE (r)-[:TRIGGERED_BY]->(m)' > /dev/null
+
+# The `r.startedAt >= 0` conjunct is functionally a no-op (startedAt is always a
+# non-negative epoch-ms timestamp) but is load-bearing for the PLAN — see QUERIES.md
+# §12.14's PROFILE note: without it the anchor lands on Node By Label Scan (m:Message),
+# scanning every Message in the workspace, not the tiny WorkflowRun set.
+FRFT='CYPHER threadId="th1" limit=10 MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(m:Message) WHERE r.startedAt >= 0 AND m.threadId = $threadId RETURN r.runId AS runId, r.status AS status, r.defKey AS defKey, r.defVersion AS defVersion, r.startedAt AS startedAt, r.endedAt AS endedAt ORDER BY r.startedAt DESC LIMIT $limit'
+out=$(gq "$WS" "$FRFT")
+assert_contains "find_runs_for_thread(th1): rft1 present" "rft1" "$out"
+assert_contains "find_runs_for_thread(th1): rft2 present" "rft2" "$out"
+assert_contains "find_runs_for_thread(th1): rft3 present" "rft3" "$out"
+assert_contains "find_runs_for_thread(th1): earlier wr1 also present" "wr1" "$out"
+assert_contains "find_runs_for_thread(th1): earlier wr3 also present" "wr3" "$out"
+
+# newest-first: rft2 (8050) before rft3 (8025) before rft1 (8000)
+rft2_line=$(echo "$out" | grep -n "rft2" | head -1 | cut -d: -f1)
+rft3_line=$(echo "$out" | grep -n "rft3" | head -1 | cut -d: -f1)
+rft1_line=$(echo "$out" | grep -n "rft1" | head -1 | cut -d: -f1)
+if [ -n "$rft2_line" ] && [ -n "$rft3_line" ] && [ -n "$rft1_line" ] \
+   && [ "$rft2_line" -lt "$rft3_line" ] && [ "$rft3_line" -lt "$rft1_line" ]; then
+  echo "  ✓ find_runs_for_thread(th1): newest-first order (rft2 > rft3 > rft1 by startedAt)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ find_runs_for_thread(th1): wrong order"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+
+# LIMIT truncates to the newest N
+out=$(gq "$WS" 'CYPHER threadId="th1" limit=1 MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(m:Message) WHERE r.startedAt >= 0 AND m.threadId = $threadId RETURN r.runId AS runId ORDER BY r.startedAt DESC LIMIT $limit')
+assert_contains "find_runs_for_thread(th1) LIMIT 1: returns only the newest (rft2)" "rft2" "$out"
+assert_not_contains "find_runs_for_thread(th1) LIMIT 1: excludes rft3" "rft3" "$out"
+
+# a thread with zero triggered runs (th2 has messages mn1-mn3, none of them trigger a run)
+out=$(gq "$WS" 'CYPHER threadId="th2" MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(m:Message) WHERE r.startedAt >= 0 AND m.threadId = $threadId RETURN count(r) AS n')
+assert_contains "find_runs_for_thread(th2): zero runs (empty, not an error)" "0" "$out"
+
+# PROFILE: anchors on WorkflowRun.startedAt index, no label scan anywhere
+prof=$(gp "$WS" "$FRFT")
+assert_index_scan "find_runs_for_thread anchors on WorkflowRun.startedAt index" "$prof"
+
+echo ""
+echo "▶ §12.15 read_recent_post_success (K-039 item 3) — recent triage post-success sample"
+
+# Dedicated, self-contained fixture — defKey "post_success_probe" is not used anywhere
+# else in this suite, so this section's assertions can't be perturbed by the §12
+# fixtures above (rft1-3, wr1, wr3, etc. all use different defKeys). Two done runs
+# (one with a PRODUCED reply, one silent), one failed run (no reply), one still-waiting
+# run the terminal-status filter must exclude — the plan's own suggested shape (§4 Step
+# 1, docs/plans/mention-reply-delivery.md).
+gq "$WS" 'CREATE (:Message {msgId:"psp_msg1", text:"reply", role:"agent", createdAt:9000, threadId:"psp_th"})' > /dev/null
+gq "$WS" 'MATCH (m:Message {msgId:"psp_msg1"}) CREATE (r:WorkflowRun {runId:"psp1", defKey:"post_success_probe", defVersion:"v1", status:"done", startedAt:9000, endedAt:9100, ctx:"{}", trace:false, maxSteps:12, stepCount:1, waitingThreadId:""}) CREATE (sr:StepRun {stepRunId:"psp_sr1", stepKey:"answer", status:"done", startedAt:9000, endedAt:9100, input:"{}", output:"posted"}) CREATE (r)-[:HAS_STEP_RUN]->(sr) CREATE (sr)-[:PRODUCED]->(m)' > /dev/null
+gq "$WS" 'CREATE (:WorkflowRun {runId:"psp2", defKey:"post_success_probe", defVersion:"v1", status:"done", startedAt:9050, endedAt:9150, ctx:"{}", trace:false, maxSteps:12, stepCount:1, waitingThreadId:""})' > /dev/null
+gq "$WS" 'CREATE (:WorkflowRun {runId:"psp3", defKey:"post_success_probe", defVersion:"v1", status:"failed", startedAt:9025, endedAt:9060, ctx:"{}", trace:false, maxSteps:12, stepCount:1, waitingThreadId:""})' > /dev/null
+gq "$WS" 'CREATE (:WorkflowRun {runId:"psp4", defKey:"post_success_probe", defVersion:"v1", status:"waiting", startedAt:9075, endedAt:0, ctx:"{}", trace:false, maxSteps:12, stepCount:1, waitingThreadId:"psp_th"})' > /dev/null
+
+# Canonical body (QUERIES.md §12.15) — as with §12.1/§12.2 above, the test copy composes
+# the two RETURN columns into one labelled, collision-resistant grep target ("sampleSize=…
+# postedCount=…") rather than asserting on bare digits that could match PROFILE/redis-cli
+# timing noise.
+RPS='MATCH (r:WorkflowRun) WHERE r.startedAt >= 0 AND r.defKey = $defKey AND r.defVersion = $defVersion AND r.status IN ["done", "failed"] WITH r ORDER BY r.startedAt DESC LIMIT $limit OPTIONAL MATCH (r)-[:HAS_STEP_RUN]->(:StepRun)-[:PRODUCED]->(m:Message) WITH r, count(m) AS producedCount RETURN "sampleSize="+toString(count(r))+" postedCount="+toString(sum(CASE WHEN producedCount > 0 THEN 1 ELSE 0 END)) AS s'
+
+out=$(gq "$WS" "CYPHER defKey=\"post_success_probe\" defVersion=\"v1\" limit=20 $RPS")
+assert_contains "§12.15 sample of 3 terminal runs (psp4 waiting excluded), 1 posted" "sampleSize=3 postedCount=1.000000" "$out"
+
+# LIMIT truncates to the newest N by startedAt: psp2(9050), psp3(9025) — excludes psp1(9000)
+out=$(gq "$WS" "CYPHER defKey=\"post_success_probe\" defVersion=\"v1\" limit=2 $RPS")
+assert_contains "§12.15 LIMIT 2: newest 2 sampled (psp1 excluded), neither posted" "sampleSize=2 postedCount=0.000000" "$out"
+
+# zero-sample: an unknown defKey is "no data," not an exception and not a false "0% healthy"
+out=$(gq "$WS" "CYPHER defKey=\"nonexistent_def\" defVersion=\"v1\" limit=20 $RPS")
+assert_contains "§12.15 zero-sample (unknown defKey): sampleSize=0, postedCount=0" "sampleSize=0 postedCount=0.000000" "$out"
+
+# PROFILE: no label scan; both WorkflowRun.startedAt and WorkflowRun.status fold into one
+# Node By Index Scan (compound — see QUERIES.md §12.15 for the isolation tests proving
+# this), only defKey/defVersion surface as the separate Filter above it.
+prof=$(gp "$WS" "CYPHER defKey=\"post_success_probe\" defVersion=\"v1\" limit=20 $RPS")
+assert_index_scan "§12.15 read_recent_post_success anchors on a WorkflowRun index scan" "$prof"
+assert_contains "§12.15 PROFILE shows the residual Filter above the index scan" "Filter" "$prof"
+
+# cleanup this section's fixture (isolated defKey, safe to scope the delete narrowly)
+gq "$WS" 'MATCH (r:WorkflowRun {defKey:"post_success_probe"}) DETACH DELETE r' > /dev/null
+gq "$WS" 'MATCH (sr:StepRun {stepRunId:"psp_sr1"}) DETACH DELETE sr' > /dev/null
+gq "$WS" 'MATCH (m:Message {msgId:"psp_msg1"}) DETACH DELETE m' > /dev/null
+
+echo ""
+echo "▶ §13 workspace configuration — model overrides (K-042 Landing 2, FR-16/FR-17)"
+
+# §13.2 read_model_overrides BEFORE any write: every existing workspace's starting
+# state is zero rows, and that must read back as "no override at any kind" — the
+# same answer §13.2's all-NULL-row case below produces. One code path, both cases.
+# (Column headers print unconditionally in redis-cli's GRAPH.QUERY reply regardless
+# of row count, so "zero rows" is checked via count(c), not by grepping RMO's own
+# header names — the same idiom §12.1/§12.3's zero-row checks use elsewhere.)
+out=$(gq "$WS" 'MATCH (c:WorkspaceConfig {workspaceConfigId:"default"}) RETURN count(c) AS cnt')
+assert_contains "§13.2 read before any write: zero WorkspaceConfig nodes exist yet" "0" "$out"
+
+RMO='MATCH (c:WorkspaceConfig {workspaceConfigId:"default"}) RETURN c.agentModelOverride AS agentModel, c.guardModelOverride AS guardModel, c.embeddingModelOverride AS embeddingModel, c.responderModelOverride AS responderModel'
+out=$(gq "$WS" "$RMO")
+assert_not_contains "§13.2 read before any write: no override value present" "lmstudio" "$out"
+
+# §13.1 write_model_overrides: first write sets only agent + guard, leaves
+# embedding/responder unset (NULL — never '').
+WMO='MERGE (c:WorkspaceConfig {workspaceConfigId:"default"}) SET c.agentModelOverride=$agent, c.guardModelOverride=$guard, c.embeddingModelOverride=$embedding, c.responderModelOverride=$responder, c.modelOverrideUpdatedAt=$at, c.modelOverrideUpdatedBy=$by RETURN c.agentModelOverride AS agent, c.guardModelOverride AS guard, c.embeddingModelOverride AS embedding, c.responderModelOverride AS responder'
+out=$(gq "$WS" "CYPHER agent=\"lmstudio/agent-a\" guard=\"lmstudio/guard-a\" embedding=null responder=null at=1000 by=\"u1\" $WMO")
+assert_contains "§13.1 first write returns the written agent value" "lmstudio/agent-a" "$out"
+assert_contains "§13.1 first write returns the written guard value" "lmstudio/guard-a" "$out"
+
+out=$(gq "$WS" "$RMO")
+assert_contains "§13.2 after first write: agent override present" "lmstudio/agent-a" "$out"
+assert_contains "§13.2 after first write: guard override present" "lmstudio/guard-a" "$out"
+
+out=$(gq "$WS" 'MATCH (c:WorkspaceConfig {workspaceConfigId:"default"}) RETURN keys(c) AS k')
+assert_contains "§13.1 first write: keys() has agentModelOverride" "agentModelOverride" "$out"
+assert_contains "§13.1 first write: keys() has guardModelOverride" "guardModelOverride" "$out"
+assert_not_contains "§13.1 first write: keys() omits embeddingModelOverride (NULL param)" "embeddingModelOverride" "$out"
+assert_not_contains "§13.1 first write: keys() omits responderModelOverride (NULL param)" "responderModelOverride" "$out"
+
+out=$(gq "$WS" 'MATCH (c:WorkspaceConfig) RETURN count(c)')
+assert_contains "§13.1 exactly one WorkspaceConfig node after first write" "1" "$out"
+
+# Regression case: a SECOND write sets embedding and explicitly CLEARS guard
+# (guard=NULL) — "NULL in SET clears" (-graph.md §2.4), distinct from "omitted at
+# CREATE". agent is re-set to the same value (still present).
+out=$(gq "$WS" "CYPHER agent=\"lmstudio/agent-a\" guard=null embedding=\"lmstudio/embed-a\" responder=null at=2000 by=\"u2\" $WMO")
+assert_contains "§13.1 second write returns the newly-set embedding value" "lmstudio/embed-a" "$out"
+
+out=$(gq "$WS" 'MATCH (c:WorkspaceConfig {workspaceConfigId:"default"}) RETURN keys(c) AS k')
+assert_not_contains "§13.1 second write CLEARS a previously-set kind (guardModelOverride gone)" "guardModelOverride" "$out"
+assert_contains "§13.1 second write: agentModelOverride still present (re-set)" "agentModelOverride" "$out"
+assert_contains "§13.1 second write: embeddingModelOverride now present" "embeddingModelOverride" "$out"
+
+out=$(gq "$WS" 'MATCH (c:WorkspaceConfig) RETURN count(c)')
+assert_contains "§13.1 still exactly one WorkspaceConfig node (constraint-backed MERGE, no dupe)" "1" "$out"
+
+# §13.2 read again: guard is back to NULL (cleared), agent/embedding present — a
+# PARTIALLY-set node, read the same way as the zero-row case above (one code path).
+out=$(gq "$WS" "$RMO")
+assert_contains "§13.2 after clear: agent still present" "lmstudio/agent-a" "$out"
+assert_contains "§13.2 after clear: embedding now present" "lmstudio/embed-a" "$out"
+
+# PROFILE: no label scan, anchors on the WorkspaceConfig index.
+prof=$(gp "$WS" "$RMO")
+assert_index_scan "§13.2 read_model_overrides anchors on WorkspaceConfig index" "$prof"
+
+# cleanup this section's fixture
+gq "$WS" 'MATCH (c:WorkspaceConfig) DETACH DELETE c' > /dev/null
+
+# ── §15: product catalog (K-052 M6) ─────────────────────────────────────────
+#
+# Global, seed-script-write-only reference catalog (docs/plans/workflow-catalog-lookup.md
+# §3.1) — lives in `reference`, looked up by property key, never scoped per workspace.
+# Canonical bodies: QUERIES.md §15.1/§15.2. Fixture: 5 products across 3 categories.
+
+echo ""
+echo "▶ §15 product catalog — lookup_product / filter_products (K-052 M6)"
+
+# NOTE: `category` is seeded Title-Case (matching seed_catalog.sh's real data,
+# e.g. "Audio") while `categoryNormalized` is its case-folded form — deliberately
+# mismatched casing so the assertions below prove the match runs against
+# categoryNormalized, not a case-sensitive compare on the raw category.
+gq "$REF" "CREATE (:Product {productId:'prod1', name:'Wireless Mouse', nameNormalized:'wireless mouse', category:'Accessories', categoryNormalized:'accessories', price:25.0})" > /dev/null
+gq "$REF" "CREATE (:Product {productId:'prod2', name:'Bluetooth Speaker', nameNormalized:'bluetooth speaker', category:'Audio', categoryNormalized:'audio', price:89.99})" > /dev/null
+gq "$REF" "CREATE (:Product {productId:'prod3', name:'4K Monitor', nameNormalized:'4k monitor', category:'Displays', categoryNormalized:'displays', price:349.0})" > /dev/null
+gq "$REF" "CREATE (:Product {productId:'prod4', name:'USB-C Hub', nameNormalized:'usb-c hub', category:'Accessories', categoryNormalized:'accessories', price:45.5})" > /dev/null
+gq "$REF" "CREATE (:Product {productId:'prod5', name:'Noise Cancelling Headphones', nameNormalized:'noise cancelling headphones', category:'Audio', categoryNormalized:'audio', price:199.99})" > /dev/null
+
+# Product.productId uniqueness constraint
+out=$(gq "$REF" "CREATE (:Product {productId:'prod1', name:'Imposter'})" 2>&1)
+assert_contains "§15 constraint blocks duplicate productId" "unique constraint violation" "$out"
+
+LOOKUP='MATCH (p:Product {nameNormalized: $nameNormalized}) RETURN p.productId AS productId, p.name AS name, p.category AS category, p.price AS price LIMIT 1'
+
+# §15.1 lookup_product — exact-name hit
+out=$(rq "$REF" "CYPHER nameNormalized=\"bluetooth speaker\" $LOOKUP")
+assert_contains "§15.1 lookup_product exact-name hit returns Bluetooth Speaker" "Bluetooth Speaker" "$out"
+assert_contains "§15.1 lookup_product hit returns its category"                 "Audio"             "$out"
+assert_contains "§15.1 lookup_product hit returns its price"                    "89.99"             "$out"
+
+# §15.1 lookup_product — abstention (AC-3): no row for an unknown name
+out=$(rq "$REF" "CYPHER nameNormalized=\"nonexistent gadget\" $LOOKUP")
+assert_no_data_row "§15.1 lookup_product unknown name returns no row (abstention)" "$(printf 'productId\nname\ncategory\nprice')" "$out"
+
+# §15.1 PROFILE: anchors on Product.nameNormalized, no label scan
+prof=$(gp "$REF" "CYPHER nameNormalized=\"bluetooth speaker\" $LOOKUP")
+assert_index_scan "§15.1 lookup_product anchors on Product.nameNormalized index" "$prof"
+
+# $categoryNormalized is what Repository.filter_products actually binds — it normalizes
+# the caller's raw `category` argument via extraction.normalize_name (case-fold) before
+# querying, and compares against the precomputed Product.categoryNormalized property
+# rather than the raw, differently-cased Product.category (K-052 M6 live-discovered fix,
+# 2026-08-28: an LLM call passed a lowercased "audio" against seeded Title-Case "Audio"
+# and the old exact p.category = $category comparison silently returned zero rows).
+FILTER='MATCH (p:Product) WHERE p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized) AND p.price >= coalesce($minPrice, -1.0) AND p.price <= coalesce($maxPrice, 1000000000.0) RETURN p.productId AS productId, p.name AS name, p.category AS category, p.price AS price ORDER BY p.price ASC LIMIT $limit'
+
+# §15.2 filter_products — unfiltered lists the whole catalog, price ascending
+out=$(rq "$REF" "CYPHER categoryNormalized=null minPrice=null maxPrice=null limit=20 $FILTER")
+assert_contains "§15.2 filter_products unfiltered includes all 5 products" "Wireless Mouse"     "$out"
+assert_contains "§15.2 filter_products unfiltered includes 4K Monitor"     "4K Monitor"          "$out"
+
+# §15.2 filter_products — category filter only (fixture stores category:'Accessories',
+# categoryNormalized:'accessories' — the mismatched casing proves the match runs
+# against categoryNormalized, not a case-sensitive compare on the raw category)
+out=$(rq "$REF" "CYPHER categoryNormalized=\"accessories\" minPrice=null maxPrice=null limit=20 $FILTER")
+assert_contains     "§15.2 filter_products category=accessories includes Wireless Mouse" "Wireless Mouse" "$out"
+assert_contains     "§15.2 filter_products category=accessories includes USB-C Hub"      "USB-C Hub"      "$out"
+assert_not_contains "§15.2 filter_products category=accessories excludes 4K Monitor"     "4K Monitor"     "$out"
+
+# §15.2 filter_products — case-insensitive category match (K-052 M6 fix): the fixture's
+# stored category is Title-Case "Audio", but the (already-normalized) argument is
+# lowercase "audio" — proving a differently-cased category argument now matches instead
+# of silently returning zero rows.
+out=$(rq "$REF" "CYPHER categoryNormalized=\"audio\" minPrice=null maxPrice=null limit=20 $FILTER")
+assert_contains "§15.2 filter_products lowercase 'audio' argument matches Title-Case 'Audio' rows (Bluetooth Speaker)" "Bluetooth Speaker" "$out"
+assert_contains "§15.2 filter_products lowercase 'audio' argument matches Title-Case 'Audio' rows (Noise Cancelling Headphones)" "Noise Cancelling Headphones" "$out"
+assert_not_contains "§15.2 filter_products lowercase 'audio' argument excludes non-audio rows" "4K Monitor" "$out"
+
+# §15.2 filter_products — price-range filter only (50.0..250.0 excludes prod1/prod3/prod4)
+out=$(rq "$REF" "CYPHER categoryNormalized=null minPrice=50.0 maxPrice=250.0 limit=20 $FILTER")
+assert_contains     "§15.2 filter_products price 50-250 includes Bluetooth Speaker"        "Bluetooth Speaker"           "$out"
+assert_contains     "§15.2 filter_products price 50-250 includes Noise Cancelling Headphones" "Noise Cancelling Headphones" "$out"
+assert_not_contains "§15.2 filter_products price 50-250 excludes 4K Monitor (too expensive)"  "4K Monitor"                  "$out"
+assert_not_contains "§15.2 filter_products price 50-250 excludes Wireless Mouse (too cheap)"   "Wireless Mouse"              "$out"
+
+# §15.2 filter_products — category + price combined
+out=$(rq "$REF" "CYPHER categoryNormalized=\"audio\" minPrice=100.0 maxPrice=null limit=20 $FILTER")
+assert_contains     "§15.2 filter_products audio+minPrice=100 includes Noise Cancelling Headphones" "Noise Cancelling Headphones" "$out"
+assert_not_contains "§15.2 filter_products audio+minPrice=100 excludes Bluetooth Speaker (below min)" "Bluetooth Speaker"          "$out"
+
+# §15.2 filter_products — abstention (AC-3): nonexistent category returns no row
+out=$(rq "$REF" "CYPHER categoryNormalized=\"nonexistent\" minPrice=null maxPrice=null limit=20 $FILTER")
+assert_no_data_row "§15.2 filter_products nonexistent category returns no row (abstention)" "$(printf 'productId\nname\ncategory\nprice')" "$out"
+
+# §15.2 PROFILE: every combination anchors on Product.price, no label scan — see
+# QUERIES.md §15.2's "Deviation from the plan's illustrative Cypher" note for why
+# (a $param IS NULL OR prop=$param null-guard would defeat the index here, same
+# live-verified quirk already documented for list_matches) — and its "case/whitespace-
+# insensitive category" note for why categoryNormalized (swapped in for the K-052 M6
+# fix) doesn't reintroduce that regression: it was never this query's scan anchor.
+prof=$(gp "$REF" "CYPHER categoryNormalized=null minPrice=null maxPrice=null limit=20 $FILTER")
+assert_index_scan "§15.2 filter_products unfiltered still anchors on Product.price index" "$prof"
+prof=$(gp "$REF" "CYPHER categoryNormalized=\"audio\" minPrice=100.0 maxPrice=null limit=20 $FILTER")
+assert_index_scan "§15.2 filter_products category+price anchors on Product.price index" "$prof"
+
+# cleanup this section's fixture
+gq "$REF" 'MATCH (p:Product) DETACH DELETE p' > /dev/null
+
+# ── §16: cart / order (K-053 M6) ─────────────────────────────────────────────
+#
+# Workspace-scoped (ws:test), unlike §15's global catalog — a cart/order belongs to
+# one customer inside one workspace. Canonical bodies: QUERIES.md §16.1-§16.10.
+# Bootstrap already created the Customer/Cart/CartItem/Order indexes + constraints
+# on ws:test (bootstrap_schema.sh's bootstrap_workspace, folded in by K-053 cluster 1).
+
+echo ""
+echo "▶ §16 cart / order — Customer/Cart/CartItem/Order lifecycle (K-053 M6)"
+
+ENSURE_CUSTOMER='MERGE (c:Customer {customerId: $customerId}) ON CREATE SET c.createdAt = $now RETURN c.customerId AS customerId, c.createdAt AS createdAt'
+ENSURE_CART='MATCH (cust:Customer {customerId: $customerId}) MERGE (cust)-[:HAS_CART]->(cart:Cart {customerId: $customerId}) ON CREATE SET cart.createdAt = $now, cart.updatedAt = $now RETURN cart.customerId AS customerId, cart.createdAt AS createdAt'
+ADD_TO_CART='MATCH (cart:Cart {customerId: $customerId}) MERGE (cart)-[:HAS_ITEM]->(item:CartItem {customerId: $customerId, productId: $productId}) ON CREATE SET item.quantity = $qty, item.addedAt = $now, item.updatedAt = $now ON MATCH SET item.quantity = item.quantity + $qty, item.updatedAt = $now SET cart.updatedAt = $now RETURN item.productId AS productId, item.quantity AS quantity'
+ADJUST_CART_ITEM='MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem {customerId: $customerId, productId: $productId}) WITH cart, item, (item.quantity - $qty) AS newQty FOREACH (_ IN CASE WHEN newQty > 0 THEN [1] ELSE [] END | SET item.quantity = newQty, item.updatedAt = $now) FOREACH (_ IN CASE WHEN newQty <= 0 THEN [1] ELSE [] END | DETACH DELETE item) SET cart.updatedAt = $now RETURN newQty AS quantity, (newQty <= 0) AS removed'
+READ_CART='MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem) RETURN item.productId AS productId, item.quantity AS quantity, item.addedAt AS addedAt ORDER BY item.addedAt'
+CLEAR_CART='MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem) DETACH DELETE item'
+PLACE_ORDER='MATCH (cust:Customer {customerId: $customerId}) OPTIONAL MATCH (dup:Order {orderId: $orderId}) WITH cust, (dup IS NULL) AS created FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END | CREATE (cust)-[:PLACED]->(:Order {orderId: $orderId, status: "placed", placedAt: $now, updatedAt: $now})) WITH cust, created UNWIND (CASE WHEN $lines = [] THEN [null] ELSE $lines END) AS line OPTIONAL MATCH (o:Order {orderId: $orderId}) FOREACH (_ IN CASE WHEN created AND line IS NOT NULL THEN [1] ELSE [] END | CREATE (o)-[:HAS_LINE]->(:OrderLine {productId: line.productId, name: line.name, unitPrice: line.unitPrice, quantity: line.quantity, lineTotal: line.lineTotal})) WITH cust, created, count(CASE WHEN line IS NOT NULL THEN 1 END) AS lineCount OPTIONAL MATCH (cart:Cart {customerId: cust.customerId})-[:HAS_ITEM]->(item:CartItem) FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END | DETACH DELETE item) RETURN created, lineCount'
+GET_ORDER='MATCH (o:Order {orderId: $orderId}) OPTIONAL MATCH (o)-[:HAS_LINE]->(l:OrderLine) RETURN o.orderId AS orderId, o.status AS status, o.placedAt AS placedAt, o.updatedAt AS updatedAt, collect({productId: l.productId, name: l.name, unitPrice: l.unitPrice, quantity: l.quantity, lineTotal: l.lineTotal}) AS lines, sum(l.lineTotal) AS total'
+FULFILL='MATCH (o:Order {orderId: $orderId}) WHERE o.status = "placed" SET o.status = "fulfilled", o.updatedAt = $now RETURN o.orderId AS orderId, o.status AS status'
+DELIVER='MATCH (o:Order {orderId: $orderId}) WHERE o.status = "fulfilled" SET o.status = "delivered", o.updatedAt = $now RETURN o.orderId AS orderId, o.status AS status'
+CANCEL='MATCH (o:Order {orderId: $orderId}) WHERE o.status = "placed" SET o.status = "cancelled", o.updatedAt = $now RETURN o.orderId AS orderId, o.status AS status'
+
+# §16.1 ensure_customer — idempotent get-or-create
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" now=1000 $ENSURE_CUSTOMER")
+assert_contains "§16.1 ensure_customer first call creates with createdAt=1000" "1000" "$out"
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" now=9999 $ENSURE_CUSTOMER")
+assert_contains "§16.1 ensure_customer second call (different now) leaves createdAt at first value" "1000" "$out"
+assert_not_contains "§16.1 ensure_customer second call did NOT re-set createdAt to 9999" "9999" "$out"
+out=$(gq "$WS" "MATCH (c:Customer {customerId:'cust1'}) RETURN count(c) AS n")
+assert_contains "§16.1 exactly one Customer node after two ensure_customer calls" "1" "$out"
+out=$(gq "$WS" "CREATE (:Customer {customerId:'cust1'})" 2>&1)
+assert_contains "§16.1 Customer.customerId constraint blocks duplicate" "unique constraint violation" "$out"
+
+# §16.3 add_to_cart BEFORE ensure_cart — zero rows (no Cart yet, graph note §2.1)
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p1\" qty=2 now=1000 $ADD_TO_CART")
+assert_no_data_row "§16.3 add_to_cart before ensure_cart returns zero rows (no Cart yet)" "$(printf 'productId\nquantity')" "$out"
+
+# §16.2 ensure_cart — get-or-create, requires prior ensure_customer
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" now=1000 $ENSURE_CART")
+assert_contains "§16.2 ensure_cart creates the Cart" "cust1" "$out"
+gq "$WS" "CYPHER customerId=\"cust1\" now=9999 $ENSURE_CART" > /dev/null
+out=$(gq "$WS" "MATCH (c:Cart {customerId:'cust1'}) RETURN count(c) AS n")
+assert_contains "§16.2 exactly one Cart node after two ensure_cart calls" "1" "$out"
+
+# §16.3 add_to_cart — MERGE-and-increment, idempotent-by-design
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p1\" qty=2 now=1000 $ADD_TO_CART")
+assert_contains "§16.3 add_to_cart first call: quantity=2" "2" "$out"
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p1\" qty=2 now=1100 $ADD_TO_CART")
+assert_contains "§16.3 add_to_cart second call: quantity=4 (increment, not replace)" "4" "$out"
+out=$(gq "$WS" "MATCH (i:CartItem {customerId:'cust1', productId:'p1'}) RETURN count(i) AS n")
+assert_contains "§16.3 exactly one CartItem after two add_to_cart calls" "1" "$out"
+out=$(gq "$WS" "CREATE (:CartItem {customerId:'cust1', productId:'p1'})" 2>&1)
+assert_contains "§16 CartItem constraint blocks duplicate (customerId, productId)" "unique constraint violation" "$out"
+prof=$(gp "$WS" "CYPHER customerId=\"cust1\" productId=\"p1\" qty=1 now=1200 $ADD_TO_CART")
+assert_index_scan "§16.3 add_to_cart anchors on Cart.customerId index" "$prof"
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p2\" qty=5 now=1300 $ADD_TO_CART")
+assert_contains "§16.3 add_to_cart second product line: quantity=5" "5" "$out"
+
+# §16.5 read_cart — both lines, oldest-added first
+out=$(rq "$WS" "CYPHER customerId=\"cust1\" $READ_CART")
+assert_contains "§16.5 read_cart includes p1" "p1" "$out"
+assert_contains "§16.5 read_cart includes p2" "p2" "$out"
+
+# §16.4 adjust_cart_item — decrement in place (5 -> 3), then decrement to zero (delete)
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p2\" qty=2 now=1400 $ADJUST_CART_ITEM")
+assert_contains "§16.4 adjust_cart_item decrement in place: quantity=3" "3" "$out"
+assert_contains "§16.4 adjust_cart_item decrement in place: removed=false" "false" "$out"
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p2\" qty=3 now=1500 $ADJUST_CART_ITEM")
+assert_contains "§16.4 adjust_cart_item decrement to zero: removed=true" "true" "$out"
+out=$(gq "$WS" "MATCH (i:CartItem {customerId:'cust1', productId:'p2'}) RETURN count(i) AS n")
+assert_contains "§16.4 CartItem p2 gone after decrement-to-zero (count=0)" "0" "$out"
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p2\" qty=1 now=1600 $ADJUST_CART_ITEM")
+assert_no_data_row "§16.4 adjust_cart_item on an already-removed line returns zero rows (no-op)" "$(printf 'quantity\nremoved')" "$out"
+
+# §16.6 clear_cart — remove the remaining line (p1)
+gq "$WS" "CYPHER customerId=\"cust1\" $CLEAR_CART" > /dev/null
+out=$(gq "$WS" "MATCH (cart:Cart {customerId:'cust1'})-[:HAS_ITEM]->(i:CartItem) RETURN count(i) AS n")
+assert_contains "§16.6 clear_cart empties the cart (count=0)" "0" "$out"
+
+# re-add two lines for §16.7's place_order fixture
+gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p1\" qty=2 now=1700 $ADD_TO_CART" > /dev/null
+gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p3\" qty=1 now=1710 $ADD_TO_CART" > /dev/null
+
+# §16.7 place_order — snapshot + clear cart, one atomic query, idempotent replay
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" orderId=\"ord1\" now=1800 lines=[{productId:\"p1\",name:\"Widget A\",unitPrice:9.99,quantity:2,lineTotal:19.98},{productId:\"p3\",name:\"Widget C\",unitPrice:5.0,quantity:1,lineTotal:5.0}] $PLACE_ORDER")
+assert_contains "§16.7 place_order first call: created=true" "true" "$out"
+assert_contains "§16.7 place_order first call: lineCount=2" "2" "$out"
+out=$(gq "$WS" "MATCH (o:Order {orderId:'ord1'}) RETURN o.status AS status")
+assert_contains "§16.7 Order created with status=placed" "placed" "$out"
+out=$(gq "$WS" "MATCH (o:Order {orderId:'ord1'})-[:HAS_LINE]->(l:OrderLine) RETURN count(l) AS n")
+assert_contains "§16.7 exactly 2 OrderLines snapshotted" "2" "$out"
+out=$(gq "$WS" "MATCH (cart:Cart {customerId:'cust1'})-[:HAS_ITEM]->(i:CartItem) RETURN count(i) AS n")
+assert_contains "§16.7 cart emptied after place_order (count=0)" "0" "$out"
+
+# idempotent replay: same orderId, second call is a true no-op (no duplicate order)
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" orderId=\"ord1\" now=1900 lines=[] $PLACE_ORDER")
+assert_contains "§16.7 place_order retry with same orderId: created=false (idempotent no-op)" "false" "$out"
+out=$(gq "$WS" "MATCH (o:Order {orderId:'ord1'})-[:HAS_LINE]->(l:OrderLine) RETURN count(l) AS n")
+assert_contains "§16.7 still exactly 2 OrderLines after idempotent retry (no duplicates)" "2" "$out"
+
+# §16.8 get_order — status + snapshot + computed total (9.99*2 + 5.00*1 = 24.98)
+out=$(rq "$WS" "CYPHER orderId=\"ord1\" $GET_ORDER")
+assert_contains "§16.8 get_order returns status=placed" "placed" "$out"
+assert_contains "§16.8 get_order returns computed total=24.98" "24.98" "$out"
+
+# §16.10 order lifecycle — guarded CAS, one transition per call (AC-7/AC-8)
+out=$(gq "$WS" "CYPHER orderId=\"ord1\" now=2000 $FULFILL")
+assert_contains "§16.10 fulfill: placed -> fulfilled" "fulfilled" "$out"
+# AC-8: cannot cancel once fulfilled — the CAS only matches from 'placed', so this
+# is zero rows / no-op, never an error
+out=$(gq "$WS" "CYPHER orderId=\"ord1\" now=2100 $CANCEL")
+assert_no_data_row "§16.10 cancel after fulfill returns zero rows (AC-8: cannot cancel once fulfilled)" "$(printf 'orderId\nstatus')" "$out"
+out=$(gq "$WS" "MATCH (o:Order {orderId:'ord1'}) RETURN o.status AS status")
+assert_contains "§16.10 status unchanged (still fulfilled) after the blocked cancel" "fulfilled" "$out"
+out=$(gq "$WS" "CYPHER orderId=\"ord1\" now=2200 $DELIVER")
+assert_contains "§16.10 deliver: fulfilled -> delivered" "delivered" "$out"
+# PROFILE: anchors on Order.orderId (only index on Order — no Order.status index,
+# QUERIES.md §16 DDL note), so a residual Filter sits above the index scan rather
+# than folding into it (graph note §3.4's documented nuance) — still no label scan.
+prof=$(gp "$WS" "CYPHER orderId=\"ord1\" now=2300 $FULFILL")
+assert_index_scan "§16.10 lifecycle CAS anchors on Order.orderId index" "$prof"
+assert_contains "§16.10 PROFILE shows the residual Filter above the index scan" "Filter" "$prof"
+
+# Order.orderId / Cart.customerId uniqueness constraints (CartItem's own composite
+# constraint was checked in §16.3, above, while a colliding CartItem still existed —
+# by this point §16.6/§16.7 have cleared the cart, so there is nothing left to collide)
+out=$(gq "$WS" "CREATE (:Order {orderId:'ord1'})" 2>&1)
+assert_contains "§16 Order.orderId constraint blocks duplicate" "unique constraint violation" "$out"
+out=$(gq "$WS" "CREATE (:Cart {customerId:'cust1'})" 2>&1)
+assert_contains "§16 Cart.customerId constraint blocks duplicate" "unique constraint violation" "$out"
+
+# cleanup this section's fixture
+gq "$WS" "MATCH (n:CartItem) DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (n:OrderLine) DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (n:Order) DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (n:Cart) DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (n:Customer) DETACH DELETE n" > /dev/null
+
+# ── §17: durable customer profile (K-054 M6) ─────────────────────────────────
+#
+# Workspace-scoped (ws:test), same Customer anchor §16 reuses — two more
+# nullable properties, no new label/index/constraint. Canonical bodies:
+# QUERIES.md §17.1-§17.2.
+
+echo ""
+echo "▶ §17 durable customer profile — Customer.name/deliveryAddress (K-054 M6)"
+
+UPSERT_PROFILE='MERGE (c:Customer {customerId: $customerId}) ON CREATE SET c.createdAt = $now SET c.name = coalesce($name, c.name), c.deliveryAddress = coalesce($deliveryAddress, c.deliveryAddress), c.profileUpdatedAt = $now RETURN c.customerId AS customerId, c.name AS name, c.deliveryAddress AS deliveryAddress'
+READ_PROFILE='MATCH (c:Customer {customerId: $customerId}) RETURN c.name AS name, c.deliveryAddress AS deliveryAddress, c.profileUpdatedAt AS profileUpdatedAt'
+
+# §17.2 read_profile before any Customer node exists — zero rows
+out=$(rq "$WS" "CYPHER customerId=\"cust1\" $READ_PROFILE")
+assert_no_data_row "§17.2 read_profile with no Customer node yet returns zero rows" "$(printf 'name\ndeliveryAddress\nprofileUpdatedAt')" "$out"
+
+# §17.1 upsert_profile — full write, creates the Customer anchor
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" name=\"Alice\" deliveryAddress=\"123 Main St\" now=1000 $UPSERT_PROFILE")
+assert_contains "§17.1 upsert_profile full write returns name=Alice" "Alice" "$out"
+assert_contains "§17.1 upsert_profile full write returns deliveryAddress=123 Main St" "123 Main St" "$out"
+out=$(gq "$WS" "MATCH (c:Customer {customerId:'cust1'}) RETURN count(c) AS n")
+assert_contains "§17.1 exactly one Customer node after the full write" "1" "$out"
+prof=$(gp "$WS" "CYPHER customerId=\"cust1\" name=\"Alice\" deliveryAddress=\"123 Main St\" now=1000 $UPSERT_PROFILE")
+assert_index_scan "§17.1 upsert_profile anchors on Customer.customerId index" "$prof"
+
+out=$(rq "$WS" "CYPHER customerId=\"cust1\" $READ_PROFILE")
+assert_contains "§17.2 read_profile after full write: name=Alice" "Alice" "$out"
+assert_contains "§17.2 read_profile after full write: deliveryAddress=123 Main St" "123 Main St" "$out"
+assert_contains "§17.2 read_profile after full write: profileUpdatedAt=1000" "1000" "$out"
+
+# §17.1 partial update #1 — omitted name (NULL) must leave it unchanged; the
+# BLOCKER case v1's unconditional SET got wrong (graph note §0/§3, AC-2)
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" name=null deliveryAddress=\"456 New Ave\" now=2000 $UPSERT_PROFILE")
+assert_contains "§17.1 partial update (name omitted): name=Alice (preserved)" "Alice" "$out"
+assert_contains "§17.1 partial update (name omitted): deliveryAddress=456 New Ave (updated)" "456 New Ave" "$out"
+out=$(rq "$WS" "CYPHER customerId=\"cust1\" $READ_PROFILE")
+assert_contains "§17.2 read-back confirms name=Alice preserved" "Alice" "$out"
+assert_contains "§17.2 read-back confirms deliveryAddress=456 New Ave updated" "456 New Ave" "$out"
+assert_contains "§17.2 read-back confirms profileUpdatedAt=2000 (bumped on partial call too)" "2000" "$out"
+out=$(gq "$WS" "MATCH (c:Customer {customerId:'cust1'}) RETURN count(c) AS n")
+assert_contains "§17.1 still exactly one Customer node after partial update #1 (no duplicate from MERGE)" "1" "$out"
+
+# §17.1 partial update #2 — the symmetric case: omitted deliveryAddress (NULL)
+# must leave it unchanged while name updates
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" name=\"Bob\" deliveryAddress=null now=3000 $UPSERT_PROFILE")
+assert_contains "§17.1 partial update (address omitted): name=Bob (updated)" "Bob" "$out"
+assert_contains "§17.1 partial update (address omitted): deliveryAddress=456 New Ave (preserved)" "456 New Ave" "$out"
+out=$(rq "$WS" "CYPHER customerId=\"cust1\" $READ_PROFILE")
+assert_contains "§17.2 read-back confirms name=Bob updated" "Bob" "$out"
+assert_contains "§17.2 read-back confirms deliveryAddress=456 New Ave still preserved" "456 New Ave" "$out"
+assert_contains "§17.2 read-back confirms profileUpdatedAt=3000" "3000" "$out"
+out=$(gq "$WS" "MATCH (c:Customer {customerId:'cust1'}) RETURN count(c) AS n")
+assert_contains "§17.1 still exactly one Customer node after partial update #2" "1" "$out"
+
+# cleanup this section's fixture
+gq "$WS" "MATCH (n:Customer) DETACH DELETE n" > /dev/null
+
+# ── §14.7 delete_document (document-ingestion2 Stage A, FR-4/FR-8) ───────────
+
+echo ""
+echo "▶ §14.7 delete_document (document-ingestion2 Stage A)"
+
+# Seed one Document + Chunk directly (raw writes — repository.create_document's
+# own §14.1 write path has no test_queries.sh harness yet; only the delete
+# query itself is Stage A's scope here). currentVersion/documentCurrent are
+# Stage A's baseline properties (repository.py create_document, plan §4).
+gq "$WS" "CREATE (d:Document {documentId:'doc1', title:'t', text:'hello', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'ck1', text:'hello', seq:0, documentId:'doc1', documentCurrent:true})" > /dev/null
+
+# graph-dba's live-verified single-query delete shape (document-ingestion2.md
+# §3.5) — capture documentId into a scalar via WITH before the delete (nothing
+# can reference the node afterward), collect+FOREACH-delete the chunks, DETACH
+# DELETE the Document, then CREATE the DocumentDeletion audit node.
+DELETE_DOCUMENT='MATCH (d:Document {documentId: $documentId}) WITH d, d.documentId AS did OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk) WITH d, did, collect(c) AS chunks FOREACH (ch IN chunks | DETACH DELETE ch) DETACH DELETE d CREATE (:DocumentDeletion {documentId: did, deletedBy: $deletedBy, deletedAt: $deletedAt}) RETURN did AS documentId'
+
+out=$(gq "$WS" "CYPHER documentId='doc1' deletedBy='du1' deletedAt=500 $DELETE_DOCUMENT")
+assert_contains "§14.7 delete_document returns the deleted documentId" "doc1" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'doc1'}) RETURN count(d)")
+assert_contains "§14.7 Document node is gone" "0" "$out"
+
+out=$(rq "$WS" "MATCH (c:Chunk {chunkId:'ck1'}) RETURN count(c)")
+assert_contains "§14.7 Chunk node is gone too (FOREACH-collected delete)" "0" "$out"
+
+out=$(rq "$WS" "MATCH (dd:DocumentDeletion {documentId:'doc1'}) RETURN dd.documentId, dd.deletedBy, dd.deletedAt")
+assert_contains "§14.7 DocumentDeletion audit node recorded (deletedBy)" "du1" "$out"
+assert_contains "§14.7 DocumentDeletion audit node recorded (deletedAt)" "500" "$out"
+
+# Re-running delete_document against the now-gone documentId is a true no-op —
+# the leading MATCH yields zero rows, so the trailing CREATE never fires either
+# (no second DocumentDeletion node, no error).
+out=$(gq "$WS" "CYPHER documentId='doc1' deletedBy='du1' deletedAt=999 $DELETE_DOCUMENT")
+assert_no_data_row "§14.7 delete_document is a no-op for an already-deleted id" "documentId" "$out"
+
+out=$(rq "$WS" "MATCH (dd:DocumentDeletion {documentId:'doc1'}) RETURN count(dd)")
+assert_contains "§14.7 exactly one DocumentDeletion node after a repeat delete attempt" "1" "$out"
+
+# ── §14.8 SUPERSEDES version history + confirm/reject/recheck (document-ingestion2
+# Stage B) ─────────────────────────────────────────────────────────────────────
+
+echo ""
+echo "▶ §14.8 SUPERSEDES (document-ingestion2 Stage B)"
+
+# Seed two Documents + Chunks directly (raw writes, same posture as §14.7 above —
+# only the SUPERSEDES shapes themselves are this section's scope).
+gq "$WS" "CREATE (d:Document {documentId:'sd1', title:'new', text:'hello v2', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:200, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'sc1', text:'hello v2', seq:0, documentId:'sd1', documentCurrent:true})" > /dev/null
+gq "$WS" "CREATE (d:Document {documentId:'sd2', title:'old', text:'hello v1', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'sc2', text:'hello v1', seq:0, documentId:'sd2', documentCurrent:true})" > /dev/null
+
+# create_or_reopen_supersede_suggestion's write shape — verbatim mirror of
+# create_or_reopen_match, Document/SUPERSEDES in place of Entity/SAME_AS
+# (plan §3.4/§4 Stage B, live-verified at this granularity — plan §0 second pass).
+CREATE_OR_REOPEN_SUPERSEDE='MATCH (a:Document {documentId: $newDocumentId}) MATCH (b:Document {documentId: $candidateDocumentId}) OPTIONAL MATCH (a)-[existing:SUPERSEDES]-(b) WITH a, b, existing, (existing IS NULL) AS isNew, (existing IS NOT NULL AND existing.status = '"'"'rejected'"'"') AS reopen FOREACH (_ IN CASE WHEN isNew THEN [1] ELSE [] END | CREATE (a)-[:SUPERSEDES {matchId: $matchId, status: $status, confidence: $confidence, technique: $technique, createdAt: $createdAt, decidedAt: CASE WHEN $status = '"'"'confirmed'"'"' THEN $createdAt ELSE null END, decidedBy: CASE WHEN $status = '"'"'confirmed'"'"' THEN '"'"'system'"'"' ELSE null END, resuggestCount: 0, lastResuggestedAt: null}]->(b)) FOREACH (_ IN CASE WHEN reopen THEN [1] ELSE [] END | SET existing.status = '"'"'pending'"'"', existing.resuggestCount = coalesce(existing.resuggestCount, 0) + 1, existing.lastResuggestedAt = $createdAt) RETURN isNew AS created, reopen AS reopened, coalesce(existing.matchId, $matchId) AS matchId, coalesce(existing.status, $status) AS status'
+
+out=$(gq "$WS" "CYPHER newDocumentId='sd1' candidateDocumentId='sd2' matchId='sm1' status='pending' confidence=0.8 technique='shingled_jaccard' createdAt=300 $CREATE_OR_REOPEN_SUPERSEDE")
+assert_contains "§14.8 create_or_reopen_supersede_suggestion creates a pending edge" "true" "$out"
+
+prof=$(gp "$WS" "MATCH (a)-[r:SUPERSEDES {matchId: 'sm1'}]->(b) RETURN r.status")
+assert_edge_index_scan "§14.8 SUPERSEDES.matchId lookup (unlabeled endpoints) uses the relationship index, no label scan" "$prof"
+
+# list_pending_document_updates' shape
+out=$(rq "$WS" "MATCH (a)-[r:SUPERSEDES {status: 'pending'}]->(b) RETURN r.matchId, a.documentId, b.documentId ORDER BY r.createdAt")
+assert_contains "§14.8 list_pending_document_updates shows the pending suggestion" "sm1" "$out"
+
+# confirm_document_update's shape — flips the edge AND supersedes the old
+# document + bulk-flips its chunks, one GRAPH.QUERY (plan §3.4).
+CONFIRM_DOCUMENT_UPDATE='MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b) SET r.status = '"'"'confirmed'"'"', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy SET b.currentVersion = false, b.supersededAt = $decidedAt, b.supersededBy = $decidedBy WITH a, b, r OPTIONAL MATCH (b)-[:HAS_CHUNK]->(c:Chunk) WITH a, b, r, collect(c) AS chunks FOREACH (ch IN chunks | SET ch.documentCurrent = false) RETURN r.matchId AS matchId, r.status AS status, a.documentId AS documentA, b.documentId AS documentB'
+
+out=$(gq "$WS" "CYPHER matchId='sm1' decidedBy='u1' decidedAt=400 $CONFIRM_DOCUMENT_UPDATE")
+assert_contains "§14.8 confirm_document_update returns the confirmed matchId" "sm1" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'sd2'}) RETURN d.currentVersion, d.supersededBy")
+assert_contains "§14.8 confirm_document_update flips the old document non-current" "false" "$out"
+assert_contains "§14.8 confirm_document_update stamps supersededBy on the old document" "u1" "$out"
+
+out=$(rq "$WS" "MATCH (c:Chunk {chunkId:'sc2'}) RETURN c.documentCurrent")
+assert_contains "§14.8 confirm_document_update bulk-flips the old document's chunks" "false" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'sd1'}) RETURN d.currentVersion")
+assert_contains "§14.8 confirm_document_update leaves the NEW document untouched" "true" "$out"
+
+# reject_document_update's shape — a second pair, so this section's reopen
+# test below has a clean rejected edge to reopen.
+gq "$WS" "CREATE (d:Document {documentId:'sd3', title:'new2', text:'hello v2b', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:250, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'sc3', text:'hello v2b', seq:0, documentId:'sd3', documentCurrent:true})" > /dev/null
+gq "$WS" "CREATE (d:Document {documentId:'sd4', title:'old2', text:'hello v1b', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:150, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'sc4', text:'hello v1b', seq:0, documentId:'sd4', documentCurrent:true})" > /dev/null
+gq "$WS" "CYPHER newDocumentId='sd3' candidateDocumentId='sd4' matchId='sm2' status='pending' confidence=0.7 technique='shingled_jaccard' createdAt=300 $CREATE_OR_REOPEN_SUPERSEDE" > /dev/null
+
+REJECT_DOCUMENT_UPDATE='MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b) SET r.status = '"'"'rejected'"'"', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy RETURN r.matchId AS matchId, r.status AS status, a.documentId AS documentA, b.documentId AS documentB'
+
+out=$(gq "$WS" "CYPHER matchId='sm2' decidedBy='u1' decidedAt=350 $REJECT_DOCUMENT_UPDATE")
+assert_contains "§14.8 reject_document_update flips status to rejected" "rejected" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'sd4'}) RETURN d.currentVersion")
+assert_contains "§14.8 reject_document_update leaves the old document current" "true" "$out"
+
+# reopen-on-corroboration — re-derive the SAME pair after rejecting it; must
+# reopen to pending (never straight to confirmed), bump resuggestCount on the
+# ORIGINAL matchId, never duplicate the edge (OQ-3 parity, plan §3.4/§7).
+out=$(gq "$WS" "CYPHER newDocumentId='sd3' candidateDocumentId='sd4' matchId='sm3' status='pending' confidence=0.9 technique='shingled_jaccard' createdAt=500 $CREATE_OR_REOPEN_SUPERSEDE")
+assert_contains "§14.8 re-deriving a rejected pair reopens (created=false)" "false" "$out"
+assert_contains "§14.8 re-deriving a rejected pair reopens to pending, never confirmed" "pending" "$out"
+
+out=$(rq "$WS" "MATCH ()-[r:SUPERSEDES {matchId:'sm2'}]->() RETURN r.status, r.resuggestCount")
+assert_contains "§14.8 reopen bumps resuggestCount on the ORIGINAL matchId" "1" "$out"
+
+out=$(rq "$WS" "MATCH (a:Document {documentId:'sd3'}) MATCH (b:Document {documentId:'sd4'}) MATCH (a)-[r:SUPERSEDES]->(b) RETURN count(r)")
+assert_contains "§14.8 reopen never creates a duplicate edge for the same pair" "1" "$out"
+
+# get_document_history's traversal shape — confirmed edges only, one hop at a
+# time, anchored on Document.documentId's own unique index each step (plan §3.7).
+OLDER_STEP='MATCH (a:Document {documentId: $documentId}) MATCH (a)-[r:SUPERSEDES {status: '"'"'confirmed'"'"'}]->(b) RETURN b.documentId AS documentId ORDER BY r.createdAt ASC LIMIT 1'
+NEWER_STEP='MATCH (b:Document {documentId: $documentId}) MATCH (a)-[r:SUPERSEDES {status: '"'"'confirmed'"'"'}]->(b) RETURN a.documentId AS documentId ORDER BY r.createdAt ASC LIMIT 1'
+
+out=$(rq "$WS" "CYPHER documentId='sd1' $OLDER_STEP")
+assert_contains "§14.8 get_document_history's older-direction step finds the confirmed predecessor" "sd2" "$out"
+
+out=$(rq "$WS" "CYPHER documentId='sd2' $NEWER_STEP")
+assert_contains "§14.8 get_document_history's newer-direction step finds the confirmed successor" "sd1" "$out"
+
+# a pending/rejected suggestion must never surface as "history" — anchored on
+# sd3 (the edge's real SOURCE, sd3->sd4, currently 'pending' after the
+# reopen-on-corroboration step above), not sd4: sd4 has no OUTGOING SUPERSEDES
+# edge at all, so anchoring OLDER_STEP there would return zero rows
+# regardless of the sd3->sd4 edge's status — a tautology, not a check of the
+# status filter (analyst review Pass 2, docs/reviews/document-ingestion2-impl.md).
+out=$(rq "$WS" "CYPHER documentId='sd3' $OLDER_STEP")
+assert_no_data_row "§14.8 get_document_history's older step ignores a pending suggestion (sd3->sd4 is pending, not confirmed)" "documentId" "$out"
+
+# cleanup this section's fixture (SUPERSEDES edges die with their endpoints)
+gq "$WS" "MATCH (n:Document) WHERE n.documentId IN ['sd1','sd2','sd3','sd4'] DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (c:Chunk) WHERE c.documentId IN ['sd1','sd2','sd3','sd4'] DETACH DELETE c" > /dev/null
+
+# ── §14.9 default-search filtering: documentCurrent (document-ingestion2 ────
+# Stage C, AC-4, plan §3.3) ──────────────────────────────────────────────────
+
+echo ""
+echo "▶ §14.9 search_chunks documentCurrent filter (document-ingestion2 Stage C)"
+
+# Two documents, one chunk each, an identical embedding — cd2 is then marked
+# superseded via a raw fixture write (Stage D auto-supersede detection doesn't
+# exist yet; same raw-fixture posture as this section's own plan §4 Stage C
+# done-condition, mirroring confirm_document_update's write shape from §14.8
+# above without needing a real SUPERSEDES edge).
+gq "$WS" "CREATE (d:Document {documentId:'cd1', title:'current', text:'hello current', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'cc1', text:'hello current', seq:0, documentId:'cd1', documentCurrent:true})" > /dev/null
+gq "$WS" "CREATE (d:Document {documentId:'cd2', title:'superseded', text:'hello old', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:50, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'cc2', text:'hello old', seq:0, documentId:'cd2', documentCurrent:true})" > /dev/null
+
+gq "$WS" "MATCH (c:Chunk {chunkId:'cc1'}) SET c.embedding = vecf32([1.0, 0.0, 0.0, 0.0])" > /dev/null
+gq "$WS" "MATCH (c:Chunk {chunkId:'cc2'}) SET c.embedding = vecf32([1.0, 0.0, 0.0, 0.0])" > /dev/null
+
+gq "$WS" "MATCH (d:Document {documentId:'cd2'}) SET d.currentVersion = false WITH d MATCH (d)-[:HAS_CHUNK]->(c:Chunk) SET c.documentCurrent = false" > /dev/null
+
+# search_chunks' new shape (repository.py): a post-YIELD WHERE on the
+# already-ANN-yielded rows — plain property equality, not exists() (flagged
+# buggy on this build, claude/graph-dba/falkordb-quirks.md) and not a
+# pre-filter (no pre-filter predicate support demonstrated for this index).
+SEARCH_CHUNKS_FILTERED="CALL db.idx.vector.queryNodes('Chunk', 'embedding', 5, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score WHERE seed.documentCurrent = true RETURN seed.chunkId AS chunkId, seed.documentId AS documentId, seed.seq AS seq, score ORDER BY score ASC LIMIT 5"
+
+out=$(rq "$WS" "$SEARCH_CHUNKS_FILTERED")
+assert_contains "§14.9 search_chunks includes the current-version chunk" "cc1" "$out"
+assert_not_contains "§14.9 search_chunks excludes the superseded chunk" "cc2" "$out"
+
+# PROFILE: the post-YIELD WHERE stays a plain filter on the already-ANN-yielded
+# rows — the ANN retrieval itself must still anchor on the vector index
+# (ProcedureCall), never a whole-graph Chunk scan.
+prof=$(gp "$WS" "$SEARCH_CHUNKS_FILTERED")
+assert_contains     "§14.9 filtered search_chunks still uses the vector index (ProcedureCall)" "ProcedureCall" "$prof"
+assert_not_contains "§14.9 filtered search_chunks has no All Node Scan"                        "All Node Scan" "$prof"
+
+# AC-5/§3.3 parity: direct-by-id lookup is unaffected by the filter — a
+# superseded document's text is still fully readable outside search ("Only
+# default search excludes non-current content, never direct lookup").
+out=$(rq "$WS" "MATCH (d:Document {documentId:'cd2'}) RETURN d.text, d.currentVersion")
+assert_contains "§14.9 direct lookup still returns the superseded document's text" "hello old" "$out"
+assert_contains "§14.9 ...and reports currentVersion=false (excluded from search only)" "false" "$out"
+
+# cleanup this section's fixture
+gq "$WS" "MATCH (n:Document) WHERE n.documentId IN ['cd1','cd2'] DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (c:Chunk) WHERE c.documentId IN ['cd1','cd2'] DETACH DELETE c" > /dev/null
+
+# ── §14.9 update-detection Cypher shapes (document-ingestion2 Stage D, FR-2/
+# AC-1/AC-2) — analyst review Pass 6 Finding 3: these two shapes were left off
+# the enumerated baseline when Stage D landed; added here per plan §5's
+# "every new Cypher shape... raises the enumerated baseline" instruction ─────
+
+echo ""
+echo "▶ §14.9 update-detection (document-ingestion2 Stage D)"
+
+# repository.create_document_with_auto_supersede's atomic write (plan §3.4) —
+# verbatim copy of the shipped query, actor-resolution branch, with the 8
+# `lshBand<i>` properties K-091 added to the CREATE. `u1` (Alice) is still the
+# User node seeded back in §2 and never deleted since.
+CREATE_DOC_WITH_AUTO_SUPERSEDE='OPTIONAL MATCH (u:User {userId: $ingestedBy}) OPTIONAL MATCH (a:Agent {agentId: $ingestedBy}) WITH coalesce(u, a) AS ingestor, (coalesce(u, a) IS NOT NULL) AS ok, (u IS NOT NULL) AS ingestorIsUser OPTIONAL MATCH (candidate:Document { textNormalizedHash: $textNormalizedHash, currentVersion: true}) WITH ingestor, ok, ingestorIsUser, candidate ORDER BY candidate.createdAt ASC LIMIT 1 FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (d:Document { documentId: $documentId, title: $title, text: $text, sourceFormat: $sourceFormat, sourceKind: CASE WHEN ingestorIsUser THEN '"'"'document'"'"' ELSE '"'"'agent'"'"' END, status: '"'"'processing'"'"', pendingJobs: 0, createdAt: $createdAt, currentVersion: true, textNormalizedHash: $textNormalizedHash, lshBand0: $lshBand0, lshBand1: $lshBand1, lshBand2: $lshBand2, lshBand3: $lshBand3, lshBand4: $lshBand4, lshBand5: $lshBand5, lshBand6: $lshBand6, lshBand7: $lshBand7 }) CREATE (d)-[:INGESTED_BY]->(ingestor) FOREACH (ch IN $chunks | CREATE (d)-[:HAS_CHUNK]->(:Chunk { chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId, documentCurrent: true }) )) WITH ok, candidate OPTIONAL MATCH (d:Document {documentId: $documentId}) WITH ok, d, candidate, (ok AND candidate IS NOT NULL) AS doSupersede FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END | SET candidate.currentVersion = false, candidate.supersededAt = $createdAt, candidate.supersededBy = '"'"'system'"'"' ) WITH ok, d, candidate, doSupersede OPTIONAL MATCH (candidate)-[:HAS_CHUNK]->(c:Chunk) WITH ok, d, candidate, doSupersede, collect(c) AS candidateChunks FOREACH (ch IN CASE WHEN doSupersede THEN candidateChunks ELSE [] END | SET ch.documentCurrent = false) WITH ok, d, candidate, doSupersede FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END | CREATE (d)-[:SUPERSEDES { matchId: $matchId, status: '"'"'confirmed'"'"', confidence: 1.0, technique: '"'"'exact_normalized_text_hash'"'"', createdAt: $createdAt, decidedAt: $createdAt, decidedBy: '"'"'system'"'"', resuggestCount: 0, lastResuggestedAt: null }]->(candidate) ) RETURN ok AS ingestorFound, d.documentId AS documentId, doSupersede AS autoSuperseded, CASE WHEN doSupersede THEN candidate.documentId ELSE null END AS supersededDocumentId, CASE WHEN doSupersede THEN $matchId ELSE null END AS matchId'
+
+# seed the pre-existing currentVersion candidate the new ingest will collide with
+gq "$WS" "CREATE (d:Document {documentId:'asd1', title:'AutoSupersede Old', text:'old text', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true, textNormalizedHash:'hashAS1'})-[:HAS_CHUNK]->(:Chunk {chunkId:'asc1', text:'old text', seq:0, documentId:'asd1', documentCurrent:true})" > /dev/null
+
+# a second ingest sharing asd1's textNormalizedHash — the atomic write must,
+# in ONE query: flip asd1 non-current + stamp supersededAt/supersededBy, bulk-
+# flip its Chunk, and create the SUPERSEDES{status:'confirmed', decidedBy:
+# 'system', confidence:1.0} edge new -> old.
+out=$(gq "$WS" "CYPHER documentId='asd2' title='AutoSupersede New' text='new text' sourceFormat='text' ingestedBy='u1' textNormalizedHash='hashAS1' createdAt=200 chunks=[{chunkId:'asc2',text:'new text',seq:0}] matchId='asm1' lshBand0='as2b0' lshBand1='as2b1' lshBand2='as2b2' lshBand3='as2b3' lshBand4='as2b4' lshBand5='as2b5' lshBand6='as2b6' lshBand7='as2b7' $CREATE_DOC_WITH_AUTO_SUPERSEDE")
+assert_contains "§14.9 create_document_with_auto_supersede returns autoSuperseded=true" "true" "$out"
+assert_contains "§14.9 create_document_with_auto_supersede returns the new documentId" "asd2" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'asd1'}) RETURN d.currentVersion, d.supersededAt, d.supersededBy")
+assert_contains "§14.9 old document flips non-current" "false" "$out"
+assert_contains "§14.9 old document stamped supersededAt" "200" "$out"
+assert_contains "§14.9 old document stamped supersededBy='system'" "system" "$out"
+
+out=$(rq "$WS" "MATCH (c:Chunk {chunkId:'asc1'}) RETURN c.documentCurrent")
+assert_contains "§14.9 old document's chunk bulk-flipped documentCurrent=false" "false" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'asd2'}) RETURN d.currentVersion")
+assert_contains "§14.9 new document is current" "true" "$out"
+
+# K-091: the ingest write stores every band, each under its own position —
+# including on an auto-superseding ingest, for which detection never runs.
+out=$(rq "$WS" "MATCH (d:Document {documentId:'asd2'}) RETURN d.lshBand0, d.lshBand3, d.lshBand7")
+assert_contains "§14.9 auto-superseding ingest stores lshBand0" "as2b0" "$out"
+assert_contains "§14.9 auto-superseding ingest stores lshBand3" "as2b3" "$out"
+assert_contains "§14.9 auto-superseding ingest stores lshBand7" "as2b7" "$out"
+
+out=$(rq "$WS" "MATCH (a:Document {documentId:'asd2'})-[r:SUPERSEDES {matchId:'asm1'}]->(b:Document {documentId:'asd1'}) RETURN r.status, r.decidedBy, r.confidence")
+assert_contains "§14.9 SUPERSEDES edge status='confirmed'" "confirmed" "$out"
+assert_contains "§14.9 SUPERSEDES edge decidedBy='system'" "system" "$out"
+assert_contains "§14.9 SUPERSEDES edge confidence=1.0" "1" "$out"
+
+# concurrency-safety claim, query-shape layer (the `threading.Barrier` proof
+# itself lives in test_repository.py, not here): the candidate OPTIONAL MATCH
+# is bound strictly BEFORE the new Document is CREATEd in the same query, so
+# a document can never match itself as its own candidate — provable in a
+# single call by ingesting brand-new content with NO pre-existing candidate
+# at all: autoSuperseded must come back false, never self-superseded.
+out=$(gq "$WS" "CYPHER documentId='asd3' title='AutoSupersede Fresh' text='fresh text' sourceFormat='text' ingestedBy='u1' textNormalizedHash='hashAS2' createdAt=300 chunks=[{chunkId:'asc3',text:'fresh text',seq:0}] matchId='asm2' lshBand0='as3b0' lshBand1='as3b1' lshBand2='as3b2' lshBand3='as3b3' lshBand4='as3b4' lshBand5='as3b5' lshBand6='as3b6' lshBand7='as3b7' $CREATE_DOC_WITH_AUTO_SUPERSEDE")
+assert_contains "§14.9 a document with no real candidate never self-supersedes (autoSuperseded=false)" "false" "$out"
+
+out=$(rq "$WS" "MATCH (:Document {documentId:'asd3'})-[r:SUPERSEDES]->() RETURN count(r)")
+assert_contains "§14.9 no SUPERSEDES edge was created for the self-match probe" "0" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'asd3'}) RETURN d.lshBand0, d.lshBand7")
+assert_contains "§14.9 plain (non-superseding) ingest stores lshBand0" "as3b0" "$out"
+assert_contains "§14.9 plain (non-superseding) ingest stores lshBand7" "as3b7" "$out"
+
+# K-091: the stored band is what the band-OR shortlist read finds — the
+# write and the read agree on the property names (lshBand5 alone matching).
+# FIND_SHORTLIST_BANDS is defined here, at its first use; its index-scan
+# PROFILE is in the find_update_shortlist block below.
+FIND_SHORTLIST_BANDS='MATCH (d:Document {currentVersion: true}) WHERE d.lshBand0 = $band0 OR d.lshBand1 = $band1 OR d.lshBand2 = $band2 OR d.lshBand3 = $band3 OR d.lshBand4 = $band4 OR d.lshBand5 = $band5 OR d.lshBand6 = $band6 OR d.lshBand7 = $band7 RETURN d.documentId AS documentId, d.title AS title, d.text AS text LIMIT $limit'
+out=$(rq "$WS" "CYPHER band0='x0' band1='x1' band2='x2' band3='x3' band4='x4' band5='as3b5' band6='x6' band7='x7' limit=5 $FIND_SHORTLIST_BANDS")
+assert_contains "§14.9 a band written at ingest is found by the band-OR shortlist read" "asd3" "$out"
+
+# K-091 backfill shapes (repository.list_documents_missing_lsh_bands /
+# set_document_lsh_bands, scripts/backfill_document_lsh_bands.sh). asd1 was
+# seeded raw above with no bands, so it is the one band-less document here.
+LIST_MISSING_BANDS='MATCH (d:Document) WHERE d.lshBand0 IS NULL OR d.lshBand1 IS NULL OR d.lshBand2 IS NULL OR d.lshBand3 IS NULL OR d.lshBand4 IS NULL OR d.lshBand5 IS NULL OR d.lshBand6 IS NULL OR d.lshBand7 IS NULL RETURN d.documentId, d.title, d.text ORDER BY d.documentId'
+out=$(rq "$WS" "$LIST_MISSING_BANDS")
+assert_contains     "§14.9 backfill listing includes a band-less (non-current) document (asd1)" "asd1" "$out"
+assert_not_contains "§14.9 backfill listing excludes a document the ingest write banded (asd2)" "asd2" "$out"
+
+SET_DOC_BANDS='MATCH (d:Document {documentId: $documentId}) SET d.lshBand0 = $lshBand0, d.lshBand1 = $lshBand1, d.lshBand2 = $lshBand2, d.lshBand3 = $lshBand3, d.lshBand4 = $lshBand4, d.lshBand5 = $lshBand5, d.lshBand6 = $lshBand6, d.lshBand7 = $lshBand7 RETURN count(d)'
+SET_BAND_PARAMS="documentId='asd1' lshBand0='as1b0' lshBand1='as1b1' lshBand2='as1b2' lshBand3='as1b3' lshBand4='as1b4' lshBand5='as1b5' lshBand6='as1b6' lshBand7='as1b7'"
+prof=$(gp "$WS" "CYPHER $SET_BAND_PARAMS $SET_DOC_BANDS")
+assert_index_scan "§14.9 backfill band write anchors on Document.documentId's index" "$prof"
+out=$(gq "$WS" "CYPHER $SET_BAND_PARAMS $SET_DOC_BANDS")
+assert_contains "§14.9 backfill band write reports the document it stamped" "1" "$out"
+out=$(rq "$WS" "MATCH (d:Document {documentId:'asd1'}) RETURN d.lshBand0, d.lshBand7")
+assert_contains "§14.9 backfill band write stores lshBand0" "as1b0" "$out"
+assert_contains "§14.9 backfill band write stores lshBand7" "as1b7" "$out"
+out=$(rq "$WS" "$LIST_MISSING_BANDS")
+assert_not_contains "§14.9 backfill listing is empty of asd1 once stamped (idempotent)" "asd1" "$out"
+
+# repository.find_update_shortlist's two signals (plan §3.4/§4.1,
+# repository.py:1878-1906) — both scoped to currentVersion documents only.
+# Fixture: lsd1 shares a band AND is current (must come back); lsd2 shares
+# the SAME band but is non-current (must be excluded); lsd3's title fuzzy-
+# matches AND is current (must come back via the fulltext signal); lsd4's
+# title also fuzzy-matches but is non-current (must be excluded); lsd5
+# matches neither signal (must never come back).
+gq "$WS" "CREATE (:Document {documentId:'lsd1', title:'Sales Numbers Update', text:'t', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true, lshBand3:'probeBand3'})" > /dev/null
+gq "$WS" "CREATE (:Document {documentId:'lsd2', title:'Old Sales Data', text:'t', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:false, lshBand3:'probeBand3'})" > /dev/null
+gq "$WS" "CREATE (:Document {documentId:'lsd3', title:'Quarterly Report Final Edition', text:'t', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true})" > /dev/null
+gq "$WS" "CREATE (:Document {documentId:'lsd4', title:'Quarterly Forecast Review', text:'t', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:false})" > /dev/null
+gq "$WS" "CREATE (:Document {documentId:'lsd5', title:'Random unrelated memo', text:'t', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true})" > /dev/null
+
+# signal 1: the index-anchored 8-way band OR, `currentVersion: true` as an
+# inline pattern-property (analyst review Pass 6 Finding 1 — this exact
+# combination, not byte-identical to the simpler shape graph-dba originally
+# profiled; PROFILE below confirms it still folds into one index scan here).
+BAND_PARAMS="band0='zz0' band1='zz1' band2='zz2' band3='probeBand3' band4='zz4' band5='zz5' band6='zz6' band7='zz7' limit=5"
+
+prof=$(gp "$WS" "CYPHER $BAND_PARAMS $FIND_SHORTLIST_BANDS")
+assert_index_scan "§14.9 find_update_shortlist band-OR anchors on a single Node By Index Scan" "$prof"
+
+out=$(rq "$WS" "CYPHER $BAND_PARAMS $FIND_SHORTLIST_BANDS")
+assert_contains     "§14.9 band-OR shortlist includes the current-version band match (lsd1)"    "lsd1" "$out"
+assert_not_contains "§14.9 band-OR shortlist excludes the non-current band match (lsd2)"        "lsd2" "$out"
+assert_not_contains "§14.9 band-OR shortlist excludes a document sharing no band (lsd5)"         "lsd5" "$out"
+
+# signal 2: the title-fuzzy full-text lookup, `currentVersion` filtered
+# post-YIELD (repository.py find_update_shortlist).
+FIND_SHORTLIST_TITLE="CALL db.idx.fulltext.queryNodes('Document', \$fuzzyQuery) YIELD node AS d WHERE d.currentVersion = true RETURN d.documentId AS documentId, d.title AS title, d.text AS text LIMIT \$limit"
+
+out=$(rq "$WS" "CYPHER fuzzyQuery='%Quarterly%' limit=5 $FIND_SHORTLIST_TITLE")
+assert_contains     "§14.9 title-fuzzy shortlist includes the current-version title match (lsd3)" "lsd3" "$out"
+assert_not_contains "§14.9 title-fuzzy shortlist excludes the non-current title match (lsd4)"     "lsd4" "$out"
+assert_not_contains "§14.9 title-fuzzy shortlist excludes a document with no title match (lsd5)"  "lsd5" "$out"
+
+# Defect 1 fix (document-ingestion2 QA report, "Report (Draft)" is one of its
+# characterization-table titles): repository.find_update_shortlist now builds
+# the fuzzy query from per-token output of repository._escape_fuzzy_token,
+# which strips RediSearch metacharacters before wrapping each token in
+# `%...%` — 'Report (Draft)'.split() -> ['Report', '(Draft)'] -> escaped ->
+# 'Report', 'Draft' -> fuzzyQuery '%Report% %Draft%'. The raw, unescaped
+# title ('%Report (Draft)%') is exactly what used to raise `RediSearch:
+# Syntax error at offset 8 near Report` live against this same index
+# (reproduced during this fix's own verification); the escaped shape below
+# is the one the shipped code now actually sends, and must both run clean
+# and still find the current-version match.
+gq "$WS" "CREATE (:Document {documentId:'lsd6', title:'Report (Draft)', text:'t', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true})" > /dev/null
+
+out=$(rq "$WS" "CYPHER fuzzyQuery='%Report% %Draft%' limit=5 $FIND_SHORTLIST_TITLE")
+assert_not_contains "§14.9 escaped title-fuzzy query for a metacharacter-bearing title raises no RediSearch syntax error" "Syntax error" "$out"
+assert_contains     "§14.9 escaped title-fuzzy query still matches the metacharacter-bearing title (lsd6)" "lsd6" "$out"
+
+# cleanup this section's fixture
+gq "$WS" "MATCH (n:Document) WHERE n.documentId IN ['asd1','asd2','asd3','lsd1','lsd2','lsd3','lsd4','lsd5','lsd6'] DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (c:Chunk) WHERE c.documentId IN ['asd1','asd2','asd3'] DETACH DELETE c" > /dev/null
+
+# ── teardown ─────────────────────────────────────────────────────────────────
+
+echo ""
+echo "▶ teardown"
+redis-cli -h "$HOST" -p "$PORT" GRAPH.DELETE "$WS"  > /dev/null && echo "  ✓ ws:test deleted"
+redis-cli -h "$HOST" -p "$PORT" GRAPH.DELETE "$REF" > /dev/null && echo "  ✓ ${REF} deleted"
+
+# ── summary ──────────────────────────────────────────────────────────────────
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+TOTAL=$((PASS+FAIL))
+echo " Results: ${PASS}/${TOTAL} passed"
+if [ "$FAIL" -gt 0 ]; then
+  echo " FAILED: ${FAIL} assertion(s)"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  exit 1
+fi
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

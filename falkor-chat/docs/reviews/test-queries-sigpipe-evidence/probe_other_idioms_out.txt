@@ -1,0 +1,6 @@
+OLD awk  (printf | awk exit) -> spurious failure 100/100
+NEW awk  (awk <<<) -> spurious failure 0/100
+OLD line (echo|grep -n|head -1) -> spurious failure 100/100
+NEW line (grep -n -m1 <<<|cut) -> spurious failure 0/100
+OLD line, absent needle (expect N/N) -> spurious failure 100/100
+NEW line, absent needle (expect N/N) -> spurious failure 100/100

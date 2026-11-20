@@ -1,0 +1,16 @@
+probe of: scripts/test_queries.sh  (N=200)
+assert_contains      big    needle=needle         want=pass -> wrong verdicts 0/200
+assert_contains      big    needle=zzz            want=fail -> wrong verdicts 0/200
+assert_contains      small  needle=mn3            want=pass -> wrong verdicts 0/200
+assert_contains      small  needle=zzz            want=fail -> wrong verdicts 0/200
+assert_not_contains  big    needle=needle         want=fail -> wrong verdicts 0/200
+assert_not_contains  big    needle=zzz            want=pass -> wrong verdicts 0/200
+assert_not_contains  small  needle=mn3            want=fail -> wrong verdicts 0/200
+assert_not_contains  small  needle=zzz            want=pass -> wrong verdicts 0/200
+assert_contains      dash   needle=-1             want=pass -> wrong verdicts 0/200
+assert_contains      dash   needle=--flag         want=pass -> wrong verdicts 0/200
+assert_contains      dash   needle=-zzz           want=fail -> wrong verdicts 0/200
+assert_not_contains  dash   needle=-1             want=fail -> wrong verdicts 0/200
+assert_not_contains  dash   needle=--flag         want=fail -> wrong verdicts 0/200
+assert_not_contains  dash   needle=-zzz           want=pass -> wrong verdicts 0/200
+TOTAL wrong verdicts: 0
