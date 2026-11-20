@@ -422,6 +422,208 @@ def test_thread_id_stamped_by_both_write_paths(repo, conn):
     assert rows == [["m1", "t1"], ["m2", "t1"]]
 
 
+# ── §4 message quoting — REPLY_TO from the post paths (K-094) ────────────────────
+
+
+def _seed_two_messages(repo):
+    """t1 with m1 → m2 (TAIL m2), author u1."""
+    _seed_thread(repo)
+    repo.post_first_message(
+        "test", thread_id="t1", msg_id="m1", author_id="u1",
+        text="one", role="user", created_at=120,
+    )
+    repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id="m2", author_id="u1",
+        text="two", role="user", created_at=130,
+    )
+
+
+def _reply_to_edges(conn):
+    return _probe(
+        conn,
+        "MATCH (a:Message)-[:REPLY_TO]->(b:Message) "
+        "RETURN a.msgId, b.msgId ORDER BY a.msgId",
+    )
+
+
+def _tail_of(conn, thread_id):
+    return _probe(
+        conn,
+        f"MATCH (:Thread {{threadId:'{thread_id}'}})-[:TAIL]->(m) RETURN m.msgId",
+    )
+
+
+def test_post_subsequent_message_with_quote_writes_reply_to(repo, conn):
+    _seed_two_messages(repo)
+
+    st = repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id="m3", author_id="u1",
+        text="re: one", role="user", created_at=140, quoted_id="m1",
+    )
+
+    assert st.written is True
+    assert st.quoted_found is True
+    assert repo.get_message("test", msg_id="m3")["quotedId"] == "m1"
+    assert _reply_to_edges(conn) == [["m3", "m1"]]
+
+
+def test_post_subsequent_message_quote_unknown_id_refuses_nothing_written(repo, conn):
+    _seed_two_messages(repo)
+
+    st = repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id="m3", author_id="u1",
+        text="re: ?", role="user", created_at=140, quoted_id="nope",
+    )
+
+    assert st.written is False
+    assert st.quoted_found is False
+    assert (st.had_head, st.dup_msg, st.author_found) == (False, False, True)
+    assert _tail_of(conn, "t1") == [["m2"]]
+    assert repo.get_message("test", msg_id="m3") is None
+    assert _reply_to_edges(conn) == []
+
+
+def test_post_subsequent_message_quote_other_thread_refuses(repo, conn):
+    _seed_two_messages(repo)
+    repo.create_thread("test", channel_id="c1", thread_id="t2", title="y", created_at=111)
+    repo.post_first_message(
+        "test", thread_id="t2", msg_id="x1", author_id="u1",
+        text="elsewhere", role="user", created_at=125,
+    )
+
+    st = repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id="m3", author_id="u1",
+        text="re: elsewhere", role="user", created_at=140, quoted_id="x1",
+    )
+
+    assert st.written is False
+    assert st.quoted_found is False
+    assert _tail_of(conn, "t1") == [["m2"]]
+    assert repo.get_message("test", msg_id="m3") is None
+    assert _reply_to_edges(conn) == []
+
+
+def test_post_first_message_quote_in_headless_thread_refuses(repo, conn):
+    _seed_two_messages(repo)  # m1 lives in t1; t2 is headless
+    repo.create_thread("test", channel_id="c1", thread_id="t2", title="y", created_at=111)
+
+    st = repo.post_first_message(
+        "test", thread_id="t2", msg_id="n1", author_id="u1",
+        text="re: one", role="user", created_at=140, quoted_id="m1",
+    )
+
+    assert st.written is False
+    assert st.quoted_found is False
+    assert st.had_head is False
+    assert repo.thread_has_head("test", thread_id="t2") is False
+    assert repo.get_message("test", msg_id="n1") is None
+
+
+def test_post_first_message_quote_on_headed_thread_reports_had_head(repo, conn):
+    _seed_two_messages(repo)
+
+    valid = repo.post_first_message(
+        "test", thread_id="t1", msg_id="r1", author_id="u1",
+        text="racer", role="user", created_at=140, quoted_id="m1",
+    )
+    unknown = repo.post_first_message(
+        "test", thread_id="t1", msg_id="r2", author_id="u1",
+        text="racer", role="user", created_at=141, quoted_id="nope",
+    )
+
+    assert (valid.written, valid.had_head, valid.quoted_found) == (False, True, True)
+    assert (unknown.written, unknown.had_head, unknown.quoted_found) == (False, True, False)
+    [[head_count]] = _probe(conn, "MATCH (:Thread)-[r:HEAD]->() RETURN count(r)")
+    assert head_count == 1
+    assert _reply_to_edges(conn) == []
+
+
+def test_post_message_without_quote_has_no_reply_to(repo, conn):
+    _seed_thread(repo)
+
+    first = repo.post_first_message(
+        "test", thread_id="t1", msg_id="m1", author_id="u1",
+        text="one", role="user", created_at=120,
+    )
+    subsequent = repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id="m2", author_id="u1",
+        text="two", role="user", created_at=130, quoted_id=None,
+    )
+
+    assert (first.written, first.quoted_found) == (True, True)
+    assert (subsequent.written, subsequent.quoted_found) == (True, True)
+    assert repo.get_message("test", msg_id="m1")["quotedId"] is None
+    assert repo.get_message("test", msg_id="m2")["quotedId"] is None
+    assert _reply_to_edges(conn) == []
+
+
+def test_post_subsequent_message_quote_replay_is_dup_no_second_edge(repo, conn):
+    _seed_two_messages(repo)
+    kw = dict(
+        thread_id="t1", msg_id="m3", author_id="u1",
+        text="re: one", role="user", created_at=140, quoted_id="m1",
+    )
+    repo.post_subsequent_message("test", **kw)
+
+    st = repo.post_subsequent_message("test", **kw)  # exact replay
+
+    assert (st.written, st.dup_msg, st.quoted_found) == (False, True, True)
+    assert _reply_to_edges(conn) == [["m3", "m1"]]
+    assert _tail_of(conn, "t1") == [["m3"]]
+
+
+def test_post_subsequent_message_replay_wins_over_unresolvable_quote(repo, conn):
+    _seed_two_messages(repo)
+    repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id="m3", author_id="u1",
+        text="re: one", role="user", created_at=140, quoted_id="m1",
+    )
+
+    st = repo.post_subsequent_message(  # replay of m3, quote no longer resolves
+        "test", thread_id="t1", msg_id="m3", author_id="u1",
+        text="re: one", role="user", created_at=140, quoted_id="gone",
+    )
+
+    assert (st.written, st.had_head, st.dup_msg) == (False, False, True)
+    assert (st.author_found, st.quoted_found) == (True, False)
+    assert [m["msgId"] for m in repo.read_thread("test", thread_id="t1")] == ["m1", "m2", "m3"]
+    assert _tail_of(conn, "t1") == [["m3"]]
+    assert _reply_to_edges(conn) == [["m3", "m1"]]
+
+
+
+@pytest.mark.parametrize("path", ["post_first_message", "post_subsequent_message"])
+@pytest.mark.parametrize("quoted_id", [None, "m1"])
+def test_post_message_quote_lookup_is_index_anchored(repo, conn, monkeypatch, path, quoted_id):
+    """K-094 plan §2/§3.2: the quote must resolve by `Node By Index Scan`, for a
+    NULL `quotedId` too. The rejected bare form `{msgId: $quotedId}` label-scans
+    every Message when the parameter is NULL, i.e. on every post without a
+    quote, and no behavioural test can see it. This EXPLAINs the exact text +
+    params the real method sends (not the `test_queries.sh` hand copy); EXPLAIN
+    does not execute, so the probe writes nothing."""
+    _seed_two_messages(repo)
+    sent: list[tuple[str, dict]] = []
+    real_graph = repo._graph
+
+    class _Recording:
+        def __init__(self, graph):
+            self._g = graph
+
+        def query(self, q, params=None):
+            sent.append((q, params))
+            return self._g.query(q, params)
+
+    monkeypatch.setattr(repo, "_graph", lambda ws: _Recording(real_graph(ws)))
+    getattr(repo, path)(  # dup msgId on a headed thread: a guarded no-op either way
+        "test", thread_id="t1", msg_id="m2", author_id="u1",
+        text="two", role="user", created_at=130, quoted_id=quoted_id,
+    )
+    [(cypher, params)] = sent
+
+    plan = db.workspace_graph(conn, "test").explain(cypher, params).plan
+
+    assert any("Node By Index Scan | (quoted:Message)" in line for line in plan), plan
+
 # ── §9.1 Read a thread since a cursor/timestamp (mention-aware) ─────────────────
 
 

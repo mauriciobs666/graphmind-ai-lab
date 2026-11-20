@@ -221,6 +221,23 @@ class UnknownMemberError(ServiceError):
     """Raised when a mention does not resolve to a known member."""
 
 
+class UnknownQuotedMessageError(ServiceError):
+    """Raised when a post's `quoted_id` is not a message in the target thread.
+
+    Decided inside the §4 write (`quotedFound=false`), so nothing was written.
+    The detail is model-read (MCP) and shared by REST, so it names neither
+    `quotedId` nor `quoted_id`, and says how to recover (plan
+    `message-quoting.md` §3.3; asserted literally by the tests).
+    """
+
+    def __init__(self, quoted_id: str, thread_id: str) -> None:
+        super().__init__(
+            f"quoted message {quoted_id!r} is not a message in thread {thread_id!r}; "
+            "nothing was posted. Retry without the quote, or quote the msgId of a message "
+            "read from this thread."
+        )
+
+
 class UnknownActorError(ServiceError):
     """Raised when the context actor does not resolve to a known member.
 
@@ -986,7 +1003,9 @@ class Services:
         variants) and the extra `write_kwargs` (e.g. `seeds`). Dispatch:
         `dupMsg` = idempotent retry success; `hadHead` = lost the first-post race
         → re-dispatch as subsequent; subsequent with no TAIL → `None` → re-dispatch
-        as first. The loop bound is a tripwire — ping-pong is impossible by
+        as first; otherwise `quotedFound=false` → `UnknownQuotedMessageError`
+        (checked after `hadHead`, so a lost race re-decides the quote; the §10.1
+        rows have no `quotedFound`, whose default `True` never raises). The loop bound is a tripwire — ping-pong is impossible by
         contract (a headed thread always has a TAIL).
         """
         use_first = not self._repo.thread_has_head(ctx.ws, thread_id=thread_id)
@@ -1003,8 +1022,10 @@ class Services:
             if not st.author_found:              # belt-and-suspenders vs the pre-check
                 raise UnknownActorError(ctx.actor)
             if st.had_head:                      # lost the first-post race
-                use_first = False
+                use_first = False                # (subsequent then decides the quote)
                 continue
+            if not st.quoted_found:              # quote missing / other thread / headless
+                raise UnknownQuotedMessageError(write_kwargs.get("quoted_id"), thread_id)
             raise RuntimeError(f"unexpected write status {st!r} (thread={thread_id!r})")
         raise RuntimeError(
             "message write dispatch did not converge "
@@ -1013,7 +1034,7 @@ class Services:
 
     def post_message(
         self, ctx: CallContext, *, thread_id: str, text: str,
-        mentions: list[str] | None = None,
+        mentions: list[str] | None = None, quoted_id: str | None = None,
     ) -> dict[str, Any]:
         """Post a message into an existing thread.
 
@@ -1026,7 +1047,11 @@ class Services:
         (a stakeholder decision: stricter than REST's own model). Validates the
         actor and mentions, derives `role` from the actor's node label
         (`User → user`, `Agent → assistant` — agents can author), then
-        dispatches on the §4 v2 status row via `_dispatch_write`.
+        dispatches on the §4 v2 status row via `_dispatch_write`. An optional
+        `quoted_id` (K-094) is resolved and written as `REPLY_TO` inside that same
+        write, same thread only; one that does not resolve raises
+        `UnknownQuotedMessageError` and nothing is posted. The result carries
+        `quotedId` (None without a quote).
 
         Agent/LLM-generated replies do not come through here: the responder and
         the workflow `post_message` tool write via `post_agent_answer`, which
@@ -1058,12 +1083,13 @@ class Services:
             subsequent_write=self._repo.post_subsequent_message,
             write_kwargs={
                 "author_id": ctx.actor, "text": text, "role": role,
-                "created_at": now, "mentions": wanted,
+                "created_at": now, "mentions": wanted, "quoted_id": quoted_id,
             },
         )
         return {
             "msgId": msg_id, "threadId": thread_id, "authorId": ctx.actor,
             "text": text, "role": role, "createdAt": now, "mentions": wanted,
+            "quotedId": quoted_id,
         }
 
     def post_agent_answer(

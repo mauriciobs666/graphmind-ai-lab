@@ -1,0 +1,85 @@
+{
+ "cwd": "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server",
+ "cmd": [
+  ".venv/bin/python",
+  "-m",
+  "pytest",
+  "-q",
+  "-p",
+  "no:cacheprovider",
+  "tests/test_api.py",
+  "tests/test_mcp.py",
+  "tests/test_storefront_api.py",
+  "tests/test_input_bound_parity.py",
+  "tests/test_services.py"
+ ],
+ "mutants": [
+  {
+   "id": "F1 api: quoted_id not passed",
+   "file": "falkorchat/api.py",
+   "old": "            quoted_id=body.quotedId,\n",
+   "new": "",
+   "occ": "all"
+  },
+  {
+   "id": "F2 api: quoted_id=None constant",
+   "file": "falkorchat/api.py",
+   "old": "quoted_id=body.quotedId",
+   "new": "quoted_id=None",
+   "occ": "all"
+  },
+  {
+   "id": "F3 mcp: quoted_id not passed to service",
+   "file": "falkorchat/mcp.py",
+   "old": "mentions=mentions, quoted_id=quoted_id",
+   "new": "mentions=mentions",
+   "occ": "all"
+  },
+  {
+   "id": "F4 mcp: docstring guidance word changed (guess->invent)",
+   "file": "falkorchat/mcp.py",
+   "old": "never construct or guess",
+   "new": "never construct or invent",
+   "occ": "all"
+  },
+  {
+   "id": "F5 mcp: quoted_id gains a maxLength bound",
+   "file": "falkorchat/mcp.py",
+   "old": "    quoted_id: str | None = None,\n",
+   "new": "    quoted_id: Annotated[str | None, Field(max_length=64)] = None,\n",
+   "occ": "all"
+  },
+  {
+   "id": "F6 mcp: quoted_id required",
+   "file": "falkorchat/mcp.py",
+   "old": "    frm: str | None = None,\n    quoted_id: str | None = None,\n",
+   "new": "    quoted_id: str,\n    frm: str | None = None,\n",
+   "occ": "all"
+  },
+  {
+   "id": "F7 REST: quotedId gains a max_length bound",
+   "file": "falkorchat/schemas.py",
+   "old": "    quotedId: str | None = None\n",
+   "new": "    quotedId: str | None = Field(None, max_length=64)\n",
+   "occ": "all"
+  },
+  {
+   "id": "F8 service result drops quotedId key",
+   "file": "falkorchat/services.py",
+   "old": "            \"quotedId\": quoted_id,\n",
+   "new": "",
+   "occ": "all"
+  },
+  {
+   "id": "F9 storefront route threads a client quotedId",
+   "file": "falkorchat/storefront_api.py",
+   "old": "    _check_text = field_validator(\"text\")(_nonblank)\n\n\nclass AdvanceOrderIn",
+   "new": "    quotedId: str | None = None\n\n    _check_text = field_validator(\"text\")(_nonblank)\n\n\nclass AdvanceOrderIn",
+   "occ": "all",
+   "extra": [
+    "text=body.text, mentions=[agent_id],",
+    "text=body.text, mentions=[agent_id], quoted_id=body.quotedId,"
+   ]
+  }
+ ]
+}

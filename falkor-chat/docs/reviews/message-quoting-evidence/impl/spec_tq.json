@@ -1,0 +1,45 @@
+{
+ "cwd": "/home/mauricio/prg/graphmind-ai-lab/falkor-chat",
+ "cmd": [
+  "bash",
+  "-c",
+  "./scripts/test_queries.sh > /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_mut.out 2>&1; rc=$?; grep -E '\u2717' /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_mut.out | tr '\\n' ';' ; grep Results /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_mut.out; exit $rc"
+ ],
+ "mutants": [
+  {
+   "id": "Q1 all copies: ok drops AND quoteOk",
+   "file": "scripts/test_queries.sh",
+   "old": " AND quoteOk) AS ok",
+   "new": ") AS ok",
+   "occ": "all"
+  },
+  {
+   "id": "Q2 all copies: same-thread WHERE dropped",
+   "file": "scripts/test_queries.sh",
+   "old": " WHERE quoted.threadId = \\$threadId",
+   "new": "",
+   "occ": "all"
+  },
+  {
+   "id": "Q3 all copies: quoteOk ignores null branch",
+   "file": "scripts/test_queries.sh",
+   "old": "(\\$quotedId IS NULL OR quoted IS NOT NULL)",
+   "new": "(quoted IS NOT NULL)",
+   "occ": "all"
+  },
+  {
+   "id": "Q4 all copies: rejected bare {msgId: $quotedId}",
+   "file": "scripts/test_queries.sh",
+   "old": "UNWIND [\\$quotedId] AS qid OPTIONAL MATCH (quoted:Message {msgId: qid})",
+   "new": "OPTIONAL MATCH (quoted:Message {msgId: \\$quotedId})",
+   "occ": "all"
+  },
+  {
+   "id": "Q5 all copies: REPLY_TO FOREACH removed",
+   "file": "scripts/test_queries.sh",
+   "old": "CREATE (m)-[:REPLY_TO]->(q)",
+   "new": "SET q.zz = 1",
+   "occ": "all"
+  }
+ ]
+}

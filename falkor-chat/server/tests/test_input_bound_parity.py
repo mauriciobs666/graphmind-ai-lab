@@ -306,6 +306,7 @@ MCP_ARGS: dict[tuple[str, str], Twin | NoBound] = {
     ("send_message", "mentions"): Twin(MSG, "body.mentions"),
     ("send_message", "re"): _UNBOUNDED_PATH,
     ("send_message", "frm"): NoBound("reserved/ignored in M1"),
+    ("send_message", "quoted_id"): NoBound("id argument, only looked up; REST body.quotedId is unbounded too"),
     ("read_messages", "re"): _UNBOUNDED_PATH,
     ("read_messages", "since"): Twin("GET /threads/{thread_id}/messages", "query.since"),
     ("read_messages", "limit"): Twin("GET /threads/{thread_id}/messages", "query.limit"),

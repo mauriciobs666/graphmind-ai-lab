@@ -98,7 +98,8 @@ def build_router(
         ctx: CallContext = Depends(get_context),
     ):
         posted = services.post_message(
-            ctx, thread_id=thread_id, text=body.text, mentions=body.mentions
+            ctx, thread_id=thread_id, text=body.text, mentions=body.mentions,
+            quoted_id=body.quotedId,
         )
         # Out-of-band, off the guarded write path (failure-isolated):
         #  * embed EVERY posted message (DECISION 3) so it joins the corpus;

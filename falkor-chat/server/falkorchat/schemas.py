@@ -52,6 +52,9 @@ class PostMessageIn(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_TEXT_LEN)
     # mention parity with the MCP `send_message` tool, which declares the same bound
     mentions: list[str] | None = Field(None, max_length=MAX_MENTIONS)
+    # K-094: optional same-thread quote, written as REPLY_TO. No bound: it is
+    # only looked up, never stored (an unresolvable id is a 400, nothing written).
+    quotedId: str | None = None
 
 
 # ── §14 Documents & Chunks (K-050 M5 Stage 1) ────────────────────────────────────

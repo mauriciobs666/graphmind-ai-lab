@@ -1411,6 +1411,9 @@ def test_a_posted_message_comes_back_on_the_participants_own_thread(client):
     # mention would have raised *before* the write, so this is also the
     # assertion that the preflight's agent check is about the right thing
     assert posted.json()["mentions"] == [AGENT]
+    # K-094: the shared `posted` dict grew `quotedId`; the storefront never quotes
+    assert "quotedId" in posted.json()
+    assert posted.json()["quotedId"] is None
 
     rows = client.get(f"{API_PREFIX}/messages", headers=headers,
                       params={"since": 0, "limit": 10}).json()
@@ -2931,7 +2934,7 @@ def test_every_service_error_subclass_is_mapped_or_declared_unreachable():
     """
     family = _subclasses(ServiceError)
     mapped, unreachable = set(SERVICE_ERROR_RESPONSES), set(SERVICE_ERRORS_UNREACHABLE)
-    assert len(family) == 15, sorted(k.__name__ for k in family)
+    assert len(family) == 16, sorted(k.__name__ for k in family)
     assert family - (mapped | unreachable) == set()
     assert not mapped & unreachable
     assert (mapped | unreachable) - family == set()
@@ -2973,6 +2976,22 @@ def test_the_message_length_unreachability_claim_is_pinned_to_its_producer():
     assert max_len <= MAX_TEXT_LEN
 
 
+def test_the_quote_unreachability_claim_is_pinned_to_its_producer(client):
+    """K-094 — `UnknownQuotedMessageError` is excused as unreachable because
+    `POST /shop/api/messages` never passes `quoted_id`. Pinned on the wire: a
+    client that sends a `quotedId` naming no message still posts, unquoted.
+    Threading the field through the route would put an unmapped `ServiceError`
+    on this route, and turn this red."""
+    assert "quotedId" not in storefront_api.PostMessageIn.model_fields
+    headers = _bearer(_join(client, "Ada", "en"))
+
+    posted = client.post(f"{API_PREFIX}/messages", headers=headers,
+                         json={"text": "hello", "quotedId": "nope"})
+
+    assert posted.status_code == 200, posted.text
+    assert posted.json()["quotedId"] is None
+
+
 def test_the_blank_message_unreachability_claim_is_pinned_to_its_producer():
     """K-101 — `InputBoundError` is excused as unreachable because the
     storefront's own `PostMessageIn` refuses blank text before the service's
@@ -3004,11 +3023,11 @@ def test_the_service_error_map_resolves_through_the_class_tree():
     assert service_error_response(derived("gone")) == (401, "invalid_token")
 
     # ...and minting it did not disturb the family the two partition tests
-    # assert is exactly fifteen. This used to need `del` + `gc.collect()` and so
+    # assert is exactly sixteen. This used to need `del` + `gc.collect()` and so
     # rested on reclaim timing; `_subclasses` now filters on the defining
     # package, which holds while the subclass is still alive (P12-4)
     assert derived in ThreadNotFoundError.__subclasses__()
-    assert len(_subclasses(ServiceError)) == 15
+    assert len(_subclasses(ServiceError)) == 16
     assert derived not in _subclasses(ServiceError)
 
     # ...and it agrees with the partition: nothing declared unreachable
@@ -4167,12 +4186,15 @@ STOREFRONT_RAISES_TODAY = frozenset({
 # its own producer test. `InputBoundError` (`post_message`'s K-101 non-blank
 # and mentions-count checks — seven now) is excused the same way:
 # `PostMessageIn.text`'s `_nonblank` answers `422` first and the route sends
-# one mention, with its own producer test. So six of the seven are exempted
-# here by a mechanism rather than by appearing in a list; `RuntimeError` is not
+# one mention, with its own producer test. `UnknownQuotedMessageError`
+# (`_dispatch_write`'s K-094 quote check — eight now) is excused the same way:
+# the route never passes `quoted_id`, with its own producer test. So seven of
+# the eight are exempted here by a mechanism rather than by appearing in a list; `RuntimeError` is not
 # a `ServiceError` at all and takes a written reason in `NON_FAMILY_RAISES`.
 SERVICE_RAISES_TODAY = frozenset({
     "InputBoundError", "MessageTooLongError", "RuntimeError", "ThreadNotFoundError",
     "UnknownActorError", "UnknownMemberError", "UnknownOrderTransitionError",
+    "UnknownQuotedMessageError",
 })
 
 # `Repository.ensure_participant`'s namespace refusal, reached from

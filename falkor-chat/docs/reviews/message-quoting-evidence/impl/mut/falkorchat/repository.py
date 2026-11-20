@@ -1,0 +1,4769 @@
+"""Data-access layer — the only place Cypher lives (DESIGN §14.2).
+
+Each method maps 1:1 to a verified query in `docs/QUERIES.md`, always
+parameterised, using `ro_query` for reads and `query` for writes, scoped to the
+per-workspace graph via `db.workspace_graph`. No business logic lives here —
+that is `services.py`'s job.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Any
+
+from falkordb import FalkorDB
+from redis.exceptions import ResponseError
+
+from . import config, db
+from .extraction import normalize_name
+from .querygen import DEFAULT_QUERY_TIMEOUT_MS, CompiledQuery
+from .update_detection import LSH_BAND_COUNT as _LSH_BAND_COUNT
+
+
+class EmbeddingDimensionError(Exception):
+    """Embedding length does not match the workspace's vector-index dimension.
+
+    Guards the silent-corruption quirk (K-008, `docs/archive/plans/m2-graphrag.md` item 2):
+    a wrong-dimension `vecf32` write is **silently accepted** at `SET` (no engine
+    error) but the node then **falls out of the ANN index** — permanently
+    unretrievable by `hybrid_search`, with no way to detect it after the fact
+    (no `vec.dimension()` on this build). `set_embedding` validates length
+    client-side and raises this *before* the write. Re-exported by `services`.
+    """
+
+
+class MemberIdCollisionError(Exception):
+    """Member id already held by the other label (QUERIES.md §2/§7 v2, DEF-1).
+
+    Member ids are namespace-unique across `User`/`Agent` (locked rule): every
+    `coalesce(u, a)` lookup assumes one id resolves to one member, so a guarded
+    ensure refuses to create a node whose id the other label already holds.
+    Raised by `ensure_user`/`ensure_agent` on the `collided` status states —
+    both the refusal (other label holds the id) and the pre-guard corruption
+    alarm (both labels hold it). Re-exported by `services` as part of the
+    service error surface (defined here to avoid a repository→services cycle).
+    """
+
+
+class WorkflowDefNotFoundError(Exception):
+    """A workflow def version was not found in the `reference` graph (M3 §11).
+
+    Raised by the service `materialize_def` when the `(key, version)` to
+    materialize has never been published — nothing is written to the workspace.
+    Re-exported by `services` (defined here to avoid a repository→services cycle).
+    """
+
+
+class WorkflowDefSpecError(Exception):
+    """A workflow-def spec failed validation before any write (M3 §11 / plan §B5).
+
+    Raised by the service `publish_workflow_def` when the spec is malformed —
+    unknown `kind`/step `type`, duplicate step keys, a `start_key` that resolves
+    to no declared step, or a transition endpoint that is not a declared step.
+    Validation runs *before* the repository write, so an invalid spec writes
+    nothing. Re-exported by `services`.
+    """
+
+
+class WorkflowDefConflictError(Exception):
+    """A re-publish or re-materialize would change the topology of an existing
+    `(key, version)` (M3 §11 / K-034).
+
+    Raised by `services.publish_workflow_def` (against `reference`) and
+    `services.materialize_def` (against `ctx.ws`'s snapshot) when the incoming
+    step-key set, transition-identity set `(from,to,on,order)`, or start key
+    differs from what's already stored — before any repository write. A
+    property-only difference (`name`, `kind`, a step's `type`/`config`, a
+    transition's `guard`) is NOT a conflict; that stays create-only-on-properties
+    (K-031-pinned). Nothing is written when this is raised. Re-exported by
+    `services`.
+
+    Both `publish_workflow_def` and `materialize_def` read-then-decide-then-write
+    with no atomicity between the read and the write (the same residual TOCTOU
+    shape as any check-then-act over two round trips): two concurrent callers
+    racing a **brand-new** `(key, version)` with differing content can both
+    observe "nothing stored yet" and both proceed to write. This is a
+    pre-existing, out-of-scope hazard (unrelated to and not worsened by this
+    gate) — for an *existing* `(key, version)`, a topology-differing candidate
+    is always rejected regardless of read timing.
+    """
+
+
+class WorkflowRunNotFoundError(Exception):
+    """A workflow run (or its current-position anchor) was not found (M3 §12).
+
+    Raised by the service/executor when a run state-move query returns zero rows
+    for a reason other than a guarded CAS miss — the run id does not exist, or it
+    has no `AT_STEP` (already terminal) when an advance was attempted. Re-exported
+    by `services` (defined here to avoid a repository→services cycle).
+    """
+
+
+class WorkflowRunNotWaitingError(Exception):
+    """Input was submitted to a run that is not parked (`waiting`) (K-024 D-G).
+
+    The §12.13 resume-with-ctx CAS returns zero rows for **three** reasons — the
+    run does not exist, it exists but is not `waiting`, or it is `waiting` but no
+    longer at the `ctxVersion` the caller read (K-097: a concurrent resume won,
+    even one whose drive re-parked it) — and the query cannot tell them apart. The
+    service splits out the first with a prior `get_run`: absent →
+    `WorkflowRunNotFoundError` (404); the other two → this (409), both meaning
+    "re-read the run and retry". Re-exported by `services`.
+    """
+
+
+class WorkflowInputRejectedError(Exception):
+    """Submitted run input (or a start `ctx`) failed validation (K-024 D-H/M-2).
+
+    Raised **before anything is written and before any step budget is consumed**:
+    a reserved key (`threadId`/`error`), a key the parked step does not declare, a
+    value outside the step's `config.expects` list, or a merged ctx over the size
+    bound. 400. Re-exported by `services`.
+    """
+
+
+class StepBudgetExceededError(Exception):
+    """A run exceeded its `maxSteps` budget (M3 §7 / §12.5).
+
+    The executor's runaway guard: `record_step_and_advance` bumps `stepCount`, and
+    when it passes the run's `maxSteps` the executor fails the run and surfaces this
+    (the run is stamped `failed` via `fail_run`). Re-exported by `services`.
+    """
+
+
+@dataclass(frozen=True)
+class MessageWriteStatus:
+    """Status row returned by the §4 v2 write paths (QUERIES.md §4 contract).
+
+    ``None`` from the write methods means the *anchor* missed (first path:
+    thread missing; subsequent path: no TAIL yet) — everything else comes back
+    as a status row the service dispatches on.
+    """
+
+    written: bool        # committed this call
+    had_head: bool       # first path only: lost the first-post race
+    dup_msg: bool        # msgId already exists (retry replay → idempotent success)
+    author_found: bool   # authorId resolved to a User or Agent
+    quoted_found: bool = True  # no quote asked, or quotedId resolves in this thread;
+                               # default keeps the §10.1 4-column rows valid
+
+
+@dataclass(frozen=True)
+class DocumentWriteStatus:
+    """Status row returned by `create_document` (§14.1 — K-050 M5 Stage 1).
+
+    Mirrors `MessageWriteStatus`'s "always return a status row, let the
+    service decide what to do with it" shape. ``written`` is False only when
+    ``ingestor_found`` is False — the actor guard is the only thing that can
+    make this write a no-op (no HEAD/TAIL race here, §2.4).
+    """
+
+    written: bool
+    ingestor_found: bool
+
+
+_FUZZY_TOKEN_UNSAFE = re.compile(r"[^\w]", re.UNICODE)
+
+
+def _lsh_band_params(lsh_bands: list[str]) -> dict[str, str]:
+    """`{lshBand0: …, lshBand7: …}` for a band write (K-091). Exactly
+    `LSH_BAND_COUNT` bands or `ValueError`: the `Document.lshBand<i>` indexes
+    are 0..7, so a short list would leave a document missing bands and a long
+    one would write unindexed properties."""
+    if len(lsh_bands) != _LSH_BAND_COUNT:
+        raise ValueError(
+            f"expected exactly {_LSH_BAND_COUNT} LSH bands, got {len(lsh_bands)}"
+        )
+    return {f"lshBand{i}": band for i, band in enumerate(lsh_bands)}
+
+
+def _escape_fuzzy_token(tok: str) -> str:
+    """Strip RediSearch query-syntax metacharacters from one token before it
+    is wrapped in a `%token%` fuzzy term (document-ingestion2 QA Defect 1,
+    `docs/test-reports/document-ingestion2-report.md`).
+
+    RediSearch's query parser treats parentheses, hyphen, colon, quotes,
+    brackets, pipe, and others as syntax. Entity names turned out to hit
+    this too (K-068); `fusion._fuzzy_query` fixes it its own way, by
+    tokenizing the name the way the full-text index does (split on ASCII
+    punctuation, keep everything else), because a glued `%modelbench%` is a
+    term the index never holds. This title path keeps stripping, unchanged
+    by K-068; whether it should tokenize like the index instead is K-064's call.
+    Stripping (rather than backslash-escaping) keeps the surviving
+    characters plain word characters, which is what RediSearch's
+    fuzzy (`%...%`) matching expects — an escaped-but-still-present
+    metacharacter would remain in the term and be a poor fuzzy match target
+    even where it did not outright crash the parser. Every character kept
+    (`\\w`) parses inside a term (live-probed, K-075).
+
+    Returns `""` for a token that was pure punctuation, and also for one left
+    with only underscores (`_`, `__`, `*_*`), as `fusion._fuzzy_query` drops
+    them (K-075): a lone `%_%` is a RediSearch syntax error, and a longer
+    all-underscore term, though it parses, carries no word content and under
+    the implicit AND makes the title query match nothing. The caller skips
+    empty results.
+    """
+    stripped = _FUZZY_TOKEN_UNSAFE.sub("", tok)
+    return stripped if stripped.strip("_") else ""
+
+
+class Repository:
+    """Cypher access over a FalkorDB connection.
+
+    Every method takes the workspace id `ws` (graph key ``ws:{ws}``) so the
+    single-tenant seam stays in `config`/`api`, never hardcoded here.
+    """
+
+    def __init__(self, conn: FalkorDB | db.LazyFalkorDB) -> None:
+        self._conn = conn
+
+    def _graph(self, ws: str):
+        return db.workspace_graph(self._conn, ws)
+
+    def _reference(self):
+        """Select the global `reference` graph (workflow def templates, §11)."""
+        return db.reference_graph(self._conn)
+
+    def ping(self, ws: str) -> bool:
+        """Liveness probe — a trivial read against the workspace graph."""
+        res = self._graph(ws).ro_query("RETURN 1")
+        return bool(res.result_set and res.result_set[0][0] == 1)
+
+    # ── §3 Channels ────────────────────────────────────────────────────────────
+
+    def create_channel(
+        self, ws: str, *, channel_id: str, name: str, created_at: int
+    ) -> None:
+        """Create a channel (plain CREATE). QUERIES.md §3.
+
+        Ids are server-minted uuids, so a MERGE could never match — this is a
+        CREATE with the uniqueness constraint as backstop. Consequence: creates
+        are non-idempotent (a retried create mints a new id).
+        """
+        self._graph(ws).query(
+            "CREATE (c:Channel {channelId: $channelId, name: $name, "
+            "createdAt: $createdAt}) "
+            "RETURN c",
+            {"channelId": channel_id, "name": name, "createdAt": created_at},
+        )
+
+    def list_channels(self, ws: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """List channels newest-first (index-anchored). QUERIES.md §3."""
+        res = self._graph(ws).ro_query(
+            "MATCH (c:Channel) WHERE c.channelId > '' "
+            "RETURN c.channelId AS channelId, c.name AS name, c.createdAt AS createdAt "
+            "ORDER BY c.createdAt DESC LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {"channelId": row[0], "name": row[1], "createdAt": row[2]}
+            for row in res.result_set
+        ]
+
+    # ── §3 Threads ─────────────────────────────────────────────────────────────
+
+    def create_thread(
+        self, ws: str, *, channel_id: str, thread_id: str, title: str, created_at: int
+    ) -> None:
+        """Create a thread under a channel (plain CREATE). QUERIES.md §3.
+
+        Non-idempotent like `create_channel` (server-minted ids; constraint as
+        backstop). Raises when the channel anchor is missing — the whole query
+        no-ops then, and a silent no-op would lose the thread. The service
+        pre-validates, so the raise is a tripwire.
+        """
+        res = self._graph(ws).query(
+            "MATCH (c:Channel {channelId: $channelId}) "
+            "CREATE (t:Thread {threadId: $threadId, title: $title, "
+            "createdAt: $createdAt, updatedAt: $createdAt}) "
+            "CREATE (c)-[:HAS_THREAD]->(t) "
+            "RETURN t",
+            {
+                "channelId": channel_id,
+                "threadId": thread_id,
+                "title": title,
+                "createdAt": created_at,
+            },
+        )
+        if not res.result_set:
+            raise RuntimeError(
+                f"thread create was a no-op — channel not found "
+                f"(channel={channel_id!r}, thread={thread_id!r})"
+            )
+
+    def list_threads(
+        self, ws: str, *, channel_id: str, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """List a channel's threads, most-recently-updated first. QUERIES.md §3."""
+        res = self._graph(ws).ro_query(
+            "MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t:Thread) "
+            "RETURN t.threadId AS threadId, t.title AS title, t.updatedAt AS updatedAt "
+            "ORDER BY t.updatedAt DESC LIMIT $limit",
+            {"channelId": channel_id, "limit": limit},
+        )
+        return [
+            {"threadId": row[0], "title": row[1], "updatedAt": row[2]}
+            for row in res.result_set
+        ]
+
+    def thread_has_head(self, ws: str, *, thread_id: str) -> bool:
+        """True once a thread has its first message (a HEAD pointer).
+
+        The service uses this to pick the first-vs-subsequent §4 write variant.
+        """
+        # NOTE (live gotcha): `exists((t)-[:HEAD]->())` returns true even when no
+        # HEAD edge exists on this build; `count{ }` isn't supported. An
+        # OPTIONAL MATCH + `IS NOT NULL` is the reliable existence check here.
+        res = self._graph(ws).ro_query(
+            "MATCH (t:Thread {threadId: $threadId}) "
+            "OPTIONAL MATCH (t)-[:HEAD]->(h) "
+            "RETURN h IS NOT NULL AS hasHead",
+            {"threadId": thread_id},
+        )
+        return bool(res.result_set and res.result_set[0][0])
+
+    # ── §2/§7 Members (author + mention targets) ────────────────────────────────
+
+    # Both ensures are v2 guarded CREATEs (QUERIES.md §2/§7, DEF-1): member ids
+    # are namespace-unique across User/Agent (locked rule). Status-row contract
+    # (exactly one row, always — no anchor MATCH, so zero-row is impossible):
+    #   created          → fresh node written (success)
+    #   existed          → id already on the same label, nothing written
+    #                      (idempotent success — re-ensure never updates props)
+    #   collided         → id held by the OTHER label, nothing written → raise
+    #   existed+collided → both labels hold the id (pre-guard corruption) → alarm
+    # Idempotency comes from the status logic (MERGE-in-FOREACH is non-standard);
+    # the same-label uniqueness constraints stay as the concurrency backstop.
+    # The residual cross-label race is one-query wide and documented — not closed.
+
+    @staticmethod
+    def _check_ensure_status(res, *, member_id: str, wanted: str, other: str) -> None:
+        created, existed, collided = (bool(v) for v in res.result_set[0])
+        if not collided:
+            return  # created or existed — both are quiet successes
+        if existed:
+            raise MemberIdCollisionError(
+                f"member-id namespace corrupted: {member_id!r} exists as both a "
+                f"User and an Agent — nothing written, manual repair required"
+            )
+        article = {"User": "a", "Agent": "an"}
+        raise MemberIdCollisionError(
+            f"member id {member_id!r} is already held by {article[other]} {other} — "
+            f"refusing to create {article[wanted]} {wanted} "
+            f"(member ids are namespace-unique across User/Agent)"
+        )
+
+    def ensure_user(
+        self, ws: str, *, user_id: str, display_name: str | None = None,
+        email: str | None = None,
+    ) -> None:
+        """Project a User into the workspace graph (guarded ensure). QUERIES.md §2.
+
+        Idempotent on the same label; raises `MemberIdCollisionError` when the
+        id is held by an Agent (or by both labels — corruption alarm).
+        """
+        res = self._graph(ws).query(
+            "OPTIONAL MATCH (u:User  {userId:  $userId}) "
+            "OPTIONAL MATCH (a:Agent {agentId: $userId}) "
+            "WITH u, a, (u IS NULL AND a IS NULL) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (:User {userId: $userId, displayName: $displayName, email: $email}) "
+            ") "
+            "RETURN ok            AS created, "
+            "       u IS NOT NULL AS existed, "
+            "       a IS NOT NULL AS collided",
+            {"userId": user_id, "displayName": display_name, "email": email},
+        )
+        self._check_ensure_status(res, member_id=user_id, wanted="User", other="Agent")
+
+    def ensure_agent(
+        self, ws: str, *, agent_id: str, name: str | None = None,
+        model: str | None = None, created_at: int | None = None,
+    ) -> None:
+        """Register an Agent in the workspace graph (guarded ensure). QUERIES.md §7.
+
+        Mirror of `ensure_user` — same contract with the labels swapped.
+        """
+        res = self._graph(ws).query(
+            "OPTIONAL MATCH (a:Agent {agentId: $agentId}) "
+            "OPTIONAL MATCH (u:User  {userId:  $agentId}) "
+            "WITH a, u, (a IS NULL AND u IS NULL) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (:Agent {agentId: $agentId, name: $name, model: $model, "
+            "createdAt: $createdAt}) "
+            ") "
+            "RETURN ok            AS created, "
+            "       a IS NOT NULL AS existed, "
+            "       u IS NOT NULL AS collided",
+            {"agentId": agent_id, "name": name, "model": model, "createdAt": created_at},
+        )
+        self._check_ensure_status(res, member_id=agent_id, wanted="Agent", other="User")
+
+    # ── §4 Messages (v2 self-guarding write paths) ──────────────────────────────
+    #
+    # Both paths guard the write inside their single GRAPH.QUERY via
+    # `FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | …)` — a guard per path,
+    # never a conditional merge of the two paths (locked decision). The message
+    # is a guarded CREATE (no MERGE); the `Message.msgId` uniqueness constraint
+    # stays as the concurrency backstop. Notes that must survive edits:
+    #   * The `UNWIND (CASE WHEN $mentions = [] …)` guard is LOAD-BEARING for the
+    #     write itself — a bare empty UNWIND collapses the row stream before the
+    #     FOREACH and the whole write silently no-ops (live-verified).
+    #   * `DELETE` inside FOREACH (TAIL relink) and nested FOREACH (mentions) are
+    #     live-verified on this build.
+    #   * Zero rows back = the *anchor* missed (thread / TAIL) → return None; the
+    #     service owns the dispatch (QUERIES.md §4 status-row contract).
+    #   * The quote (K-094) resolves via `UNWIND [$quotedId] AS qid` then
+    #     `OPTIONAL MATCH (quoted:Message {msgId: $quotedId})`, never a bare
+    #     `{msgId: $quotedId}`: a NULL parameter in a pattern-property equality
+    #     plans `Node By Label Scan` over every Message (falkordb-quirks.md, "A
+    #     bare pattern-property equality match …"), so every post WITHOUT a quote
+    #     would scan; the rebound variable keeps `Node By Index Scan`. A
+    #     one-element list always yields exactly one row, even `[null]`.
+    #     `quotedId` is therefore always sent (None = no quote); omitting it
+    #     raises `Missing parameters`. Same-thread only (`quoted.threadId`).
+
+    @staticmethod
+    def _write_status(res) -> MessageWriteStatus | None:
+        if not res.result_set:
+            return None
+        return MessageWriteStatus(*(bool(v) for v in res.result_set[0]))
+
+    def post_first_message(
+        self, ws: str, *, thread_id: str, msg_id: str, author_id: str,
+        text: str, role: str, created_at: int, mentions: list[str] | None = None,
+        quoted_id: str | None = None,
+    ) -> MessageWriteStatus | None:
+        """First message in a thread — creates HEAD + TAIL. QUERIES.md §4 v2.
+
+        Mentions and the optional same-thread quote (`quoted_id` →
+        `REPLY_TO`) ride inside this single GRAPH.QUERY (atomicity rule).
+        Returns the status row, or None when the thread anchor is missing.
+        """
+        res = self._graph(ws).query(
+            "MATCH (t:Thread {threadId: $threadId}) "
+            "OPTIONAL MATCH (t)-[:HEAD]->(h) "
+            "OPTIONAL MATCH (dup:Message {msgId: $msgId}) "
+            "OPTIONAL MATCH (ua:User  {userId:  $authorId}) "
+            "OPTIONAL MATCH (aa:Agent {agentId: $authorId}) "
+            "OPTIONAL MATCH (quoted:Message {msgId: $quotedId}) WHERE quoted.threadId = $threadId "
+            "WITH t, h, dup, coalesce(ua, aa) AS author, quoted "
+            "UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid "
+            "OPTIONAL MATCH (mu:User  {userId:  mid}) "
+            "OPTIONAL MATCH (ma:Agent {agentId: mid}) "
+            "WITH t, h, dup, author, quoted, collect(DISTINCT coalesce(mu, ma)) AS mems "
+            "WITH t, h, dup, author, quoted, mems, "
+            "     ($quotedId IS NULL OR quoted IS NOT NULL) AS quoteOk "
+            "WITH t, h, dup, author, quoted, mems, quoteOk, "
+            "     (h IS NULL AND dup IS NULL AND author IS NOT NULL AND quoteOk) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (m:Message {msgId: $msgId, text: $text, role: $role, "
+            "                     createdAt: $createdAt, threadId: $threadId}) "
+            "  CREATE (t)-[:HEAD]->(m) "
+            "  CREATE (t)-[:TAIL]->(m) "
+            "  CREATE (m)-[:POSTED_BY]->(author) "
+            "  SET t.updatedAt = $createdAt "
+            "  FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) "
+            "  FOREACH (q IN CASE WHEN quoted IS NULL THEN [] ELSE [quoted] END | "
+            "    CREATE (m)-[:REPLY_TO]->(q)) "
+            ") "
+            "RETURN ok                 AS written, "
+            "       h    IS NOT NULL   AS hadHead, "
+            "       dup  IS NOT NULL   AS dupMsg, "
+            "       author IS NOT NULL AS authorFound, "
+            "       quoteOk            AS quotedFound",
+            {
+                "threadId": thread_id, "msgId": msg_id, "authorId": author_id,
+                "text": text, "role": role, "createdAt": created_at,
+                "mentions": list(mentions or []), "quotedId": quoted_id,
+            },
+        )
+        return self._write_status(res)
+
+    def post_subsequent_message(
+        self, ws: str, *, thread_id: str, msg_id: str, author_id: str,
+        text: str, role: str, created_at: int, mentions: list[str] | None = None,
+        quoted_id: str | None = None,
+    ) -> MessageWriteStatus | None:
+        """Append a message — moves TAIL forward via NEXT. QUERIES.md §4 v2.
+
+        Mentions and the optional same-thread quote (`quoted_id` →
+        `REPLY_TO`) ride inside this single GRAPH.QUERY (atomicity rule).
+        Returns the status row, or None when the thread has no TAIL yet.
+        """
+        res = self._graph(ws).query(
+            "MATCH (t:Thread {threadId: $threadId})-[tailRel:TAIL]->(prev:Message) "
+            "OPTIONAL MATCH (dup:Message {msgId: $msgId}) "
+            "OPTIONAL MATCH (ua:User  {userId:  $authorId}) "
+            "OPTIONAL MATCH (aa:Agent {agentId: $authorId}) "
+            "OPTIONAL MATCH (quoted:Message {msgId: $quotedId}) WHERE quoted.threadId = $threadId "
+            "WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author, quoted "
+            "UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid "
+            "OPTIONAL MATCH (mu:User  {userId:  mid}) "
+            "OPTIONAL MATCH (ma:Agent {agentId: mid}) "
+            "WITH t, tailRel, prev, dup, author, quoted, collect(DISTINCT coalesce(mu, ma)) AS mems "
+            "WITH t, tailRel, prev, dup, author, quoted, mems, "
+            "     ($quotedId IS NULL OR quoted IS NOT NULL) AS quoteOk "
+            "WITH t, tailRel, prev, dup, author, quoted, mems, quoteOk, "
+            "     (dup IS NULL AND author IS NOT NULL AND quoteOk) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (m:Message {msgId: $msgId, text: $text, role: $role, "
+            "                     createdAt: $createdAt, threadId: $threadId}) "
+            "  CREATE (prev)-[:NEXT]->(m) "
+            "  DELETE tailRel "
+            "  CREATE (t)-[:TAIL]->(m) "
+            "  CREATE (m)-[:POSTED_BY]->(author) "
+            "  SET t.updatedAt = $createdAt "
+            "  FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) "
+            "  FOREACH (q IN CASE WHEN quoted IS NULL THEN [] ELSE [quoted] END | "
+            "    CREATE (m)-[:REPLY_TO]->(q)) "
+            ") "
+            "RETURN ok                 AS written, "
+            "       false              AS hadHead, "
+            "       dup  IS NOT NULL   AS dupMsg, "
+            "       author IS NOT NULL AS authorFound, "
+            "       quoteOk            AS quotedFound",
+            {
+                "threadId": thread_id, "msgId": msg_id, "authorId": author_id,
+                "text": text, "role": role, "createdAt": created_at,
+                "mentions": list(mentions or []), "quotedId": quoted_id,
+            },
+        )
+        return self._write_status(res)
+
+    # ── §10 Agent answer provenance — EMITTED (K-013) ───────────────────────────
+    #
+    # The AI responder posts its answer as the Agent (role derived `assistant`)
+    # via the §4 write path, and records the §6 retrieval seeds that grounded it
+    # as `(answer)-[:EMITTED {score, rank}]->(seed)` provenance edges written
+    # INSIDE the same GRAPH.QUERY (atomicity — QUERIES.md §10). Both write paths
+    # carry the seed block so the service can reuse the §4 dispatch loop verbatim
+    # (subsequent → on None retry as first). `seeds` is ordered by rank; the three
+    # §10.1 map params are derived positionally. `seedIds == []` is a verified
+    # no-op (the CASE guard keeps the write alive), so the same shape serves
+    # non-provenance writes. Build quirk: an EMITTED endpoint must be a bound node
+    # (a map-projection cannot be a CREATE endpoint), so seeds are collected as
+    # nodes and per-edge props come from map params keyed by the node's own msgId.
+    #
+    # K-050 M5 Stage 5 (`document-ingestion-graph.md` §3): `seedIds` now resolves
+    # against BOTH `Message.msgId` and `Chunk.chunkId` via a two-label
+    # `OPTIONAL MATCH` + `coalesce` pair — the same bare-id idiom already used
+    # for author/mention resolution in this same query (§3.1: no namespaced id
+    # scheme, no parallel `kind` list — both id spaces are disjoint uuid4
+    # generators). The per-edge map-param key is `coalesce(seed.msgId,
+    # seed.chunkId)` — exactly one is non-null per seed node, so `coalesce`
+    # always resolves the right key regardless of seed kind.
+
+    @staticmethod
+    def _seed_params(
+        seeds: list[tuple[str, float]] | None,
+    ) -> tuple[list[str], dict[str, float], dict[str, int]]:
+        """Derive the three §10.1 seed params from the ranked `seeds` list.
+
+        `seeds = [(seedId, score)]` in rank order (`seedId` a `Message.msgId`
+        or `Chunk.chunkId`, generic over id space — K-050 M5 Stage 5) →
+        `seed_ids` (rank = position), `score_by = {seedId: score}`,
+        `rank_by = {seedId: index}`.
+        """
+        ordered = list(seeds or [])
+        seed_ids = [s[0] for s in ordered]
+        score_by = {s[0]: s[1] for s in ordered}
+        rank_by = {s[0]: i for i, s in enumerate(ordered)}
+        return seed_ids, score_by, rank_by
+
+    def post_agent_answer(
+        self, ws: str, *, thread_id: str, msg_id: str, author_id: str,
+        text: str, role: str, created_at: int,
+        mentions: list[str] | None = None,
+        seeds: list[tuple[str, float]] | None = None,
+    ) -> MessageWriteStatus | None:
+        """Agent answer with EMITTED provenance (subsequent path). QUERIES.md §10.1.
+
+        The §4 subsequent write plus one added guarded UNWIND/FOREACH block that
+        resolves seed msgIds to bound `Message` nodes and creates the `EMITTED`
+        edges inside the same guard. §4's first four columns (no `quotedFound`;
+        None = no TAIL → retry as first). Mentions + seeds both ride inside the single
+        GRAPH.QUERY (atomicity rule).
+        """
+        seed_ids, score_by, rank_by = self._seed_params(seeds)
+        res = self._graph(ws).query(
+            "MATCH (t:Thread {threadId: $threadId})-[tailRel:TAIL]->(prev:Message) "
+            "OPTIONAL MATCH (dup:Message {msgId: $msgId}) "
+            "OPTIONAL MATCH (ua:User  {userId:  $authorId}) "
+            "OPTIONAL MATCH (aa:Agent {agentId: $authorId}) "
+            "WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author "
+            "UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid "
+            "OPTIONAL MATCH (mu:User  {userId:  mid}) "
+            "OPTIONAL MATCH (ma:Agent {agentId: mid}) "
+            "WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems "
+            "UNWIND (CASE WHEN $seedIds = [] THEN [null] ELSE $seedIds END) AS sid "
+            "OPTIONAL MATCH (sm:Message {msgId: sid}) "
+            "OPTIONAL MATCH (sc:Chunk {chunkId: sid}) "
+            "WITH t, tailRel, prev, dup, author, mems, "
+            "     collect(DISTINCT coalesce(sm, sc)) AS seeds "
+            "WITH t, tailRel, prev, dup, author, mems, seeds, "
+            "     (dup IS NULL AND author IS NOT NULL) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (m:Message {msgId: $msgId, text: $text, role: $role, "
+            "                     createdAt: $createdAt, threadId: $threadId}) "
+            "  CREATE (prev)-[:NEXT]->(m) "
+            "  DELETE tailRel "
+            "  CREATE (t)-[:TAIL]->(m) "
+            "  CREATE (m)-[:POSTED_BY]->(author) "
+            "  SET t.updatedAt = $createdAt "
+            "  FOREACH (mem  IN mems  | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) "
+            "  FOREACH (seed IN seeds | CREATE (m)-[:EMITTED "
+            "    {score: $scoreBy[coalesce(seed.msgId, seed.chunkId)], "
+            "     rank: $rankBy[coalesce(seed.msgId, seed.chunkId)]}]->(seed)) "
+            ") "
+            "RETURN ok                 AS written, "
+            "       false              AS hadHead, "
+            "       dup  IS NOT NULL   AS dupMsg, "
+            "       author IS NOT NULL AS authorFound",
+            {
+                "threadId": thread_id, "msgId": msg_id, "authorId": author_id,
+                "text": text, "role": role, "createdAt": created_at,
+                "mentions": list(mentions or []),
+                "seedIds": seed_ids, "scoreBy": score_by, "rankBy": rank_by,
+            },
+        )
+        return self._write_status(res)
+
+    def post_agent_answer_first(
+        self, ws: str, *, thread_id: str, msg_id: str, author_id: str,
+        text: str, role: str, created_at: int,
+        mentions: list[str] | None = None,
+        seeds: list[tuple[str, float]] | None = None,
+    ) -> MessageWriteStatus | None:
+        """First-path agent answer with EMITTED provenance. QUERIES.md §10.1 note.
+
+        The §4 first-message write (creates HEAD + TAIL) with the same seed block
+        folded in — the defensive fallback the dispatch loop needs when the agent
+        answers into a headless thread. Realistically the trigger message is the
+        HEAD, so the subsequent path is the live one; both carry the block.
+        """
+        seed_ids, score_by, rank_by = self._seed_params(seeds)
+        res = self._graph(ws).query(
+            "MATCH (t:Thread {threadId: $threadId}) "
+            "OPTIONAL MATCH (t)-[:HEAD]->(h) "
+            "OPTIONAL MATCH (dup:Message {msgId: $msgId}) "
+            "OPTIONAL MATCH (ua:User  {userId:  $authorId}) "
+            "OPTIONAL MATCH (aa:Agent {agentId: $authorId}) "
+            "WITH t, h, dup, coalesce(ua, aa) AS author "
+            "UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid "
+            "OPTIONAL MATCH (mu:User  {userId:  mid}) "
+            "OPTIONAL MATCH (ma:Agent {agentId: mid}) "
+            "WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems "
+            "UNWIND (CASE WHEN $seedIds = [] THEN [null] ELSE $seedIds END) AS sid "
+            "OPTIONAL MATCH (sm:Message {msgId: sid}) "
+            "OPTIONAL MATCH (sc:Chunk {chunkId: sid}) "
+            "WITH t, h, dup, author, mems, collect(DISTINCT coalesce(sm, sc)) AS seeds "
+            "WITH t, h, dup, author, mems, seeds, "
+            "     (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (m:Message {msgId: $msgId, text: $text, role: $role, "
+            "                     createdAt: $createdAt, threadId: $threadId}) "
+            "  CREATE (t)-[:HEAD]->(m) "
+            "  CREATE (t)-[:TAIL]->(m) "
+            "  CREATE (m)-[:POSTED_BY]->(author) "
+            "  SET t.updatedAt = $createdAt "
+            "  FOREACH (mem  IN mems  | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) "
+            "  FOREACH (seed IN seeds | CREATE (m)-[:EMITTED "
+            "    {score: $scoreBy[coalesce(seed.msgId, seed.chunkId)], "
+            "     rank: $rankBy[coalesce(seed.msgId, seed.chunkId)]}]->(seed)) "
+            ") "
+            "RETURN ok                 AS written, "
+            "       h    IS NOT NULL   AS hadHead, "
+            "       dup  IS NOT NULL   AS dupMsg, "
+            "       author IS NOT NULL AS authorFound",
+            {
+                "threadId": thread_id, "msgId": msg_id, "authorId": author_id,
+                "text": text, "role": role, "createdAt": created_at,
+                "mentions": list(mentions or []),
+                "seedIds": seed_ids, "scoreBy": score_by, "rankBy": rank_by,
+            },
+        )
+        return self._write_status(res)
+
+    def read_provenance(self, ws: str, *, msg_id: str) -> list[dict[str, Any]]:
+        """An answer's cited seeds, ordered by rank (forward). QUERIES.md §10.2.
+
+        Read path (`ro_query`). Anchored on the answer's `msgId` index,
+        traverses `EMITTED` outward to a seed of EITHER kind (generalized,
+        K-050 M5 Stage 5, `document-ingestion-graph.md` §3.3). `s` is
+        deliberately **unlabeled** in the pattern — it's discovered by
+        traversal from the index-anchored `a`, not independently searched, so
+        there's no `Node By Label Scan` risk (live-verified `GRAPH.PROFILE`:
+        `Node By Index Scan | (a:Message)` → `Conditional Traverse (a)-[:EMITTED]->(s)`
+        → `Optional Conditional Traverse (d)`). The
+        `OPTIONAL MATCH (s)<-[:HAS_CHUNK]-(d:Document)` hop only ever matches
+        when `s` is a `Chunk` (a `Message` has no incoming `HAS_CHUNK` edge) —
+        this is the AC-5 "traverses back through `(:Chunk)<-[:HAS_CHUNK]-
+        (:Document)`" requirement, folded into the same read as one extra hop.
+
+        Rows `{seedKind, seedId, text, role, documentId, documentTitle, score,
+        rank}` — `seedKind` is `'Message'` or `'Chunk'`; `role` is null for a
+        `Chunk` seed; `documentId`/`documentTitle` are null for a `Message`
+        seed.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (a:Message {msgId: $msgId})-[e:EMITTED]->(s) "
+            "OPTIONAL MATCH (s)<-[:HAS_CHUNK]-(d:Document) "
+            "RETURN labels(s)[0]              AS seedKind, "
+            "       coalesce(s.msgId, s.chunkId) AS seedId, "
+            "       s.text                    AS text, "
+            "       s.role                    AS role, "
+            "       d.documentId              AS documentId, "
+            "       d.title                   AS documentTitle, "
+            "       e.score, e.rank "
+            "ORDER BY e.rank",
+            {"msgId": msg_id},
+        )
+        return [
+            {
+                "seedKind": row[0], "seedId": row[1], "text": row[2],
+                "role": row[3], "documentId": row[4], "documentTitle": row[5],
+                "score": row[6], "rank": row[7],
+            }
+            for row in res.result_set
+        ]
+
+    def read_citing_answers(
+        self, ws: str, *, seed_id: str
+    ) -> list[dict[str, Any]]:
+        """Answers that cited a seed, newest-first (reverse). QUERIES.md §10.3.
+
+        Read path (`ro_query`). Resolves `$seedId` against both
+        `Message.msgId` and `Chunk.chunkId` via the same two-label
+        `OPTIONAL MATCH` + `coalesce` idiom the write side uses (generalized,
+        K-050 M5 Stage 5, `document-ingestion-graph.md` §3.4) — bare id, not a
+        namespaced scheme, same locked-convention argument as §3.1. `a`'s
+        `Message` label costs nothing here even though `a` is the unbound
+        traversal target: `s` already supplies the index anchor (resolved one
+        step earlier by the `OPTIONAL MATCH` pair), so the planner never falls
+        back to a label scan on `a` — live-verified against 1,000 candidate
+        answers with `GRAPH.PROFILE` showing no `Node By Label Scan` at any
+        point. An answer is always a `Message`, so this row shape is
+        unchanged from before generalization: `{answerMsgId, role, createdAt,
+        score, rank}`.
+        """
+        res = self._graph(ws).ro_query(
+            "OPTIONAL MATCH (sm:Message {msgId: $seedId}) "
+            "OPTIONAL MATCH (sc:Chunk {chunkId: $seedId}) "
+            "WITH coalesce(sm, sc) AS s "
+            "MATCH (a:Message)-[e:EMITTED]->(s) "
+            "RETURN a.msgId, a.role, a.createdAt, e.score, e.rank "
+            "ORDER BY a.createdAt DESC",
+            {"seedId": seed_id},
+        )
+        return [
+            {
+                "answerMsgId": row[0], "role": row[1], "createdAt": row[2],
+                "score": row[3], "rank": row[4],
+            }
+            for row in res.result_set
+        ]
+
+    def read_thread(self, ws: str, *, thread_id: str) -> list[dict[str, Any]]:
+        """Read a full thread in order. QUERIES.md §4.
+
+        K-056: `toolsUsed` (`link_step_emission`'s breadcrumb-source property, `[]` when
+        never stamped — `coalesce` covers both a pre-K-056 row with no property at all
+        and a step that dispatched nothing) rides along so `executor._assemble_messages`
+        can tag a tool-backed assistant turn when this thread is replayed into a later
+        prompt.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (t:Thread {threadId: $threadId})-[:HEAD]->(first:Message) "
+            "MATCH (first)-[:NEXT*0..]->(m:Message) "
+            "MATCH (m)-[:POSTED_BY]->(author) "
+            "RETURN m.msgId AS msgId, m.text AS text, m.role AS role, "
+            "m.createdAt AS createdAt, "
+            "coalesce(author.userId, author.agentId) AS authorId, "
+            "author.displayName AS displayName, labels(author) AS authorType, "
+            "coalesce(m.toolsUsed, []) AS toolsUsed "
+            "ORDER BY m.createdAt",
+            {"threadId": thread_id},
+        )
+        return [
+            {
+                "msgId": row[0], "text": row[1], "role": row[2], "createdAt": row[3],
+                "authorId": row[4], "displayName": row[5], "authorType": row[6],
+                "toolsUsed": row[7],
+            }
+            for row in res.result_set
+        ]
+
+    # ── §5 Full-text search ─────────────────────────────────────────────────────
+
+    def search_messages(
+        self, ws: str, *, query: str, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Workspace-wide full-text keyword search over message text. QUERIES.md §5.
+
+        Anchored on the `Message` full-text index; the channel-scoping MATCH from
+        §5 is omitted for the workspace-wide search surface (DESIGN §14.4).
+        """
+        res = self._graph(ws).ro_query(
+            "CALL db.idx.fulltext.queryNodes('Message', $query) "
+            "YIELD node AS m, score "
+            "RETURN m.msgId AS msgId, m.threadId AS threadId, m.text AS text, "
+            "m.createdAt AS createdAt, score "
+            "ORDER BY score DESC LIMIT $limit",
+            {"query": query, "limit": limit},
+        )
+        return [
+            {
+                "msgId": row[0], "threadId": row[1], "text": row[2],
+                "createdAt": row[3], "score": row[4],
+            }
+            for row in res.result_set
+        ]
+
+    # ── §6 GraphRAG hybrid retrieval ────────────────────────────────────────────
+
+    def set_embedding(
+        self, ws: str, *, msg_id: str, embedding: list[float],
+        expected_dim: int | None = None,
+    ) -> bool:
+        """Set a message's embedding (async, after posting). QUERIES.md §6. Write path.
+
+        Decoupled from the message write path — the message is readable before the
+        embedding lands (DESIGN §9); this runs once per message from the embedding
+        worker. `vecf32(...)` wraps the `$embedding` list parameter in the query.
+
+        **Validates `len(embedding) == expected_dim` client-side before the SET**
+        (default `config.EMBEDDING_DIM`). This is not optional: a wrong-dimension
+        `vecf32` write is silently accepted by the engine but the node then drops
+        out of the ANN index permanently (item-2 quirk) — raise
+        `EmbeddingDimensionError` rather than let the message vanish.
+
+        Returns True if the message existed and the embedding committed, False if
+        no message matched `$msgId` (a silent no-op the caller may want to notice).
+        """
+        dim = config.EMBEDDING_DIM if expected_dim is None else expected_dim
+        if len(embedding) != dim:
+            raise EmbeddingDimensionError(
+                f"embedding has {len(embedding)} dimensions, expected {dim} "
+                f"(msgId={msg_id!r}) — a wrong-dimension vecf32 write is silently "
+                f"accepted but drops the node out of the ANN index; refusing to write"
+            )
+        res = self._graph(ws).query(
+            "MATCH (m:Message {msgId: $msgId}) SET m.embedding = vecf32($embedding)",
+            {"msgId": msg_id, "embedding": list(embedding)},
+        )
+        return res.properties_set > 0
+
+    def read_index_dimension(
+        self, ws: str, *, label: str, prop: str = "embedding"
+    ) -> int | None:
+        """Introspect `ws:{ws}`'s vector-index dimension for `label.prop` (FR-19,
+        `-graph.md` §3.2). QUERIES.md §6 (new subsection).
+
+        Returns the configured dimension, or `None` for every "no vector index"
+        edge case — the four `-graph.md` §3.2 edge behaviours collapse to exactly
+        two outcomes here:
+
+        - **a real int** — the vector index exists (dimension is index metadata,
+          not data, so this is `True` even with zero vectors written).
+        - **`None`** — covers all three "there is no vector index to compare
+          against" cases, deliberately not distinguished further (the caller's
+          only correct response to any of them is "refuse"):
+            1. the label has only non-vector (e.g. `RANGE`) indexes → one row,
+               `dim` column `NULL`;
+            2. the label is unknown to this graph → zero rows;
+            3. the graph key `ws:{ws}` does not exist at all → FalkorDB raises
+               `ERR Invalid graph operation on empty key` rather than returning
+               rows — caught here and folded into the same `None` outcome.
+
+        Routed via `ro_query` (never a write) so a nonexistent graph key is never
+        implicitly created as a side effect of this check — `ro_query`/`GRAPH.RO_QUERY`
+        raising the "empty key" error (rather than silently creating the graph) is
+        exactly what makes case 3 distinguishable from case 2 at all, and is the same
+        behaviour `services._read_or_absent` already relies on for the reference/
+        snapshot "cold graph key" probe.
+        """
+        try:
+            res = self._graph(ws).ro_query(
+                "CALL db.indexes() YIELD label, types, options "
+                "WHERE label = $label AND types[$prop] = ['VECTOR'] "
+                "RETURN options[$prop].dimension AS dim",
+                {"label": label, "prop": prop},
+            )
+        except ResponseError as exc:
+            if "empty key" in str(exc):
+                return None
+            raise
+        if not res.result_set:
+            return None
+        return res.result_set[0][0]
+
+    def hybrid_search(
+        self, ws: str, *, q_vec: list[float], k: int = 10, limit: int = 10,
+        channel_id: str | None = None, timeout: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """GraphRAG hybrid retrieval: vector ANN seed + scope traversal. QUERIES.md §6.
+
+        Read path (routes via `ro_query`). Two variants mirror §6: channel-scoped
+        (`channel_id` given → keep the `MATCH (c:Channel …)` line) vs workspace-wide
+        (`channel_id` omitted → drop it). `vecf32(...)` wraps the `$qVec` list
+        parameter, same as the SET.
+
+        `score` is **cosine distance** (0 = identical); rows come back already
+        `ORDER BY score ASC` (most similar first) — do not re-sort. `relatedContext`
+        is `[]` in M2: the Entity co-occurrence expansion (`MENTIONS`→`Entity`, §6 —
+        distinct from `MENTIONS_MEMBER`) is present but dormant until an extraction
+        pipeline lands, so it no-ops cleanly. Passed through unchanged.
+
+        `timeout` (ms) is a per-query client override for long GraphRAG reads
+        (DESIGN §10 / K-007 posture) — the service supplies it, not this layer.
+        ANN recall is approximate: kNN may return fewer than `k` — never treat
+        "returns exactly k" as an invariant.
+        """
+        scoped = channel_id is not None
+        cypher = (
+            "CALL db.idx.vector.queryNodes('Message', 'embedding', $k, vecf32($qVec)) "
+            "YIELD node AS seed, score "
+            "MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed) "
+            + (
+                "MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t) "
+                if scoped else ""
+            )
+            + "OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) "
+            "WITH seed, score, collect(DISTINCT related)[..5] AS expanded "
+            "RETURN seed.msgId AS msgId, seed.text AS text, seed.role AS role, "
+            "score, [m IN expanded | m.text] AS relatedContext "
+            "ORDER BY score ASC "
+            "LIMIT $limit"
+        )
+        params: dict[str, Any] = {"qVec": list(q_vec), "k": k, "limit": limit}
+        if scoped:
+            params["channelId"] = channel_id
+        res = self._graph(ws).ro_query(cypher, params, timeout=timeout)
+        return [
+            {
+                "msgId": row[0], "text": row[1], "role": row[2],
+                "score": row[3], "relatedContext": row[4],
+            }
+            for row in res.result_set
+        ]
+
+    # ── §9 Read-cursors & since-reads ───────────────────────────────────────────
+
+    @staticmethod
+    def _since_row(row: list[Any]) -> dict[str, Any]:
+        return {
+            "msgId": row[0], "text": row[1], "role": row[2], "createdAt": row[3],
+            "authorId": row[4], "authorType": row[5], "isMention": bool(row[6]),
+            "threadId": row[7], "displayName": row[8],
+        }
+
+    # Two predicate forms, one method (QUERIES.md §9.1/§9.2 v2):
+    #   * `since_msg_id is None` → plain `m.createdAt > $since` — explicit-since
+    #     semantics (may re-deliver or skip within that exact millisecond).
+    #   * a string (possibly "") → formulation-A composite keyset, which mirrors
+    #     the ORDER BY 1:1 and never skips a millisecond-tied sibling.
+    # Both forms share the deterministic total order (createdAt, msgId).
+    _SINCE_PLAIN = "m.createdAt > $since "
+    _SINCE_KEYSET = (
+        "m.createdAt > $since "
+        "OR (m.createdAt = $since AND m.msgId > $sinceMsgId) "
+    )
+
+    def read_thread_since(
+        self, ws: str, *, thread_id: str, me_id: str, since: int,
+        since_msg_id: str | None = None, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Thread-scoped since-read; chronological, reader-mentions flagged. §9.1.
+
+        Chronological `(createdAt, msgId)` order is the cursor-pagination
+        invariant: a truncated page must be the earliest rows so advancing the
+        cursor to the last delivered pair never skips anything (mention-first
+        sorting + LIMIT loses messages). `isMention` stays a flag for the client.
+        """
+        where = self._SINCE_PLAIN if since_msg_id is None else self._SINCE_KEYSET
+        res = self._graph(ws).ro_query(
+            "MATCH (t:Thread {threadId: $threadId})-[:HEAD]->(first:Message) "
+            "MATCH (first)-[:NEXT*0..]->(m:Message) "
+            "WHERE " + where +
+            "MATCH (m)-[:POSTED_BY]->(author) "
+            "OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) "
+            "       WHERE me.userId = $meId OR me.agentId = $meId "
+            "WITH m, author, count(me) > 0 AS isMention "
+            "RETURN m.msgId, m.text, m.role, m.createdAt, "
+            "coalesce(author.userId, author.agentId) AS authorId, "
+            "labels(author) AS authorType, isMention, m.threadId AS threadId, "
+            "author.displayName AS displayName "
+            "ORDER BY m.createdAt, m.msgId "
+            "LIMIT $limit",
+            {
+                "threadId": thread_id, "meId": me_id, "since": since,
+                "sinceMsgId": since_msg_id or "", "limit": limit,
+            },
+        )
+        return [self._since_row(row) for row in res.result_set]
+
+    def read_ws_since(
+        self, ws: str, *, me_id: str, since: int,
+        since_msg_id: str | None = None, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Workspace-wide since-read across all threads. §9.2.
+
+        Anchors on the `Message.createdAt` index (formulation A folds the
+        composite OR into the same index scan — re-profile on engine upgrades).
+        Chronological (see `read_thread_since`); reader-mentions flagged.
+        """
+        where = self._SINCE_PLAIN if since_msg_id is None else self._SINCE_KEYSET
+        res = self._graph(ws).ro_query(
+            "MATCH (m:Message) "
+            "WHERE " + where +
+            "MATCH (m)-[:POSTED_BY]->(author) "
+            "OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) "
+            "       WHERE me.userId = $meId OR me.agentId = $meId "
+            "WITH m, author, count(me) > 0 AS isMention "
+            "RETURN m.msgId, m.text, m.role, m.createdAt, "
+            "coalesce(author.userId, author.agentId) AS authorId, "
+            "labels(author) AS authorType, isMention, m.threadId AS threadId, "
+            "author.displayName AS displayName "
+            "ORDER BY m.createdAt, m.msgId "
+            "LIMIT $limit",
+            {
+                "meId": me_id, "since": since,
+                "sinceMsgId": since_msg_id or "", "limit": limit,
+            },
+        )
+        return [self._since_row(row) for row in res.result_set]
+
+    def advance_cursor(
+        self, ws: str, *, me_id: str, thread_id: str, cursor_id: str,
+        now: int, now_msg_id: str,
+    ) -> tuple[int, str | None] | None:
+        """MERGE/advance a read-cursor with the composite monotonic guard. §9.3 v2.
+
+        The guard is computed once in a `WITH` so both `SET`s see the pre-write
+        state; `(now, nowMsgId)` advances only when strictly ahead of the stored
+        pair — a stale or tie-smaller replay never moves the cursor backward.
+        `coalesce(rc.lastReadMsgId, '')` covers pre-K-007 cursors (no backfill
+        needed). When the member node doesn't exist the anchor MATCH yields no
+        rows — the advance is a no-op returning None (never an IndexError).
+        """
+        res = self._graph(ws).query(
+            "MATCH (mem) WHERE mem.userId = $meId OR mem.agentId = $meId "
+            "MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId: $cursorId}) "
+            "ON CREATE SET rc.memberId = $meId, rc.threadId = $threadId "
+            "WITH rc, ($now > coalesce(rc.lastReadAt, 0) "
+            "      OR ($now = coalesce(rc.lastReadAt, 0) "
+            "          AND $nowMsgId > coalesce(rc.lastReadMsgId, ''))) AS adv "
+            "SET rc.lastReadAt    = CASE WHEN adv THEN $now      ELSE rc.lastReadAt    END, "
+            "    rc.lastReadMsgId = CASE WHEN adv THEN $nowMsgId ELSE rc.lastReadMsgId END "
+            "RETURN rc.lastReadAt, rc.lastReadMsgId",
+            {
+                "meId": me_id, "threadId": thread_id, "cursorId": cursor_id,
+                "now": now, "nowMsgId": now_msg_id,
+            },
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return (row[0], row[1])
+
+    def get_cursor(self, ws: str, *, cursor_id: str) -> tuple[int, str | None] | None:
+        """Read a cursor's `(lastReadAt, lastReadMsgId)` pair, or None. §9.4.
+
+        Pre-K-007 cursors have no `lastReadMsgId` — the pair comes back as
+        `(ts, None)` and the service maps it to the `''` base convention.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (rc:ReadCursor {cursorId: $cursorId}) "
+            "RETURN rc.lastReadAt, rc.lastReadMsgId",
+            {"cursorId": cursor_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return (row[0], row[1])
+
+    # ── §14 Documents & Chunks (K-050 M5 Stage 1) ────────────────────────────────
+
+    def create_document(
+        self, ws: str, *, document_id: str, title: str, text: str,
+        source_format: str, ingested_by: str, created_at: int,
+        chunks: list[dict[str, Any]],
+    ) -> DocumentWriteStatus:
+        """Create a `Document` + all its `Chunk`s + `HAS_CHUNK` edges. QUERIES.md §14.1.
+
+        One `GRAPH.QUERY`, per `document-ingestion-graph.md` §2.1: the actor
+        (`ingested_by`) is resolved against `User`/`Agent` the same
+        `coalesce(u, a)` way `post_first_message` resolves an author, and
+        `Document.sourceKind` is derived server-side from *which* label
+        resolved — never trusted from the caller (same posture as
+        `Message.role`). Plain guarded `CREATE`, no `dup` guard: a retried
+        call mints a second `Document` (§2.4's deliberate non-idempotent
+        posture, matching the channel/thread-creation precedent). `chunks` is
+        a list of `{chunkId, text, seq}` maps, pre-split app-side
+        (`chunking.split_into_chunks`).
+
+        `currentVersion: true` (`Document`) and `documentCurrent: true` (per
+        `Chunk`) are the version-lifecycle axis's baseline properties
+        (`document-ingestion2.md` §3.1/§4 Stage A) — every document needs
+        them regardless of whether anything ever supersedes it; a later stage
+        flips them, this stage only ever seeds them `true`.
+        """
+        res = self._graph(ws).query(
+            "OPTIONAL MATCH (u:User  {userId:  $ingestedBy}) "
+            "OPTIONAL MATCH (a:Agent {agentId: $ingestedBy}) "
+            "WITH u, a, coalesce(u, a) AS ingestor, (coalesce(u, a) IS NOT NULL) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (d:Document {"
+            "    documentId: $documentId, title: $title, text: $text, "
+            "    sourceFormat: $sourceFormat, "
+            "    sourceKind: CASE WHEN u IS NOT NULL THEN 'document' ELSE 'agent' END, "
+            "    status: 'processing', pendingJobs: 0, createdAt: $createdAt, "
+            "    currentVersion: true"
+            "  }) "
+            "  CREATE (d)-[:INGESTED_BY]->(ingestor) "
+            "  FOREACH (ch IN $chunks | "
+            "    CREATE (d)-[:HAS_CHUNK]->(:Chunk {"
+            "      chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId, "
+            "      documentCurrent: true"
+            "    })"
+            "  )"
+            ") "
+            "RETURN ok AS written, ingestor IS NOT NULL AS ingestorFound",
+            {
+                "documentId": document_id, "title": title, "text": text,
+                "sourceFormat": source_format, "ingestedBy": ingested_by,
+                "createdAt": created_at, "chunks": chunks,
+            },
+        )
+        row = res.result_set[0]
+        return DocumentWriteStatus(written=bool(row[0]), ingestor_found=bool(row[1]))
+
+    def get_document(self, ws: str, *, document_id: str) -> dict[str, Any] | None:
+        """Fetch a document (verbatim `text`, AC-9) + its ingesting actor. §14.2."""
+        res = self._graph(ws).ro_query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            "OPTIONAL MATCH (d)-[:INGESTED_BY]->(actor) "
+            "RETURN d.documentId AS documentId, d.title AS title, d.text AS text, "
+            "d.sourceFormat AS sourceFormat, d.sourceKind AS sourceKind, "
+            "d.status AS status, d.createdAt AS createdAt, "
+            "labels(actor)[0] AS ingestedByKind, "
+            "coalesce(actor.userId, actor.agentId) AS ingestedById",
+            {"documentId": document_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "documentId": row[0], "title": row[1], "text": row[2],
+            "sourceFormat": row[3], "sourceKind": row[4], "status": row[5],
+            "createdAt": row[6], "ingestedByKind": row[7], "ingestedById": row[8],
+        }
+
+    def start_document_progress(
+        self, ws: str, *, document_id: str, total_jobs: int
+    ) -> None:
+        """Initialize `document_id`'s outstanding-background-job count (K-051).
+
+        `background._schedule_chunk_processing` calls this once, synchronously,
+        right before scheduling any per-chunk embed/extract job — so
+        `report_document_job_done` always has a real count to decrement
+        against and never races the jobs themselves, which only start
+        scheduling after this returns. `total_jobs` is the number of
+        `_safe_embed_chunk`/`_safe_extract` calls about to be scheduled for
+        this document (one per chunk per wired worker).
+
+        `total_jobs <= 0` (K-051 review MINOR 2 — a zero-chunk document, or
+        any future caller that reaches this with nothing to schedule) flips
+        `status` straight to `'ready'` in the same query, guarded on
+        `status = 'processing'` — the same first-terminal-write-wins posture
+        `report_document_job_done` uses, so this can never resurrect a
+        document some other job already failed. Without this, a document
+        with nothing scheduled would park at `'processing'` forever waiting
+        for a `report_document_job_done` call that will never come — exactly
+        the defect K-051 exists to fix, just reached from the zero-work edge
+        instead of the all-work-done edge.
+        """
+        self._graph(ws).query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            "SET d.pendingJobs = $totalJobs "
+            "WITH d "
+            "FOREACH (_ IN CASE WHEN $totalJobs <= 0 AND d.status = 'processing' "
+            "  THEN [1] ELSE [] END | SET d.status = 'ready')",
+            {"documentId": document_id, "totalJobs": total_jobs},
+        )
+
+    def report_document_job_done(
+        self, ws: str, *, document_id: str, success: bool
+    ) -> None:
+        """Report one background embed/extract job's outcome for `document_id`
+        (K-051 — closes the "`Document.status` never reaches a terminal
+        state" defect, `document-ingestion-report.md` Defect 1).
+
+        Decrements the outstanding-job count `start_document_progress` set,
+        then flips `Document.status`: to `'ready'` once every scheduled job
+        has reported success and none has failed, or to `'failed'` the
+        instant any single job reports failure — regardless of how many
+        others are still outstanding (one failed chunk is enough to call the
+        whole document's background processing failed, mirroring the
+        `_safe_*` wrappers' own per-job isolation one layer up). "Failure"
+        here means a job's final outcome after the worker's own bounded
+        transient-provider-error retry (K-067), never one attempt. Both
+        branches guard on `d.status = 'processing'` so the first terminal
+        write wins: a late-arriving report — success after a failure, or a
+        stray failure after every other job already reported success and the
+        document reached `'ready'` — can never flip a document back out of a
+        terminal state. One `GRAPH.QUERY`, same atomic-single-round-trip
+        posture as every other counter/status write in this module.
+        """
+        self._graph(ws).query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            "SET d.pendingJobs = coalesce(d.pendingJobs, 0) - 1 "
+            "WITH d "
+            "FOREACH (_ IN CASE WHEN NOT $success AND d.status = 'processing' "
+            "  THEN [1] ELSE [] END | SET d.status = 'failed') "
+            "FOREACH (_ IN CASE WHEN $success AND d.pendingJobs <= 0 "
+            "  AND d.status = 'processing' THEN [1] ELSE [] END | "
+            "  SET d.status = 'ready')",
+            {"documentId": document_id, "success": bool(success)},
+        )
+
+    def chunk_document_is_processing(self, ws: str, *, chunk_id: str) -> bool:
+        """Is the `Document` that owns `chunk_id` still `'processing'`?
+
+        The K-067 retry liveness gate (plan
+        `falkor-chat/docs/plans/extract-transient-retry.md` §3.5): a background
+        job retrying a transient provider error reads this before and after each
+        backoff sleep, and stops retrying once the document has reached a
+        terminal state — a sibling job already failed it (first terminal write
+        wins, so no later success can help) — or has been deleted. Returns
+        `False` when no row comes back (chunk or document gone). Read-only
+        (`ro_query`), one indexed `Chunk` lookup plus one `HAS_CHUNK` hop.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (c:Chunk {chunkId: $chunkId})<-[:HAS_CHUNK]-(d:Document) "
+            "RETURN d.status = 'processing'",
+            {"chunkId": chunk_id},
+        )
+        if not res.result_set:
+            return False
+        return bool(res.result_set[0][0])
+
+    def list_document_chunks(
+        self, ws: str, *, document_id: str
+    ) -> list[dict[str, Any]]:
+        """List a document's chunks in order (`chunkId` + `text` only).
+
+        K-050 M5 Stage 2: the internal seam `services.ingest_document`'s caller
+        (`api.py`/`mcp.py`) uses to schedule background chunk embedding right
+        after a document is written — not part of the public MCP/REST surface
+        (mirrors `posted["text"]` riding `post_message`'s own return for the
+        same purpose at message scale; a document's chunks are read back
+        instead of echoed in the receipt to keep `ingest_document`'s response
+        at the documented `{documentId, chunkCount, status}` shape, QUERIES.md §14.4,
+        rather than doubling a up-to-500,000-char payload back into the
+        response body). Always traversed from an already-anchored `Document`,
+        never independently scanned — no new index needed, same posture as
+        `ABOUT`/`RELATES_TO` (`document-ingestion-graph.md` §2.2).
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (d:Document {documentId: $documentId})-[:HAS_CHUNK]->(c:Chunk) "
+            "RETURN c.chunkId AS chunkId, c.text AS text "
+            "ORDER BY c.seq",
+            {"documentId": document_id},
+        )
+        return [{"chunkId": row[0], "text": row[1]} for row in res.result_set]
+
+    def list_unembedded_chunks(self, ws: str) -> list[dict[str, Any]]:
+        """Every `Chunk` with no `embedding`, with its owning document's id/title/status
+        (K-102 repair listing — read-only, never changes `Document.status`).
+
+        Such a chunk is invisible to `search_chunks`. A full scan of `Chunk` by design:
+        a one-off operator read, not a hot path.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (d:Document)-[:HAS_CHUNK]->(c:Chunk) WHERE c.embedding IS NULL "
+            "RETURN c.chunkId, c.text, d.documentId, d.title, d.status "
+            "ORDER BY d.documentId, c.seq"
+        )
+        return [
+            {"chunkId": r[0], "text": r[1], "documentId": r[2],
+             "documentTitle": r[3], "documentStatus": r[4]}
+            for r in res.result_set
+        ]
+
+    def list_failed_documents(self, ws: str) -> list[dict[str, Any]]:
+        """Every `Document` with `status = 'failed'` and how many of its chunks still
+        lack an embedding (K-102 repair report — read-only)."""
+        res = self._graph(ws).ro_query(
+            "MATCH (d:Document {status: 'failed'}) "
+            "OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk) WHERE c.embedding IS NULL "
+            "RETURN d.documentId, d.title, count(c) ORDER BY d.documentId"
+        )
+        return [
+            {"documentId": r[0], "documentTitle": r[1], "unembeddedChunks": r[2]}
+            for r in res.result_set
+        ]
+
+    def set_chunk_embedding(
+        self, ws: str, *, chunk_id: str, embedding: list[float],
+        expected_dim: int | None = None,
+    ) -> bool:
+        """Set a chunk's embedding (async, after ingestion). QUERIES.md §6.
+
+        K-050 M5 Stage 2: mirrors `set_embedding` exactly, `Chunk` in place of
+        `Message` — the same decoupled-from-the-write-path posture (a chunk is
+        readable before its embedding lands, plan §4 Stage 2) and the same
+        pre-write dimension validation (a wrong-dimension `vecf32` write is
+        silently accepted by the engine but the node then drops out of the ANN
+        index permanently — item-2 quirk, applies identically to `Chunk`).
+
+        Returns True if the chunk existed and the embedding committed, False if
+        no chunk matched `$chunkId`.
+        """
+        dim = config.EMBEDDING_DIM if expected_dim is None else expected_dim
+        if len(embedding) != dim:
+            raise EmbeddingDimensionError(
+                f"embedding has {len(embedding)} dimensions, expected {dim} "
+                f"(chunkId={chunk_id!r}) — a wrong-dimension vecf32 write is "
+                f"silently accepted but drops the node out of the ANN index; "
+                f"refusing to write"
+            )
+        res = self._graph(ws).query(
+            "MATCH (c:Chunk {chunkId: $chunkId}) SET c.embedding = vecf32($embedding)",
+            {"chunkId": chunk_id, "embedding": list(embedding)},
+        )
+        return res.properties_set > 0
+
+    def search_chunks(
+        self, ws: str, *, q_vec: list[float], k: int = 10, limit: int = 10,
+        timeout: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """`Chunk`-only ANN retrieval — the standalone KB search surface (FR-3,
+        plan §3.7). K-050 M5 Stage 2. Read path (`ro_query`).
+
+        Mirrors `hybrid_search`'s `CALL db.idx.vector.queryNodes(...) YIELD ...`
+        shape, `Chunk` in place of `Message` — but with no scope traversal (a
+        chunk has no Thread/Channel to scope by, unlike a message) and no
+        Entity co-occurrence expansion (`ABOUT` is dormant until extraction,
+        Stage 3 — an `OPTIONAL MATCH` on it here would just no-op today, so it
+        is deferred rather than added speculatively). `documentId` rides
+        denormalized on `Chunk` itself (§3.2), so the source document is
+        reported with no extra hop.
+
+        `score` is cosine distance (0 = identical) — rows come back already
+        `ORDER BY score ASC` (most similar first), same convention as
+        `hybrid_search`; do not re-sort. `timeout` (ms) is a per-query client
+        override, same posture as `hybrid_search`'s.
+
+        **Default-search filtering (document-ingestion2 Stage C, AC-4, plan
+        §3.3):** a post-`YIELD` `WHERE seed.documentCurrent = true` excludes
+        chunks belonging to a superseded `Document` version, evaluated only
+        on the already-ANN-yielded (bounded, `k`-sized) rows — a plain
+        property-equality filter, deliberately **not** an `exists()` pattern
+        (unreliable over relationship patterns on this build, and here it
+        would just be the wrong tool for a boolean-equality check anyway —
+        `claude/graph-dba/falkordb-quirks.md`) and **not** a pre-filter (this
+        build's vector index has no pre-filter predicate support demonstrated
+        anywhere in this codebase). Because this filter can now discard
+        ANN-yielded rows before `LIMIT`, a caller that needs a full `limit`
+        worth of results after filtering must over-fetch via `k` — see
+        `services.search_documents`'s docstring for the concrete idiom.
+        """
+        res = self._graph(ws).ro_query(
+            "CALL db.idx.vector.queryNodes('Chunk', 'embedding', $k, vecf32($qVec)) "
+            "YIELD node AS seed, score "
+            "WHERE seed.documentCurrent = true "
+            "RETURN seed.chunkId AS chunkId, seed.text AS text, "
+            "seed.documentId AS documentId, seed.seq AS seq, score "
+            "ORDER BY score ASC "
+            "LIMIT $limit",
+            {"qVec": list(q_vec), "k": k, "limit": limit},
+            timeout=timeout,
+        )
+        return [
+            {
+                "chunkId": row[0], "text": row[1], "documentId": row[2],
+                "seq": row[3], "score": row[4],
+            }
+            for row in res.result_set
+        ]
+
+    # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ─────────────
+
+    def delete_document(
+        self, ws: str, *, document_id: str, deleted_by: str, deleted_at: int,
+    ) -> bool:
+        """Hard-delete a `Document` + its `Chunk`s, one atomic write, with an
+        audit trail (FR-4/FR-8, plan §3.5). **Live-verified single-query
+        shape** (`graph-dba`, plan §0/§3.5) — capture `documentId` into a
+        plain scalar via `WITH` *before* the delete (nothing can reference
+        the node afterward), collect+`FOREACH`-delete the chunks, `DETACH
+        DELETE` the `Document`, then `CREATE` the audit node off the captured
+        scalar. One `GRAPH.QUERY`, one round trip.
+
+        Structurally leaves `Entity`/`RELATES_TO` completely untouched
+        (§3.6) — only `Chunk`->`ABOUT`->`Entity` edges disappear, and only
+        because they hang off the deleted `Chunk`s themselves, not because of
+        any policy decision at this level.
+
+        Returns True if a `Document` matched (and was deleted + audited),
+        False if `document_id` was already absent — a true no-op, no audit
+        node written (mirrors `recheck_match`'s "the initial anchor missing
+        makes everything downstream vacuous" shape: the leading `MATCH`
+        yields zero rows, so the trailing `CREATE` never fires either).
+        """
+        res = self._graph(ws).query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            "WITH d, d.documentId AS did "
+            "OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk) "
+            "WITH d, did, collect(c) AS chunks "
+            "FOREACH (ch IN chunks | DETACH DELETE ch) "
+            "DETACH DELETE d "
+            "CREATE (:DocumentDeletion {"
+            "  documentId: did, deletedBy: $deletedBy, deletedAt: $deletedAt"
+            "}) "
+            "RETURN did AS documentId",
+            {
+                "documentId": document_id, "deletedBy": deleted_by,
+                "deletedAt": deleted_at,
+            },
+        )
+        return bool(res.result_set)
+
+    def get_document_deletion(
+        self, ws: str, *, document_id: str
+    ) -> dict[str, Any] | None:
+        """FR-8/AC-8 — the audit record for a hard-deleted document (§3.5).
+
+        Keyed by the (now-gone) `documentId` *value*, not a graph reference —
+        nothing can point at a node `delete_document` already `DETACH
+        DELETE`d. Returns `None` if `document_id` was never deleted (this
+        call cannot and does not need to distinguish "still exists" from
+        "never existed" — both are equally "no deletion record").
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (dd:DocumentDeletion {documentId: $documentId}) "
+            "RETURN dd.documentId AS documentId, dd.deletedBy AS deletedBy, "
+            "dd.deletedAt AS deletedAt",
+            {"documentId": document_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"documentId": row[0], "deletedBy": row[1], "deletedAt": row[2]}
+
+    def list_documents(
+        self, ws: str, *, current_only: bool = True, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """§3.7 supporting capability — document summaries, oldest first,
+        mirrors `list_matches`'s `ORDER BY createdAt`/`LIMIT` shape.
+
+        **Two separate query strings, not a null-guarded `WHERE`** for the
+        `current_only` toggle — the same live-verified, index-preserving
+        idiom `list_matches` already uses for `status` (a `$currentOnly IS
+        NULL OR d.currentVersion = true`-style guard silently drops the
+        `Document.currentVersion` index even when the parameter is bound).
+        """
+        if current_only:
+            res = self._graph(ws).ro_query(
+                "MATCH (d:Document {currentVersion: true}) "
+                "OPTIONAL MATCH (d)-[:INGESTED_BY]->(actor) "
+                "RETURN d.documentId AS documentId, d.title AS title, "
+                "d.sourceFormat AS sourceFormat, d.sourceKind AS sourceKind, "
+                "d.status AS status, d.currentVersion AS currentVersion, "
+                "d.createdAt AS createdAt, "
+                "labels(actor)[0] AS ingestedByKind, "
+                "coalesce(actor.userId, actor.agentId) AS ingestedById "
+                "ORDER BY d.createdAt "
+                "LIMIT $limit",
+                {"limit": limit},
+            )
+        else:
+            res = self._graph(ws).ro_query(
+                "MATCH (d:Document) "
+                "OPTIONAL MATCH (d)-[:INGESTED_BY]->(actor) "
+                "RETURN d.documentId AS documentId, d.title AS title, "
+                "d.sourceFormat AS sourceFormat, d.sourceKind AS sourceKind, "
+                "d.status AS status, d.currentVersion AS currentVersion, "
+                "d.createdAt AS createdAt, "
+                "labels(actor)[0] AS ingestedByKind, "
+                "coalesce(actor.userId, actor.agentId) AS ingestedById "
+                "ORDER BY d.createdAt "
+                "LIMIT $limit",
+                {"limit": limit},
+            )
+        return [
+            {
+                "documentId": row[0], "title": row[1], "sourceFormat": row[2],
+                "sourceKind": row[3], "status": row[4], "currentVersion": row[5],
+                "createdAt": row[6], "ingestedByKind": row[7], "ingestedById": row[8],
+            }
+            for row in res.result_set
+        ]
+
+    # ── §14.8 SUPERSEDES version history + confirm/reject/recheck ────────────────
+    # (document-ingestion2 Stage B, FR-3/FR-5, plan §3.2/§3.4/§3.7) — zero
+    # dependency on detection (Stage D not landed yet): every write below is
+    # exercised via a directly-injected matchId in tests, exactly as the
+    # plan's own Stage B "Done" condition requires.
+    #
+    # Every SUPERSEDES-anchored query below matches its endpoints UNLABELED
+    # (`(a)`/`(b)`, never `(a:Document)`) — the identical planner-trap
+    # discipline `SAME_AS` queries already follow (§14.6 above, plan §3.2):
+    # a bare label on either endpoint of a relationship-index-anchored query
+    # forces a full `Node By Label Scan` on this build even though the
+    # relationship-property scan alone is fully selective. Direction is
+    # `new -> old` (mirrors `SAME_AS`'s `new -> existing` convention, plan §3.2).
+
+    def create_or_reopen_supersede_suggestion(
+        self, ws: str, *, new_document_id: str, candidate_document_id: str,
+        match_id: str, status: str, confidence: float, technique: str,
+        created_at: int,
+    ) -> dict[str, Any]:
+        """The suggested tier's (and any future non-atomic tier's) find-or-
+        create-or-reopen write — verbatim mirror of `create_or_reopen_match`
+        at `Document` granularity (plan §3.4/§4 Stage B, OQ-3's "reuse by
+        pair, reopen if rejected" contract, live-verified at this granularity
+        too, plan §0 second `graph-dba` pass).
+
+        **Implemented in Stage B, not Stage D** (plan §4 Stage B lists it
+        under Stage D's file inventory only because that's where the
+        detection pipeline first *calls* it) — its logic has zero detection
+        dependency, and Stage B's own "Done" condition requires exercising
+        confirm/reject/recheck end-to-end with an organically-reopenable
+        suggestion, which is unsatisfiable without this primitive. Stage D
+        will simply consume it, not re-create it.
+
+        Write direction is a convention, not a semantic claim (always
+        `new -> candidate`); the `OPTIONAL MATCH` lookup is undirected, so a
+        suggestion already written in the opposite discovery order on an
+        earlier detection run is still found, never duplicated. Not a bare
+        `MERGE` — a direction-fixed `MERGE` would miss that opposite-order
+        case (same reasoning as `create_or_reopen_match`'s own docstring).
+
+        Returns `{created, reopened, matchId, status}`. `matchId`/
+        `confidence`/`technique`/`created_at` are consumed only when a fresh
+        edge is actually created; a reopened edge keeps its **original**
+        `matchId` and bumps `resuggestCount`/`lastResuggestedAt` instead.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a:Document {documentId: $newDocumentId}) "
+            "MATCH (b:Document {documentId: $candidateDocumentId}) "
+            "OPTIONAL MATCH (a)-[existing:SUPERSEDES]-(b) "
+            "WITH a, b, existing, "
+            "     (existing IS NULL) AS isNew, "
+            "     (existing IS NOT NULL AND existing.status = 'rejected') AS reopen "
+            "FOREACH (_ IN CASE WHEN isNew THEN [1] ELSE [] END | "
+            "  CREATE (a)-[:SUPERSEDES {"
+            "    matchId: $matchId, status: $status, confidence: $confidence, "
+            "    technique: $technique, createdAt: $createdAt, "
+            "    decidedAt: CASE WHEN $status = 'confirmed' THEN $createdAt ELSE null END, "
+            "    decidedBy: CASE WHEN $status = 'confirmed' THEN 'system' ELSE null END, "
+            "    resuggestCount: 0, lastResuggestedAt: null"
+            "  }]->(b) "
+            ") "
+            "FOREACH (_ IN CASE WHEN reopen THEN [1] ELSE [] END | "
+            "  SET existing.status = 'pending', "
+            "      existing.resuggestCount = coalesce(existing.resuggestCount, 0) + 1, "
+            "      existing.lastResuggestedAt = $createdAt "
+            ") "
+            "RETURN isNew AS created, reopen AS reopened, "
+            "       coalesce(existing.matchId, $matchId) AS matchId, "
+            "       coalesce(existing.status, $status)   AS status",
+            {
+                "newDocumentId": new_document_id,
+                "candidateDocumentId": candidate_document_id,
+                "matchId": match_id, "status": status, "confidence": confidence,
+                "technique": technique, "createdAt": created_at,
+            },
+        )
+        row = res.result_set[0]
+        return {"created": row[0], "reopened": row[1], "matchId": row[2], "status": row[3]}
+
+    def confirm_document_update(
+        self, ws: str, *, match_id: str, decided_by: str, decided_at: int,
+    ) -> dict[str, Any] | None:
+        """FR-3/AC-3 — confirm a `pending` (or previously `rejected`)
+        `SUPERSEDES` suggestion (plan §3.4, full `SAME_AS`-lifecycle
+        parity). `decided_by` is a real `User`/`Agent` id here, never
+        `'system'` — this path is only ever reached by a human/agent
+        decision (the auto tier's `'system'` stamp only ever happens inside
+        `create_document_with_auto_supersede`, Stage D).
+
+        Unlike `confirm_match` (entities are never physically merged, so
+        nothing else changes), confirming a `SUPERSEDES` edge has a real
+        side effect on the graph: the old document (`b`, the supersede
+        target) flips `currentVersion: false` + `supersededAt`/
+        `supersededBy`, and all of its `Chunk`s bulk-flip `documentCurrent:
+        false` — the exact same effect `create_document_with_auto_supersede`
+        (Stage D) produces for an auto-superseded document, so a confirmed
+        suggestion is indistinguishable from an auto-supersede once decided
+        (plan §3.4). One `GRAPH.QUERY`.
+
+        Returns `{matchId, status, documentA, documentB}` (`documentA` =
+        the new/superseding document, `documentB` = the old/superseded
+        one), or `None` if no `SUPERSEDES` edge has this `matchId`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b) "
+            "SET r.status = 'confirmed', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy "
+            "SET b.currentVersion = false, b.supersededAt = $decidedAt, "
+            "    b.supersededBy = $decidedBy "
+            "WITH a, b, r "
+            "OPTIONAL MATCH (b)-[:HAS_CHUNK]->(c:Chunk) "
+            "WITH a, b, r, collect(c) AS chunks "
+            "FOREACH (ch IN chunks | SET ch.documentCurrent = false) "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.documentId AS documentA, b.documentId AS documentB",
+            {"matchId": match_id, "decidedAt": decided_at, "decidedBy": decided_by},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "documentA": row[2], "documentB": row[3]}
+
+    def reject_document_update(
+        self, ws: str, *, match_id: str, decided_by: str, decided_at: int,
+    ) -> dict[str, Any] | None:
+        """FR-3/AC-3 — reject a `SUPERSEDES` suggestion (plan §3.4). Never
+        deletes the edge (OQ-3 parity — the `rejected` record is what makes
+        automatic re-open on corroboration, or `recheck_document_update` on
+        demand, answerable with no second mechanism). Leaves **both**
+        documents independent, current, and searchable — nothing about
+        either `Document`/`Chunk` changes (AC-3's own wording).
+
+        Returns `{matchId, status, documentA, documentB}`, or `None` if no
+        `SUPERSEDES` edge has this `matchId`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b) "
+            "SET r.status = 'rejected', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.documentId AS documentA, b.documentId AS documentB",
+            {"matchId": match_id, "decidedAt": decided_at, "decidedBy": decided_by},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "documentA": row[2], "documentB": row[3]}
+
+    def recheck_document_update(
+        self, ws: str, *, match_id: str, at: int
+    ) -> dict[str, Any] | None:
+        """§3.4's reversed scope call (the ML note's §7 recommendation) —
+        manually reopen a `rejected` `SUPERSEDES` edge back to `pending`,
+        bumping `resuggestCount`/`lastResuggestedAt` (verbatim mirror of
+        `recheck_match`). A no-op for any other current status (including
+        "no such matchId") — both cases return zero rows indistinguishably;
+        the caller cannot and does not need to tell them apart.
+
+        Returns `{matchId, status, documentA, documentB}`, or `None` on the
+        no-op.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b) "
+            "WHERE r.status = 'rejected' "
+            "SET r.status = 'pending', "
+            "    r.resuggestCount = coalesce(r.resuggestCount, 0) + 1, "
+            "    r.lastResuggestedAt = $at "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.documentId AS documentA, b.documentId AS documentB",
+            {"matchId": match_id, "at": at},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "documentA": row[2], "documentB": row[3]}
+
+    def list_pending_document_updates(
+        self, ws: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """OQ-3's review surface (reused from the original feature's OQ-2
+        answer, plan §3.8) — `status='pending'` `SUPERSEDES` edges, oldest
+        first. Directed (matches the canonical write direction) — no
+        undirected-doubling risk.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (a)-[r:SUPERSEDES {status: 'pending'}]->(b) "
+            "RETURN r.matchId AS matchId, "
+            "       a.documentId AS documentA, a.title AS titleA, "
+            "       b.documentId AS documentB, b.title AS titleB, "
+            "       r.confidence AS confidence, r.technique AS technique, "
+            "       r.createdAt AS createdAt "
+            "ORDER BY r.createdAt "
+            "LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {
+                "matchId": row[0], "documentA": row[1], "titleA": row[2],
+                "documentB": row[3], "titleB": row[4], "confidence": row[5],
+                "technique": row[6], "createdAt": row[7],
+            }
+            for row in res.result_set
+        ]
+
+    def list_document_updates(
+        self, ws: str, *, status: str | None = None, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Status-filterable (or unfiltered) `SUPERSEDES` listing — audit
+        parity with `list_matches` (plan §3.8), the only way to discover the
+        auto-superseded (`status='confirmed', decidedBy='system'`) tier once
+        Stage D lands.
+
+        **Two separate query strings, not one `WHERE $status IS NULL OR
+        r.status = $status` null-guard** — the same live-verified,
+        index-preserving idiom `list_matches` already uses (a null-guarded
+        `WHERE` silently discards the `SUPERSEDES.status` index even when
+        `$status` is bound to a real value). The unfiltered branch is a
+        genuinely unavoidable full scan on this build (no relationship-
+        type-only scan operator exists) — `limit` bounds the *result* size,
+        not the *scan* cost; reasonable for an infrequent admin/audit call.
+        """
+        if status is not None:
+            res = self._graph(ws).ro_query(
+                "MATCH (a)-[r:SUPERSEDES {status: $status}]->(b) "
+                "RETURN r.matchId AS matchId, "
+                "       a.documentId AS documentA, a.title AS titleA, "
+                "       b.documentId AS documentB, b.title AS titleB, "
+                "       r.status AS status, r.confidence AS confidence, "
+                "       r.technique AS technique, r.createdAt AS createdAt "
+                "ORDER BY r.createdAt "
+                "LIMIT $limit",
+                {"status": status, "limit": limit},
+            )
+        else:
+            res = self._graph(ws).ro_query(
+                "MATCH (a)-[r:SUPERSEDES]->(b) "
+                "RETURN r.matchId AS matchId, "
+                "       a.documentId AS documentA, a.title AS titleA, "
+                "       b.documentId AS documentB, b.title AS titleB, "
+                "       r.status AS status, r.confidence AS confidence, "
+                "       r.technique AS technique, r.createdAt AS createdAt "
+                "ORDER BY r.createdAt "
+                "LIMIT $limit",
+                {"limit": limit},
+            )
+        return [
+            {
+                "matchId": row[0], "documentA": row[1], "titleA": row[2],
+                "documentB": row[3], "titleB": row[4], "status": row[5],
+                "confidence": row[6], "technique": row[7], "createdAt": row[8],
+            }
+            for row in res.result_set
+        ]
+
+    def get_document_history(
+        self, ws: str, *, document_id: str
+    ) -> list[dict[str, Any]]:
+        """§3.7 supporting capability (FR-5) — every version in the
+        **confirmed** `SUPERSEDES` chain containing `document_id`, oldest to
+        newest. Works from **any** version's id in the chain, not only the
+        current tip. A `pending`/`rejected` suggestion never appears — only
+        a resolved supersession is "history" (plan §3.7's own wording).
+
+        Returns `[]` if `document_id` doesn't exist at all (no assertion
+        needed beyond "nothing to show").
+
+        **Implementation note (not itself a `graph-dba`-live-verified
+        shape, unlike the two items plan §0's second pass closed):**
+        walked one hop at a time in each direction with plain, single-hop
+        queries, each still anchored on `Document.documentId`'s own unique
+        index — deliberately **not** a variable-length `[:SUPERSEDES*]`
+        pattern with an inline relationship-property filter, whose planner
+        behavior on this build is untested. A `SUPERSEDES` chain is short
+        (bounded by real edit history, not fan-out), so the extra round
+        trips are cheap; a cycle guard (`seen`) protects against a
+        structurally-impossible but defensively-cheap-to-guard loop. Ties
+        (more than one confirmed edge into/out of the same document, which
+        the schema does not structurally forbid) resolve to the oldest
+        candidate, `ORDER BY r.createdAt ASC LIMIT 1` — the same tie-break
+        `create_entity_with_auto_match` uses.
+        """
+        self_res = self._graph(ws).ro_query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            "RETURN d.documentId AS documentId, d.title AS title, "
+            "d.createdAt AS createdAt, d.currentVersion AS currentVersion, "
+            "d.supersededAt AS supersededAt, d.supersededBy AS supersededBy",
+            {"documentId": document_id},
+        )
+        if not self_res.result_set:
+            return []
+
+        def _row_to_dict(row: list[Any]) -> dict[str, Any]:
+            return {
+                "documentId": row[0], "title": row[1], "createdAt": row[2],
+                "currentVersion": row[3], "supersededAt": row[4],
+                "supersededBy": row[5],
+            }
+
+        older: list[dict[str, Any]] = []
+        seen = {document_id}
+        current = document_id
+        while True:
+            res = self._graph(ws).ro_query(
+                "MATCH (a:Document {documentId: $documentId}) "
+                "MATCH (a)-[r:SUPERSEDES {status: 'confirmed'}]->(b) "
+                "RETURN b.documentId AS documentId, b.title AS title, "
+                "b.createdAt AS createdAt, b.currentVersion AS currentVersion, "
+                "b.supersededAt AS supersededAt, b.supersededBy AS supersededBy "
+                "ORDER BY r.createdAt ASC LIMIT 1",
+                {"documentId": current},
+            )
+            if not res.result_set or res.result_set[0][0] in seen:
+                break
+            row = res.result_set[0]
+            older.append(_row_to_dict(row))
+            seen.add(row[0])
+            current = row[0]
+        older.reverse()
+
+        newer: list[dict[str, Any]] = []
+        current = document_id
+        while True:
+            res = self._graph(ws).ro_query(
+                "MATCH (b:Document {documentId: $documentId}) "
+                "MATCH (a)-[r:SUPERSEDES {status: 'confirmed'}]->(b) "
+                "RETURN a.documentId AS documentId, a.title AS title, "
+                "a.createdAt AS createdAt, a.currentVersion AS currentVersion, "
+                "a.supersededAt AS supersededAt, a.supersededBy AS supersededBy "
+                "ORDER BY r.createdAt ASC LIMIT 1",
+                {"documentId": current},
+            )
+            if not res.result_set or res.result_set[0][0] in seen:
+                break
+            row = res.result_set[0]
+            newer.append(_row_to_dict(row))
+            seen.add(row[0])
+            current = row[0]
+
+        return older + [_row_to_dict(self_res.result_set[0])] + newer
+
+    # ── §14.9 Auto-tier update detection (document-ingestion2 Stage D, FR-2/AC-1) ─
+    # Every SUPERSEDES-anchored write below follows the same unlabeled-endpoint
+    # discipline as §14.8 above (plan §3.2).
+
+    # Ingestor-resolution query prefixes for `create_document_with_auto_supersede`
+    # below (agent-team-ingestion-graph.md §2.2) — two literal query-text
+    # branches, not one shared text with a possibly-NULL `$producedBy` param: the
+    # identical pattern-property match plans `Node By Index Scan` when the param
+    # carries a real value and falls back to `Node By Label Scan` + `Filter` when
+    # it is NULL (live-verified, same doc §2.3). `ingestorIsUser` lets everything
+    # after the resolution prefix stay byte-identical text in both branches.
+    _INGESTOR_RESOLVE_BY_ACTOR = (
+        "OPTIONAL MATCH (u:User  {userId:  $ingestedBy}) "
+        "OPTIONAL MATCH (a:Agent {agentId: $ingestedBy}) "
+        "WITH coalesce(u, a) AS ingestor, (coalesce(u, a) IS NOT NULL) AS ok, "
+        "     (u IS NOT NULL) AS ingestorIsUser "
+    )
+    _INGESTOR_RESOLVE_BY_PRODUCER = (
+        "OPTIONAL MATCH (pa:Agent {agentId: $producedBy}) "
+        "WITH pa AS ingestor, (pa IS NOT NULL) AS ok, false AS ingestorIsUser "
+    )
+
+    def create_document_with_auto_supersede(
+        self, ws: str, *, document_id: str, title: str, text: str,
+        text_normalized_hash: str, source_format: str, ingested_by: str,
+        created_at: int, chunks: list[dict[str, Any]], match_id: str,
+        lsh_bands: list[str], produced_by: str | None = None,
+    ) -> dict[str, Any]:
+        """FR-2/AC-1 auto-tier update detection, folded into document creation
+        itself — mirrors `create_entity_with_auto_match`'s concurrency-fix
+        precedent one hop over (plan §3.4, live-verified `graph-dba`, §0): a
+        batch resubmitting the same content twice, or two concurrent
+        `ingest_document` calls for the same edited file, could otherwise each
+        run the hash-equality lookup before either sibling's `Document`
+        commits, silently defeating the auto tier's "no confirmation needed"
+        guarantee — the identical race shape `create_entity_with_auto_match`
+        was built to close, one hop over. FalkorDB/Redis serializes
+        `GRAPH.QUERY` execution, so folding the lookup + create + conditional
+        supersede into one round trip closes it by construction.
+
+        One atomic `GRAPH.QUERY`: (1) resolve `ingested_by` against `User`/
+        `Agent` (same `coalesce`-guarded `FOREACH` shape `create_document`
+        already uses — an unresolvable actor means nothing is written at all,
+        `ingestorFound=False`, mirroring `create_document`'s own contract),
+        (2) `OPTIONAL MATCH` the oldest pre-existing `currentVersion`
+        `Document` sharing `text_normalized_hash` — binds strictly before the
+        new `Document`'s `CREATE`, so the new document can never appear as its
+        own candidate (same live-verified ordering guarantee as the entity
+        precedent), (3) `CREATE` the new `Document` + `Chunk`s, guarded on
+        actor validity.
+
+        **Then a re-`MATCH` of the just-created document by its own unique
+        `documentId`, before the two live-verified `FOREACH` blocks** (plan
+        §0/§3.4 — not itself part of the live-verified shape, but a necessary
+        elaboration of it): a node `CREATE`d *inside* a `FOREACH` is not
+        referenceable outside that `FOREACH` — Cypher's own scoping rule, not
+        a FalkorDB quirk — so this is the only way to hold `d` for the steps
+        below. A cheap indexed lookup (`documentId` carries a `UNIQUE`
+        constraint), not a scan.
+
+        **Two separate `FOREACH`-guarded blocks sharing one `WITH`** (the
+        exact shape `graph-dba` live-verified, plan §0 — not one `FOREACH`
+        mixing `SET`+`CREATE`): block one flips the candidate's
+        `currentVersion` to `false` + stamps `supersededAt`/`supersededBy`;
+        its `Chunk`s are bulk-flipped in between via their own
+        `OPTIONAL MATCH`+`collect`+`FOREACH` step (a `FOREACH` body cannot
+        itself contain a `MATCH`, so this cannot be folded into either
+        guarded block — mirrors `confirm_document_update`'s own chunk-bulk-
+        flip shape verbatim); block two `CREATE`s the `SUPERSEDES{
+        status:'confirmed', decidedBy:'system', confidence:1.0}` edge
+        new -> old. Every conditional step is guarded on `doSupersede`
+        (`ingestor found AND a candidate exists`), not on `candidate IS NOT
+        NULL` alone — an unresolvable actor must leave every existing
+        document untouched, even in the vanishingly rare case a hash-
+        colliding candidate also exists.
+
+        Returns `{documentId, chunkCount, autoSuperseded, supersededDocumentId,
+        matchId, ingestorFound}`. `ingestorFound=False` means nothing was
+        written at all (the caller raises `UnknownActorError`, mirroring
+        `create_document`'s own `ingestor_found` contract).
+        `supersededDocumentId`/`matchId` are `None` when `autoSuperseded` is
+        `False`. `chunkCount` is computed app-side from `len(chunks)` — no
+        extra aggregation needed in the query.
+
+        **`lsh_bands`** (K-091): the new document's MinHash LSH bands, computed
+        app-side by the caller (`update_detection.document_lsh_bands`, the one
+        pipeline detection and the backfill also use, as `text_normalized_hash`
+        is computed app-side), stored as `lshBand0..7` on the `CREATE` — the
+        properties `find_update_shortlist`'s band lookup reads, on both
+        ingestor-resolution branches. Exactly 8 bands, else `ValueError`
+        before any query runs (`_lsh_band_params`).
+        Written here, not by `background._safe_detect_update`, because that
+        job is never scheduled for an auto-superseded ingest (nor when no
+        embed worker or extraction pipeline is wired), and every ingest
+        passes through this write.
+
+        **`produced_by`** (optional, additive — `agent-knowledge-base-strategy.md`
+        §4.1): when given, the ingestor-resolution clause matches ONLY
+        `(a:Agent {agentId: $producedBy})` — `ingested_by`/`$ingestedBy` plays no
+        role in this branch's query text or params at all, so a resolved
+        `produced_by` always sources `sourceKind: 'agent'`, never `'document'`.
+        When omitted (`None`, the default), the query text, params, and result are
+        byte-identical to this method's pre-existing behavior. See §2.2/§2.3 of
+        `docs/plans/agent-team-ingestion-graph.md` for why this is two literal
+        query-text branches, not one shared text with a possibly-`NULL` param.
+        """
+        resolve = (
+            self._INGESTOR_RESOLVE_BY_PRODUCER if produced_by is not None
+            else self._INGESTOR_RESOLVE_BY_ACTOR
+        )
+        params: dict[str, Any] = {
+            "documentId": document_id, "title": title, "text": text,
+            "textNormalizedHash": text_normalized_hash,
+            "sourceFormat": source_format,
+            "createdAt": created_at, "chunks": chunks, "matchId": match_id,
+        }
+        if produced_by is not None:
+            params["producedBy"] = produced_by
+        else:
+            params["ingestedBy"] = ingested_by
+        params.update(_lsh_band_params(lsh_bands))
+        band_props = "".join(f", lshBand{i}: $lshBand{i}" for i in range(_LSH_BAND_COUNT))
+
+        res = self._graph(ws).query(
+            resolve +
+            "OPTIONAL MATCH (candidate:Document {"
+            "  textNormalizedHash: $textNormalizedHash, currentVersion: true"
+            "}) "
+            "WITH ingestor, ok, ingestorIsUser, candidate "
+            "ORDER BY candidate.createdAt ASC "
+            "LIMIT 1 "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (d:Document {"
+            "    documentId: $documentId, title: $title, text: $text, "
+            "    sourceFormat: $sourceFormat, "
+            "    sourceKind: CASE WHEN ingestorIsUser THEN 'document' ELSE 'agent' END, "
+            "    status: 'processing', pendingJobs: 0, createdAt: $createdAt, "
+            "    currentVersion: true, textNormalizedHash: $textNormalizedHash"
+            + band_props +
+            "  }) "
+            "  CREATE (d)-[:INGESTED_BY]->(ingestor) "
+            "  FOREACH (ch IN $chunks | "
+            "    CREATE (d)-[:HAS_CHUNK]->(:Chunk {"
+            "      chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId, "
+            "      documentCurrent: true"
+            "    })"
+            "  )"
+            ") "
+            "WITH ok, candidate "
+            "OPTIONAL MATCH (d:Document {documentId: $documentId}) "
+            "WITH ok, d, candidate, (ok AND candidate IS NOT NULL) AS doSupersede "
+            "FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END | "
+            "  SET candidate.currentVersion = false, candidate.supersededAt = $createdAt, "
+            "      candidate.supersededBy = 'system' "
+            ") "
+            "WITH ok, d, candidate, doSupersede "
+            "OPTIONAL MATCH (candidate)-[:HAS_CHUNK]->(c:Chunk) "
+            "WITH ok, d, candidate, doSupersede, collect(c) AS candidateChunks "
+            "FOREACH (ch IN CASE WHEN doSupersede THEN candidateChunks ELSE [] END | "
+            "  SET ch.documentCurrent = false"
+            ") "
+            "WITH ok, d, candidate, doSupersede "
+            "FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END | "
+            "  CREATE (d)-[:SUPERSEDES {"
+            "    matchId: $matchId, status: 'confirmed', confidence: 1.0, "
+            "    technique: 'exact_normalized_text_hash', createdAt: $createdAt, "
+            "    decidedAt: $createdAt, decidedBy: 'system', "
+            "    resuggestCount: 0, lastResuggestedAt: null"
+            "  }]->(candidate) "
+            ") "
+            "RETURN ok AS ingestorFound, d.documentId AS documentId, "
+            "       doSupersede AS autoSuperseded, "
+            "       CASE WHEN doSupersede THEN candidate.documentId ELSE null END "
+            "         AS supersededDocumentId, "
+            "       CASE WHEN doSupersede THEN $matchId ELSE null END AS matchId",
+            params,
+        )
+        row = res.result_set[0]
+        return {
+            "documentId": row[1], "chunkCount": len(chunks),
+            "autoSuperseded": bool(row[2]), "supersededDocumentId": row[3],
+            "matchId": row[4], "ingestorFound": bool(row[0]),
+        }
+
+    def list_documents_missing_lsh_bands(self, ws: str) -> list[dict[str, Any]]:
+        """Every `Document` lacking any of `lshBand0..7`, current or not (K-091
+        backfill listing — read-only). A full `Document` scan by design: a
+        one-off operator read, not a hot path."""
+        missing = " OR ".join(f"d.lshBand{i} IS NULL" for i in range(_LSH_BAND_COUNT))
+        res = self._graph(ws).ro_query(
+            f"MATCH (d:Document) WHERE {missing} "
+            "RETURN d.documentId, d.title, d.text ORDER BY d.documentId"
+        )
+        return [
+            {"documentId": r[0], "title": r[1], "text": r[2]} for r in res.result_set
+        ]
+
+    def set_document_lsh_bands(
+        self, ws: str, *, document_id: str, lsh_bands: list[str],
+    ) -> bool:
+        """Stamp `lshBand0..7` on one existing `Document` (K-091 backfill
+        write). Anchored on the unique `documentId`; returns whether the
+        document existed. Exactly 8 bands, else `ValueError` (`_lsh_band_params`)."""
+        params: dict[str, Any] = {**_lsh_band_params(lsh_bands), "documentId": document_id}
+        set_clause = ", ".join(f"d.lshBand{i} = $lshBand{i}" for i in range(_LSH_BAND_COUNT))
+        res = self._graph(ws).query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            f"SET {set_clause} RETURN count(d)",
+            params,
+        )
+        return bool(res.result_set and res.result_set[0][0])
+
+    def find_update_shortlist(
+        self, ws: str, *, bands: list[str], title: str, limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Suggested-tier candidate generation (plan §3.4/§4 Stage D, ML note
+        §4.1) — two unioned, de-duplicated signals, both scoped to
+        `currentVersion` documents only (never actor-scoped — the ML note's
+        own "never miss the cross-actor-edit case" instruction, §4.1):
+
+        1. An index-anchored `OR` across the `b` LSH band-equality predicates
+           (`WHERE d.lshBand0 = $band0 OR d.lshBand1 = $band1 OR ...`) —
+           **live-verified** (plan §0 second `graph-dba` pass) as a single
+           `Node By Index Scan`, no label scan, confirmed structurally
+           distinct from the general "`OR`-as-scan-anchor" quirk
+           `falkor-chat/AGENTS.md` already names (that one is the unrelated
+           single-property `$param IS NULL OR prop = $param` optional-filter
+           idiom).
+        2. A separate title-fuzzy full-text lookup (RediSearch on
+           `Document.title`) — skipped entirely when `title` is empty (no
+           degenerate query is issued — on this build an empty query returns
+           no rows rather than erroring, live-probed in K-075 — the same
+           posture `fusion._fuzzy_query`'s caller takes for entity names),
+           and also skipped when every token strips
+           to nothing or to underscores only (see below) — same reasoning, a
+           degenerate query, and the band candidates are still returned. One
+           `%token%` fuzzy term per title word — title is short
+           (`MAX_NAME_LEN=200`), so this stays cheap. Each whitespace token
+           is run through `_escape_fuzzy_token` first: free-form document
+           titles routinely carry RediSearch query-syntax metacharacters
+           (parens, hyphen, colon, quotes, brackets, pipe — document-
+           ingestion2 QA Defect 1). A token left with only underscores is
+           dropped too, never sent: a lone `%_%` is a syntax error whose
+           exception would discard the band candidates as well (K-075). The
+           entity-name builder handles the same metacharacters differently,
+           by splitting on them (K-068).
+
+        Unioned + de-duplicated by `documentId` in Python (a document
+        matching both signals is returned once). Returns `{documentId, title,
+        text}` rows — `text` is needed by the caller
+        (`background._safe_detect_update`) to compute the precise Jaccard
+        ratio against this (small, bounded) shortlist; the LSH bands only
+        ever narrow candidates, never substitute for the exact metric (plan
+        §3.4 step 2).
+        """
+        params: dict[str, Any] = {f"band{i}": band for i, band in enumerate(bands)}
+        params["limit"] = limit
+        where_clause = " OR ".join(f"d.lshBand{i} = $band{i}" for i in range(len(bands)))
+        band_res = self._graph(ws).ro_query(
+            f"MATCH (d:Document {{currentVersion: true}}) "
+            f"WHERE {where_clause} "
+            "RETURN d.documentId AS documentId, d.title AS title, d.text AS text "
+            "LIMIT $limit",
+            params,
+        )
+        candidates: dict[str, dict[str, Any]] = {
+            row[0]: {"documentId": row[0], "title": row[1], "text": row[2]}
+            for row in band_res.result_set
+        }
+        if title:
+            fuzzy_query = " ".join(
+                f"%{escaped}%"
+                for escaped in (_escape_fuzzy_token(tok) for tok in title.split())
+                if escaped
+            )
+        else:
+            fuzzy_query = ""
+        if fuzzy_query:
+            title_res = self._graph(ws).ro_query(
+                "CALL db.idx.fulltext.queryNodes('Document', $fuzzyQuery) "
+                "YIELD node AS d "
+                "WHERE d.currentVersion = true "
+                "RETURN d.documentId AS documentId, d.title AS title, d.text AS text "
+                "LIMIT $limit",
+                {"fuzzyQuery": fuzzy_query, "limit": limit},
+            )
+            for row in title_res.result_set:
+                candidates.setdefault(
+                    row[0], {"documentId": row[0], "title": row[1], "text": row[2]}
+                )
+        return list(candidates.values())
+
+    # ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3, FR-7a) ─────────────────────
+
+    def create_entity(
+        self, ws: str, *, entity_id: str, name: str, name_normalized: str,
+        type: str, created_at: int,
+    ) -> dict[str, Any]:
+        """Create a fresh `Entity` node. QUERIES.md §14.5.
+
+        **Always a NEW node** — this method never looks up or reuses an
+        existing entity; fusion (a future stage) never blocks creation here,
+        only decides *linking* after the fact. `name_normalized` is computed
+        app-side by the caller (`IngestionPipeline`) using the SAME shared
+        normalization helper `extraction.normalize_name` — one function, not
+        two independently-written normalizers that can drift
+        (`document-ingestion-graph.md` §2.2, `document-ingestion-ml.md` §3.2).
+        Written starting this stage even though fusion is the first reader,
+        so no backfill migration is needed later. Both `entityId` and every
+        edge here are freshly minted by *this same pipeline run* moments
+        apart — a plain `CREATE`, no guard-and-status-row contract (unlike
+        `Document`/message writes, a `MATCH` miss downstream would indicate a
+        real bug, not routine caller input).
+        """
+        res = self._graph(ws).query(
+            "CREATE (e:Entity {"
+            "  entityId: $entityId, name: $name, nameNormalized: $nameNormalized, "
+            "  type: $type, createdAt: $createdAt"
+            "}) "
+            "RETURN e.entityId AS entityId",
+            {
+                "entityId": entity_id, "name": name,
+                "nameNormalized": name_normalized, "type": type,
+                "createdAt": created_at,
+            },
+        )
+        return {"entityId": res.result_set[0][0]}
+
+    def link_chunk_about_entity(
+        self, ws: str, *, chunk_id: str, entity_id: str
+    ) -> None:
+        """Write the dormant `(:Chunk)-[:ABOUT]->(:Entity)` edge (schema
+        scaffolded since M2, `docs/DESIGN.md` §5.1 — never populated until
+        this stage). QUERIES.md §14.5.
+
+        Plain `CREATE`, never `MERGE`: a chunk is extracted exactly once per
+        ingestion, so a duplicate `(chunk, entity)` `ABOUT` pair shouldn't
+        occur under normal operation; if it ever did, an extra co-occurrence
+        edge is harmless (no properties to conflict) — the same
+        never-deduplicated posture already adopted for `RELATES_TO` (§3.1).
+        """
+        self._graph(ws).query(
+            "MATCH (c:Chunk {chunkId: $chunkId}) "
+            "MATCH (e:Entity {entityId: $entityId}) "
+            "CREATE (c)-[:ABOUT]->(e)",
+            {"chunkId": chunk_id, "entityId": entity_id},
+        )
+
+    def create_entity_relationship(
+        self, ws: str, *, subject_id: str, object_id: str, label: str,
+        source_chunk_id: str, source_document_id: str, created_at: int,
+    ) -> None:
+        """Write one `RELATES_TO` fact edge. QUERIES.md §14.5.
+
+        `label` is the LLM-extracted predicate, stored as free text — never
+        its own Cypher relationship type (plan §3.3/§3.1: an unbounded,
+        LLM-controlled set of relationship types is a real risk this avoids,
+        the same "opaque string, parsed app-side" convention already used for
+        `Step.config`/`TRANSITION.guard`). **Never deduplicated** — every
+        extracted fact is independent provenance and is written even if an
+        identical `RELATES_TO` edge already exists between the same two
+        entities (FR-6/§3.1: conflicting or repeated facts are always kept,
+        never merged or overwritten).
+        """
+        self._graph(ws).query(
+            "MATCH (subj:Entity {entityId: $subjectId}) "
+            "MATCH (obj:Entity  {entityId: $objectId}) "
+            "CREATE (subj)-[:RELATES_TO {"
+            "  label: $label, sourceChunkId: $sourceChunkId, "
+            "  sourceDocumentId: $sourceDocumentId, createdAt: $createdAt"
+            "}]->(obj)",
+            {
+                "subjectId": subject_id, "objectId": object_id, "label": label,
+                "sourceChunkId": source_chunk_id,
+                "sourceDocumentId": source_document_id, "createdAt": created_at,
+            },
+        )
+
+    # ── §14.6 Entity fusion — SAME_AS (K-050 M5 Stage 4, FR-6/7/8/9/10) ──────────
+    #
+    # Every `SAME_AS`-anchored query below matches its endpoints UNLABELED
+    # (`(a)`/`(b)`, never `(a:Entity)`) — a bare label on either endpoint of a
+    # relationship-index-anchored query forces a full `Node By Label Scan` on
+    # this build even though the relationship-property scan alone is fully
+    # selective (`document-ingestion-graph.md` §1.4, `claude/graph-dba/
+    # falkordb-quirks.md`). `SAME_AS` only ever connects `Entity` nodes by
+    # construction, so omitting the label costs nothing semantically.
+
+    def create_entity_with_auto_match(
+        self, ws: str, *, entity_id: str, name: str, name_normalized: str,
+        type: str, created_at: int, match_id: str,
+    ) -> dict[str, Any]:
+        """FR-8 exact-tier auto-merge, folded into entity creation itself —
+        the plan-gate review BLOCKER fix (`document-ingestion.md` §3.4
+        "Concurrency note", `document-ingestion-graph.md` §1.8).
+
+        One atomic `GRAPH.QUERY` that (1) looks up the oldest pre-existing
+        `Entity` sharing `(nameNormalized, type)` — the same semantics
+        `find_exact_candidate` originally described standalone (§2.3) —
+        (2) creates the new `Entity` node, and (3), only if a candidate was
+        found, creates a `SAME_AS{status:'confirmed', decidedBy:'system',
+        confidence:1.0}` edge from the new entity to it. All three in one
+        round trip, so no concurrent `GRAPH.QUERY` against the same
+        `(nameNormalized, type)` can ever observe a state between "candidate
+        checked" and "entity created + linked" (FalkorDB/Redis serializes
+        command execution — this is the same guarantee `create_or_reopen_match`
+        below already relies on for its own read-then-write, applied one hop
+        earlier). Live-verified ordering (graph note §1.8): the candidate
+        `MATCH` binds strictly before the new entity's `CREATE`, so the new
+        entity can never appear as its own candidate.
+
+        No reopen branch — a brand-new `Entity`, `CREATE`d fresh inside this
+        same query, cannot structurally already have a `SAME_AS` edge to
+        reopen (graph note §1.8's confirmed simplification).
+
+        Returns `{entityId, exactMatched, candidateEntityId, matchId}` —
+        `candidateEntityId`/`matchId` are `None` when `exactMatched` is
+        False. `match_id` is server-minted by the caller and consumed only
+        if a candidate is actually found.
+        """
+        res = self._graph(ws).query(
+            "OPTIONAL MATCH (candidate:Entity {nameNormalized: $nameNormalized, type: $type}) "
+            "WITH candidate "
+            "ORDER BY candidate.createdAt ASC "
+            "LIMIT 1 "
+            "CREATE (e:Entity {"
+            "  entityId: $entityId, name: $name, nameNormalized: $nameNormalized, "
+            "  type: $type, createdAt: $createdAt"
+            "}) "
+            "WITH e, candidate "
+            "FOREACH (_ IN CASE WHEN candidate IS NOT NULL THEN [1] ELSE [] END | "
+            "  CREATE (e)-[:SAME_AS {"
+            "    matchId: $matchId, status: 'confirmed', confidence: 1.0, "
+            "    technique: 'exact_normalized_name_type', createdAt: $createdAt, "
+            "    decidedAt: $createdAt, decidedBy: 'system', "
+            "    resuggestCount: 0, lastResuggestedAt: null"
+            "  }]->(candidate) "
+            ") "
+            "RETURN e.entityId AS entityId, "
+            "       candidate IS NOT NULL AS exactMatched, "
+            "       candidate.entityId AS candidateEntityId, "
+            "       CASE WHEN candidate IS NOT NULL THEN $matchId ELSE null END AS matchId",
+            {
+                "entityId": entity_id, "name": name, "nameNormalized": name_normalized,
+                "type": type, "createdAt": created_at, "matchId": match_id,
+            },
+        )
+        row = res.result_set[0]
+        return {
+            "entityId": row[0], "exactMatched": row[1],
+            "candidateEntityId": row[2], "matchId": row[3],
+        }
+
+    def find_fuzzy_candidates(
+        self, ws: str, *, fuzzy_query: str, type: str, limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """FR-9 suggested-tier candidate lookup — RediSearch fuzzy full-text
+        against `Entity.name`, `type`-filtered (`document-ingestion-graph.md`
+        §2.3). `fuzzy_query` is built app-side by `fusion.find_fuzzy_candidates`
+        (one `%token%` 1-edit fuzzy term per name token, tokenized the way
+        the full-text index tokenizes `Entity.name`, K-068) — this method issues
+        the query verbatim, no further construction here (Cypher stays only
+        in this module). Ranked by score, highest first.
+        """
+        res = self._graph(ws).ro_query(
+            "CALL db.idx.fulltext.queryNodes('Entity', $fuzzyQuery) "
+            "YIELD node AS candidate, score "
+            "WHERE candidate.type = $type "
+            "RETURN candidate.entityId AS entityId, candidate.name AS name, "
+            "candidate.type AS type, score "
+            "ORDER BY score DESC "
+            "LIMIT $limit",
+            {"fuzzyQuery": fuzzy_query, "type": type, "limit": limit},
+        )
+        return [
+            {"entityId": row[0], "name": row[1], "type": row[2], "score": row[3]}
+            for row in res.result_set
+        ]
+
+    def create_or_reopen_match(
+        self, ws: str, *, new_entity_id: str, candidate_entity_id: str,
+        match_id: str, status: str, confidence: float, technique: str,
+        created_at: int,
+    ) -> dict[str, Any]:
+        """FR-9 suggested tier (and any future non-atomic tier's) find-or-
+        create-or-reopen write — OQ-3's "reuse by pair, reopen if rejected"
+        contract (`document-ingestion-graph.md` §1.6).
+
+        Write direction is a convention, not a semantic claim (always
+        `new -> candidate`, graph note §1.5); the `OPTIONAL MATCH` lookup is
+        undirected, so a suggestion already written in the opposite discovery
+        order on an earlier ingestion is still found, never duplicated. Not a
+        bare `MERGE` — see the graph note §1.6 for why a direction-fixed
+        `MERGE` would miss that opposite-order case.
+
+        Returns `{created, reopened, matchId, status}`. `matchId`/`confidence`/
+        `technique`/`created_at` are consumed only when a fresh edge is
+        actually created; a reopened edge keeps its **original** `matchId`
+        and bumps `resuggestCount`/`lastResuggestedAt` instead.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a:Entity {entityId: $newEntityId}) "
+            "MATCH (b:Entity {entityId: $candidateEntityId}) "
+            "OPTIONAL MATCH (a)-[existing:SAME_AS]-(b) "
+            "WITH a, b, existing, "
+            "     (existing IS NULL) AS isNew, "
+            "     (existing IS NOT NULL AND existing.status = 'rejected') AS reopen "
+            "FOREACH (_ IN CASE WHEN isNew THEN [1] ELSE [] END | "
+            "  CREATE (a)-[:SAME_AS {"
+            "    matchId: $matchId, status: $status, confidence: $confidence, "
+            "    technique: $technique, createdAt: $createdAt, "
+            "    decidedAt: CASE WHEN $status = 'confirmed' THEN $createdAt ELSE null END, "
+            "    decidedBy: CASE WHEN $status = 'confirmed' THEN 'system' ELSE null END, "
+            "    resuggestCount: 0, lastResuggestedAt: null"
+            "  }]->(b) "
+            ") "
+            "FOREACH (_ IN CASE WHEN reopen THEN [1] ELSE [] END | "
+            "  SET existing.status = 'pending', "
+            "      existing.resuggestCount = coalesce(existing.resuggestCount, 0) + 1, "
+            "      existing.lastResuggestedAt = $createdAt "
+            ") "
+            "RETURN isNew AS created, reopen AS reopened, "
+            "       coalesce(existing.matchId, $matchId) AS matchId, "
+            "       coalesce(existing.status, $status)   AS status",
+            {
+                "newEntityId": new_entity_id, "candidateEntityId": candidate_entity_id,
+                "matchId": match_id, "status": status, "confidence": confidence,
+                "technique": technique, "createdAt": created_at,
+            },
+        )
+        row = res.result_set[0]
+        return {"created": row[0], "reopened": row[1], "matchId": row[2], "status": row[3]}
+
+    def confirm_match(
+        self, ws: str, *, match_id: str, decided_by: str, decided_at: int,
+    ) -> dict[str, Any] | None:
+        """FR-10 — flip a `pending`/`rejected` `SAME_AS` edge to `confirmed`,
+        stamping the audit fields (`document-ingestion-graph.md` §1.7).
+        `decided_by` is a real `User`/`Agent` id here, never `'system'` — this
+        path is only ever reached by a human/agent decision.
+
+        Returns `{matchId, status, entityA, entityB}`, or `None` if no
+        `SAME_AS` edge has this `matchId` (caller's job to turn that into a
+        404-shaped error).
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SAME_AS {matchId: $matchId}]->(b) "
+            "SET r.status = 'confirmed', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.entityId AS entityA, b.entityId AS entityB",
+            {"matchId": match_id, "decidedAt": decided_at, "decidedBy": decided_by},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "entityA": row[2], "entityB": row[3]}
+
+    def reject_match(
+        self, ws: str, *, match_id: str, decided_by: str, decided_at: int,
+    ) -> dict[str, Any] | None:
+        """FR-10 — flip a `SAME_AS` edge to `rejected`, stamping the audit
+        fields (`document-ingestion-graph.md` §1.7). Never deletes the edge —
+        the `rejected` record is what makes OQ-3 (automatic re-open on
+        corroboration, or `recheck_match` on demand) answerable with no
+        second mechanism.
+
+        Returns `{matchId, status, entityA, entityB}`, or `None` if no
+        `SAME_AS` edge has this `matchId`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SAME_AS {matchId: $matchId}]->(b) "
+            "SET r.status = 'rejected', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.entityId AS entityA, b.entityId AS entityB",
+            {"matchId": match_id, "decidedAt": decided_at, "decidedBy": decided_by},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "entityA": row[2], "entityB": row[3]}
+
+    def recheck_match(self, ws: str, *, match_id: str, at: int) -> dict[str, Any] | None:
+        """OQ-3's manual reopen path — flips a `rejected` `SAME_AS` edge back
+        to `pending` and bumps `resuggestCount`/`lastResuggestedAt`
+        (`document-ingestion-graph.md` §1.7). A no-op for any other current
+        status (including "no such matchId") — the `WHERE r.status =
+        'rejected'` guard means both cases return zero rows indistinguishably;
+        the caller cannot and does not need to tell them apart (recheck is
+        idempotent either way: nothing to transition either time).
+
+        Returns `{matchId, status, entityA, entityB}`, or `None` on the no-op.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SAME_AS {matchId: $matchId}]->(b) "
+            "WHERE r.status = 'rejected' "
+            "SET r.status = 'pending', "
+            "    r.resuggestCount = coalesce(r.resuggestCount, 0) + 1, "
+            "    r.lastResuggestedAt = $at "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.entityId AS entityA, b.entityId AS entityB",
+            {"matchId": match_id, "at": at},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "entityA": row[2], "entityB": row[3]}
+
+    def list_pending_matches(self, ws: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """OQ-2's review surface — `status='pending'` `SAME_AS` edges, oldest
+        first (`document-ingestion-graph.md` §1.7). Directed (matches the
+        canonical write direction, §1.5) — no undirected-doubling risk.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (a)-[r:SAME_AS {status: 'pending'}]->(b) "
+            "RETURN r.matchId AS matchId, "
+            "       a.entityId AS entityA, a.name AS nameA, "
+            "       b.entityId AS entityB, b.name AS nameB, "
+            "       r.confidence AS confidence, r.technique AS technique, "
+            "       r.createdAt AS createdAt "
+            "ORDER BY r.createdAt "
+            "LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {
+                "matchId": row[0], "entityA": row[1], "nameA": row[2],
+                "entityB": row[3], "nameB": row[4], "confidence": row[5],
+                "technique": row[6], "createdAt": row[7],
+            }
+            for row in res.result_set
+        ]
+
+    def list_matches(
+        self, ws: str, *, status: str | None = None, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """The plan-gate review's MAJOR-finding fix — status-filterable (or
+        unfiltered) `SAME_AS` listing, closing the auto-merge tier's missing
+        discovery surface (`document-ingestion-graph.md` §1.7).
+
+        **Two separate query strings, not one `WHERE $status IS NULL OR
+        r.status = $status` null-guard** — live-verified that idiom silently
+        discards the `SAME_AS.status` index even when `$status` is bound to a
+        real value (graph note §1.7, `claude/graph-dba/falkordb-quirks.md`).
+        The unfiltered branch is a genuinely unavoidable full scan on this
+        build (no relationship-type-only scan operator exists) — `limit`
+        bounds the *result* size, not the *scan* cost; reasonable for an
+        infrequent admin/audit call, not a hot path.
+        """
+        if status is not None:
+            res = self._graph(ws).ro_query(
+                "MATCH (a)-[r:SAME_AS {status: $status}]->(b) "
+                "RETURN r.matchId AS matchId, "
+                "       a.entityId AS entityA, a.name AS nameA, "
+                "       b.entityId AS entityB, b.name AS nameB, "
+                "       r.status AS status, r.confidence AS confidence, "
+                "       r.technique AS technique, r.createdAt AS createdAt "
+                "ORDER BY r.createdAt "
+                "LIMIT $limit",
+                {"status": status, "limit": limit},
+            )
+        else:
+            res = self._graph(ws).ro_query(
+                "MATCH (a)-[r:SAME_AS]->(b) "
+                "RETURN r.matchId AS matchId, "
+                "       a.entityId AS entityA, a.name AS nameA, "
+                "       b.entityId AS entityB, b.name AS nameB, "
+                "       r.status AS status, r.confidence AS confidence, "
+                "       r.technique AS technique, r.createdAt AS createdAt "
+                "ORDER BY r.createdAt "
+                "LIMIT $limit",
+                {"limit": limit},
+            )
+        return [
+            {
+                "matchId": row[0], "entityA": row[1], "nameA": row[2],
+                "entityB": row[3], "nameB": row[4], "status": row[5],
+                "confidence": row[6], "technique": row[7], "createdAt": row[8],
+            }
+            for row in res.result_set
+        ]
+
+    def get_message(self, ws: str, *, msg_id: str) -> dict[str, Any] | None:
+        """Fetch a single message with author + quoted-id, or None. QUERIES.md §4."""
+        res = self._graph(ws).ro_query(
+            "MATCH (m:Message {msgId: $msgId}) "
+            "OPTIONAL MATCH (m)-[:POSTED_BY]->(author) "
+            "OPTIONAL MATCH (m)-[:REPLY_TO]->(quoted:Message) "
+            "RETURN m.msgId, m.text, m.role, m.createdAt, "
+            "coalesce(author.userId, author.agentId) AS authorId, "
+            "labels(author) AS authorType, m.threadId AS threadId, "
+            "quoted.msgId AS quotedId",
+            {"msgId": msg_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "msgId": row[0], "text": row[1], "role": row[2], "createdAt": row[3],
+            "authorId": row[4], "authorType": row[5], "threadId": row[6],
+            "quotedId": row[7],
+        }
+
+    # ── validation reads (used by services) ─────────────────────────────────────
+
+    def thread_exists(self, ws: str, *, thread_id: str) -> bool:
+        """True if the thread exists in the workspace."""
+        res = self._graph(ws).ro_query(
+            "OPTIONAL MATCH (t:Thread {threadId: $threadId}) RETURN t IS NOT NULL",
+            {"threadId": thread_id},
+        )
+        return bool(res.result_set and res.result_set[0][0])
+
+    def channel_exists(self, ws: str, *, channel_id: str) -> bool:
+        """True if the channel exists in the workspace."""
+        res = self._graph(ws).ro_query(
+            "OPTIONAL MATCH (c:Channel {channelId: $channelId}) "
+            "RETURN c IS NOT NULL",
+            {"channelId": channel_id},
+        )
+        return bool(res.result_set and res.result_set[0][0])
+
+    def resolve_member_kinds(self, ws: str, *, ids: list[str]) -> dict[str, str | None]:
+        """id -> 'User' | 'Agent' | None. QUERIES.md §2 (member-kind lookup).
+
+        One round trip covers author validation, mention validation, and role
+        derivation (`User → user`, `Agent → assistant` — mapping is service-side).
+        """
+        if not ids:
+            return {}
+        res = self._graph(ws).ro_query(
+            "UNWIND $ids AS id "
+            "OPTIONAL MATCH (u:User  {userId:  id}) "
+            "OPTIONAL MATCH (a:Agent {agentId: id}) "
+            "RETURN id, CASE WHEN coalesce(u, a) IS NULL THEN null "
+            "                ELSE labels(coalesce(u, a))[0] END AS kind",
+            {"ids": list(ids)},
+        )
+        return {row[0]: row[1] for row in res.result_set}
+
+    def list_thread_participants(
+        self, ws: str, *, thread_id: str
+    ) -> list[dict[str, Any]]:
+        """A thread's participants = its parent channel's roster (RO). QUERIES.md
+        §2 "List thread participants" (K-036 — web-api-coverage FR-8).
+
+        Anchors on `Node By Index Scan | (t:Thread)` (`Thread.threadId`), one
+        backward `HAS_THREAD` hop to the channel, one forward `MEMBER_OF` hop
+        per member — no label scan (live-verified `GRAPH.PROFILE`, QUERIES.md
+        §2). `type` is `labels(u)` (mirrors `read_thread`'s `authorType`
+        convention — the kind-string derivation is the caller's job, same as
+        everywhere else this repository returns raw `labels()`). Empty list
+        when the thread's channel has zero members — not an error (the
+        demo-seed-timing edge case QUERIES.md §2 calls out).
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (c:Channel)-[:HAS_THREAD]->(t:Thread {threadId: $threadId}) "
+            "MATCH (u)-[:MEMBER_OF]->(c) "
+            "RETURN coalesce(u.userId, u.agentId) AS memberId, "
+            "       u.displayName                 AS displayName, "
+            "       labels(u)                     AS type "
+            "ORDER BY u.displayName",
+            {"threadId": thread_id},
+        )
+        return [
+            {"memberId": row[0], "displayName": row[1], "type": row[2]}
+            for row in res.result_set
+        ]
+
+    # ── §11 Workflow definitions & snapshots (M3 Slice 1) ────────────────────────
+    #
+    # Definitions live canonically in the GLOBAL `reference` graph as versioned
+    # WorkflowDef templates; materializing copies a def@version into a
+    # workspace as a local WorkflowDefSnapshot subgraph. Reference-scoped methods
+    # take NO `ws` (plan F3); only materialization consumes a workspace. Every
+    # node MERGE is backed by a UNIQUE constraint (`WorkflowDef {key,version}` /
+    # `WorkflowDefSnapshot {key,version}` / `Step {stepUid}`). `config`/`guard`
+    # are opaque strings, stored and returned verbatim (rule 8). Each method maps
+    # 1:1 to a verified QUERIES.md §11 query.
+
+    # Publish/materialize share the same MERGE shape (§11.1 / §11.4), differing
+    # only in the root label and the target graph. Create-only on properties,
+    # topology-enforced by services (K-034) — see this class's docstrings, not
+    # "idempotent" unconditionally. The two sequential UNWIND blocks each
+    # collapse via `count(...)` so the RETURN is one status row
+    # (a naive shape row-multiplies steps × transitions).
+    _PUBLISH_CYPHER = (
+        "MERGE (d:{label} {{key: $key, version: $version}}) "
+        "  ON CREATE SET d.name = $name, d.kind = $kind "
+        "WITH d "
+        "UNWIND $steps AS s "
+        "  MERGE (st:Step {{stepUid: $key + ':' + $version + ':' + s.key}}) "
+        "    ON CREATE SET st.key = s.key, st.type = s.type, st.config = s.config "
+        "  MERGE (d)-[:HAS_STEP]->(st) "
+        "WITH d, count(st) AS stepCount "
+        "MATCH (start:Step {{stepUid: $key + ':' + $version + ':' + $startKey}}) "
+        "MERGE (d)-[:START]->(start) "
+        "WITH d, stepCount "
+        "UNWIND $transitions AS tr "
+        "  MATCH (from:Step {{stepUid: $key + ':' + $version + ':' + tr.from}}) "
+        "  MATCH (to:Step   {{stepUid: $key + ':' + $version + ':' + tr.to}}) "
+        "  MERGE (from)-[rel:TRANSITION {{on: tr.on, order: tr.order}}]->(to) "
+        "    ON CREATE SET rel.guard = tr.guard "
+        "WITH d, stepCount, count(rel) AS transitionCount "
+        "RETURN d.key AS key, d.version AS version, stepCount, transitionCount"
+    )
+
+    # Subgraph read = two focused, index-anchored queries (§11.2 / §11.5): meta +
+    # steps (via HAS_STEP), then transitions. No `length(path)` ordering (F6) —
+    # the app reconstructs order from `TRANSITION.order`/topology.
+    _READ_META_CYPHER = (
+        "MATCH (d:{label} {{key: $key, version: $version}}) "
+        "OPTIONAL MATCH (d)-[:START]->(start:Step) "
+        "OPTIONAL MATCH (d)-[:HAS_STEP]->(s:Step) "
+        "RETURN d.name AS name, d.kind AS kind, start.key AS startKey, "
+        "       collect(DISTINCT {{key: s.key, type: s.type, config: s.config}}) AS steps"
+    )
+    _READ_TRANSITIONS_CYPHER = (
+        "MATCH (d:{label} {{key: $key, version: $version}})"
+        "-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step) "
+        "RETURN collect({{from: from.key, to: to.key, on: tr.on, "
+        "                 guard: tr.guard, order: tr.order}}) AS transitions"
+    )
+
+    @staticmethod
+    def _read_subgraph(graph, *, label: str, key: str, version: str):
+        """Read a def/snapshot subgraph (shared by def-read and snapshot-read).
+
+        `None` when the root node is absent (the meta `MATCH` yields no rows).
+        Otherwise `{name, kind, start_key, steps, transitions}`.
+        """
+        meta = graph.ro_query(
+            Repository._READ_META_CYPHER.format(label=label),
+            {"key": key, "version": version},
+        )
+        if not meta.result_set:
+            return None
+        name, kind, start_key, steps = meta.result_set[0]
+        trs = graph.ro_query(
+            Repository._READ_TRANSITIONS_CYPHER.format(label=label),
+            {"key": key, "version": version},
+        )
+        transitions = trs.result_set[0][0] if trs.result_set else []
+        return {
+            "name": name, "kind": kind, "start_key": start_key,
+            "steps": list(steps), "transitions": list(transitions),
+        }
+
+    @staticmethod
+    def _read_structure(graph, *, label: str, key: str, version: str):
+        """Observability read of a def/snapshot subgraph — **all** meta rows (K-031).
+
+        Runs the *same* `_READ_META_CYPHER`/`_READ_TRANSITIONS_CYPHER` constants
+        as `_read_subgraph` (§11.2 / §11.5) — no new or modified Cypher.
+
+        **Why this duplicates `_read_subgraph`** (~12 lines, deliberate): that
+        helper feeds `materialize_def` and the SHA-locked executor
+        (`get_snapshot` → `executor._drive_loop`) and must not move. This one
+        serves the read-only structure/diff endpoints, which need a different
+        shape and a different row discipline.
+
+        **Why it reads every row, not `result_set[0]`.** `_READ_META_CYPHER`
+        returns `start.key` as a non-aggregated grouping key beside
+        `collect(DISTINCT …)`, so the one-row collapse QUERIES.md §11.2 documents
+        holds only *because* `start.key` is constant across the fan-out. A root
+        carrying more than one `START` edge breaks that premise and yields **one
+        row per start key** (verified live, K-031 V-1: two `START` edges → two
+        meta rows), of which `_read_subgraph` takes an arbitrary one. How a root
+        acquires a second `START` edge is **K-034**'s (a re-publish is create-only
+        on properties but *additive* on structure); detecting it is this method's.
+
+        **Why the returned shape differs from §11.2's documented contract.**
+        §11.2 documents a scalar `startKey`; this returns `start_keys:
+        list[str]` — a deliberate, documented stretch of the "`repository.py` is
+        a 1:1 mirror of QUERIES.md" rule (DESIGN §14.2), recorded from the query
+        side in the **QUERIES.md §11.2 multi-`START` note** (mirrored at §11.5).
+
+        `None` when the root node is absent **or when the graph key itself has
+        been fully `GRAPH.DELETE`d** (K-005) — `test_queries.sh`'s teardown does
+        the latter to `reference`, and an uncaught "empty key" `ResponseError`
+        here previously escaped both callers and `Services.diff_def_snapshot`
+        entirely, collapsing its per-side presence check to a blanket failure
+        before the other side was ever read (`claude/coder/kaizen/plan.md`
+        K-005). Same "empty key" catch already used for this exact FalkorDB
+        behaviour at `read_index_dimension` (earlier in this class) and
+        `services._read_or_absent`; any other `ResponseError` still propagates.
+        Otherwise `{name, kind, start_keys, steps, transitions}`.
+        """
+        try:
+            meta = graph.ro_query(
+                Repository._READ_META_CYPHER.format(label=label),
+                {"key": key, "version": version},
+            )
+        except ResponseError as exc:
+            if "empty key" in str(exc):
+                return None
+            raise
+        if not meta.result_set:
+            return None
+        name, kind = meta.result_set[0][0], meta.result_set[0][1]
+        start_keys: list[str] = []
+        steps: list[dict[str, Any]] = []
+        seen_steps: set[str] = set()
+        for row in meta.result_set:
+            if row[2] is not None and row[2] not in start_keys:
+                start_keys.append(row[2])
+            for step in row[3]:
+                if step["key"] is not None and step["key"] not in seen_steps:
+                    seen_steps.add(step["key"])
+                    steps.append(dict(step))
+        trs = graph.ro_query(
+            Repository._READ_TRANSITIONS_CYPHER.format(label=label),
+            {"key": key, "version": version},
+        )
+        transitions = trs.result_set[0][0] if trs.result_set else []
+        return {
+            "name": name, "kind": kind, "start_keys": start_keys,
+            "steps": steps, "transitions": [dict(t) for t in transitions],
+        }
+
+    def publish_def(
+        self, *, key: str, version: str, name: str, kind: str, start_key: str,
+        steps: list[dict[str, Any]], transitions: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Publish a def version into the `reference` graph. §11.1.
+
+        Write path. Every node MERGE is constraint-backed. **This method itself
+        does not enforce structural immutability** — a differing payload for an
+        existing `(key, version)` mints parallel `TRANSITION`/`START` structure
+        (K-034; see `test_publish_def_direct_call_is_unsafe_mints_parallel_
+        transition_on_retarget`). The guarantee is enforced by the caller:
+        `services.publish_workflow_def` rejects a topology-differing re-publish
+        (`WorkflowDefConflictError`, 409) *before* calling this method — same as
+        `_validate_def_spec`, which is also run there, before this call, so the
+        inner `MATCH (start …)`/`MATCH (from/to …)` always resolve for a valid
+        spec. Returns `{key, version, stepCount, transitionCount}`.
+        """
+        res = self._reference().query(
+            self._PUBLISH_CYPHER.format(label="WorkflowDef"),
+            {
+                "key": key, "version": version, "name": name, "kind": kind,
+                "startKey": start_key, "steps": list(steps),
+                "transitions": list(transitions),
+            },
+        )
+        row = res.result_set[0]
+        return {
+            "key": row[0], "version": row[1],
+            "stepCount": row[2], "transitionCount": row[3],
+        }
+
+    def read_def_subgraph(self, *, key: str, version: str) -> dict[str, Any] | None:
+        """Read a def's full subgraph from `reference` — the materialize input. §11.2.
+
+        `None` when the def version is absent. `{name, kind, start_key, steps,
+        transitions}`; `steps`/`transitions` are unordered (F6). Read path.
+        """
+        return self._read_subgraph(
+            self._reference(), label="WorkflowDef", key=key, version=version
+        )
+
+    def read_def_structure(self, *, key: str, version: str) -> dict[str, Any] | None:
+        """Read a def's full structure from `reference` for observability. §11.2.
+
+        Same query constants as `read_def_subgraph`, multi-`START`-aware shape
+        (`start_keys: list[str]`) — see `_read_structure`. `None` when absent.
+        Read path.
+        """
+        return self._read_structure(
+            self._reference(), label="WorkflowDef", key=key, version=version
+        )
+
+    def get_def(self, *, key: str, version: str | None = None) -> dict[str, Any] | None:
+        """Get a def's metadata (latest version if `version` is None). §11.3.
+
+        `{key, version, name, kind}` or `None` if absent. Read path.
+        """
+        graph = self._reference()
+        if version is None:
+            res = graph.ro_query(
+                "MATCH (d:WorkflowDef {key: $key}) "
+                "RETURN d.key AS key, d.version AS version, d.name AS name, "
+                "       d.kind AS kind "
+                "ORDER BY d.version DESC LIMIT 1",
+                {"key": key},
+            )
+        else:
+            res = graph.ro_query(
+                "MATCH (d:WorkflowDef {key: $key, version: $version}) "
+                "RETURN d.key AS key, d.version AS version, d.name AS name, "
+                "       d.kind AS kind",
+                {"key": key, "version": version},
+            )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"key": row[0], "version": row[1], "name": row[2], "kind": row[3]}
+
+    def list_defs(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        """List defs (every version), newest version first within each key. §11.3.
+
+        Read path; anchored on the `WorkflowDef.key` index.
+        """
+        res = self._reference().ro_query(
+            "MATCH (d:WorkflowDef) WHERE d.key > '' "
+            "RETURN d.key AS key, d.version AS version, d.name AS name, "
+            "       d.kind AS kind "
+            "ORDER BY d.key, d.version DESC LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {"key": row[0], "version": row[1], "name": row[2], "kind": row[3]}
+            for row in res.result_set
+        ]
+
+    # ── §12 Workflow execution — runs, step-runs & traces (M3 executor) ──────────
+    #
+    # The executor walks a materialized snapshot (§11) as a WorkflowRun that
+    # records each executed step as a StepRun. All live workspace-local in
+    # `ws:{id}`. Each method maps 1:1 to a verified QUERIES.md §12 query; every
+    # state-move is a single GRAPH.QUERY (atomicity, rule 4). Status-move contract:
+    # zero rows = the anchor missed (run gone / wrong current state / CAS did not
+    # apply) → `None`; a row = the move committed. `ctx`/`input`/`output`/`payload`
+    # are opaque flat strings, stored and returned verbatim (rule 8).
+
+    def start_run(
+        self, ws: str, *, run_id: str, def_key: str, def_version: str,
+        started_at: int, trigger_msg_id: str, ctx: str, trace: bool, max_steps: int,
+    ) -> dict[str, Any] | None:
+        """Begin a run at the snapshot's START step. QUERIES.md §12.1.
+
+        Creates the `WorkflowRun` (`running`, `stepCount:0`, `waitingThreadId:''`)
+        with `OF_DEF`/`AT_STEP`/`TRIGGERED_BY` edges. Returns
+        `{runId, startKey, status, stepCount}`, or `None` when the snapshot has no
+        START or the trigger message is missing (both anchors must match).
+        """
+        res = self._graph(ws).query(
+            "MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})"
+            "-[:START]->(start:Step) "
+            "MATCH (trigger:Message {msgId: $triggerMsgId}) "
+            "CREATE (r:WorkflowRun {runId: $runId, defKey: $defKey, "
+            "                       defVersion: $defVersion, status: 'running', "
+            "                       startedAt: $startedAt, ctx: $ctx, trace: $trace, "
+            "                       maxSteps: $maxSteps, stepCount: 0, "
+            "                       waitingThreadId: ''}) "
+            "CREATE (r)-[:OF_DEF]->(snap) "
+            "CREATE (r)-[:AT_STEP]->(start) "
+            "CREATE (r)-[:TRIGGERED_BY]->(trigger) "
+            "RETURN r.runId AS runId, start.key AS startKey, r.status AS status, "
+            "       r.stepCount AS stepCount",
+            {
+                "runId": run_id, "defKey": def_key, "defVersion": def_version,
+                "startedAt": started_at, "triggerMsgId": trigger_msg_id,
+                "ctx": ctx, "trace": trace, "maxSteps": max_steps,
+            },
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "runId": row[0], "startKey": row[1], "status": row[2],
+            "stepCount": row[3],
+        }
+
+    def start_run_untriggered(
+        self, ws: str, *, run_id: str, def_key: str, def_version: str,
+        started_at: int, ctx: str, trace: bool, max_steps: int,
+    ) -> dict[str, Any] | None:
+        """Begin a run with **no** chat trigger message. QUERIES.md §12.12.
+
+        Parent: §12.1 (`start_run`), minus the `MATCH (trigger:Message …)` anchor
+        and the `TRIGGERED_BY` edge — a `kind:'process'` run (K-024) is started from
+        REST/API, so there is no `Message`, no `Thread` and nothing to link.
+        Deliberately a **second, self-contained write path** rather than an
+        `OPTIONAL MATCH` + `FOREACH` conditional inside §12.1 (the §4
+        first/subsequent doctrine; it sidesteps the empty-row-collapse bug class).
+
+        Single anchor ⇒ `None` = the snapshot has no `START` (or `(key, version)`
+        does not exist) and **nothing is written**. `waitingThreadId` starts `''`
+        and stays `''` — a process run has no thread, which is why §12.9's lookup
+        must never be called with an empty `threadId` (plan F-5/F-6).
+        """
+        res = self._graph(ws).query(
+            "MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})"
+            "-[:START]->(start:Step) "
+            "CREATE (r:WorkflowRun {runId: $runId, defKey: $defKey, "
+            "                       defVersion: $defVersion, status: 'running', "
+            "                       startedAt: $startedAt, ctx: $ctx, trace: $trace, "
+            "                       maxSteps: $maxSteps, stepCount: 0, "
+            "                       waitingThreadId: ''}) "
+            "CREATE (r)-[:OF_DEF]->(snap) "
+            "CREATE (r)-[:AT_STEP]->(start) "
+            "RETURN r.runId AS runId, start.key AS startKey, r.status AS status, "
+            "       r.stepCount AS stepCount",
+            {
+                "runId": run_id, "defKey": def_key, "defVersion": def_version,
+                "startedAt": started_at, "ctx": ctx, "trace": trace,
+                "maxSteps": max_steps,
+            },
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "runId": row[0], "startKey": row[1], "status": row[2],
+            "stepCount": row[3],
+        }
+
+    def record_step_and_advance(
+        self, ws: str, *, run_id: str, step_run_id: str, step_status: str,
+        started_at: int, ended_at: int, input: str, output: str, to_step_uid: str,
+        resolved_model: str | None = None, model_source: str | None = None,
+        model_fallback: bool | None = None,
+    ) -> dict[str, Any] | None:
+        """The M4 tail-anchored atomic advance. QUERIES.md §12.2.
+
+        One query: records the just-executed step (`cur`, at `AT_STEP`) as a
+        `StepRun`, appends it to the `NEXT` trail via the `LAST_STEP_RUN` tail
+        pointer, moves the tail, relinks `AT_STEP` to `$toStepUid`, and bumps
+        `stepCount` — all atomic. `to_step_uid` may equal the current step's uid
+        (advance-to-self: the executor's self-loop / suspend / terminal record).
+        Returns `{stepCount, stepRunId, ranStepKey}`, or `None` when the run is
+        missing, already terminal (no `AT_STEP`), or `$toStepUid` is not a step in
+        this workspace.
+
+        K-042 Landing 2 (FR-8, `-graph.md` §1.4): `resolved_model`/`model_source`/
+        `model_fallback` ride the same `CREATE` as three additional, nullable
+        `StepRun` properties. A `None` param **omits** the property entirely
+        ([verified] `-graph.md` §1.4/§8) — the non-LLM step types (`decision`/
+        `human`/`wait`, the offline `agent`-without-LLM stub) pass all three as
+        `None` and cost zero extra bytes, no branching needed.
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId})-[atRel:AT_STEP]->(cur:Step) "
+            "MATCH (to:Step {stepUid: $toStepUid}) "
+            "OPTIONAL MATCH (r)-[lastRel:LAST_STEP_RUN]->(prevSR:StepRun) "
+            "CREATE (sr:StepRun {stepRunId: $stepRunId, stepKey: cur.key, "
+            "                    status: $stepStatus, startedAt: $startedAt, "
+            "                    endedAt: $endedAt, input: $input, output: $output, "
+            "                    resolvedModel: $resolvedModel, "
+            "                    modelSource: $modelSource, "
+            "                    modelFallback: $modelFallback}) "
+            "CREATE (r)-[:HAS_STEP_RUN]->(sr) "
+            "CREATE (sr)-[:RAN]->(cur) "
+            "FOREACH (p  IN CASE WHEN prevSR  IS NULL THEN [] ELSE [prevSR]  END | "
+            "  CREATE (p)-[:NEXT]->(sr)) "
+            "FOREACH (lr IN CASE WHEN lastRel IS NULL THEN [] ELSE [lastRel] END | "
+            "  DELETE lr) "
+            "CREATE (r)-[:LAST_STEP_RUN]->(sr) "
+            "DELETE atRel "
+            "CREATE (r)-[:AT_STEP]->(to) "
+            "SET r.stepCount = r.stepCount + 1 "
+            "RETURN r.stepCount AS stepCount, sr.stepRunId AS stepRunId, "
+            "       cur.key AS ranStepKey",
+            {
+                "runId": run_id, "stepRunId": step_run_id, "stepStatus": step_status,
+                "startedAt": started_at, "endedAt": ended_at, "input": input,
+                "output": output, "toStepUid": to_step_uid,
+                "resolvedModel": resolved_model, "modelSource": model_source,
+                "modelFallback": model_fallback,
+            },
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"stepCount": row[0], "stepRunId": row[1], "ranStepKey": row[2]}
+
+    def suspend_run(
+        self, ws: str, *, run_id: str, thread_id: str
+    ) -> dict[str, Any] | None:
+        """Guarded CAS `running → waiting`. QUERIES.md §12.3.
+
+        Denorms `waitingThreadId` (so §12.9 finds the parked run index-anchored).
+        The flip commits only if the run is currently `running`; a suspend of a
+        non-running run matches the node but fails the `WHERE` → `None`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "WHERE r.status = 'running' "
+            "SET r.status = 'waiting', r.waitingThreadId = $threadId "
+            "RETURN r.runId AS runId, r.status AS status",
+            {"runId": run_id, "threadId": thread_id},
+        )
+        return self._status_row(res)
+
+    def resume_run(self, ws: str, *, run_id: str) -> dict[str, Any] | None:
+        """Guarded CAS `waiting → running` (single-flight). QUERIES.md §12.4.
+
+        Two concurrent replies both try to resume; per-query atomicity means only
+        the one that observes `status = 'waiting'` flips it — the loser sees
+        `running`, the `WHERE` fails, and gets `None` (no re-entry). Clears
+        `waitingThreadId` so the run is no longer discoverable as parked.
+
+        K-097: bumps `ctxVersion` (compares nothing — it writes no ctx, so it has no
+        ctx read to compare). It still ends a wait instance, so a pending versioned
+        CAS (§12.13) taken against that wait is refused even when this resume's
+        drive re-parks the run (the ABA, `docs/plans/workflow-input-cas-graph.md`).
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "WHERE r.status = 'waiting' "
+            "SET r.status = 'running', r.waitingThreadId = '', "
+            "    r.ctxVersion = coalesce(r.ctxVersion, 0) + 1 "
+            "RETURN r.runId AS runId, r.status AS status",
+            {"runId": run_id},
+        )
+        return self._status_row(res)
+
+    def resume_run_with_ctx(
+        self, ws: str, *, run_id: str, ctx: str, ctx_version: int
+    ) -> dict[str, Any] | None:
+        """Versioned CAS `waiting → running` **that also writes `ctx`**. §12.13.
+
+        The human/signal-input path for a `process` run (K-024 **D-F**) and the
+        timer sweep's release: the input, already validated and merged into the run
+        ctx service-side, rides **inside** the CAS so the write and the flip cannot
+        be split. `ctx` is the FULL merged run ctx; `ctx_version` is the
+        `ctxVersion` the caller read (`get_run`) **together with the ctx it merged
+        onto** — keyword-only and required, so no caller can skip the compare.
+
+        K-097 (`docs/plans/workflow-input-cas-graph.md` §2): a status-only compare
+        matches `waiting` again once a winner's drive re-parks the run (the ABA), so
+        the CAS also compares `coalesce(r.ctxVersion, 0)` and bumps it. A read of
+        `(waiting, v)` names one wait instance; the CAS succeeds only if no resume
+        and no ctx write has happened since.
+
+        Zero-row contract: a run that is not `waiting`, or not at the read
+        `ctxVersion`, matches the node but fails the `WHERE` ⇒ **`None` and NOTHING
+        is written** — no flip, no ctx, no version bump. The two causes are not
+        distinguished: both mean "re-read and retry" (409). A missing `runId` is
+        likewise zero rows — the service splits it out with its prior `get_run`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "WHERE r.status = 'waiting' AND coalesce(r.ctxVersion, 0) = $ctxVersion "
+            "SET r.status = 'running', r.waitingThreadId = '', r.ctx = $ctx, "
+            "    r.ctxVersion = $ctxVersion + 1 "
+            "RETURN r.runId AS runId, r.status AS status",
+            {"runId": run_id, "ctx": ctx, "ctxVersion": ctx_version},
+        )
+        return self._status_row(res)
+
+    def complete_run(
+        self, ws: str, *, run_id: str, ended_at: int
+    ) -> dict[str, Any] | None:
+        """Terminal `done` — clears `AT_STEP`. QUERIES.md §12.5.
+
+        The audit trail survives via `HAS_STEP_RUN` + `NEXT` + `LAST_STEP_RUN`.
+        `DELETE` of a null `AT_STEP` is a verified no-op (re-completing an
+        already-terminal run does not error). `None` = run not found.
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "OPTIONAL MATCH (r)-[atRel:AT_STEP]->() "
+            "DELETE atRel "
+            "SET r.status = 'done', r.endedAt = $endedAt "
+            "RETURN r.runId AS runId, r.status AS status",
+            {"runId": run_id, "endedAt": ended_at},
+        )
+        return self._status_row(res)
+
+    def fail_run(
+        self, ws: str, *, run_id: str, ended_at: int, ctx: str
+    ) -> dict[str, Any] | None:
+        """Terminal `failed` — clears `AT_STEP`, stamps a `ctx` note. QUERIES.md §12.5.
+
+        The executor calls this on `stepCount > maxSteps` (step-budget exceeded,
+        §7), stamping a diagnostic note into `ctx`. `None` = run not found.
+
+        K-097: bumps `ctxVersion`, keeping "every ctx write to an existing run bumps
+        it" true. Not load-bearing (a terminal run already fails §12.13's status
+        guard).
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "OPTIONAL MATCH (r)-[atRel:AT_STEP]->() "
+            "DELETE atRel "
+            "SET r.status = 'failed', r.endedAt = $endedAt, r.ctx = $ctx, "
+            "    r.ctxVersion = coalesce(r.ctxVersion, 0) + 1 "
+            "RETURN r.runId AS runId, r.status AS status",
+            {"runId": run_id, "endedAt": ended_at, "ctx": ctx},
+        )
+        return self._status_row(res)
+
+    def link_step_emission(
+        self, ws: str, *, step_run_id: str, msg_id: str,
+        tools_used: list[str] = (),
+    ) -> dict[str, Any] | None:
+        """`StepRun -[:PRODUCED]-> Message` (D2). QUERIES.md §12.6.
+
+        The second query of the deliberately two-step emission (post the message
+        via the guarded §4 write, then link). `MERGE` on the relationship makes the
+        link idempotent (a retry re-links exactly once). Distinct from K-013's
+        `EMITTED` (§10). `None` when an endpoint is missing.
+
+        K-056 (`docs/reviews/salesperson-tool-reliability-ml.md` §4.3): `tools_used`
+        (the producing step's own non-`post_message` dispatched tool names, `executor.
+        StepResult.toolsUsed`) rides the same `SET` as the `toolsUsed` `Message`
+        property — the durable source `read_thread` (§4) surfaces and
+        `_assemble_messages`'s tool-use breadcrumb reads on the *next* turn's replay.
+        Defaults to an empty list (a node that dispatched nothing still stamps `[]`,
+        never leaves the property unset — an explicit write, not a reliance on
+        `read_thread`'s `coalesce` fallback).
+        """
+        res = self._graph(ws).query(
+            "MATCH (sr:StepRun {stepRunId: $stepRunId}) "
+            "MATCH (m:Message  {msgId: $msgId}) "
+            "MERGE (sr)-[:PRODUCED]->(m) "
+            "SET m.toolsUsed = $toolsUsed "
+            "RETURN sr.stepRunId AS stepRunId, m.msgId AS msgId",
+            {"stepRunId": step_run_id, "msgId": msg_id,
+             "toolsUsed": list(tools_used)},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"stepRunId": row[0], "msgId": row[1]}
+
+    def get_run(self, ws: str, *, run_id: str) -> dict[str, Any] | None:
+        """Read a run's state. QUERIES.md §12.7 (RO).
+
+        `atStepKey` is `None` for terminal runs (`AT_STEP` cleared). `None` when
+        the run does not exist. `ctxVersion` (K-097) is `coalesce(r.ctxVersion, 0)`:
+        a run is created without the property, so a never-resumed run reads 0. It
+        is read in the same query as `ctx`, which is what lets a caller hand
+        §12.13 the version that belongs to the ctx it merged onto.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "OPTIONAL MATCH (r)-[:AT_STEP]->(cur:Step) "
+            "OPTIONAL MATCH (r)-[:OF_DEF]->(snap:WorkflowDefSnapshot) "
+            "RETURN r.runId AS runId, r.status AS status, r.stepCount AS stepCount, "
+            "       r.maxSteps AS maxSteps, r.trace AS trace, r.ctx AS ctx, "
+            "       r.startedAt AS startedAt, r.endedAt AS endedAt, "
+            "       r.waitingThreadId AS waitingThreadId, cur.key AS atStepKey, "
+            "       snap.key AS defKey, snap.version AS defVersion, "
+            "       coalesce(r.ctxVersion, 0) AS ctxVersion",
+            {"runId": run_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "runId": row[0], "status": row[1], "stepCount": row[2],
+            "maxSteps": row[3], "trace": row[4], "ctx": row[5],
+            "startedAt": row[6], "endedAt": row[7], "waitingThreadId": row[8],
+            "atStepKey": row[9], "defKey": row[10], "defVersion": row[11],
+            "ctxVersion": row[12],
+        }
+
+    def read_step_runs(self, ws: str, *, run_id: str) -> list[dict[str, Any]]:
+        """The NEXT-ordered audit trail. QUERIES.md §12.8 (RO).
+
+        Finds the chain head via `OPTIONAL MATCH` + `IS NULL` (never the broken
+        `exists()`-in-pattern check), then walks `NEXT*0..`, ordered by the
+        executor's monotonic `startedAt` (coincides with NEXT order).
+
+        K-042 Landing 2 (FR-8, `-graph.md` §1.7): projects `resolvedModel`/
+        `modelSource`/`modelFallback` alongside the existing columns — `None` for a
+        `StepRun` that never had them written (a non-LLM step, or a pre-Landing-2
+        row; both read back identically, no backfill).
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun {runId: $runId})-[:HAS_STEP_RUN]->(sr:StepRun) "
+            "OPTIONAL MATCH (pv:StepRun)-[:NEXT]->(sr) "
+            "WITH sr, pv WHERE pv IS NULL "
+            "MATCH (sr)-[:NEXT*0..]->(x:StepRun) "
+            "RETURN x.stepRunId AS stepRunId, x.stepKey AS stepKey, "
+            "       x.status AS status, x.startedAt AS startedAt, "
+            "       x.endedAt AS endedAt, x.input AS input, x.output AS output, "
+            "       x.resolvedModel AS resolvedModel, "
+            "       x.modelSource AS modelSource, "
+            "       x.modelFallback AS modelFallback "
+            "ORDER BY x.startedAt",
+            {"runId": run_id},
+        )
+        return [
+            {
+                "stepRunId": row[0], "stepKey": row[1], "status": row[2],
+                "startedAt": row[3], "endedAt": row[4], "input": row[5],
+                "output": row[6], "resolvedModel": row[7], "modelSource": row[8],
+                "modelFallback": row[9],
+            }
+            for row in res.result_set
+        ]
+
+    def find_waiting_run_for_thread(
+        self, ws: str, *, thread_id: str
+    ) -> dict[str, Any] | None:
+        """The resume lookup, index-anchored on `WorkflowRun.status`. QUERIES.md §12.9 (RO).
+
+        Anchors on the existing `status` index (point lookup on `'waiting'`) plus a
+        residual filter on the denormed `waitingThreadId` — no new index. A thread
+        holds at most one `waiting` run at a time. `None` when nothing is parked.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun {status: 'waiting'}) "
+            "WHERE r.waitingThreadId = $threadId "
+            "RETURN r.runId AS runId, r.status AS status "
+            "LIMIT 1",
+            {"threadId": thread_id},
+        )
+        return self._status_row(res)
+
+    def find_runs_for_thread(
+        self, ws: str, *, thread_id: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Every run this thread has ever had, newest-first (RO). QUERIES.md
+        §12.14 `find_runs_for_thread` (K-036 — web-api-coverage FR-2).
+
+        The `r.startedAt >= 0` conjunct is functionally a no-op (`startedAt` is
+        always non-negative) but is **load-bearing for the query plan** — see
+        QUERIES.md §12.14's PROFILE finding: without it the anchor lands on
+        `Node By Label Scan (m:Message)` (a workspace-wide scan) instead of the
+        small `WorkflowRun` scan, because a `WHERE` predicate on one pattern
+        variable pulls the label-scan anchor onto that variable regardless of
+        relative cardinality. Paired with the `WorkflowRun.startedAt` range
+        index (`bootstrap_schema.sh`), this anchors on
+        `Node By Index Scan (r:WorkflowRun)`. Empty list for a thread with no
+        runs (not an error).
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(m:Message) "
+            "WHERE r.startedAt >= 0 AND m.threadId = $threadId "
+            "RETURN r.runId AS runId, r.status AS status, r.defKey AS defKey, "
+            "       r.defVersion AS defVersion, r.startedAt AS startedAt, "
+            "       r.endedAt AS endedAt "
+            "ORDER BY r.startedAt DESC "
+            "LIMIT $limit",
+            {"threadId": thread_id, "limit": limit},
+        )
+        return [
+            {
+                "runId": row[0], "status": row[1], "defKey": row[2],
+                "defVersion": row[3], "startedAt": row[4], "endedAt": row[5],
+            }
+            for row in res.result_set
+        ]
+
+    def find_due_wait_candidates(
+        self, ws: str, *, limit: int
+    ) -> list[dict[str, Any]]:
+        """The K-028 sweep's read half — every parked `wait`/`human` candidate,
+        due-agnostic. QUERIES.md §12.16 (RO).
+
+        Anchors on the **existing** `WorkflowRun.status` value index (the same
+        anchor §12.9 already uses, on the same "waiting set is tiny" cardinality
+        argument) — no new index, no new `WorkflowRun` property. Dueness itself
+        is derived app-side (`services._wait_due_at`) from data the existing
+        suspend/record path already writes unconditionally on every park
+        (`docs/plans/workflow-timers.md` §3.2); this query only reads. Returns
+        every `waiting` run regardless of whether it is actually due, or even
+        whether its parked step declares a timer at all — `sweep_due_workflow_
+        runs` decides that app-side, never in Cypher (rule 8: never filter
+        inside `config`).
+
+        v3 (`docs/plans/workflow-timers.md` §3.4): `RETURN` gains `s.key AS
+        stepKey` — an additive projection off the already-bound `s`, no new
+        traversal — so the sweep can write the step-scoped `ctx.timerFired`
+        marker (§3.3/§3.5) without a second read, and can also detect (§3.5 step
+        5.1) whether a candidate has since moved to a *different* waiting step
+        between this scan and the sweep's per-candidate act.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun {status: 'waiting'})-[:AT_STEP]->(s:Step) "
+            "OPTIONAL MATCH (r)-[:LAST_STEP_RUN]->(sr:StepRun) "
+            "RETURN r.runId AS runId, s.key AS stepKey, s.type AS stepType, "
+            "       s.config AS stepConfig, sr.startedAt AS parkedAt "
+            "LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {
+                "runId": row[0], "stepKey": row[1], "stepType": row[2],
+                "stepConfig": row[3], "parkedAt": row[4],
+            }
+            for row in res.result_set
+        ]
+
+    def read_recent_post_success(
+        self, ws: str, *, def_key: str, def_version: str, limit: int
+    ) -> dict[str, int]:
+        """Last-`limit` terminal-run post-success sample (RO). QUERIES.md §12.15
+        (K-039 item 3).
+
+        Feeds `Services.check_demo_readiness`'s `postSuccess` field: of the last
+        `limit` **terminal** (`status IN ['done', 'failed']`) runs of
+        `def_key`@`def_version`, ordered `startedAt DESC`, how many produced at
+        least one reply (`StepRun -[:PRODUCED]-> Message`, D2, §12.6).
+        `waiting`/`running` runs are excluded from the sample — they haven't
+        reached a verdict yet. `sampleSize`/`postedCount` are both `0` for a
+        fresh workspace or an unknown `def_key`/`def_version` — never an
+        exception. **`postedCount` comes back from FalkorDB as a Python
+        `float`**, never `NULL`/`None`, in both the empty and non-empty case
+        (live-verified, QUERIES.md §12.15) — cast to `int` here so callers get
+        two clean `int`s, not `"postedCount": 1.0` leaking into the JSON
+        response.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun) "
+            "WHERE r.startedAt >= 0 "
+            "  AND r.defKey = $defKey AND r.defVersion = $defVersion "
+            "  AND r.status IN ['done', 'failed'] "
+            "WITH r ORDER BY r.startedAt DESC LIMIT $limit "
+            "OPTIONAL MATCH (r)-[:HAS_STEP_RUN]->(:StepRun)-[:PRODUCED]->(m:Message) "
+            "WITH r, count(m) AS producedCount "
+            "RETURN count(r) AS sampleSize, "
+            "       sum(CASE WHEN producedCount > 0 THEN 1 ELSE 0 END) AS postedCount",
+            {"defKey": def_key, "defVersion": def_version, "limit": limit},
+        )
+        row = res.result_set[0]
+        return {"sampleSize": row[0], "postedCount": int(row[1])}
+
+    def append_trace_event(
+        self, ws: str, *, step_run_id: str, trace_id: str, seq: int, kind: str,
+        at: int, payload: str,
+    ) -> dict[str, Any] | None:
+        """Write one debug trace record (FR-4). QUERIES.md §12.10.
+
+        Called ONLY for a debug instance (`WorkflowRun.trace = true`) — the
+        `GraphTracer`; the `NullTracer` issues no query so a lean run writes zero
+        `TraceEvent` nodes. `payload` is a flat serialized string, length-capped by
+        the caller (rule 6). `None` when the step-run anchor is missing.
+        """
+        res = self._graph(ws).query(
+            "MATCH (sr:StepRun {stepRunId: $stepRunId}) "
+            "CREATE (te:TraceEvent {traceId: $traceId, seq: $seq, kind: $kind, "
+            "                       at: $at, payload: $payload}) "
+            "CREATE (sr)-[:TRACED]->(te) "
+            "RETURN te.traceId AS traceId",
+            {
+                "stepRunId": step_run_id, "traceId": trace_id, "seq": seq,
+                "kind": kind, "at": at, "payload": payload,
+            },
+        )
+        if not res.result_set:
+            return None
+        return {"traceId": res.result_set[0][0]}
+
+    def read_trace(self, ws: str, *, run_id: str) -> list[dict[str, Any]]:
+        """Reconstruct a run's execution (debug). QUERIES.md §12.11 (RO).
+
+        Traverses run → step-runs → trace events, ordered by
+        `(StepRun.startedAt, TraceEvent.seq)` — the full cross-step reconstruction.
+        A non-debug run has zero `TRACED` edges → `[]` (AC-5's negative half).
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun {runId: $runId})-[:HAS_STEP_RUN]->(sr:StepRun)"
+            "-[:TRACED]->(te:TraceEvent) "
+            "RETURN sr.stepRunId AS stepRunId, sr.stepKey AS stepKey, "
+            "       te.traceId AS traceId, te.seq AS seq, te.kind AS kind, "
+            "       te.at AS at, te.payload AS payload "
+            "ORDER BY sr.startedAt, te.seq",
+            {"runId": run_id},
+        )
+        return [
+            {
+                "stepRunId": row[0], "stepKey": row[1], "traceId": row[2],
+                "seq": row[3], "kind": row[4], "at": row[5], "payload": row[6],
+            }
+            for row in res.result_set
+        ]
+
+    # ── K-042 Landing 2 U9 (FR-16/FR-17): workspace model overrides ─────────────
+    #
+    # A distinct topic from workflow execution above — workspace-level configuration,
+    # not a run/step-run/trace. `docs/plans/llm-provider-config-graph.md` §2.2/§2.4/
+    # §2.5/§6.1 owns the design; QUERIES.md §13 documents the same Cypher.
+
+    def write_model_overrides(
+        self, ws: str, *, agent: str | None = None, guard: str | None = None,
+        embedding: str | None = None, responder: str | None = None,
+        at: int, by: str,
+    ) -> dict[str, Any]:
+        """Write the workspace's per-kind model-override singleton (FR-16/FR-17,
+        `-graph.md` §2.2/§2.4). `docs/QUERIES.md` §13.1.
+
+        Constraint-backed `MERGE` on `WorkspaceConfig.workspaceConfigId` (the
+        `bootstrap_schema.sh` `UNIQUE` constraint — the standing "every `MERGE` must
+        be backed by a uniqueness constraint" rule) — safe under concurrent writers.
+        Each of `agent`/`guard`/`embedding`/`responder` is a `"<provider>/<model-id>"`
+        ref, a role name, or `None`. A `None` in `SET` **clears** that kind's
+        override — unlike `CREATE`, where a `None` param merely omits the key — so
+        "never set" and "explicitly cleared" land on the identical representation
+        (the property absent), which is also what §2.5's read treats as "no
+        override at that kind". **Callers must never pass `''`** — an empty string
+        is a value ("a model literally named empty"), never "no override"; that
+        representation is reserved for `None` alone (`-graph.md` §2.4's explicit
+        warning).
+
+        Property-name crosswalk against this repo's own `kind` strings is NOT this
+        method's concern — it only knows the graph's four property names
+        (`agentModelOverride`/`guardModelOverride`/`embeddingModelOverride`/
+        `responderModelOverride`). The kind↔property mapping (which is **not** a
+        1:1 name match — `-graph.md` §8.4) lives in `modelconfig._KIND_TO_OVERRIDE_KEY`,
+        the resolver's own concern.
+
+        Returns the four values as written (post-`SET`, so a caller can confirm a
+        clear actually landed).
+        """
+        res = self._graph(ws).query(
+            "MERGE (c:WorkspaceConfig {workspaceConfigId: 'default'}) "
+            "SET c.agentModelOverride     = $agent, "
+            "    c.guardModelOverride     = $guard, "
+            "    c.embeddingModelOverride = $embedding, "
+            "    c.responderModelOverride = $responder, "
+            "    c.modelOverrideUpdatedAt = $at, "
+            "    c.modelOverrideUpdatedBy = $by "
+            "RETURN c.agentModelOverride AS agent, c.guardModelOverride AS guard, "
+            "       c.embeddingModelOverride AS embedding, "
+            "       c.responderModelOverride AS responder",
+            {
+                "agent": agent, "guard": guard, "embedding": embedding,
+                "responder": responder, "at": at, "by": by,
+            },
+        )
+        row = res.result_set[0]
+        return {"agent": row[0], "guard": row[1], "embedding": row[2], "responder": row[3]}
+
+    def read_model_overrides(self, ws: str) -> dict[str, str | None]:
+        """Read the workspace's per-kind model overrides (FR-16/FR-17, `-graph.md`
+        §2.5/§6.1). `docs/QUERIES.md` §13.2 (RO).
+
+        Returns `{agentModel, guardModel, embeddingModel, responderModel}` — the
+        exact shape `-graph.md` §6.1 names. **Zero rows (the `WorkspaceConfig` node
+        was never written) and a one-row all-`NULL` result (written, but this
+        particular kind was never set) are the SAME answer — "no override at that
+        kind" — and both are returned as the identical all-`None` dict here, one
+        code path, per §2.5's own live-verified note.** Every existing workspace is
+        the zero-row case, so this must stay the cheap, silent, non-exceptional
+        default, never an error.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (c:WorkspaceConfig {workspaceConfigId: 'default'}) "
+            "RETURN c.agentModelOverride     AS agentModel, "
+            "       c.guardModelOverride     AS guardModel, "
+            "       c.embeddingModelOverride AS embeddingModel, "
+            "       c.responderModelOverride AS responderModel"
+        )
+        if not res.result_set:
+            return {
+                "agentModel": None, "guardModel": None,
+                "embeddingModel": None, "responderModel": None,
+            }
+        row = res.result_set[0]
+        return {
+            "agentModel": row[0], "guardModel": row[1],
+            "embeddingModel": row[2], "responderModel": row[3],
+        }
+
+    @staticmethod
+    def _status_row(res) -> dict[str, Any] | None:
+        """`{runId, status}` for the §12 state-move CAS queries, or `None` (zero rows)."""
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"runId": row[0], "status": row[1]}
+
+    def materialize_snapshot(
+        self, ws: str, *, key: str, version: str, name: str, kind: str,
+        start_key: str, steps: list[dict[str, Any]],
+        transitions: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Materialize a def@version into `ws:{id}` as a local snapshot. §11.4.
+
+        Write path — the workspace half of the two-phase materialize (the
+        `name/kind/start_key/steps/transitions` come from `read_def_subgraph`).
+        Same MERGE shape as `publish_def` with the `WorkflowDefSnapshot` root
+        label, scoped to the workspace graph; produces a subgraph structurally
+        identical to the reference def. **This method itself does not enforce
+        structural immutability** — a differing payload for an existing
+        `(key, version)` mints parallel `TRANSITION`/`START` structure in the
+        snapshot (K-034), the same hazard `publish_def` carries. The guarantee is
+        enforced by the caller: `services.materialize_def` rejects a topology-
+        differing re-materialize (`WorkflowDefConflictError`, 409) *before*
+        calling this method. Returns `{key, version, stepCount, transitionCount}`.
+        """
+        res = self._graph(ws).query(
+            self._PUBLISH_CYPHER.format(label="WorkflowDefSnapshot"),
+            {
+                "key": key, "version": version, "name": name, "kind": kind,
+                "startKey": start_key, "steps": list(steps),
+                "transitions": list(transitions),
+            },
+        )
+        row = res.result_set[0]
+        return {
+            "key": row[0], "version": row[1],
+            "stepCount": row[2], "transitionCount": row[3],
+        }
+
+    def get_snapshot(self, ws: str, *, key: str, version: str) -> dict[str, Any] | None:
+        """Read a snapshot's full subgraph from `ws:{id}`. §11.5.
+
+        Mirror of `read_def_subgraph` with the `WorkflowDefSnapshot` root; `None`
+        when absent. `{name, kind, start_key, steps, transitions}`. Read path.
+        """
+        return self._read_subgraph(
+            self._graph(ws), label="WorkflowDefSnapshot", key=key, version=version
+        )
+
+    def read_snapshot_structure(
+        self, ws: str, *, key: str, version: str
+    ) -> dict[str, Any] | None:
+        """Read a snapshot's full structure from `ws:{id}` for observability. §11.5.
+
+        Mirror of `read_def_structure` with the `WorkflowDefSnapshot` root; same
+        multi-`START`-aware shape (`start_keys: list[str]`) — see
+        `_read_structure`. `None` when absent. Read path.
+        """
+        return self._read_structure(
+            self._graph(ws), label="WorkflowDefSnapshot", key=key, version=version
+        )
+
+    def list_snapshots(self, ws: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """List a workspace's snapshots, newest version first per key. §11.6.
+
+        Read path; anchored on the `WorkflowDefSnapshot.key` index.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (snap:WorkflowDefSnapshot) WHERE snap.key > '' "
+            "RETURN snap.key AS key, snap.version AS version, snap.name AS name, "
+            "       snap.kind AS kind "
+            "ORDER BY snap.key, snap.version DESC LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {"key": row[0], "version": row[1], "name": row[2], "kind": row[3]}
+            for row in res.result_set
+        ]
+
+    # ── §15 Product catalog (K-052 M6) ────────────────────────────────────────────
+    #
+    # A global, seed-script-write-only reference catalog (`docs/plans/
+    # workflow-catalog-lookup.md` §3.1) — looked up by property key against
+    # `reference`, never scoped per workspace (unlike `WorkflowDef`, which is
+    # traversed from workspace-local runs and therefore materialized). Both
+    # methods are `ro_query` reads; canonical bodies: `docs/QUERIES.md` §15.
+
+    def lookup_product(self, *, name_normalized: str) -> dict[str, Any] | None:
+        """Exact-name catalog fact lookup (FR-1/AC-1/AC-4). QUERIES.md §15.1.
+
+        `None` when no product matches `name_normalized` — the AC-3 abstention
+        case, never a fabricated row. Anchored on the `Product.nameNormalized`
+        range index (no label scan).
+
+        K-053 M6: now also returns `productId` — added (additive, backward-
+        compatible) so `services.add_cart_item` can resolve a customer-named
+        product to the `productId` a `CartItem` is keyed on (`workflow-cart-
+        and-totals-graph.md` §2). K-052's original shape never needed it (pure
+        fact lookup, no cart concept yet); the `Product` node always carried
+        the property, it just wasn't selected. Since K-078 the cart writes
+        resolve by `productId` (`lookup_products_by_id`), not through this
+        lookup; the projected `productId` is now what `lookup_product_fact`
+        hands the model to copy into `add_to_cart`/`remove_from_cart`.
+        """
+        res = self._reference().ro_query(
+            "MATCH (p:Product {nameNormalized: $nameNormalized}) "
+            "RETURN p.productId AS productId, p.name AS name, "
+            "       p.category AS category, p.price AS price "
+            "LIMIT 1",
+            {"nameNormalized": name_normalized},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "productId": row[0], "name": row[1], "category": row[2], "price": row[3],
+        }
+
+    def lookup_products_by_id(
+        self, *, product_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """Batch current name/price resolution by `productId` (K-053 M6).
+
+        Graph note §6: the two-graph read `get_cart`/`place_order` need — cart
+        lines (`ws:{id}`) carry only `productId`/`quantity`, never a price
+        (FR-3: prices must never go stale on the cart line); this resolves
+        each id's *current* name/price from `reference` in one round trip.
+        `MATCH` (not `OPTIONAL MATCH`): a `productId` no longer in the catalog
+        (graph note §8 item 2 — a cart referencing a since-deleted product,
+        not addressed by any AC) simply produces no row for that id, never a
+        null-padded placeholder — callers detect a missing id by its absence
+        from the returned list. An empty `product_ids` short-circuits without
+        a query (an empty-list `UNWIND` would collapse to zero rows here too,
+        but there is no other write/read in this query for that to silently
+        drop, so it's a plain optimization, not a correctness guard).
+        """
+        if not product_ids:
+            return []
+        res = self._reference().ro_query(
+            "UNWIND $productIds AS pid "
+            "MATCH (p:Product {productId: pid}) "
+            "RETURN p.productId AS productId, p.name AS name, p.price AS price",
+            {"productIds": list(product_ids)},
+        )
+        return [
+            {"productId": row[0], "name": row[1], "price": row[2]}
+            for row in res.result_set
+        ]
+
+    def filter_products(
+        self, *, category: str | None, min_price: float | None,
+        max_price: float | None, limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Category/price-range catalog filter (FR-2/FR-3). QUERIES.md §15.2.
+
+        Each filter is optional (`None` = not applied); an all-`None` call lists
+        the whole catalog, bounded by `limit`. **Deliberately not** a
+        `$param IS NULL OR prop = $param` null-guard — that idiom defeats the
+        index on this build even when a filter carries a real value (the same
+        live-verified quirk already documented for `list_matches`, §14.6 /
+        `claude/graph-dba/falkordb-quirks.md`). `minPrice`/`maxPrice` instead use
+        literal-sentinel `coalesce` bounds (`docs/QUERIES.md` §15.2's "Deviation
+        from the plan's illustrative Cypher" note has the live `GRAPH.PROFILE`
+        evidence) — every filter combination, including all-omitted, anchors on
+        the `Product.price` range index rather than a label scan.
+
+        `category` is matched case/whitespace-insensitively: the caller's raw
+        `category` is normalized here with `extraction.normalize_name` (same
+        helper, same convention as `Product.nameNormalized`/`lookup_product`)
+        and compared against the precomputed `Product.categoryNormalized`
+        property, never a runtime `toLower()` in the `WHERE` clause. A live
+        LLM-driven run lowercased a category argument (e.g. "audio" for the
+        seeded "Audio") and the prior exact-case `category` comparison silently
+        returned zero rows — this fixes that without touching the query's
+        sargability: `category`/`categoryNormalized` was never this query's
+        scan anchor (`Product.price` is, via the literal-sentinel bounds
+        above), so swapping which property the equality residual filter runs
+        against doesn't change what the planner anchors on.
+
+        `salesperson-ui` S7c: now also returns `productId` — the **identical
+        additive change K-053 already made to `lookup_product`** above. The
+        `Product` node always carried the property, it just wasn't selected;
+        every caller keys on the row by name, so widening the projection
+        breaks none of them. What it removes is `Storefront._catalog_rows`'s `1 + n`
+        (a second `lookup_product` point read per row, purely to recover the
+        id) and the silent-drop branch that went with it
+        (`docs/plans/salesperson-ui.md` §5.1 S7c). `tools.FilterProductsTool`
+        returns these rows verbatim to the model, so the slug now reaches the
+        LLM's context — deliberate, and consistent with
+        `LookupProductFactTool`, which has done exactly that since K-053.
+
+        A `category` that normalizes to `""` (empty or whitespace-only) is
+        treated as **omitted**, i.e. `None`: the query's `coalesce` only reads
+        null as "no filter", so `""` would otherwise match no product at all —
+        the storefront model sent `{"category": ""}` meaning "any category"
+        (`docs/reviews/salesperson-fabricated-prices-rca.md` CF-1). Done here,
+        not in the tool, because this is where normalization already happens,
+        so every caller gets the same meaning of "blank".
+        """
+        category_normalized = (
+            (normalize_name(category) or None) if category is not None else None
+        )
+        res = self._reference().ro_query(
+            "MATCH (p:Product) "
+            "WHERE p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized) "
+            "  AND p.price >= coalesce($minPrice, -1.0) "
+            "  AND p.price <= coalesce($maxPrice, 1000000000.0) "
+            "RETURN p.productId AS productId, p.name AS name, "
+            "       p.category AS category, p.price AS price "
+            "ORDER BY p.price ASC LIMIT $limit",
+            {
+                "categoryNormalized": category_normalized, "minPrice": min_price,
+                "maxPrice": max_price, "limit": limit,
+            },
+        )
+        return [
+            {
+                "productId": row[0], "name": row[1],
+                "category": row[2], "price": row[3],
+            }
+            for row in res.result_set
+        ]
+
+    # ── §16 Cart / Order (K-053 M6) ────────────────────────────────────────────
+    #
+    # Workspace-scoped (`self._graph(ws)`), unlike the §15 catalog above — every
+    # method here is a direct transcription of a `[verified]` Cypher shape in
+    # `docs/plans/workflow-cart-and-totals-graph.md` (v2), named per-method
+    # below. `Customer`/`Cart`/`CartItem`/`Order`/`OrderLine` schema: graph note
+    # §1/§2/§3. `services.py` (a later cluster) owns `ensure_customer`/
+    # `ensure_cart` call-ordering before `add_to_cart`/`place_order` — this
+    # layer stays a thin, faithful Cypher wrapper, same division as every other
+    # section of this file.
+
+    def ensure_customer(
+        self, ws: str, *, customer_id: str, now: int
+    ) -> dict[str, Any]:
+        """Get-or-create the `Customer` anchor (idempotent). Graph note §1.3.
+
+        `ON CREATE` only, so a re-call leaves `createdAt` at the first call's
+        value — never re-applied on a `MERGE` hit. Backed by the
+        `Customer.customerId` uniqueness constraint.
+        """
+        res = self._graph(ws).query(
+            "MERGE (c:Customer {customerId: $customerId}) "
+            "ON CREATE SET c.createdAt = $now "
+            "RETURN c.customerId AS customerId, c.createdAt AS createdAt",
+            {"customerId": customer_id, "now": now},
+        )
+        row = res.result_set[0]
+        return {"customerId": row[0], "createdAt": row[1]}
+
+    def ensure_cart(
+        self, ws: str, *, customer_id: str, now: int
+    ) -> dict[str, Any] | None:
+        """Get-or-create the `Cart` anchor under an existing `Customer`. Graph note §2.3.
+
+        Call after `ensure_customer` — this `MATCH`es the `Customer` and does
+        nothing if it is missing (zero rows; callers that need the write-or-raise
+        contract check for that explicitly, mirroring `create_thread`'s missing-
+        anchor tripwire). The `MERGE` spans the whole `(Customer)-[:HAS_CART]->
+        (Cart)` pattern, safe here because `Cart`'s matched property
+        (`customerId`) is fully specified and constraint-backed on both ends
+        (graph note §2.3 — not the K-034 changed-endpoint gotcha).
+        """
+        res = self._graph(ws).query(
+            "MATCH (cust:Customer {customerId: $customerId}) "
+            "MERGE (cust)-[:HAS_CART]->(cart:Cart {customerId: $customerId}) "
+            "ON CREATE SET cart.createdAt = $now, cart.updatedAt = $now "
+            "RETURN cart.customerId AS customerId, cart.createdAt AS createdAt",
+            {"customerId": customer_id, "now": now},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"customerId": row[0], "createdAt": row[1]}
+
+    def add_to_cart(
+        self, ws: str, *, customer_id: str, product_id: str, qty: int, now: int
+    ) -> dict[str, Any] | None:
+        """MERGE-and-increment a cart line (idempotent-by-design). Graph note §2.1.
+
+        "Add" means increment, not replace — two calls with the same
+        `product_id` sum their `qty`. Zero rows means no `Cart` exists yet for
+        `customer_id` — the caller runs `ensure_customer` + `ensure_cart` first
+        (the `ensure_user`-before-write convention, applied here).
+        """
+        res = self._graph(ws).query(
+            "MATCH (cart:Cart {customerId: $customerId}) "
+            "MERGE (cart)-[:HAS_ITEM]->(item:CartItem {customerId: $customerId, "
+            "                                           productId: $productId}) "
+            "ON CREATE SET item.quantity = $qty, item.addedAt = $now, item.updatedAt = $now "
+            "ON MATCH  SET item.quantity = item.quantity + $qty, item.updatedAt = $now "
+            "SET cart.updatedAt = $now "
+            "RETURN item.productId AS productId, item.quantity AS quantity",
+            {"customerId": customer_id, "productId": product_id, "qty": qty, "now": now},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"productId": row[0], "quantity": row[1]}
+
+    def adjust_cart_item(
+        self, ws: str, *, customer_id: str, product_id: str, qty: int, now: int
+    ) -> dict[str, Any] | None:
+        """Guarded decrement-or-remove, single query. Graph note §2.2.
+
+        `qty` is positive — the amount to remove. Decrementing to a positive
+        remainder updates the line in place; decrementing to zero or below
+        deletes the `CartItem` node and its edge in the same call. Zero rows
+        means no such line (already removed, or never added) — a no-op the
+        caller reports as such, not an error.
+        """
+        res = self._graph(ws).query(
+            "MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->"
+            "(item:CartItem {customerId: $customerId, productId: $productId}) "
+            "WITH cart, item, (item.quantity - $qty) AS newQty "
+            "FOREACH (_ IN CASE WHEN newQty > 0  THEN [1] ELSE [] END | "
+            "  SET item.quantity = newQty, item.updatedAt = $now) "
+            "FOREACH (_ IN CASE WHEN newQty <= 0 THEN [1] ELSE [] END | DETACH DELETE item) "
+            "SET cart.updatedAt = $now "
+            "RETURN newQty AS quantity, (newQty <= 0) AS removed",
+            {"customerId": customer_id, "productId": product_id, "qty": qty, "now": now},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"quantity": row[0], "removed": bool(row[1])}
+
+    def read_cart(self, ws: str, *, customer_id: str) -> list[dict[str, Any]]:
+        """Current cart lines, oldest-added first (prices resolved separately —
+        catalog reads live in `reference`, `services.py`'s job). Graph note §2.4.
+
+        Zero rows is a legitimate "empty cart" (or no cart yet) — both look the
+        same by design; nothing here needs to distinguish "never touched" from
+        "emptied".
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem) "
+            "RETURN item.productId AS productId, item.quantity AS quantity, "
+            "       item.addedAt AS addedAt "
+            "ORDER BY item.addedAt",
+            {"customerId": customer_id},
+        )
+        return [
+            {"productId": row[0], "quantity": row[1], "addedAt": row[2]}
+            for row in res.result_set
+        ]
+
+    def clear_cart(self, ws: str, *, customer_id: str) -> None:
+        """Delete every `CartItem` under this customer's cart. Graph note §2.5.
+
+        Used standalone (FR-1) and inside `place_order` (as part of checkout,
+        via this repository's own §3.2 write). A `MATCH` against zero items is
+        a plain no-op.
+        """
+        self._graph(ws).query(
+            "MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem) "
+            "DETACH DELETE item",
+            {"customerId": customer_id},
+        )
+
+    def place_order(
+        self, ws: str, *, customer_id: str, order_id: str, now: int,
+        lines: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Snapshot + clear cart, one atomic query. Graph note §3.2.
+
+        `lines` is pre-resolved by the caller (current name/price from
+        `reference`, `lineTotal = unitPrice * quantity` via
+        `pricing.compute_line_total`) — no arithmetic happens in Cypher. Keyed
+        on a caller-minted `order_id` (the idempotency key): a guarded `CREATE`,
+        not a `MERGE` (mirrors `Message`'s guarded-`CREATE` idiom, DESIGN
+        §5.3/§9) — a retried call with the same `order_id` is a true no-op
+        (`created=False`), never a duplicate order. The cart's items are
+        cleared only on the call that actually creates the order (`created`),
+        so a replay never re-clears an already-emptied cart.
+
+        Raises when the `Customer` anchor is missing — the whole query no-ops
+        then (its own `MATCH (cust:Customer …)` is unconditional, graph note
+        §3.2), and a silent no-op would lose the order; mirrors
+        `create_thread`'s missing-anchor tripwire. The service layer's job
+        (`ensure_customer` first, §3.3 of the owning plan) is to make this
+        unreachable in practice — this raise is a tripwire, not the intended
+        control-flow path.
+        """
+        res = self._graph(ws).query(
+            "MATCH (cust:Customer {customerId: $customerId}) "
+            "OPTIONAL MATCH (dup:Order {orderId: $orderId}) "
+            "WITH cust, (dup IS NULL) AS created "
+            "FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END | "
+            "  CREATE (cust)-[:PLACED]->(:Order {orderId: $orderId, status: 'placed', "
+            "                                     placedAt: $now, updatedAt: $now}) "
+            ") "
+            "WITH cust, created "
+            "UNWIND (CASE WHEN $lines = [] THEN [null] ELSE $lines END) AS line "
+            "OPTIONAL MATCH (o:Order {orderId: $orderId}) "
+            "FOREACH (_ IN CASE WHEN created AND line IS NOT NULL THEN [1] ELSE [] END | "
+            "  CREATE (o)-[:HAS_LINE]->(:OrderLine {productId: line.productId, "
+            "                                        name: line.name, "
+            "                                        unitPrice: line.unitPrice, "
+            "                                        quantity: line.quantity, "
+            "                                        lineTotal: line.lineTotal}) "
+            ") "
+            "WITH cust, created, count(CASE WHEN line IS NOT NULL THEN 1 END) AS lineCount "
+            "OPTIONAL MATCH (cart:Cart {customerId: cust.customerId})-[:HAS_ITEM]->(item:CartItem) "
+            "FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END | DETACH DELETE item) "
+            "RETURN created, lineCount",
+            {
+                "customerId": customer_id, "orderId": order_id, "now": now,
+                "lines": lines,
+            },
+        )
+        if not res.result_set:
+            raise RuntimeError(
+                f"place_order was a no-op — customer not found "
+                f"(customer={customer_id!r}, order={order_id!r})"
+            )
+        row = res.result_set[0]
+        return {"created": bool(row[0]), "lineCount": row[1]}
+
+    def get_order(self, ws: str, *, order_id: str) -> dict[str, Any] | None:
+        """Status + snapshot + computed total. Graph note §3.3.
+
+        `total` is `sum(OrderLine.lineTotal)` computed on read — never stored
+        (graph note §3). `None` when no such `Order`.
+
+        Live-discovered nuance beyond the note's own verification (which only
+        exercised a 2-line order): `collect()` over a fan-out that matched zero
+        `OrderLine`s (a zero-line order — not reachable via the intended tool
+        path, §3.3 of the owning plan, but a valid direct call here) yields one
+        all-`null` placeholder entry, not `[]` — the same "constant scalar
+        beside an aggregate fan-out" shape as elsewhere in this engine, just
+        with the OPTIONAL MATCH finding nothing instead of finding one row per
+        distinct group. Filtered out client-side below rather than reshaping
+        the note's own `[verified]` Cypher.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (o:Order {orderId: $orderId}) "
+            "OPTIONAL MATCH (o)-[:HAS_LINE]->(l:OrderLine) "
+            "RETURN o.orderId AS orderId, o.status AS status, o.placedAt AS placedAt, "
+            "       o.updatedAt AS updatedAt, "
+            "       collect({productId: l.productId, name: l.name, unitPrice: l.unitPrice, "
+            "                 quantity: l.quantity, lineTotal: l.lineTotal}) AS lines, "
+            "       sum(l.lineTotal) AS total",
+            {"orderId": order_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        lines = [line for line in row[4] if line["productId"] is not None]
+        return {
+            "orderId": row[0], "status": row[1], "placedAt": row[2],
+            "updatedAt": row[3], "lines": lines, "total": row[5],
+        }
+
+    @staticmethod
+    def _order_status_row(res) -> dict[str, Any] | None:
+        """`{orderId, status}` for the §3.4 lifecycle CAS queries, or `None` (zero rows)."""
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"orderId": row[0], "status": row[1]}
+
+    def fulfill_order(self, ws: str, *, order_id: str, now: int) -> dict[str, Any] | None:
+        """Guarded CAS `placed → fulfilled`. Graph note §3.4.
+
+        Commits only from `status = 'placed'` — a stale/duplicate/out-of-order
+        attempt matches zero rows and writes nothing, returning `None`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (o:Order {orderId: $orderId}) "
+            "WHERE o.status = 'placed' "
+            "SET o.status = 'fulfilled', o.updatedAt = $now "
+            "RETURN o.orderId AS orderId, o.status AS status",
+            {"orderId": order_id, "now": now},
+        )
+        return self._order_status_row(res)
+
+    def deliver_order(self, ws: str, *, order_id: str, now: int) -> dict[str, Any] | None:
+        """Guarded CAS `fulfilled → delivered`. Graph note §3.4.
+
+        Commits only from `status = 'fulfilled'`; otherwise zero rows → `None`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (o:Order {orderId: $orderId}) "
+            "WHERE o.status = 'fulfilled' "
+            "SET o.status = 'delivered', o.updatedAt = $now "
+            "RETURN o.orderId AS orderId, o.status AS status",
+            {"orderId": order_id, "now": now},
+        )
+        return self._order_status_row(res)
+
+    def cancel_order(self, ws: str, *, order_id: str, now: int) -> dict[str, Any] | None:
+        """Guarded CAS `placed → cancelled`. Graph note §3.4.
+
+        Only reachable from `'placed'` — enforces AC-8 ("cannot cancel once
+        fulfilled"): an order already `fulfilled`/`delivered`/`cancelled`
+        matches zero rows and writes nothing.
+        """
+        res = self._graph(ws).query(
+            "MATCH (o:Order {orderId: $orderId}) "
+            "WHERE o.status = 'placed' "
+            "SET o.status = 'cancelled', o.updatedAt = $now "
+            "RETURN o.orderId AS orderId, o.status AS status",
+            {"orderId": order_id, "now": now},
+        )
+        return self._order_status_row(res)
+
+    # ── §17 Durable customer profile (K-054 M6) ───────────────────────────────
+    #
+    # Workspace-scoped, direct transcription of `docs/plans/
+    # workflow-durable-profile-graph.md` §3/§4 (v2) — two more nullable
+    # properties on the existing `Customer` anchor (§16 above), no new label,
+    # no new index/constraint. `upsert_profile` is self-contained: unlike
+    # `add_to_cart` (which `MATCH`es a `Cart` an earlier `ensure_cart` call must
+    # have created), `write_profile`'s own `MERGE` creates the `Customer`
+    # anchor itself when missing, so this method needs no preceding
+    # `ensure_customer` call from the service layer.
+
+    def upsert_profile(
+        self, ws: str, *, customer_id: str, name: str | None,
+        delivery_address: str | None, now: int,
+    ) -> dict[str, Any]:
+        """`MERGE` + per-field `coalesce()`-guarded `SET`, update-in-place. Graph
+        note §3 (v2, live-verified [verified], §0).
+
+        `name`/`delivery_address` are `None` when the caller didn't supply that
+        field on this call — `coalesce($field, c.field)` means "not provided,
+        leave unchanged," never "clear it" (the note's own explicit caller
+        contract). **This must never regress to an unconditional `SET`** — that
+        was v1's BLOCKER (a partial update would null the omitted field,
+        defeating AC-2); the `coalesce()` per data field is the fix.
+        `profileUpdatedAt` alone stays an unconditional `SET` — every call that
+        reaches this query touched the profile, partial or full.
+        """
+        res = self._graph(ws).query(
+            "MERGE (c:Customer {customerId: $customerId}) "
+            "ON CREATE SET c.createdAt = $now "
+            "SET c.name             = coalesce($name, c.name), "
+            "    c.deliveryAddress = coalesce($deliveryAddress, c.deliveryAddress), "
+            "    c.profileUpdatedAt = $now "
+            "RETURN c.customerId AS customerId, c.name AS name, "
+            "       c.deliveryAddress AS deliveryAddress",
+            {
+                "customerId": customer_id, "name": name,
+                "deliveryAddress": delivery_address, "now": now,
+            },
+        )
+        row = res.result_set[0]
+        return {"customerId": row[0], "name": row[1], "deliveryAddress": row[2]}
+
+    def get_profile(self, ws: str, *, customer_id: str) -> dict[str, Any] | None:
+        """The one code path for "unset". Graph note §4.
+
+        `None` (zero rows) when no `Customer` node exists at all yet for this
+        id — nobody has ever interacted with this workspace as this customer
+        (cart, order, or profile). A row with `name`/`deliveryAddress` both
+        `None` means the customer exists (e.g. from cart activity) but has
+        never given a name/address — both cases mean "ask them" to the caller;
+        the distinction is preserved here rather than collapsed, per the
+        note's own §4.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (c:Customer {customerId: $customerId}) "
+            "RETURN c.name AS name, c.deliveryAddress AS deliveryAddress, "
+            "       c.profileUpdatedAt AS profileUpdatedAt",
+            {"customerId": customer_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"name": row[0], "deliveryAddress": row[1], "profileUpdatedAt": row[2]}
+
+    # ── §18 Storefront participants & resets (QUERIES.md §18, salesperson-ui S4) ──
+    #
+    # `docs/plans/salesperson-ui-graph.md` (S0, v1.2, approved) §3/§4/§5/§10 —
+    # the storefront's participant provisioning, the two resets, and the two
+    # order reads. **Every query below is that note's text verbatim**, newlines
+    # and `//` comments included: they are the live-verified v1.2 blocks, not a
+    # sketch, and the two `//`-marked guard lines are the whole safety argument.
+    # This is the one place in this class where the Cypher is a triple-quoted
+    # multi-line constant rather than the house concatenated-string style —
+    # deliberately, because `//` is a line comment (`--` does not parse on this
+    # build) and joining the lines would comment out the rest of the query.
+    #
+    # **The two guards (note §1), which are provenance checks, not id checks:**
+    #   G1  `WHERE u.tokenHash IS NOT NULL` on the anchor — only a *participant*
+    #       `User` is ever a reset root. `seed_demo.sh`'s `u1`, `config.USER_ID`'s
+    #       lifespan node, an operator account and an `Agent` id are all rejected.
+    #   G2  `WHERE ch.participantId = u.userId` on the channel hop — only a
+    #       `Channel` minted by `ensure_participant` (the *only* writer of
+    #       `Channel.participantId`) is ever a delete target. `demo-general` has
+    #       no `participantId` at all, and `null = anything` is `null`, never
+    #       `true`, so it is **structurally unreachable** as a target regardless
+    #       of what any `User` property says or who is a member of it.
+    # Neither guard may be relaxed for readability: with G2 removed the same call
+    # destroys `demo-welcome` and its messages, and with both removed the label
+    # counts afterwards are byte-identical to a clean run (note §2.3 row B) — a
+    # survivor assertion written by label cannot see the difference, which is why
+    # `test_repository.py` asserts the non-participant survivors *by identity*.
+    #
+    # Two dependencies this scoping inherits, both named in the note and neither
+    # visible from this file alone:
+    #   * `WorkflowRun` completeness assumes the storefront deployment leaves
+    #     `api.build_router` unmounted (`dev_surface=False`) — a run started
+    #     through `api.py`'s untriggered path carries no `TRIGGERED_BY` edge and
+    #     is unreachable by both resets (note §4).
+    #   * Message completeness assumes every `Message` is linked into its
+    #     thread's `HEAD`/`NEXT`/`TAIL` chain, which QUERIES.md §4's write paths
+    #     do inside their own guarded `FOREACH`. A hand-planted off-chain message
+    #     survives both resets (note §4/§6).
+
+    _ENSURE_PARTICIPANT_CYPHER = """\
+// $participantId $displayName $tokenHash $language $channelId $threadId
+// $threadTitle $agentId $now
+OPTIONAL MATCH (existing:User  {userId:  $participantId})
+OPTIONAL MATCH (clash:Agent    {agentId: $participantId})
+OPTIONAL MATCH (agent:Agent    {agentId: $agentId})
+WITH existing, clash, agent,
+     (existing IS NULL AND clash IS NULL AND agent IS NOT NULL) AS doCreate
+FOREACH (_ IN CASE WHEN doCreate THEN [1] ELSE [] END |
+  CREATE (u:User {userId:      $participantId,
+                  displayName: $displayName,
+                  tokenHash:   $tokenHash,
+                  language:    $language,
+                  channelId:   $channelId,
+                  threadId:    $threadId,
+                  joinedAt:    $now})
+  CREATE (c:Channel {channelId:     $channelId, name: $displayName,
+                     participantId: $participantId, createdAt: $now})
+  CREATE (t:Thread  {threadId:  $threadId,  title: $threadTitle,
+                     createdAt: $now, updatedAt: $now})
+  CREATE (c)-[:HAS_THREAD]->(t)
+  CREATE (u)-[:MEMBER_OF     {role: 'member',    joinedAt: $now}]->(c)
+  CREATE (agent)-[:MEMBER_OF {role: 'assistant', joinedAt: $now}]->(c)
+)
+RETURN doCreate                            AS created,
+       existing IS NOT NULL                AS existed,
+       existing.tokenHash IS NOT NULL      AS existedParticipant,
+       clash    IS NOT NULL                AS collided,
+       agent    IS NULL                    AS agentMissing,
+       CASE WHEN doCreate THEN $channelId ELSE existing.channelId END AS channelId,
+       CASE WHEN doCreate THEN $threadId  ELSE existing.threadId  END AS threadId,
+       CASE WHEN doCreate THEN $language  ELSE existing.language  END AS language
+"""
+
+    _RESET_PARTICIPANT_CYPHER = """\
+// $participantId $newThreadId $threadTitle $now
+MATCH (u:User {userId: $participantId})
+WHERE u.tokenHash IS NOT NULL                       // G1
+OPTIONAL MATCH (u)-[:MEMBER_OF]->(ch:Channel)
+  WHERE ch.participantId = u.userId                 // G2
+OPTIONAL MATCH (ch)-[:HAS_THREAD]->(t:Thread)
+OPTIONAL MATCH (t)-[:HEAD]->(h:Message)-[:NEXT*0..]->(m:Message)
+WITH u, ch, collect(DISTINCT t) AS threads, collect(DISTINCT m) AS msgs
+
+UNWIND (CASE WHEN msgs = [] THEN [null] ELSE msgs END) AS mm
+OPTIONAL MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(mm)
+WITH u, ch, threads, msgs, collect(DISTINCT r) AS runs
+
+UNWIND (CASE WHEN runs = [] THEN [null] ELSE runs END) AS rr
+OPTIONAL MATCH (rr)-[:HAS_STEP_RUN]->(sr:StepRun)
+OPTIONAL MATCH (sr)-[:TRACED]->(te:TraceEvent)
+WITH u, ch, threads, msgs, runs,
+     collect(DISTINCT sr) AS steps, collect(DISTINCT te) AS traces,
+     [x IN threads | x.threadId] AS threadIds
+
+OPTIONAL MATCH (rc:ReadCursor) WHERE rc.threadId IN threadIds
+WITH u, ch, threads, msgs, runs, steps, traces, threadIds,
+     collect(DISTINCT rc) AS tcur
+
+OPTIONAL MATCH (u)-[:HAS_CURSOR]->(own:ReadCursor)
+WITH u, ch, threads, msgs, runs, steps, traces, threadIds, tcur,
+     collect(DISTINCT own) AS allOwn
+
+UNWIND (CASE WHEN allOwn = [] THEN [null] ELSE allOwn END) AS oc
+OPTIONAL MATCH (liveT:Thread) WHERE oc IS NOT NULL AND liveT.threadId = oc.threadId
+WITH u, ch, threads, msgs, runs, steps, traces, tcur,
+     collect(DISTINCT CASE WHEN oc IS NOT NULL
+                            AND (oc.threadId IN threadIds OR liveT IS NULL)
+                           THEN oc END) AS ocur
+WITH u, ch, threads, msgs, runs, steps, traces,
+     tcur + [x IN ocur WHERE NOT x IN tcur] AS cursors
+
+OPTIONAL MATCH (cust:Customer {customerId: $participantId})
+OPTIONAL MATCH (cust)-[:HAS_CART]->(cart:Cart)
+OPTIONAL MATCH (cart)-[:HAS_ITEM]->(item:CartItem)
+WITH u, ch, threads, msgs, runs, steps, traces, cursors,
+     collect(DISTINCT cust) AS custs, collect(DISTINCT cart) AS carts,
+     collect(DISTINCT item) AS items
+
+OPTIONAL MATCH (:Customer {customerId: $participantId})-[:PLACED]->(o:Order)
+OPTIONAL MATCH (o)-[:HAS_LINE]->(ol:OrderLine)
+WITH u, ch, threads, msgs, runs, steps, traces, cursors, custs, carts, items,
+     collect(DISTINCT o) AS orders, collect(DISTINCT ol) AS lines
+
+FOREACH (c IN CASE WHEN ch IS NULL THEN [] ELSE [ch] END |
+  CREATE (c)-[:HAS_THREAD]->(:Thread {threadId:  $newThreadId,
+                                      title:     $threadTitle,
+                                      createdAt: $now, updatedAt: $now})
+)
+SET u.threadId = CASE WHEN ch IS NULL THEN u.threadId ELSE $newThreadId END
+
+WITH u, ch,
+     CASE WHEN ch IS NULL THEN []
+          ELSE threads + msgs + runs + steps + traces + cursors
+                       + custs + carts + items + orders + lines END AS victims,
+     size(threads) AS threadCount, size(msgs)    AS messageCount,
+     size(runs)    AS runCount,    size(steps)   AS stepRunCount,
+     size(traces)  AS traceCount,  size(cursors) AS cursorCount,
+     size(orders)  AS orderCount,  size(items)   AS cartItemCount
+FOREACH (v IN victims | DETACH DELETE v)
+WITH ch, u, victims, ch IS NOT NULL AS scoped,
+     threadCount, messageCount, runCount, stepRunCount, traceCount,
+     cursorCount, orderCount, cartItemCount
+RETURN scoped, u.threadId AS threadId, size(victims) AS deletedCount,
+       CASE WHEN scoped THEN threadCount   ELSE 0 END AS threadCount,
+       CASE WHEN scoped THEN messageCount  ELSE 0 END AS messageCount,
+       CASE WHEN scoped THEN runCount      ELSE 0 END AS runCount,
+       CASE WHEN scoped THEN stepRunCount  ELSE 0 END AS stepRunCount,
+       CASE WHEN scoped THEN traceCount    ELSE 0 END AS traceCount,
+       CASE WHEN scoped THEN cursorCount   ELSE 0 END AS cursorCount,
+       CASE WHEN scoped THEN orderCount    ELSE 0 END AS orderCount,
+       CASE WHEN scoped THEN cartItemCount ELSE 0 END AS cartItemCount
+"""
+
+    _RESET_ALL_PARTICIPANTS_CYPHER = """\
+MATCH (u:User)
+WHERE u.tokenHash IS NOT NULL                       // G1
+OPTIONAL MATCH (u)-[:MEMBER_OF]->(ch:Channel)
+  WHERE ch.participantId = u.userId                 // G2
+OPTIONAL MATCH (ch)-[:HAS_THREAD]->(t:Thread)
+OPTIONAL MATCH (t)-[:HEAD]->(h:Message)-[:NEXT*0..]->(m:Message)
+WITH collect(DISTINCT CASE WHEN ch IS NOT NULL THEN u END)        AS users,
+     collect(DISTINCT ch)                                          AS channels,
+     collect(DISTINCT t)                                           AS threads,
+     collect(DISTINCT m)                                           AS msgs,
+     collect(DISTINCT CASE WHEN ch IS NOT NULL THEN u.userId END)  AS pids,
+     collect(DISTINCT CASE WHEN ch IS NULL THEN u.userId END)      AS unscopedIds
+
+UNWIND (CASE WHEN msgs = [] THEN [null] ELSE msgs END) AS mm
+OPTIONAL MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(mm)
+WITH users, channels, threads, msgs, pids, unscopedIds, collect(DISTINCT r) AS runs
+
+UNWIND (CASE WHEN runs = [] THEN [null] ELSE runs END) AS rr
+OPTIONAL MATCH (rr)-[:HAS_STEP_RUN]->(sr:StepRun)
+OPTIONAL MATCH (sr)-[:TRACED]->(te:TraceEvent)
+WITH users, channels, threads, msgs, pids, unscopedIds, runs,
+     collect(DISTINCT sr) AS steps, collect(DISTINCT te) AS traces,
+     [x IN threads | x.threadId] AS threadIds
+
+OPTIONAL MATCH (rc:ReadCursor) WHERE rc.threadId IN threadIds
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces,
+     collect(DISTINCT rc) AS tcur
+
+UNWIND (CASE WHEN users = [] THEN [null] ELSE users END) AS uu
+OPTIONAL MATCH (uu)-[:HAS_CURSOR]->(own:ReadCursor)
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces,
+     tcur, collect(DISTINCT own) AS ocur
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces,
+     tcur + [x IN ocur WHERE NOT x IN tcur] AS cursors
+
+OPTIONAL MATCH (cust:Customer) WHERE cust.customerId IN pids
+OPTIONAL MATCH (cust)-[:HAS_CART]->(cart:Cart)
+OPTIONAL MATCH (cart)-[:HAS_ITEM]->(item:CartItem)
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces, cursors,
+     collect(DISTINCT cust) AS custs, collect(DISTINCT cart) AS carts,
+     collect(DISTINCT item) AS items
+
+OPTIONAL MATCH (c2:Customer)-[:PLACED]->(o:Order) WHERE c2.customerId IN pids
+OPTIONAL MATCH (o)-[:HAS_LINE]->(ol:OrderLine)
+WITH users, channels, threads, msgs, unscopedIds, runs, steps, traces, cursors,
+     custs, carts, items, collect(DISTINCT o) AS orders,
+     collect(DISTINCT ol) AS lines
+
+WITH users + channels + threads + msgs + runs + steps + traces + cursors
+           + custs + carts + items + orders + lines AS victims,
+     unscopedIds, size(unscopedIds) AS unscopedCount,
+     size(users)   AS userCount,     size(channels) AS channelCount,
+     size(threads) AS threadCount,   size(msgs)     AS messageCount,
+     size(runs)    AS runCount,      size(steps)    AS stepRunCount,
+     size(traces)  AS traceCount,    size(cursors)  AS cursorCount,
+     size(custs)   AS customerCount, size(orders)   AS orderCount
+FOREACH (v IN victims | DETACH DELETE v)
+RETURN userCount, channelCount, threadCount, messageCount, runCount,
+       stepRunCount, traceCount, cursorCount, customerCount, orderCount,
+       unscopedCount, unscopedIds
+"""
+
+    _CURRENT_ORDER_CYPHER = """\
+// $customerId
+MATCH (cust:Customer {customerId: $customerId})-[:PLACED]->(o:Order)
+WITH o ORDER BY o.placedAt DESC, o.orderId DESC LIMIT 1
+OPTIONAL MATCH (o)-[:HAS_LINE]->(l:OrderLine)
+RETURN o.orderId AS orderId, o.status AS status,
+       o.placedAt AS placedAt, o.updatedAt AS updatedAt,
+       collect({productId: l.productId, name: l.name, unitPrice: l.unitPrice,
+                quantity: l.quantity, lineTotal: l.lineTotal}) AS lines,
+       sum(l.lineTotal) AS total
+"""
+
+    _ORDER_OWNERSHIP_CYPHER = """\
+// $customerId, $orderId
+OPTIONAL MATCH (cust:Customer {customerId: $customerId})-[:PLACED]->(o:Order {orderId: $orderId})
+RETURN o IS NOT NULL AS owned, o.status AS status
+"""
+
+    def ensure_participant(
+        self, ws: str, *, participant_id: str, display_name: str,
+        token_hash: str, language: str, channel_id: str, thread_id: str,
+        thread_title: str, agent_id: str, now: int,
+    ) -> dict[str, Any]:
+        """Provision one storefront participant in a single atomic write. Note §3.
+
+        Writes `User` + `Channel` + `Thread` + both `MEMBER_OF` edges in one
+        `GRAPH.QUERY`, following QUERIES.md §2's guarded-`CREATE`-inside-
+        `FOREACH` idiom. **Atomicity is the point, not a nicety**: a partial
+        join would leave a `Channel` with no `participantId`-bearing owner —
+        exactly the "unscoped participant" state note §5 (F2) leaves *whole and
+        counted* rather than half-deleted, and which the note's own safety
+        argument depends on being unreachable through this code path.
+
+        This is the **only** writer of `Channel.participantId`, the provenance
+        marker G2 reads. Nothing else in this class can set it (`create_channel`
+        writes a fixed three-property map), which is what makes a pre-existing
+        channel structurally unable to become a delete target.
+
+        Returns the status row (exactly one, always — three `OPTIONAL MATCH`es
+        and no anchor `MATCH`, so it can never zero-row):
+
+        | `created` | `existed` | `existedParticipant` | meaning |
+        |---|---|---|---|
+        | `True`  | `False` | `False` | fresh participant written (3 nodes, 3 rels) |
+        | `False` | `True`  | `True`  | already a participant — nothing written; the
+          row carries the **stored** ids/language, so a replay is a
+          read-through (restart survival) |
+
+        `agentMissing=True` means the demo `Agent` (`agent_id`) is absent and
+        **nothing at all was written** — the caller maps that to a `503` naming
+        `seed_demo.sh` (note §3). It is not raised here because "the demo isn't
+        seeded" is a deployment-readiness answer, not a namespace violation.
+
+        Raises `MemberIdCollisionError` when the id is held by an `Agent`, or by
+        a `User` that is **not** a participant (no `tokenHash`) — both are the
+        same refusal as `ensure_user`'s, and the second one exists because
+        without it a caller following the status row would build a participant
+        record out of three `None`s and a token the graph never stored (note §3,
+        F7).
+
+        **Not a token-rotation path**: a replay carrying a fresh `token_hash`
+        returns `existed=True` and does not write the new hash — the same
+        "re-ensure never updates properties" contract as `ensure_user`.
+        """
+        res = self._graph(ws).query(
+            self._ENSURE_PARTICIPANT_CYPHER,
+            {
+                "participantId": participant_id, "displayName": display_name,
+                "tokenHash": token_hash, "language": language,
+                "channelId": channel_id, "threadId": thread_id,
+                "threadTitle": thread_title, "agentId": agent_id, "now": now,
+            },
+        )
+        row = res.result_set[0]
+        status = {
+            "created": bool(row[0]), "existed": bool(row[1]),
+            "existedParticipant": bool(row[2]), "collided": bool(row[3]),
+            "agentMissing": bool(row[4]), "channelId": row[5],
+            "threadId": row[6], "language": row[7],
+        }
+        if status["collided"]:
+            if status["existed"]:
+                raise MemberIdCollisionError(
+                    f"member-id namespace corrupted: {participant_id!r} exists as "
+                    f"both a User and an Agent — nothing written, manual repair "
+                    f"required"
+                )
+            raise MemberIdCollisionError(
+                f"member id {participant_id!r} is already held by an Agent — "
+                f"refusing to provision a participant (member ids are "
+                f"namespace-unique across User/Agent)"
+            )
+        if status["existed"] and not status["existedParticipant"]:
+            raise MemberIdCollisionError(
+                f"member id {participant_id!r} is already held by a non-participant "
+                f"User (no tokenHash) — refusing to provision a participant over it"
+            )
+        return status
+
+    def add_channel_member(
+        self, ws: str, *, member_id: str, channel_id: str, role: str,
+        joined_at: int,
+    ) -> bool:
+        """Add a `User`/`Agent` to a channel's roster. QUERIES.md §2 (§7 for the
+        `Agent` side) — the one documented, verified membership write that had
+        no repository method until now (`seed_demo.sh` and `test_queries.sh`
+        both fill the gap with raw Cypher).
+
+        Idempotent: `MERGE` on the edge with `ON CREATE SET`, so a re-add keeps
+        the original `role`/`joinedAt` rather than rewriting them. The member
+        anchor is label-agnostic (`userId OR agentId`, the same pattern
+        `advance_cursor` uses), so one method covers both member kinds.
+
+        `False` when either anchor is missing — the whole query then matches no
+        rows and writes nothing, which the caller must not read as success.
+
+        **This does not make a channel a participant's own.** Membership is not
+        provenance: `ensure_participant` writes `Channel.participantId`, and G2
+        reads that, never `MEMBER_OF` alone — a participant added to
+        `demo-general` with this method is a genuine member of a channel that is
+        still structurally unreachable by either reset (note §1.1).
+        """
+        res = self._graph(ws).query(
+            "MATCH (mem) WHERE mem.userId = $memberId OR mem.agentId = $memberId "
+            "MATCH (c:Channel {channelId: $channelId}) "
+            "MERGE (mem)-[r:MEMBER_OF]->(c) "
+            "  ON CREATE SET r.role = $role, r.joinedAt = $joinedAt "
+            "RETURN r.role AS role",
+            {
+                "memberId": member_id, "channelId": channel_id, "role": role,
+                "joinedAt": joined_at,
+            },
+        )
+        return bool(res.result_set)
+
+    def get_participant_record(
+        self, ws: str, *, participant_id: str
+    ) -> dict[str, Any] | None:
+        """Read one participant's record — the authoritative token/scope lookup.
+
+        `None` when the id is unknown **or** names a `User` that is not a
+        participant (G1: no `tokenHash`). The two collapse deliberately: both
+        mean "not a participant" to a token check, and an already-reset-away
+        participant is indistinguishable from an id that never existed.
+
+        The graph is the registry, not an in-process map (plan §4.3): this read
+        is what makes a participant's token survive a server restart.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (u:User {userId: $participantId}) "
+            "WHERE u.tokenHash IS NOT NULL "
+            "RETURN u.userId AS participantId, u.displayName AS displayName, "
+            "       u.tokenHash AS tokenHash, u.channelId AS channelId, "
+            "       u.threadId AS threadId, u.language AS language, "
+            "       u.joinedAt AS joinedAt",
+            {"participantId": participant_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "participantId": row[0], "displayName": row[1], "tokenHash": row[2],
+            "channelId": row[3], "threadId": row[4], "language": row[5],
+            "joinedAt": row[6],
+        }
+
+    def set_participant_record(
+        self, ws: str, *, participant_id: str, display_name: str | None = None,
+        token_hash: str | None = None, language: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Update an **existing** participant's record in place (post-join
+        changes: a re-chosen language after "reset mine", a rotated token, a
+        renamed display name).
+
+        Per-field `coalesce($field, u.field)`, the same caller contract as
+        `upsert_profile`: an omitted field (`None`) means "not provided, leave
+        unchanged", **never** "clear it". A caller must not pass `""` to mean
+        "no value".
+
+        `None` (zero rows) when the id is unknown or is not a participant.
+        **The `tokenHash IS NOT NULL` anchor is a guard, not a filter**: without
+        it this method could stamp a `tokenHash` onto `seed_demo.sh`'s `u1` and
+        so mint a "participant" whose channel carries no `participantId` — the
+        unscoped shape note §5 (F2) is built to survive rather than behead, and
+        which nothing in the shipped code is otherwise able to create.
+        **Neither `channelId` nor `threadId` is settable here**, for the same
+        reason: together they are the server-resolved scope denorm the storefront
+        reads from (plan §4.3), and both are decided **in-query** — `channelId`
+        once, by `ensure_participant`, together with the marker G2 reads;
+        `threadId` by `ensure_participant` at join and re-decided by
+        `reset_participant` at every "reset mine", which mints the replacement
+        thread and repoints `u.threadId` inside the same atomic write. A settable
+        `threadId` would be the one lever in this surface able to point one
+        participant at *another* participant's thread, since G1 proves the target
+        is a participant but nothing here can prove the thread lies inside that
+        participant's own channel. If a caller is ever found that genuinely needs
+        to repoint it, the containment check belongs in the `MATCH` — the same
+        place G1/G2 live — not in Python.
+        """
+        res = self._graph(ws).query(
+            "MATCH (u:User {userId: $participantId}) "
+            "WHERE u.tokenHash IS NOT NULL "
+            "SET u.displayName = coalesce($displayName, u.displayName), "
+            "    u.tokenHash   = coalesce($tokenHash,   u.tokenHash), "
+            "    u.language    = coalesce($language,    u.language) "
+            "RETURN u.userId AS participantId, u.displayName AS displayName, "
+            "       u.tokenHash AS tokenHash, u.channelId AS channelId, "
+            "       u.threadId AS threadId, u.language AS language, "
+            "       u.joinedAt AS joinedAt",
+            {
+                "participantId": participant_id, "displayName": display_name,
+                "tokenHash": token_hash, "language": language,
+            },
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "participantId": row[0], "displayName": row[1], "tokenHash": row[2],
+            "channelId": row[3], "threadId": row[4], "language": row[5],
+            "joinedAt": row[6],
+        }
+
+    def list_participants(
+        self, ws: str, *, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """The presenter roster — every participant `User`, join order first.
+
+        Filtered on the bare `u.tokenHash IS NOT NULL` (G1), so
+        `config.USER_ID`'s lifespan-created `User` and `seed_demo.sh`'s `u1`
+        never appear. **Do not add a `u.userId > ''` conjunct** to "upgrade" the
+        label scan to an index scan: it has no selectivity (both forms visit
+        every `User`), and `42 > ''` evaluates to `null`, so the conjunct
+        silently drops any participant whose `userId` is not a string. The note
+        withdrew that tip on measurement *and* on correctness (§8/F5), and the
+        same bare predicate is what both resets anchor on — one predicate, so
+        there is no second form for a future editor to copy into a destructive
+        query.
+
+        No `tokenHash` in the projection: the roster is presenter-facing, and
+        the hash is only ever read by `get_participant_record`'s token check.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (u:User) WHERE u.tokenHash IS NOT NULL "
+            "RETURN u.userId AS participantId, u.displayName AS displayName, "
+            "       u.channelId AS channelId, u.threadId AS threadId, "
+            "       u.language AS language, u.joinedAt AS joinedAt "
+            "ORDER BY u.joinedAt ASC, u.userId ASC LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {
+                "participantId": row[0], "displayName": row[1],
+                "channelId": row[2], "threadId": row[3], "language": row[4],
+                "joinedAt": row[5],
+            }
+            for row in res.result_set
+        ]
+
+    def reset_participant(
+        self, ws: str, *, participant_id: str, new_thread_id: str,
+        thread_title: str, now: int,
+    ) -> dict[str, Any] | None:
+        """Reset mine — one atomic query. Note §4.
+
+        Collects the victim set structurally (never by `Message.threadId`),
+        mints the replacement `Thread`, repoints `User.threadId`, then deletes.
+        The participant's `User` and `Channel` **survive**, so their token stays
+        valid; their `Customer`/`Cart`/`Order` subgraph does not.
+
+        Three outcomes the caller must tell apart (note §12's response
+        contract):
+
+        * `None` (zero rows) — G1 rejected the id: not a participant, or already
+          deleted. The route's existing not-a-participant handling (`404`/`401`).
+        * `scoped=False` — G2 found no owned channel. **A guaranteed no-op**:
+          empty victim list, no re-mint, `User.threadId` untouched and every
+          per-class count forced to `0` so the row cannot read as a partial
+          success. The caller must treat this as an alarm — `409 Conflict` with
+          a machine-readable code, **never** `200`: nothing was reset and
+          nothing will be until the graph is repaired.
+        * `scoped=True` — the reset ran; `deletedCount` is the authoritative
+          field.
+
+        Raises `unique constraint violation on node of type Thread` — and writes
+        **nothing** — if two `Channel`s ever carry the same `participantId`
+        (the `WITH u, ch, collect(…)` groups by `ch`, so the re-mint `FOREACH`
+        fires twice with one `$newThreadId`). That is the duplicate-marker
+        fail-safe, not a defect: it fails loudly and non-destructively, and a
+        retry re-raises forever. Propagate it as a `5xx`; do not retry.
+
+        The delete is **thread-scoped, not author-scoped**: the `Agent`'s own
+        replies inside this participant's thread go with it, and no other
+        participant's do. An author-scoped sweep would orphan those replies and
+        cross participant boundaries the moment the `Agent` is the author.
+
+        `ReadCursor` handling is deliberately narrower here than in
+        `reset_all_participants`: this reset keeps the `User`, so a cursor it
+        holds on a thread that **survives** (a cross-member participant's cursor
+        on `demo-welcome`) is live read-state for a membership this operation
+        was never asked to touch, and is kept. Only cursors on a thread being
+        deleted now, or on a thread that no longer exists, go (note §4, P2).
+        """
+        res = self._graph(ws).query(
+            self._RESET_PARTICIPANT_CYPHER,
+            {
+                "participantId": participant_id, "newThreadId": new_thread_id,
+                "threadTitle": thread_title, "now": now,
+            },
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "scoped": bool(row[0]), "threadId": row[1], "deletedCount": row[2],
+            "threadCount": row[3], "messageCount": row[4], "runCount": row[5],
+            "stepRunCount": row[6], "traceCount": row[7], "cursorCount": row[8],
+            "orderCount": row[9], "cartItemCount": row[10],
+        }
+
+    def reset_all_participants(self, ws: str) -> dict[str, Any]:
+        """Reset everyone — the same scoping, widened to every participant
+        `User`, and additionally deleting the `User` and `Channel` nodes
+        themselves so every participant token is invalidated. Note §5.
+
+        No thread is re-minted: every participant is bounced to the join screen
+        and `ensure_participant` mints a fresh subgraph on their next join.
+
+        **Always exactly one status row**, including on a clean graph (the
+        global `collect()` over an empty match produces one all-zeros row) —
+        an unambiguous "nothing to do" rather than an empty result to index
+        into.
+
+        `unscopedCount`/`unscopedIds` name the participants G2 could **not**
+        resolve. They are left **whole and collectable** rather than beheaded
+        (note §5, F2: v1.0 deleted such a `User` while its channel, thread and
+        messages stayed stranded and unreachable — one participant's transcript
+        left live in a graph the presenter has just been told is clean). The
+        caller returns `200` with `incomplete: true` and `unresolved:
+        unscopedIds` — the reset did everything it could, so it is not an error,
+        but the response must not read as clean.
+
+        Survivors, positively: `Agent`; `WorkspaceConfig` (taking it would
+        silently undo K-056's Ministral re-point — the single most expensive
+        mistake available here); `Document`/`Chunk`/`Entity`;
+        `WorkflowDefSnapshot`/`Step`; `config.USER_ID`'s lifespan `User`; and
+        every `Channel`/`Thread`/`Message` not reachable from a participant
+        `User`, `seed_demo.sh`'s `demo-general`/`demo-welcome` included.
+        `reference` is a different graph and is never referenced by this query —
+        structural, not a convention.
+
+        The wide `HAS_CURSOR` sweep here has **no** liveness filter, unlike
+        `reset_participant`'s: the `User` is deleted, so any cursor it owns that
+        survived would be unowned — a real orphan (note §5, F3).
+        """
+        res = self._graph(ws).query(self._RESET_ALL_PARTICIPANTS_CYPHER)
+        row = res.result_set[0]
+        return {
+            "userCount": row[0], "channelCount": row[1], "threadCount": row[2],
+            "messageCount": row[3], "runCount": row[4], "stepRunCount": row[5],
+            "traceCount": row[6], "cursorCount": row[7], "customerCount": row[8],
+            "orderCount": row[9], "unscopedCount": row[10],
+            "unscopedIds": list(row[11] or []),
+        }
+
+    def get_customer_current_order(
+        self, ws: str, *, customer_id: str
+    ) -> dict[str, Any] | None:
+        """The customer's **current** order — the most recently *placed* one,
+        whatever its status. Note §10.1.
+
+        "Current" is deliberately not "the most recent non-terminal order": a
+        demo participant walks `placed → fulfilled → delivered` and AC-7
+        requires them to *see* the status change, so a non-terminal filter would
+        make the order card vanish at the moment the demo is trying to show it.
+        A subsequent `place_order` supersedes it.
+
+        `None` when there is no such `Customer` **or** the customer has placed
+        no orders — collapsed deliberately (`GET /shop/api/state` renders "no
+        order" identically for both).
+
+        Return shape mirrors `get_order`'s, including both of its quirks: a
+        zero-line order yields one all-`null` placeholder from `collect()`
+        (filtered out here, exactly as `get_order` does) and `sum()` returns a
+        float (`0.0` on an empty aggregation, never `None`) — a `float`-vs-`int`
+        mismatch to expect wherever this feeds a response model. `collect()` and
+        `sum()` over one fan-out are safe because `LIMIT 1` guarantees exactly
+        one `o` for the whole aggregation. Ties on `placedAt` break by
+        `orderId DESC` — arbitrary but *stable across polls*, which is what a
+        card repainting every 2 s needs.
+        """
+        res = self._graph(ws).ro_query(
+            self._CURRENT_ORDER_CYPHER, {"customerId": customer_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        lines = [line for line in row[4] if line["productId"] is not None]
+        return {
+            "orderId": row[0], "status": row[1], "placedAt": row[2],
+            "updatedAt": row[3], "lines": lines, "total": row[5],
+        }
+
+    def order_belongs_to_customer(
+        self, ws: str, *, customer_id: str, order_id: str
+    ) -> dict[str, Any]:
+        """Ownership gate for an order-lifecycle action. Note §10.2.
+
+        Always exactly one row, so `owned` is never `None` and the caller never
+        has to tell "no row" from "not owned": an unknown order, an unknown
+        customer and another participant's order all return
+        `{"owned": False, "status": None}`. `status` rides along free, letting
+        the caller decide `404` before the CAS without a second round trip.
+
+        **Not optional.** `services.advance_order`'s CAS is keyed on `orderId`
+        alone, so without this gate any participant who learned another's
+        `orderId` could cancel their order. The storefront never puts an
+        `orderId` in a request body, which makes this defence in depth — but it
+        is the only thing standing between the two.
+        """
+        res = self._graph(ws).ro_query(
+            self._ORDER_OWNERSHIP_CYPHER,
+            {"customerId": customer_id, "orderId": order_id},
+        )
+        row = res.result_set[0]
+        return {"owned": bool(row[0]), "status": row[1]}
+
+    # ── Structured NL query generation (K-055 M6) — no QUERIES.md section ─────
+    #    (compiler-produced Cypher, not a query 1:1-mapped to QUERIES.md)
+    #
+    # `docs/plans/workflow-nl-query-generation.md` §3.1 step 5. This is the
+    # **only** repository method in this whole four-capability effort that
+    # takes compiler-produced Cypher rather than a query 1:1-mapped to
+    # `QUERIES.md` — its `compiled: CompiledQuery` parameter (not `cypher:
+    # str, params: dict`) is itself part of the "only `querygen.compile`'s
+    # output ever reaches this method" enforcement (a type-checker-visible
+    # constraint, not just a docstring comment). `graph_key` is an already-
+    # resolved graph key (`"reference"` or `f"ws:{ws}"`) — unlike every other
+    # method here, this one does not go through `self._graph`/`self._reference`
+    # (both of which apply their own fixed prefix/hardcoding), because
+    # `querygen`'s dataset registry can point at either graph and the caller
+    # (`services.run_structured_query`) already resolved which one.
+
+    def run_readonly_query(
+        self, graph_key: str, compiled: CompiledQuery, *,
+        timeout: int = DEFAULT_QUERY_TIMEOUT_MS,
+    ) -> list[dict[str, Any]]:
+        """Execute a `querygen.compile(...)`-produced query and return its rows
+        as plain dicts, keyed by column name (`result.header`) — the first
+        repository read whose column set isn't known ahead of time (every
+        other method here maps a fixed, hardcoded set of columns by index).
+        `querygen.compile` never aliases a `RETURN` expression to anything
+        **other than its own original text** — the tuple-`DISTINCT` branch
+        (order_by outside `returns`, no aggregate) aliases internally
+        (`c0`, `c1`, ...) to carry the dedup tuple through a `WITH`, but
+        always re-aliases the final `RETURN` back to the original expression
+        text, so a key here is always that raw expression text FalkorDB
+        assigns (e.g. `"c.name"`, `"count(p)"`), not a friendly bare property
+        name and never one of the internal `c0`/`c1`/... aliases.
+
+        **Layer 2 of the plan's two-layer safety design (§3.2):** this always
+        calls `.ro_query(...)` — **never** `.query(...)`/`.profile(...)` —
+        which FalkorDB itself refuses to execute if `compiled.cypher` is ever,
+        somehow, a write (live-verified, `claude/graph-dba/falkordb-quirks.md`).
+        This holds even if `querygen.compile` itself has a defect: the engine,
+        not this method's own code, is the actual backstop. Do not add a
+        `.query(...)`/`.profile(...)` call anywhere in this method.
+
+        `timeout` defaults to `querygen.DEFAULT_QUERY_TIMEOUT_MS` — see that
+        constant's own docstring for why it is a safety margin, not an exact
+        per-query ceiling on this deployment's pinned build.
+        """
+        res = self._graph_by_key(graph_key).ro_query(
+            compiled.cypher, compiled.params, timeout=timeout,
+        )
+        columns = [col[1] for col in res.header]
+        return [dict(zip(columns, row)) for row in res.result_set]
+
+    def _graph_by_key(self, graph_key: str):
+        """Select a graph by its already-resolved key — the one place in this
+        class that selects a graph without going through `self._graph(ws)`'s
+        `ws:{ws}` prefixing or `self._reference()`'s hardcoded `"reference"`,
+        because `run_readonly_query`'s caller has already resolved which
+        literal graph key it means (`querygen.DatasetSchema.graph_key`)."""
+        return self._conn.select_graph(graph_key)

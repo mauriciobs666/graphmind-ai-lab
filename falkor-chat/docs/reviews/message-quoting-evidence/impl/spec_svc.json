@@ -1,0 +1,88 @@
+{
+ "cwd": "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server",
+ "cmd": [
+  ".venv/bin/python",
+  "-m",
+  "pytest",
+  "-q",
+  "-p",
+  "no:cacheprovider",
+  "tests/test_services.py"
+ ],
+ "mutants": [
+  {
+   "id": "S1 argued-down order: quote checked before had_head",
+   "file": "falkorchat/services.py",
+   "old": "            if st.had_head:                      # lost the first-post race\n                use_first = False                # (subsequent then decides the quote)\n                continue\n            if not st.quoted_found:              # quote missing / other thread / headless\n                raise UnknownQuotedMessageError(write_kwargs.get(\"quoted_id\"), thread_id)\n",
+   "new": "            if not st.quoted_found:              # quote missing / other thread / headless\n                raise UnknownQuotedMessageError(write_kwargs.get(\"quoted_id\"), thread_id)\n            if st.had_head:                      # lost the first-post race\n                use_first = False                # (subsequent then decides the quote)\n                continue\n",
+   "occ": "all"
+  },
+  {
+   "id": "S2 quote checked before written/dup",
+   "file": "falkorchat/services.py",
+   "old": "            if st.written or st.dup_msg:",
+   "new": "            if not st.quoted_found:              # quote missing / other thread / headless\n                raise UnknownQuotedMessageError(write_kwargs.get(\"quoted_id\"), thread_id)\n            if st.written or st.dup_msg:",
+   "occ": "all"
+  },
+  {
+   "id": "S3 quoted_id not threaded into write_kwargs",
+   "file": "falkorchat/services.py",
+   "old": "\"mentions\": wanted, \"quoted_id\": quoted_id,",
+   "new": "\"mentions\": wanted, \"quoted_id\": None,",
+   "occ": "all"
+  },
+  {
+   "id": "S4 result quotedId hardcoded None",
+   "file": "falkorchat/services.py",
+   "old": "\"quotedId\": quoted_id,",
+   "new": "\"quotedId\": None,",
+   "occ": "all"
+  },
+  {
+   "id": "S5 error takes id from nowhere (None)",
+   "file": "falkorchat/services.py",
+   "old": "UnknownQuotedMessageError(write_kwargs.get(\"quoted_id\"), thread_id)",
+   "new": "UnknownQuotedMessageError(None, thread_id)",
+   "occ": "all"
+  },
+  {
+   "id": "S6 error args swapped",
+   "file": "falkorchat/services.py",
+   "old": "UnknownQuotedMessageError(write_kwargs.get(\"quoted_id\"), thread_id)",
+   "new": "UnknownQuotedMessageError(thread_id, write_kwargs.get(\"quoted_id\"))",
+   "occ": "all"
+  },
+  {
+   "id": "S7 quote check removed (falls to RuntimeError)",
+   "file": "falkorchat/services.py",
+   "old": "            if not st.quoted_found:              # quote missing / other thread / headless\n                raise UnknownQuotedMessageError(write_kwargs.get(\"quoted_id\"), thread_id)\n",
+   "new": "",
+   "occ": "all"
+  },
+  {
+   "id": "S8 rejected alternative: service pre-read instead of in-query check",
+   "file": "falkorchat/services.py",
+   "old": "            if not st.quoted_found:              # quote missing / other thread / headless\n                raise UnknownQuotedMessageError(write_kwargs.get(\"quoted_id\"), thread_id)\n            raise RuntimeError",
+   "new": "            raise RuntimeError",
+   "occ": "all",
+   "extra": [
+    "        msg_id, now = self._id(), self._next_ts()\n        self._dispatch_write(\n            ctx, thread_id=thread_id, msg_id=msg_id,\n            first_write=self._repo.post_first_message,",
+    "        if quoted_id is not None:\n            q = self._repo.get_message(ctx.ws, msg_id=quoted_id) if hasattr(self._repo, \"get_message\") else None\n            if q is None or q.get(\"threadId\") != thread_id:\n                raise UnknownQuotedMessageError(quoted_id, thread_id)\n        msg_id, now = self._id(), self._next_ts()\n        self._dispatch_write(\n            ctx, thread_id=thread_id, msg_id=msg_id,\n            first_write=self._repo.post_first_message,"
+   ]
+  },
+  {
+   "id": "S9 MessageWriteStatus.quoted_found default False",
+   "file": "falkorchat/repository.py",
+   "old": "    quoted_found: bool = True",
+   "new": "    quoted_found: bool = False",
+   "occ": "all"
+  },
+  {
+   "id": "S10 post_agent_answer threads quoted_id=None",
+   "file": "falkorchat/services.py",
+   "old": "\"created_at\": now, \"mentions\": wanted, \"seeds\": ordered_seeds,",
+   "new": "\"created_at\": now, \"mentions\": wanted, \"seeds\": ordered_seeds, \"quoted_id\": None,",
+   "occ": "all"
+  }
+ ]
+}

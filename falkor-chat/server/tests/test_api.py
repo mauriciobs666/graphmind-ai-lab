@@ -97,6 +97,57 @@ def test_post_message_mention_parity(client, conn):
     assert bad.json()["error"] == "UnknownMemberError"
 
 
+
+# ── K-094 message quoting (REST) ────────────────────────────────────────────────
+
+_QUOTE_DETAIL = (
+    "quoted message {q!r} is not a message in thread {t!r}; "
+    "nothing was posted. Retry without the quote, or quote the msgId of a message "
+    "read from this thread."
+)
+
+
+def test_post_message_with_quote_writes_and_reads_back_quoted_id(client):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    m1 = client.post(f"/threads/{tid}/messages", json={"text": "one"}).json()["msgId"]
+
+    r = client.post(f"/threads/{tid}/messages", json={"text": "re: one", "quotedId": m1})
+
+    assert r.status_code == 201, r.text
+    assert r.json()["quotedId"] == m1
+    got = client.get(f"/messages/{r.json()['msgId']}")
+    assert got.status_code == 200
+    assert got.json()["quotedId"] == m1
+
+
+@pytest.mark.parametrize("where", ["unknown", "other-thread"])
+def test_post_message_unresolvable_quote_is_400_and_nothing_written(client, where):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    client.post(f"/threads/{tid}/messages", json={"text": "one"})
+    other = _new_thread(client, cid, title="other")
+    elsewhere = client.post(f"/threads/{other}/messages", json={"text": "x"}).json()["msgId"]
+    quoted = "nope" if where == "unknown" else elsewhere
+
+    r = client.post(f"/threads/{tid}/messages", json={"text": "re", "quotedId": quoted})
+
+    assert r.status_code == 400, r.text
+    assert r.json()["error"] == "UnknownQuotedMessageError"
+    assert r.json()["detail"] == _QUOTE_DETAIL.format(q=quoted, t=tid)
+    assert [m["text"] for m in client.get(f"/threads/{tid}/messages").json()] == ["one"]
+
+
+def test_post_message_without_quote_answers_null_quoted_id(client):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+
+    r = client.post(f"/threads/{tid}/messages", json={"text": "plain"})
+
+    assert r.status_code == 201
+    assert "quotedId" in r.json()
+    assert r.json()["quotedId"] is None
+
 def test_create_thread_unknown_channel_404(client):
     r = client.post("/channels/nope/threads", json={"title": "x"})
     assert r.status_code == 404

@@ -232,6 +232,7 @@ def send_message(
     re: str,
     mentions: Annotated[list[str] | None, Field(max_length=MAX_MENTIONS)] = None,
     frm: str | None = None,
+    quoted_id: str | None = None,
 ) -> dict[str, Any]:
     """Post `body` into thread `re`, optionally mentioning members.
 
@@ -242,9 +243,16 @@ def send_message(
     configured actor (Q#1). Schedules the same out-of-band
     embed/trigger/responder work the REST route does (K-041), off-band so the
     write itself is never delayed.
+
+    Omit `quoted_id` unless you hold the exact `msgId` of a message in thread
+    `re`, copied from a `read_messages(re=...)` row; never construct or guess
+    one. A `quoted_id` that is not a message in this thread is an error and
+    nothing is posted.
     """
     ctx = _get_context()
-    posted = _svc().post_message(ctx, thread_id=re, text=body, mentions=mentions)
+    posted = _svc().post_message(
+        ctx, thread_id=re, text=body, mentions=mentions, quoted_id=quoted_id
+    )
     _schedule_background(ctx, posted)
     return posted
 

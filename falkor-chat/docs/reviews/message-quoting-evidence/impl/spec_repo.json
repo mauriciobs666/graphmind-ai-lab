@@ -1,0 +1,114 @@
+{
+ "cwd": "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server",
+ "cmd": [
+  ".venv/bin/python",
+  "-m",
+  "pytest",
+  "-q",
+  "-p",
+  "no:cacheprovider",
+  "tests/test_repository.py",
+  "-k",
+  "quote or reply_to or index_anchored"
+ ],
+ "mutants": [
+  {
+   "id": "R1 quoteOk drops `$quotedId IS NULL OR` (both)",
+   "file": "falkorchat/repository.py",
+   "old": "($quotedId IS NULL OR quoted IS NOT NULL)",
+   "new": "(quoted IS NOT NULL)",
+   "occ": "all"
+  },
+  {
+   "id": "R2a first: drop same-thread WHERE",
+   "file": "falkorchat/repository.py",
+   "old": " WHERE quoted.threadId = $threadId",
+   "new": "",
+   "occ": 0
+  },
+  {
+   "id": "R2b subsequent: drop same-thread WHERE",
+   "file": "falkorchat/repository.py",
+   "old": " WHERE quoted.threadId = $threadId",
+   "new": "",
+   "occ": 1
+  },
+  {
+   "id": "R2c both: $threadId guard -> quoted.threadId IS NOT NULL",
+   "file": "falkorchat/repository.py",
+   "old": "WHERE quoted.threadId = $threadId",
+   "new": "WHERE quoted.threadId IS NOT NULL",
+   "occ": "all"
+  },
+  {
+   "id": "R3a first: quotedFound column hardcoded true",
+   "file": "falkorchat/repository.py",
+   "old": "quoteOk            AS quotedFound",
+   "new": "true               AS quotedFound",
+   "occ": 0
+  },
+  {
+   "id": "R3b subsequent: quotedFound column hardcoded true",
+   "file": "falkorchat/repository.py",
+   "old": "quoteOk            AS quotedFound",
+   "new": "true               AS quotedFound",
+   "occ": 1
+  },
+  {
+   "id": "R3c both: quotedFound column dropped (4 cols)",
+   "file": "falkorchat/repository.py",
+   "old": ", \"\n            \"       quoteOk            AS quotedFound\"",
+   "new": "\"",
+   "occ": "all"
+  },
+  {
+   "id": "R4a first: quoted_id not threaded (quotedId=None)",
+   "file": "falkorchat/repository.py",
+   "old": "\"quotedId\": quoted_id",
+   "new": "\"quotedId\": None",
+   "occ": 0
+  },
+  {
+   "id": "R4b subsequent: quoted_id not threaded",
+   "file": "falkorchat/repository.py",
+   "old": "\"quotedId\": quoted_id",
+   "new": "\"quotedId\": None",
+   "occ": 1
+  },
+  {
+   "id": "R5a first: ok drops AND quoteOk",
+   "file": "falkorchat/repository.py",
+   "old": " AND quoteOk) AS ok",
+   "new": ") AS ok",
+   "occ": 0
+  },
+  {
+   "id": "R5b subsequent: ok drops AND quoteOk",
+   "file": "falkorchat/repository.py",
+   "old": " AND quoteOk) AS ok",
+   "new": ") AS ok",
+   "occ": 1
+  },
+  {
+   "id": "R6 subsequent: REPLY_TO FOREACH removed",
+   "file": "falkorchat/repository.py",
+   "old": "CREATE (m)-[:REPLY_TO]->(q)",
+   "new": "SET q.x = 1",
+   "occ": 1
+  },
+  {
+   "id": "R7a first: rejected bare {msgId: $quotedId} form",
+   "file": "falkorchat/repository.py",
+   "old": "\"UNWIND [$quotedId] AS qid \"\n            \"OPTIONAL MATCH (quoted:Message {msgId: qid})",
+   "new": "\"OPTIONAL MATCH (quoted:Message {msgId: $quotedId})",
+   "occ": 0
+  },
+  {
+   "id": "R7b subsequent: rejected bare {msgId: $quotedId} form",
+   "file": "falkorchat/repository.py",
+   "old": "\"UNWIND [$quotedId] AS qid \"\n            \"OPTIONAL MATCH (quoted:Message {msgId: qid})",
+   "new": "\"OPTIONAL MATCH (quoted:Message {msgId: $quotedId})",
+   "occ": 1
+  }
+ ]
+}

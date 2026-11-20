@@ -1,0 +1,826 @@
+"""One process, two front doors (plan §3.1, §6).
+
+`create_app` builds the shared `Services` once and mounts both the REST router
+(`api.py`) and the MCP Streamable-HTTP app (`mcp.py`) on a single FastAPI/uvicorn
+process. The MCP app's lifespan MUST be forwarded to FastAPI or the MCP session
+manager never initialises (python-sdk #1367).
+
+Importing this module (and calling `create_app` without injected services)
+never touches the network — the default services hold a deferred connection
+handle, and the first FalkorDB round-trip happens at lifespan startup, where
+an unreachable instance fails fast (DEF-2).
+
+Run:  uvicorn falkorchat.app:app   (agents connect at /mcp; REST under /)
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import json
+import logging
+import os
+from collections.abc import Callable
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from anyio import to_thread
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from . import api, config, db, storefront_api
+from . import mcp as mcp_mod
+from .config import CallContext
+from .guards import WorkflowConfigError
+from .llm import extract_own_line_json_object
+from .modelconfig import ModelGateway, StaticModelGateway
+from .repository import Repository
+from .services import (
+    DEFAULT_SWEEP_LIMIT,
+    AgentNotFoundError,
+    ChannelNotFoundError,
+    DocumentNotFoundError,
+    DocumentUpdateNotFoundError,
+    MatchNotFoundError,
+    SearchNotAvailableError,
+    ServiceError,
+    Services,
+    ThreadNotFoundError,
+    WorkflowDefConflictError,
+    WorkflowDefNotFoundError,
+    WorkflowDefSpecError,
+    WorkflowEngineDisabledError,
+    WorkflowInputRejectedError,
+    WorkflowRunNotFoundError,
+    WorkflowRunNotWaitingError,
+)
+from .storefront import CUSTOMER_SPEAKER_LABEL, Storefront
+
+_log = logging.getLogger(__name__)
+
+
+class _McpPathAlias:
+    """ASGI shim: rewrite bare ``/mcp`` to ``/mcp/`` (QA DEF-1).
+
+    Starlette's Mount only serves the sub-app under ``/mcp/``; a client POSTing
+    to the documented ``/mcp`` got 405 and the MCP python client does not
+    auto-append the slash. Rewriting the path serves both spellings without
+    relying on clients following redirects.
+    """
+
+    def __init__(self, app) -> None:  # noqa: ANN001 - ASGI app
+        self._app = app
+
+    async def __call__(self, scope, receive, send):  # noqa: ANN001 - ASGI signature
+        if scope["type"] == "http" and scope.get("path") == "/mcp":
+            scope = dict(scope, path="/mcp/", raw_path=b"/mcp/")
+        await self._app(scope, receive, send)
+
+
+class _SPAStaticFiles(StaticFiles):
+    """`StaticFiles(html=True)` plus an HTML5-history SPA fallback (QA DEF-1).
+
+    Starlette `Mount`s are terminal — a 404 raised inside one does not fall
+    through to a route registered after it — so `StaticFiles(html=True)`
+    alone only ever serves `index.html` at the served directory's own root.
+    `salesperson/src/routes.tsx` uses `createBrowserRouter` (HTML5-history
+    client-side routing), which requires the server to serve the SPA shell
+    for *any* path that isn't a real static asset, so the client-side router
+    can take over — a direct navigation to a deep route (a bookmark, a QR
+    code, or a page refresh) otherwise 404s before the SPA ever loads.
+
+    `api_prefix` is the mount-relative prefix (e.g. `"api"` for a mount at
+    `/shop` whose API lives at `/shop/api`) that must be **excluded** from
+    the fallback: an unmatched `/shop/api/*` path (no such route) still
+    falls through to this static mount, and must keep 404ing rather than
+    silently start returning the SPA shell for a typo'd or missing API path.
+    """
+
+    def __init__(self, *args, api_prefix: str, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._api_prefix = api_prefix.strip("/")
+
+    async def get_response(self, path: str, scope):  # noqa: ANN001 - ASGI scope
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            route_path = path.replace(os.sep, "/")
+            if route_path == self._api_prefix or route_path.startswith(
+                f"{self._api_prefix}/"
+            ):
+                raise
+            return await super().get_response("index.html", scope)
+
+
+# The minimal browser client (DESIGN §14.5) lives at the repo root `web/`,
+# a sibling of `server/`. Served from this process so there is no CORS seam.
+_DEFAULT_WEB_DIR = Path(__file__).resolve().parents[2] / "web"
+
+
+def _register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(ServiceError)
+    async def _handle_service_error(_request, exc: ServiceError):  # noqa: ANN001
+        not_found = isinstance(
+            exc,
+            (
+                ChannelNotFoundError, ThreadNotFoundError, MatchNotFoundError,
+                DocumentNotFoundError, DocumentUpdateNotFoundError,
+                AgentNotFoundError,
+            ),
+        )
+        return JSONResponse(
+            status_code=404 if not_found else 400,
+            content={"error": type(exc).__name__, "detail": str(exc)},
+        )
+
+    # §11 workflow errors live in `repository` (no import cycle) so they are not
+    # `ServiceError` subclasses — map them explicitly: bad spec → 400, absent
+    # def → 404, same envelope shape as the service-error handler.
+    @app.exception_handler(WorkflowDefSpecError)
+    async def _handle_wf_spec_error(_request, exc: WorkflowDefSpecError):  # noqa: ANN001
+        return JSONResponse(
+            status_code=400,
+            content={"error": type(exc).__name__, "detail": str(exc)},
+        )
+
+    @app.exception_handler(WorkflowDefNotFoundError)
+    async def _handle_wf_not_found(_request, exc: WorkflowDefNotFoundError):  # noqa: ANN001
+        return JSONResponse(
+            status_code=404,
+            content={"error": type(exc).__name__, "detail": str(exc)},
+        )
+
+    # A topology-differing re-publish/re-materialize (K-034) — same "state
+    # conflict, nothing written" 409 precedent as `WorkflowRunNotWaitingError`.
+    @app.exception_handler(WorkflowDefConflictError)
+    async def _handle_wf_def_conflict(_request, exc: WorkflowDefConflictError):  # noqa: ANN001
+        return JSONResponse(
+            status_code=409,
+            content={"error": type(exc).__name__, "detail": str(exc)},
+        )
+
+    # §12 run start/input error map (K-024 D-G). Same envelope shape throughout.
+    # Note what is deliberately absent: a fault raised *during the drive* never
+    # reaches here — `services._drive_or_fault` converts it into a 200/201
+    # `{"status":"failed", …}` envelope, because the run is already correctly
+    # terminal in the graph and a 500 would misreport it (D-G). What is mapped
+    # below are the faults raised **before** anything was written.
+    _wf_run_error_codes: tuple[tuple[type[Exception], int], ...] = (
+        # the run id does not exist in this workspace
+        (WorkflowRunNotFoundError, 404),
+        # input for a run that is not parked, or that lost the resume CAS —
+        # nothing was written (§12.13's zero-row contract)
+        (WorkflowRunNotWaitingError, 409),
+        # reserved key / undeclared key / disallowed value (D-H) — a free
+        # rejection: nothing written, no step budget consumed
+        (WorkflowInputRejectedError, 400),
+        # a structurally malformed `cmp` guard, whose dominant source is
+        # publish-time validation — an authoring defect, same class as
+        # `WorkflowDefSpecError`
+        (WorkflowConfigError, 400),
+        # the engine is not wired into this deployment — a named RuntimeError
+        # subclass so this maps to 503 without a blanket handler masking real bugs
+        (WorkflowEngineDisabledError, 503),
+    )
+
+    def _register(exc_type: type[Exception], code: int) -> None:
+        async def _handler(_request, exc: Exception):  # noqa: ANN001
+            return JSONResponse(
+                status_code=code,
+                content={"error": type(exc).__name__, "detail": str(exc)},
+            )
+
+        app.add_exception_handler(exc_type, _handler)
+
+    for _exc_type, _code in _wf_run_error_codes:
+        _register(_exc_type, _code)
+
+    # `search_documents` (K-050 M5 Stage 2, FR-3): no `ModelGateway` wired is a
+    # deployment-configuration gap, not a caller mistake — same 503 precedent
+    # as `WorkflowEngineDisabledError` above, registered separately since it is
+    # not a workflow-run error.
+    _register(SearchNotAvailableError, 503)
+
+
+async def _sweep_loop(
+    services: Services, context_provider: Callable[[], CallContext], *,
+    interval_s: float, limit: int,
+) -> None:
+    """K-028 §3.6 — tick `Services.sweep_due_workflow_runs` on a fixed interval.
+
+    `Services.sweep_due_workflow_runs` is synchronous and blocking-on-FalkorDB
+    (like every other `Services` method) — offloaded via
+    `starlette.concurrency.run_in_threadpool` (the same call
+    FastAPI's own `BackgroundTasks` routes a sync callable through,
+    `python-web-quirks` SKILL.md) rather than calling it inline on the event
+    loop. A tick fault is logged and swallowed so one bad sweep never kills the
+    loop — the next interval simply tries again; a def-author/config problem
+    surfaces per-run in the sweep's own `faulted` bucket instead.
+    """
+    while True:
+        await asyncio.sleep(interval_s)
+        try:
+            ctx = context_provider()
+            await run_in_threadpool(services.sweep_due_workflow_runs, ctx, limit=limit)
+        except Exception:  # noqa: BLE001 — one bad tick must not kill the loop
+            _log.exception("workflow sweep tick failed")
+
+
+def create_app(
+    services: Services | None = None,
+    *,
+    context_provider: Callable[[], CallContext] | None = None,
+    mount_mcp: bool = True,
+    dev_surface: bool = True,
+    storefront: bool = False,
+    storefront_dir: Path | str | None = None,
+    web_dir: Path | None = None,
+    responder: object | None = None,
+    embed_worker: object | None = None,
+    trigger: object | None = None,
+    ingestion_pipeline: object | None = None,
+    sweep_interval_s: float | None = None,
+    sweep_limit: int = DEFAULT_SWEEP_LIMIT,
+) -> FastAPI:
+    """Build the FastAPI app.
+
+    `services`/`context_provider` are injectable for tests (target `ws:test`).
+    `mount_mcp=False` skips the MCP mount — used by REST tests so the FastMCP
+    session manager (run-once per instance) isn't started repeatedly.
+    `web_dir` overrides where the static browser client is served from; it
+    defaults to the repo-root `web/` and is skipped if that directory is absent.
+
+    `dev_surface=False` (salesperson-ui §4.9 move 1) un-mounts the **whole
+    unauthenticated dev surface**: `api.build_router`, the `/` `StaticFiles`
+    catch-all *and* `/mcp` — the last one regardless of `mount_mcp`, so the
+    dangerous combination is not expressible. What is left is a bare `GET /health`
+    liveness route (the router's own lives inside `api.build_router`, so
+    un-mounting it would otherwise take the probe with it); it is registered on
+    this branch **only**, so the default deployment still has exactly one.
+
+    This is a **function parameter and deliberately not an environment variable**.
+    The storefront serves mutually-untrusting participants out of one workspace,
+    and every route the legacy router exposes resolves through the process-constant
+    `config.get_context()` with no authentication — a workspace-wide transcript
+    read, a full-text search and a post box. Making the switch un-settable from the
+    environment is what closes that structurally instead of by configuration:
+    `_build_default_app` derives it as `not config.STOREFRONT_ENABLED`, and there
+    is no operator setting that puts the surface back while participants exist.
+
+    `responder`/`embed_worker` (K-013) are **opt-in** out-of-band handlers wired
+    onto `BackgroundTasks` in the message-post path; both default to `None` so
+    building the default app stays network-free and existing tests are untouched.
+    `ingestion_pipeline` (K-050 M5 Stage 3) is the same **opt-in** shape, scheduled
+    per chunk on `ingest_document` alongside (never instead of) `embed_worker`'s
+    own chunk-embed scheduling — the two are independent background jobs for the
+    same chunk. A production wiring constructs them explicitly and passes them
+    in, e.g.::
+
+        from falkorchat.embedding import EmbeddingWorker
+        from falkorchat.ingestion import IngestionPipeline
+        from falkorchat.modelconfig import GraphWorkspaceOverrides, ModelGateway
+        from falkorchat.responder import AgentResponder
+
+        models = ModelGateway.from_env(workspace_overrides=GraphWorkspaceOverrides(repo))
+        services.set_models(models)  # K-042 L2-4: publish-time model-resolvability check
+        worker = EmbeddingWorker(repo, models=models)
+        ingestion_pipeline = IngestionPipeline(repo, models=models)
+        responder = AgentResponder(services, worker=worker, agent_id="bot1", models=models)
+        app = create_app(
+            services, responder=responder, embed_worker=worker,
+            ingestion_pipeline=ingestion_pipeline,
+        )
+
+    `sweep_interval_s` (K-028, §3.6) is the same **opt-in** shape: `None` (the
+    default) starts no periodic task at all, so building the default app stays
+    network-free and every existing test is untouched; a production wiring
+    passes `config.WORKFLOW_SWEEP_INTERVAL_S` (see `_build_default_app`). The
+    tick itself is `_sweep_loop`, started/cancelled by the lifespan below.
+    `sweep_limit` is the per-tick `limit` passed to
+    `Services.sweep_due_workflow_runs`.
+
+    `storefront=True` (salesperson-ui S8) mounts the authenticated `/shop/api`
+    router, the storefront's typed error map and the SPA build at `/shop`, and
+    runs §4.9's readiness preflight in the lifespan. It also gives the
+    `Storefront` the same `trigger` the legacy transports schedule (§4.4
+    measure 1): storefront turns run on that object's own bounded executor, and
+    the lifespan drains it after `yield`. It is **mutually exclusive
+    with `dev_surface`** and says so by raising, not by preferring one: the two
+    surfaces must not coexist however the app was constructed, and the guard is
+    keyed on this **parameter** rather than on `config.STOREFRONT_ENABLED`
+    because `config.py` resolves every flag at *import* time — a guard on the
+    module constant would be dead in exactly the configuration the suite tests.
+
+    `storefront_dir` is the **served** SPA build directory, and `create_app`
+    resolves it once and hands the same value to both consumers: the
+    `Storefront` (which builds the product-image manifest from
+    `<dir>/products/`) and the `/shop` static mount. Forwarding it to only one
+    of the two is the §4.7 failure this parameter exists to prevent — the
+    manifest keyed on one tree while the assets are served from another, which
+    yields `null` `imageUrl`s in the benign case and *wrong* ones in the worse
+    one, and AC-11's negative branch masks both. `None` falls back to
+    `config.STOREFRONT_DIR`, **here**, so the fallback is also one value rather
+    than two independent reads.
+    """
+    if storefront and dev_surface:
+        # §4.9's route-table assertion, as a startup failure rather than a
+        # convention: with participants on the LAN, the legacy router, the `/`
+        # static catch-all and `/mcp` are an unauthenticated workspace-wide
+        # transcript read, full-text search and post box. Raising here makes the
+        # dangerous shape unbuildable instead of merely undocumented.
+        raise ValueError(
+            "create_app(storefront=True) requires dev_surface=False — the "
+            "storefront deployment must not mount the unauthenticated legacy "
+            "surface (salesperson-ui §4.9 move 1)"
+        )
+
+    if services is None:
+        # DEF-2: a deferred connection handle — building the app must never
+        # touch the network (this function runs at import time via the
+        # module-level `app = create_app()` below). The first real connection
+        # happens at lifespan startup and fails fast with a clear
+        # `db.FalkorDBUnreachableError` (host:port) when FalkorDB is down.
+        services = Services(Repository(db.LazyFalkorDB()))
+
+    provider = context_provider or config.get_context
+
+    # `dev_surface` is dominant over `mount_mcp`: §4.9 requires that `/mcp` — the
+    # same unauthenticated seam as the REST router — is absent from the storefront
+    # route table however the app was constructed.
+    mount_mcp = mount_mcp and dev_surface
+
+    shop: Storefront | None = None
+    if storefront:
+        # **One value, resolved once, reaching both consumers.** See the
+        # docstring: the mount below and the manifest inside this `Storefront`
+        # must be the same directory or every `imageUrl` is wrong rather than
+        # merely absent.
+        served_dir = (
+            config.STOREFRONT_DIR if storefront_dir is None else storefront_dir
+        )
+        shop = Storefront(
+            services,
+            presenter_key=config.STOREFRONT_PRESENTER_KEY,
+            turn_workers=config.STOREFRONT_TURN_WORKERS,
+            quiesce_s=config.STOREFRONT_QUIESCE_S,
+            # The storefront's workspace is the app's own (§4.9 move 2 collapsed
+            # it onto one variable, so there is no second value to get wrong) —
+            # taken from `provider()` rather than from `config.WS_ID` directly,
+            # so an injected `context_provider` pins the storefront too instead
+            # of leaving it on the module constant.
+            ws=provider().ws,
+            agent_id=config.AGENT_ID,
+            storefront_dir=served_dir,
+            # §4.4 measure 1: the storefront's turn worker reaches the workflow
+            # layer through the **same** trigger the legacy transports schedule
+            # on `BackgroundTasks`, never through its own `services`. `None`
+            # here (no workflow engine wired) leaves the queue, the `409` gate
+            # and the quiesce wait working with a turn that does nothing.
+            trigger=trigger,
+            # `id_gen` is deliberately **not** passed: S6's participant-id
+            # collision argument rests on no caller ever pinning it, and this is
+            # the first caller.
+        )
+
+    # document-ingestion2 Stage D: `_safe_detect_update` needs only plain
+    # repository methods (no LLM/embedding), so it reuses whichever of
+    # `embed_worker`/`ingestion_pipeline` is wired — both are constructed
+    # against the SAME `Repository` instance in production (`_build_default_
+    # app`'s own docstring example) — rather than adding a third top-level
+    # `repo=` parameter here. Mirrors `background._schedule_chunk_
+    # processing`'s own `getattr(..., "repo", None)` repo-sourcing idiom
+    # exactly. `None` when neither is wired (or a test fake carries no
+    # `.repo`) — `_schedule_update_detection` already no-ops on that.
+    repo_for_detection = getattr(embed_worker, "repo", None) or getattr(
+        ingestion_pipeline, "repo", None
+    )
+
+    if mount_mcp:
+        mcp_mod.configure(
+            services,
+            context_provider=context_provider,
+            responder=responder,
+            embed_worker=embed_worker,
+            trigger=trigger,
+            ingestion_pipeline=ingestion_pipeline,
+            repo=repo_for_detection,
+        )
+        mcp_app = mcp_mod.mcp.streamable_http_app()
+        # Forward the MCP app's lifespan or the session manager never inits
+        # (python-sdk #1367). On this build the lifespan is exposed as the
+        # Starlette router's `lifespan_context` (a callable taking the app).
+        mcp_lifespan = mcp_app.router.lifespan_context
+    else:
+        mcp_lifespan = None
+
+    @asynccontextmanager
+    async def _lifespan(app_: FastAPI):
+        # salesperson-ui §4.4 measure 2. **Here, before `yield`, and nowhere
+        # else**: `current_default_thread_limiter()` is event-loop scoped and
+        # raises `anyio.NoEventLoopError` outside a running loop, so this cannot
+        # be done at import or in `create_app`'s body. anyio's own default is
+        # 40 threads, shared by every sync endpoint FastAPI offloads; raising it
+        # is headroom for the 2 s poll path and explicitly **not** load-bearing
+        # — measure 1's turn executor is what keeps agent turns off this
+        # limiter in the first place.
+        to_thread.current_default_thread_limiter().total_tokens = config.THREAD_LIMIT
+        # The §4 write paths anchor on the author node — ensure the configured
+        # actor exists before the first write. This is also the first real
+        # FalkorDB round-trip (the default services hold a deferred handle):
+        # an unreachable instance aborts startup within the connect-timeout
+        # budget (db.FalkorDBUnreachableError, names host:port), and an actor
+        # id colliding with an existing Agent aborts loudly
+        # (MemberIdCollisionError) instead of silently shadowing it (DEF-1).
+        services.ensure_actor(provider())
+        # §4.9's readiness preflight, plus §4.7's "the manifest is built at
+        # startup only". Before `yield`, so a mis-seeded demo refuses to start
+        # naming the fix command instead of coming up green and dead.
+        if shop is not None:
+            app_.state.storefront = shop
+            app_.state.storefront_preflight = storefront_api.storefront_preflight(
+                shop
+            )
+        # K-028 §3.6: the periodic sweep task, opt-in (`sweep_interval_s is
+        # None` starts nothing — the plain M1/M2 app and the disabled-engine
+        # default both leave it `None`, see `_build_default_app`). Held on
+        # `app_.state` — an unreferenced `asyncio.Task` is a real GC risk
+        # (`python-web-quirks` SKILL.md), not just tidiness.
+        sweep_task: asyncio.Task[None] | None = None
+        if sweep_interval_s is not None:
+            sweep_task = asyncio.create_task(
+                _sweep_loop(
+                    services, provider, interval_s=sweep_interval_s,
+                    limit=sweep_limit,
+                )
+            )
+            app_.state.sweep_task = sweep_task
+        if mcp_lifespan is not None:
+            async with mcp_lifespan(app_):
+                yield
+        else:
+            yield
+        if sweep_task is not None:
+            sweep_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await sweep_task
+        if shop is not None:
+            # §4.4 measure 1's graceful drain: every turn already accepted has a
+            # message written for it, so shutdown waits for them rather than
+            # cancelling them. Offloaded rather than called inline because
+            # `shutdown(wait=True)` is a blocking join of up to the agent
+            # timeout, and blocking the loop here stalls uvicorn's own shutdown.
+            await run_in_threadpool(shop.shutdown_turns)
+
+    app = FastAPI(lifespan=_lifespan)
+
+    if context_provider is not None:
+        app.dependency_overrides[api.get_context] = context_provider
+
+    if dev_surface:
+        app.include_router(
+            api.build_router(
+                services, responder=responder, embed_worker=embed_worker,
+                trigger=trigger, ingestion_pipeline=ingestion_pipeline,
+                repo=repo_for_detection,
+            )
+        )
+    else:
+        # §4.9: the legacy router is not mounted, and `GET /health` lives inside
+        # it (`api.build_router`) — so re-register the liveness probe bare here,
+        # with the router's own contract: `services.ping` only (no participant
+        # data), 503 when FalkorDB does not answer.
+        @app.get("/health")
+        def health():
+            # `provider()` is resolved OUTSIDE the try, matching `api.py`, whose
+            # route takes `ctx` through `Depends(get_context)` — i.e. outside any
+            # handler of its own. Unreachable while `config.get_context` returns a
+            # constant, but the moment real auth lands in that seam (§14.3) a
+            # failure to resolve the caller must surface as a 500, not be reported
+            # as "FalkorDB unreachable".
+            ctx = provider()
+            try:
+                ok = services.ping(ctx)
+            except Exception:  # noqa: BLE001 - any failure to reach FalkorDB is 503
+                ok = False
+            if not ok:
+                raise HTTPException(status_code=503, detail="FalkorDB unreachable")
+            return {"status": "ok"}
+
+    _register_error_handlers(app)
+
+    if shop is not None:
+        # Registered **inside** `create_app`, and before the `/` catch-all
+        # below: Starlette matches routes in registration order, so a mount
+        # added after this function returns would be unreachable.
+        storefront_api.register_storefront_error_handlers(app)
+        app.include_router(
+            storefront_api.build_storefront_router(shop),
+            prefix=storefront_api.API_PREFIX,
+        )
+        if served_dir is not None and Path(served_dir).is_dir():
+            # The **same** `served_dir` the `Storefront` above built its image
+            # manifest from — never a second read of `config.STOREFRONT_DIR`.
+            app.mount(
+                storefront_api.SHOP_MOUNT,
+                _SPAStaticFiles(
+                    directory=str(served_dir),
+                    html=True,
+                    # `/shop/api` relative to the `/shop` mount — the slice
+                    # the fallback must never swallow (see `_SPAStaticFiles`).
+                    api_prefix=storefront_api.API_PREFIX[
+                        len(storefront_api.SHOP_MOUNT) :
+                    ],
+                ),
+                name="shop",
+            )
+
+    if mount_mcp:
+        app.mount("/mcp", mcp_app)
+        # Serve the documented slash-less spelling too (QA DEF-1).
+        app.add_middleware(_McpPathAlias)
+
+    # Static UI mounts LAST: "/" is a catch-all, so it must sit behind the REST
+    # routes and the /mcp mount (Starlette matches routes in registration order).
+    web = _DEFAULT_WEB_DIR if web_dir is None else web_dir
+    if dev_surface and web.is_dir():
+        app.mount("/", StaticFiles(directory=str(web), html=True), name="web")
+
+    return app
+
+
+def _build_default_app() -> FastAPI:
+    """Construct the module-level ASGI app for `uvicorn falkorchat.app:app`.
+
+    Gated on `config.ENABLE_AGENT` (env `FALKORCHAT_ENABLE_AGENT`): when off (the
+    default), returns the plain network-free app so importing this module and the
+    pytest baseline never touch any provider or read any config file. When on, builds
+    **one** `ModelGateway` (K-042 FR-4/FR-15 — the two config files are read once,
+    here) and wires the live K-013 loop through it: the embedding worker embeds EVERY
+    posted message, and `AgentResponder` replies to an `@mention` of `config.AGENT_ID`
+    — sharing one `Repository`/`Services`/`ModelGateway` with the app. Constructing the
+    gateway is itself offline (it only parses the two files); the first network call
+    happens when a posted message runs its background tasks.
+
+    The served app MUST run at the workspace's embedding dimension
+    (`FALKORCHAT_EMBEDDING_DIM=1024` for `ws:acme`, or the overlay's declared `dim` for
+    the resolved embedding model, §4.5) or embeddings silently drop out of the ANN index
+    — `scripts/start_server.sh` sets it.
+    """
+    repo = Repository(db.LazyFalkorDB())
+    services = Services(repo)
+    # salesperson-ui §4.9 move 1: one flag drives both switches. The storefront
+    # deployment mounts none of the unauthenticated surfaces (`api.build_router`,
+    # the `/` static catch-all, `/mcp`); off — the default — this is exactly the
+    # app shape that shipped before, since both parameters take their own default.
+    dev_surface = not config.STOREFRONT_ENABLED
+    # §4.9 move 1: one flag, two switches — and the storefront's own directory
+    # is read **once**, here, then forwarded as a single value (`create_app`
+    # hands it to both the `Storefront` and the `/shop` mount).
+    storefront_kwargs = {
+        "storefront": config.STOREFRONT_ENABLED,
+        "storefront_dir": config.STOREFRONT_DIR,
+    }
+    if not config.ENABLE_AGENT:
+        return create_app(
+            services, mount_mcp=dev_surface, dev_surface=dev_surface,
+            **storefront_kwargs,
+        )
+
+    # Imported lazily so the disabled path carries no import-time weight and the
+    # dependency surface for offline imports stays minimal.
+    from .embedding import EmbeddingWorker
+    from .ingestion import IngestionPipeline
+    from .modelconfig import GraphWorkspaceOverrides, ModelGateway
+    from .responder import AgentResponder
+
+    # K-042 L2-3 (FR-16/FR-17): the same `repo`/connection every other collaborator
+    # here shares, not a second connection — a graph-backed `WorkspaceOverrides`
+    # reading the workspace's `WorkspaceConfig` singleton (`-graph.md` §2.2/§2.5) per
+    # call for the two consumers with no per-drive `run` dict (`agent`/`embedding`,
+    # below); the executor/guard path instead reads once per drive in `_drive` and
+    # never touches this port (§2.6).
+    models = ModelGateway.from_env(
+        workspace_overrides=GraphWorkspaceOverrides(repo)
+    )
+    # K-042 L2-4 (FR-9): `services` was already constructed above (line 262) — this
+    # gateway is only built when `config.ENABLE_AGENT` is on, so it cannot be passed
+    # at `Services.__init__` without unconditionally reading the two config files
+    # (plan §4.1's "required only when a consumer is wired" rule). Late-bind, same
+    # pattern as `set_executor` below.
+    services.set_models(models)
+    worker = EmbeddingWorker(repo, models=models)
+    # K-050 M5 Stage 3: shares the same repo/gateway as `worker` — its own
+    # background job, scheduled independently, never chained off the embed.
+    ingestion_pipeline = IngestionPipeline(repo, models=models)
+    responder = AgentResponder(
+        services, worker=worker, agent_id=config.AGENT_ID, models=models
+    )
+
+    # M3 workflow engine (K-023): checked AFTER the responder/embedder/LLM exist (the
+    # trigger holds the responder for its no-workflow fall-through). Off by default; the
+    # imports are lazy so the disabled path carries no weight. Constructing the executor
+    # + trigger is offline — the first network call is when a posted message runs its
+    # background tasks. The trigger (not the responder) is passed to `create_app`, so the
+    # API schedules exactly one handler per request.
+    if config.WORKFLOW_ENABLED:
+        from .executor import GraphTracer, WorkflowExecutor
+        from .tools import build_builtin_registry
+        from .trigger import WorkflowTrigger
+
+        registry = build_builtin_registry(services, agent_id=config.AGENT_ID, models=models)
+        judge = _build_llm_judge(models)
+        executor = WorkflowExecutor(
+            services, repo, models=models, guard_judge=judge,
+            tool_registry=registry, tracer=GraphTracer(repo),
+            # K-078 id2 D9: storefront customer lines reach the model as
+            # `Customer: …`, never under the participant's display name.
+            human_speaker_label=(
+                CUSTOMER_SPEAKER_LABEL if config.STOREFRONT_ENABLED else None
+            ),
+        )
+        services.set_executor(executor)  # late-bind (breaks the services↔executor cycle)
+        trigger = WorkflowTrigger(
+            services, agent_id=config.AGENT_ID, def_key=config.TRIGGER_DEF_KEY,
+            def_version=config.TRIGGER_DEF_VERSION,
+            # salesperson-ui §4.3 part 4: with the fall-through off the trigger holds
+            # no responder at all, so a message matching no workflow reaches nothing.
+            # The M2 responder's retrieval is workspace-WIDE, which in a shared-
+            # workspace storefront would surface another participant's messages —
+            # made unreachable structurally, not merely improbable.
+            responder=responder if config.TRIGGER_RESPONDER_FALLTHROUGH else None,
+        )
+        # K-028 §3.6: the periodic sweep only ever starts alongside the executor
+        # it depends on — same double-flag gate (`AGENTS.md`: `WORKFLOW_ENABLED`
+        # alone is not enough). Every other path below (M1/M2 app,
+        # disabled-workflow app) leaves `sweep_interval_s` at `create_app`'s
+        # `None` default.
+        return create_app(
+            services, trigger=trigger, embed_worker=worker,
+            ingestion_pipeline=ingestion_pipeline,
+            sweep_interval_s=config.WORKFLOW_SWEEP_INTERVAL_S,
+            mount_mcp=dev_surface, dev_surface=dev_surface,
+            **storefront_kwargs,
+        )
+
+    return create_app(
+        services, responder=responder, embed_worker=worker,
+        ingestion_pipeline=ingestion_pipeline,
+        mount_mcp=dev_surface, dev_surface=dev_surface,
+        **storefront_kwargs,
+    )
+
+
+_JUDGE_SYSTEM_PROMPT = (
+    "You are a strict gate deciding whether a workflow may advance. You are given a "
+    "CONDITION and evidence about the conversation: a CURRENT STATE (the agent's compact "
+    "understanding of the request — request/known/missing) and/or RECENT TURNS (the latest "
+    "messages, oldest first, for context only). One of them may be absent; judge the "
+    "CONDITION against whatever you are given. Reply with a single JSON object and nothing "
+    'else: {"decision": <true|false>, "rationale": "<one short sentence>"}. Answer true '
+    "ONLY when the condition is clearly satisfied; when in doubt answer false. The "
+    "rationale must state ONLY the evidence supporting your decision: when advancing, say "
+    "what the user DID provide — never mention what is absent, missing or unclear."
+)
+
+# The assembled judge user message is capped (≈1500 tokens, the DS §Q1 budget). Oldest turns
+# are dropped first; 6 turns × 400 chars ≈ 2.4k, so this is a backstop, not a routine path.
+JUDGE_USER_MAX_CHARS = 6000
+
+
+def _render_judge_user(
+    condition: object, understanding: object, recent_turns: object
+) -> str:
+    """Assemble the DS §Q1 judge user message: CONDITION / CURRENT STATE / RECENT TURNS.
+
+    Each evidence block is omitted when empty (the omit rule itself lives upstream in
+    `guards.evaluate_guard` — this only renders what it is handed). The result is capped at
+    `JUDGE_USER_MAX_CHARS` by dropping **oldest** turns first, so the newest turn — the one
+    the condition is usually about — always survives; a hard truncation backstops the rest.
+    """
+    blocks = [f"CONDITION: {condition}"]
+    if understanding:
+        state = json.dumps(understanding, indent=2, sort_keys=True, default=str)
+        blocks.append(f"CURRENT STATE:\n{state}")
+    base = "\n\n".join(blocks)
+
+    # n-2 (K-027 carried finding): compute how many *newest* turns fit via O(1)
+    # length arithmetic per eviction instead of re-joining the whole candidate
+    # message on every drop — the old loop was O(turns^2) in turn count (a real
+    # cost only once a caller hands this many turns; irrelevant at the shipped
+    # RECENT_TURNS_N=6 window). `lines[-kept:]` is always the same suffix the old
+    # `turns.pop(0)` loop converged on, since both only ever drop from the front.
+    turns = list(recent_turns) if isinstance(recent_turns, list) else []
+    lines = [f"{t.get('speaker', 'member')}: {t.get('text', '')}" for t in turns]
+    n = len(lines)
+    header = "RECENT TURNS (context only):\n"
+    kept = n
+    total = len(base) + 2 + len(header) + sum(map(len, lines)) + max(0, n - 1)
+    while kept > 0 and total > JUDGE_USER_MAX_CHARS:
+        total -= len(lines[n - kept]) + (1 if kept > 1 else 0)
+        kept -= 1
+
+    if kept:
+        rendered = "\n".join(lines[-kept:])
+        return "\n\n".join(blocks + [f"{header}{rendered}"])
+    return base[:JUDGE_USER_MAX_CHARS]
+
+
+class _LlmGuardJudge:
+    """The production fuzzy-guard judge (DS §Q1), K-042: a small callable **object**
+    (not a closure) so it can carry `accepts_run = True` — the zero-churn capability
+    flag `guards.evaluate_guard` checks before forwarding `run=` (§4.10 step 4). Every
+    stub judge in the test suite lacks this attribute and is called exactly as before.
+
+    Matches the injected judge shape `guards.evaluate_guard` calls:
+    `(condition, *, understanding, recent_turns, ctx, step_output, model=None, run=None)
+    -> {decision, rationale}`. Builds the §Q1 prompt from whichever evidence tier
+    `guards` selected — the compact `understanding` (primary) or the RECENT-TURNS
+    fallback; the omit rule is applied upstream in `guards.evaluate_guard`, so this
+    judge is a **dumb renderer** of what it is handed. A non-JSON / malformed reply
+    resolves to `{"decision": False, …}` — and `guards._coerce_verdict` applies the
+    same bias-to-suspend downstream, so an unreliable judge never falsely advances.
+    Calibration (κ / false-advance) is a U14/U15 concern; the wired judge must simply
+    exist so an `llm` guard never hits the m-3 "no judge" path in the served flow.
+
+    K-042 FR-4/FR-6/§4.10: resolves kind `guard` through the gateway on every
+    evaluation — `model` is the guard's own choice if it declared one, else the kind
+    default; `ws` comes off `run["ws"]` (the B-1 carrier `_drive` stamps, since this
+    judge otherwise has no `CallContext` — `ctx` here is the *run* ctx dict).
+
+    The reply is parsed with `llm.extract_own_line_json_object(..., require_key="decision")`,
+    **not** a bare `json.loads` (K-027 item 1) and **not** the permissive
+    `extract_json_object` the tool-call path uses (K-027 gate B-1). A model that wraps its
+    verdict in a ```json fence or a sentence of prose used to break *every* verdict silently —
+    the D13 probe scored Ministral 26/26 "unparseable judge output", one of them a correct
+    `decision:true`. What the parse now accepts, precisely: a reply that is entirely one JSON
+    object (bare or fenced), or **exactly one** `decision`-carrying object that owns its lines.
+
+    Everything else — prose with no object, a verdict quoted mid-sentence
+    (*"I would answer {"decision": true …} but they did not"*), two candidate objects that
+    disagree — resolves to `decision=False`. That asymmetry is the point: a *missed* advance
+    costs the run one more turn, a *false* advance passes a gate the workflow relies on, and
+    `guards._coerce_verdict` cannot catch a quoted verdict downstream because its rationale
+    reads perfectly clean. Tolerance is therefore only ever applied to how a verdict is
+    *wrapped*, never to whether one was *asserted*.
+
+    **Residual, declared:** a *hypothetical* or *schema-echo* verdict the model writes on
+    its **own line**, with no second object to disambiguate it, is still accepted and
+    still advances (pinned in `test_app.py`). Line ownership is the only signal a parser
+    has; separating "here is the shape of a verdict" from "here is my verdict" needs the
+    model's intent. K-027 item 3 owns the false-advance metric — if calibration finds
+    this shape in the count, the stricter rule (accept only a reply that is *entirely*
+    one object after fence-stripping) is the documented next narrowing.
+    """
+
+    accepts_run = True
+
+    def __init__(self, models: object) -> None:
+        self._models = models
+
+    def __call__(
+        self, condition, *, understanding, recent_turns, ctx, step_output,
+        model=None, run=None,
+    ):  # noqa: ANN001
+        ws = run.get("ws") if isinstance(run, dict) else None
+        # K-042 L2-3 (FR-16/FR-17, B-1's payoff): the per-drive workspace-override
+        # read `_drive` stamps onto `run["modelOverrides"]` (§2.6) — the same carrier
+        # `ws` already rides, since `evaluate_guard`'s `ctx=` here is the run-ctx
+        # dict, not a `CallContext` (§4.10). Passed as `overrides=` so `resolve()`
+        # uses the pre-fetched dict rather than a second graph round trip.
+        overrides = run.get("modelOverrides") if isinstance(run, dict) else None
+        llm = self._models.llm("guard", requested=model, ws=ws, overrides=overrides)
+        user = _render_judge_user(condition, understanding, recent_turns)
+        text = llm.complete([
+            {"role": "system", "content": _JUDGE_SYSTEM_PROMPT},
+            {"role": "user", "content": user},
+        ])
+        parsed = extract_own_line_json_object(text, require_key="decision")
+        if parsed is None:
+            return {"decision": False, "rationale": "unparseable judge output"}
+        return parsed
+
+
+def _as_model_gateway(obj: object) -> object:
+    """FR-4 sugar (§3): a raw `llm`-shaped object (has `.complete(...)`) wraps into a
+    `StaticModelGateway`; an already-real gateway (`ModelGateway`/`StaticModelGateway`)
+    passes through unchanged. Lets `_build_llm_judge` accept either a bare injected
+    stub LLM (every existing direct test call) or the production `ModelGateway`."""
+    if isinstance(obj, (ModelGateway, StaticModelGateway)):
+        return obj
+    return StaticModelGateway(llm=obj)
+
+
+def _build_llm_judge(models: object) -> _LlmGuardJudge:
+    """Build the production fuzzy-guard judge (see `_LlmGuardJudge`). `models` is
+    either a real `ModelGateway` (production) or a bare LLM client (tests — wrapped
+    via `_as_model_gateway`'s FR-4 sugar)."""
+    return _LlmGuardJudge(_as_model_gateway(models))
+
+
+# Default ASGI app for `uvicorn falkorchat.app:app`.
+app = _build_default_app()

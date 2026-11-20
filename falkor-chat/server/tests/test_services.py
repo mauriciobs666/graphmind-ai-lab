@@ -49,6 +49,7 @@ from falkorchat.services import (
     UnknownActorError,
     UnknownMemberError,
     UnknownOrderTransitionError,
+    UnknownQuotedMessageError,
     WorkflowDefConflictError,
     WorkflowInputRejectedError,
     WorkflowRunNotFoundError,
@@ -2054,6 +2055,119 @@ def test_post_message_dispatch_loop_is_bounded():
     with pytest.raises(RuntimeError):
         svc.post_message(CTX, thread_id="t1", text="hi")
 
+
+
+# ── post_message: quoting (K-094) ───────────────────────────────────────────────
+
+
+def _quote_status(*row):
+    return MessageWriteStatus(*row)
+
+
+def _headed_thread_repo():
+    repo = FakeRepo()
+    repo.threads.add("t1")
+    repo.heads.add("t1")
+    repo.members.add("u1")
+    return repo
+
+
+def test_post_message_passes_quoted_id_to_write():
+    repo = _headed_thread_repo()
+    svc = make_service(repo)
+
+    msg = svc.post_message(CTX, thread_id="t1", text="re", quoted_id="m1")
+
+    assert repo.calls[-1][0] == "post_subsequent_message"
+    assert repo.calls[-1][1]["quoted_id"] == "m1"
+    assert msg["quotedId"] == "m1"
+
+
+def test_post_message_without_quote_passes_none_and_returns_null_quoted_id():
+    repo = _headed_thread_repo()
+    svc = make_service(repo)
+
+    msg = svc.post_message(CTX, thread_id="t1", text="plain")
+
+    assert "quoted_id" in repo.calls[-1][1]
+    assert repo.calls[-1][1]["quoted_id"] is None
+    assert "quotedId" in msg
+    assert msg["quotedId"] is None
+
+
+def test_post_message_quoted_not_found_raises_unknown_quoted_message():
+    repo = _headed_thread_repo()
+    repo.subseq_status = [_quote_status(False, False, False, True, False)]
+    svc = make_service(repo)
+
+    with pytest.raises(UnknownQuotedMessageError) as exc:
+        svc.post_message(CTX, thread_id="t1", text="re", quoted_id="nope")
+
+    assert str(exc.value) == (
+        "quoted message 'nope' is not a message in thread 't1'; "
+        "nothing was posted. Retry without the quote, or quote the msgId of a message "
+        "read from this thread."
+    )
+    assert [c[0] for c in repo.calls if c[0].startswith("post_")] == [
+        "post_subsequent_message"
+    ]
+
+
+def test_post_message_quote_had_head_redispatches_before_quote_check():
+    repo = FakeRepo()
+    repo.threads.add("t1")  # headless at dispatch time → first path
+    repo.members.add("u1")
+    repo.first_status = [_quote_status(False, True, False, True, False)]  # lost the race
+    svc = make_service(repo)
+
+    msg = svc.post_message(CTX, thread_id="t1", text="re", quoted_id="m1")
+
+    kinds = [c[0] for c in repo.calls if c[0].startswith("post_")]
+    assert kinds == ["post_first_message", "post_subsequent_message"]
+    assert repo.calls[-1][1]["quoted_id"] == "m1"
+    assert msg["quotedId"] == "m1"
+
+
+def test_post_message_quote_dup_msg_is_idempotent_success():
+    repo = _headed_thread_repo()
+    repo.subseq_status = [_quote_status(False, False, True, True, False)]
+    svc = make_service(repo)
+
+    msg = svc.post_message(CTX, thread_id="t1", text="re", quoted_id="gone")
+
+    assert msg["msgId"] == "id1"
+    assert msg["quotedId"] == "gone"
+
+
+def test_post_agent_answer_unaffected_by_quote_dispatch():
+    repo = FakeRepo()
+    repo.threads.add("t1")
+    repo.heads.add("t1")
+    repo.agents.add("a1")
+    repo.agent_subseq_status = [
+        MessageWriteStatus(written=True, had_head=False, dup_msg=False, author_found=True)
+    ]
+    svc = make_service(repo)
+
+    msg = svc.post_agent_answer(CallContext(ws="test", actor="a1"), thread_id="t1", text="ans")
+
+    assert msg["role"] == "assistant"
+    assert "quoted_id" not in repo.calls[-1][1]
+    assert "quotedId" not in msg
+
+
+def test_post_agent_answer_unwritten_four_column_row_is_not_a_quote_error():
+    """A §10.1 row has no `quotedFound`; its default must read as "no quote
+    problem", so an unexpected unwritten row stays the generic tripwire."""
+    repo = FakeRepo()
+    repo.threads.add("t1")
+    repo.heads.add("t1")
+    repo.agents.add("a1")
+    repo.agent_subseq_status = [MessageWriteStatus(False, False, False, True)]
+    svc = make_service(repo)
+
+    with pytest.raises(RuntimeError, match="unexpected write status"):
+        svc.post_agent_answer(CallContext(ws="test", actor="a1"), thread_id="t1", text="ans")
 
 def test_post_message_created_at_is_strictly_increasing_under_fixed_clock():
     repo = FakeRepo()

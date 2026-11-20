@@ -101,6 +101,7 @@ from .services import (
     UnknownActorError,
     UnknownMemberError,
     UnknownOrderTransitionError,
+    UnknownQuotedMessageError,
     WorkflowDefConflictError,
     WorkflowDefNotFoundError,
     WorkflowDefSpecError,
@@ -734,6 +735,12 @@ SERVICE_ERRORS_UNREACHABLE: dict[type[ServiceError], str] = {
         "no storefront route creates a channel or thread or ingests a document "
         "through `Services` (`Storefront.join` creates its channel and thread "
         "via `repo.ensure_participant`, which carries no K-101 check)"
+    ),
+    UnknownQuotedMessageError: (
+        "`services.post_message`'s K-094 quote check — `POST /shop/api/messages` "
+        "never passes `quoted_id` (its `PostMessageIn` has no `quotedId` field), "
+        "so the §4 write always reports `quotedFound=true` and this is "
+        "unreachable from any client"
     ),
     UnknownOrderTransitionError: (
         "`services.advance_order`'s guard on an unknown transition string — "

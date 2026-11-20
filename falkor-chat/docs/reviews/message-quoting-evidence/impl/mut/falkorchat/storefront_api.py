@@ -1,0 +1,1582 @@
+"""The storefront's HTTP door — the `/shop/api` router and its error map (S8).
+
+`docs/plans/salesperson-ui.md` §5.2 (the eleven-route surface), §5.3 (the
+route-class table and the `(route, response)` completeness table it feeds),
+§4.7 (the product-image manifest), §4.9 (the deployment with no unauthenticated
+read path). The storefront's *core* — the participant registry, join, token
+verification, state, reset, catalog and the order gate — is `storefront.py`;
+this module only turns it into HTTP.
+
+The one thing this module exists to make decidable
+--------------------------------------------------
+**The error map is total by type**, so the set of responses the server can
+produce is bounded by construction rather than by anybody having enumerated it
+(§5.3's C13 residual paragraph). Machine-readable constants carry that:
+
+* `ROUTE_CLASSES` — §5.3's route-class table, keyed on `(METHOD, path)` because
+  `/shop/api/messages` is a `reads-only` route under `GET` and a `writes` route
+  under `POST`. It is the **input** to the gate, not a nicety: without it the
+  `{handlers} × {routes}` cross product is nonsense on the two routes that
+  issue no query at all.
+* `CROSS_CUTTING_HANDLERS` / `ENVELOPE_HANDLERS` / `RESHAPED_HANDLERS` /
+  `INHERITED_HANDLERS` — **every exception handler on the app**, split by
+  whether it *produces* one of §5.3's three cross-cutting responses, merely
+  re-shapes a response a route already declares, re-shapes an *inherited*
+  handler's response into a plan token on `/shop/api` only, or produces no row
+  at all. `tests/test_storefront_api.py` asserts that `app.exception_handlers`
+  is exactly the union of the four, so a handler with no classification reddens
+  rather than passing unnoticed.
+
+  The four exist because `create_app` builds **one** app: the framework's
+  defaults and `app.py`'s legacy error map are on the storefront deployment
+  too. The gate used to enumerate the *difference* against a baseline app,
+  which showed it five of seventeen handlers and hid the one that fires —
+  `POST /shop/api/messages` answered `404 {"error":"ThreadNotFoundError"}`, an
+  unruled `(route, response)` arriving from the server
+  (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`, P10-1).
+
+`cross_cutting_response()` is the **single seam** both the live handler and the
+gate read, so the gate cannot agree with a handler that has drifted from it —
+and the per-route contract tests then assert the same answers by *execution*,
+which is what keeps the seam itself honest.
+
+What this module deliberately does not hold
+-------------------------------------------
+No Cypher (`falkor-chat/AGENTS.md` rule 1) and no participant resolution of its
+own: authentication is `Storefront.resolve_token`, the only way this module
+resolves a participant, and it always re-reads the graph. There is no
+participant-record cache anywhere in `Storefront` (S9 removed it outright), so
+there is no second path that could disagree with the graph.
+
+Steps that extend this module
+-----------------------------
+* **S9** — `POST /shop/api/messages` carries the turn enqueue behind its write
+  (delivered); the trigger runs on `Storefront`'s own turn worker, so this
+  module's service-layer reach is unchanged by it and the guard below stays
+  green rather than being bumped.
+* **S10** — the three presenter operations now live on `Storefront` itself
+  (`presenter_login`, `list_participants`, `reset_all`), together with the
+  login rate-limiter and reset-everyone's stop-intake-then-drain quiesce
+  (delivered). This module's three presenter routes are thin again — each
+  calls one `Storefront` method and maps its raises — which is why S8 could
+  build them against the delivered core in the first place: S8's gate is
+  evaluated over **all eleven** routes and cannot be run on a partial surface,
+  so the routes existed here first and the core caught up at S10.
+"""
+
+from __future__ import annotations
+
+import inspect
+import logging
+from typing import Any, Literal
+
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
+from fastapi.exceptions import (
+    RequestValidationError,
+    WebSocketRequestValidationError,
+)
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, field_validator
+from redis import exceptions as redis_exceptions
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from . import config
+from .db import FalkorDBUnreachableError
+from .guards import WorkflowConfigError
+from .services import (
+    AgentNotFoundError,
+    BatchTooLargeError,
+    ChannelNotFoundError,
+    DocumentNotFoundError,
+    DocumentTooLargeError,
+    DocumentUpdateNotFoundError,
+    EmptyDocumentError,
+    InputBoundError,
+    InvalidSearchQueryError,
+    MatchNotFoundError,
+    MessageTooLongError,
+    SearchNotAvailableError,
+    ServiceError,
+    ThreadNotFoundError,
+    UnknownActorError,
+    UnknownMemberError,
+    UnknownOrderTransitionError,
+    UnknownQuotedMessageError,
+    WorkflowDefConflictError,
+    WorkflowDefNotFoundError,
+    WorkflowDefSpecError,
+    WorkflowEngineDisabledError,
+    WorkflowInputRejectedError,
+    WorkflowRunNotFoundError,
+    WorkflowRunNotWaitingError,
+)
+from .storefront import (
+    BadPresenterKeyError,
+    DemoNotSeededError,
+    OrderTransitionRefusedError,
+    ParticipantRecord,
+    QuiesceTimeoutError,
+    ResetAllStateUnknownError,
+    ResetStateUnknownError,
+    Storefront,
+    TurnNotScheduledError,
+    UnknownOrderError,
+    UnknownParticipantError,
+    UnscopedParticipantError,
+    parse_bearer,
+)
+
+_log = logging.getLogger(__name__)
+
+# Where `create_app` mounts this router, and where it mounts the SPA build.
+# `ROUTE_CLASSES` below spells the *full* paths, so a change to either that is
+# not made here fails the route-table assertion rather than silently
+# re-classifying every route (`_route_paths` is prefix-blind unless threaded —
+# `docs/reviews/salesperson-ui-impl.md` `## Pass 5`).
+API_PREFIX = "/shop/api"
+SHOP_MOUNT = "/shop"
+
+# The presenter credential's id half: `Authorization: Bearer presenter.<token>`
+# (§5.3's credentials table). A participant id is `p-<uuid4hex>`, which can
+# never collide with it.
+PRESENTER_PRINCIPAL = "presenter"
+
+# ── §5.3's route classes ─────────────────────────────────────────────────────
+#
+# "Which of the three cross-cutting responses a given route can produce is
+# decided by its class." These three strings are that table.
+WRITES = "writes"
+READS_ONLY = "reads-only"
+NO_GRAPH = "no graph access"
+
+# `(METHOD, path)` -> `(class, op token)`. The op token is the `<op>` in
+# §5.3's `504 <op>_state_unknown` and is `None` for every non-writing route.
+#
+# **Keyed on the method as well as the path, and that is load-bearing:**
+# `/shop/api/messages` is `reads-only` under `GET` (its read passes an explicit
+# `since`, so it never advances a cursor and therefore never writes) and
+# `writes` under `POST`. A path-keyed table would give one of the two the other
+# one's cross-cutting row.
+ROUTE_CLASSES: dict[tuple[str, str], tuple[str, str | None]] = {
+    ("GET", f"{API_PREFIX}/health"): (NO_GRAPH, None),
+    ("POST", f"{API_PREFIX}/session"): (WRITES, "join"),
+    ("GET", f"{API_PREFIX}/state"): (READS_ONLY, None),
+    ("GET", f"{API_PREFIX}/messages"): (READS_ONLY, None),
+    ("POST", f"{API_PREFIX}/messages"): (WRITES, "post"),
+    ("GET", f"{API_PREFIX}/catalog"): (READS_ONLY, None),
+    ("POST", f"{API_PREFIX}/order/advance"): (WRITES, "order"),
+    ("POST", f"{API_PREFIX}/reset"): (WRITES, "reset"),
+    ("POST", f"{API_PREFIX}/presenter/session"): (NO_GRAPH, None),
+    ("GET", f"{API_PREFIX}/presenter/participants"): (READS_ONLY, None),
+    ("POST", f"{API_PREFIX}/presenter/reset-all"): (WRITES, "reset"),
+}
+
+# The two handler tokens `cross_cutting_response` dispatches on. Not the
+# response tokens — `graph_timeout` becomes `graph_read_timeout` or
+# `<op>_state_unknown` depending on the route's class, which is the whole point.
+_GRAPH_UNAVAILABLE = "graph_unavailable"
+_GRAPH_TIMEOUT = "graph_timeout"
+
+# Every exception type this module maps to one of §5.3's **three cross-cutting
+# responses**, with the handler token that decides which. The gate crosses this
+# with `ROUTE_CLASSES` and asserts the result against §5.3's completeness table.
+CROSS_CUTTING_HANDLERS: dict[type[BaseException], str] = {
+    # Nothing was sent — the precedent is `api.py:63` / `app.py:345`.
+    FalkorDBUnreachableError: _GRAPH_UNAVAILABLE,
+    redis_exceptions.ConnectionError: _GRAPH_UNAVAILABLE,
+    # A *query-time* timeout: `reads-only` ⇒ nothing changed; `writes` ⇒ the
+    # write may have committed and the participant-facing meaning is *unknown*
+    # (§4.8 F8).
+    redis_exceptions.TimeoutError: _GRAPH_TIMEOUT,
+}
+
+
+def cross_cutting_response(
+    handler_token: str, method: str, path: str
+) -> tuple[int, str] | None:
+    """`(status, error token)` for one cross-cutting handler on one route, or
+    `None` when that route's class permits none of the three.
+
+    **The single seam the live handler and the gate both read.** Written as one
+    function rather than as a table in the tests and a branch in the handler,
+    because two spellings of one rule is exactly the shape §5.3 keeps finding
+    defects in — and because a gate that agrees with a handler it does not
+    share code with is a gate that cannot see the handler drift. What the gate
+    therefore cannot check is this function itself, which is why the per-route
+    contract tests assert the same answers by *execution* against a stubbed
+    repository on every one of the nine graph-touching routes.
+    """
+    klass, op = ROUTE_CLASSES[(method, path)]
+    if klass == NO_GRAPH:
+        # §5.3: no query is issued, so no typed handler can fire and the route
+        # takes none of the three rows. A handler firing here is a defect.
+        return None
+    if handler_token == _GRAPH_UNAVAILABLE:
+        return 503, _GRAPH_UNAVAILABLE
+    if klass == READS_ONLY:
+        return 503, "graph_read_timeout"
+    return 504, f"{op}_state_unknown"
+
+
+# ── size bounds (§5.2, mirroring `schemas.py`'s rule-6 posture) ──────────────
+MAX_DISPLAY_NAME_LEN = 60
+MAX_LANGUAGE_LEN = 32
+MAX_MESSAGE_TEXT_LEN = 2000
+MAX_MESSAGE_PAGE = 200
+DEFAULT_MESSAGE_PAGE = 50
+MAX_PRESENTER_KEY_LEN = 200
+
+# The join response's `welcome` line (§5.2). Server-side because the join
+# response is minted before the SPA knows the participant's language is
+# accepted; S12c/S13 own every other string the participant reads.
+WELCOME: dict[str, str] = {
+    "en": "Welcome to the store, {name}.",
+    "pt-BR": "Bem-vindo à loja, {name}.",
+    "es": "Bienvenido a la tienda, {name}.",
+}
+WELCOME_FALLBACK = WELCOME["en"]
+
+
+def _welcome(display_name: str, language: str) -> str:
+    return WELCOME.get(language, WELCOME_FALLBACK).format(name=display_name)
+
+
+def _nonblank(value: str) -> str:
+    """Reject a whitespace-only string at the boundary.
+
+    `Field(min_length=1)` accepts `"   "` (verified, `python-web-quirks`
+    SKILL.md), and a blank display name or a blank presenter key is the most
+    ordinary human mistake in both flows (§5.3 C11 files the blank key as
+    *user-supplied*, to be shown next to the box). Raising here keeps it a
+    `422 validation_failed` carrying that field's own name rather than a
+    server-side surprise later.
+    """
+    if not value.strip():
+        raise ValueError("must not be blank")
+    return value
+
+
+class JoinIn(BaseModel):
+    """`POST /shop/api/session` (§5.2).
+
+    **Field order is part of the contract.** §5.3 C11 pins the `422` selection
+    rule to the *first* entry of `RequestValidationError.errors()`, which for a
+    single request model is declaration order — so a request violating both
+    bounds reports `displayName`, deterministically, and the client's
+    highlighting cannot depend on which field the user fixed last.
+
+    `language` is bounded for length here and checked against the deployment's
+    own `Storefront.locales` in the route, because the locale set is per-
+    instance configuration (`FALKORCHAT_STOREFRONT_LOCALES`) and not a class
+    constant. That check raises the same `RequestValidationError` with the same
+    `loc`, so both violations are one response shape and one code path.
+    """
+
+    displayName: str = Field(min_length=1, max_length=MAX_DISPLAY_NAME_LEN)
+    language: str = Field(min_length=1, max_length=MAX_LANGUAGE_LEN)
+
+    _check_display_name = field_validator("displayName")(_nonblank)
+
+
+class PostMessageIn(BaseModel):
+    """`POST /shop/api/messages` (§5.2) — `text ≤ 2000`."""
+
+    text: str = Field(min_length=1, max_length=MAX_MESSAGE_TEXT_LEN)
+
+    _check_text = field_validator("text")(_nonblank)
+
+
+class AdvanceOrderIn(BaseModel):
+    """`POST /shop/api/order/advance` (§5.2).
+
+    No `orderId`: §5.2's invariant is that no route accepts `ws`, `threadId`,
+    `customerId` or `orderId` from the client, and §4.6 takes the order id from
+    server-side state — which is what makes `404`/`409` mean *stale*, never
+    *someone else's* (§5.3 C10).
+    """
+
+    transition: Literal["fulfill", "deliver", "cancel"]
+
+
+class PresenterSessionIn(BaseModel):
+    """`POST /shop/api/presenter/session` (§5.2) — the key, exchanged for a token."""
+
+    key: str = Field(min_length=1, max_length=MAX_PRESENTER_KEY_LEN)
+
+    _check_key = field_validator("key")(_nonblank)
+
+
+class StorefrontHTTPError(HTTPException):
+    """A refusal a **route** produces, carrying the storefront's stable envelope.
+
+    Deliberately a subclass of `HTTPException` rather than a re-registration of
+    the base handler: Starlette resolves a handler by walking the exception's
+    MRO and taking the first match, so this claims its own envelope without
+    changing what a plain `HTTPException` does — which matters because the
+    storefront deployment's bare `GET /health` raises one (`app.py`, §4.9
+    move 1) and is not part of this contract.
+
+    `error` is the machine-readable token §5.3's rules dispatch on (C6b reads
+    the *body*, not the `409`); `extra` carries the per-response fields §5.2
+    names — the order's current `status`, a reset's re-read `state`.
+    """
+
+    def __init__(
+        self, status_code: int, error: str, detail: str, **extra: Any
+    ) -> None:
+        super().__init__(status_code=status_code, detail=detail)
+        self.error = error
+        self.extra = extra
+
+
+class StorefrontPreflightError(RuntimeError):
+    """§4.9's readiness preflight refused to start the storefront.
+
+    Raised from the lifespan **before** `yield`, so a mis-seeded deployment
+    fails at boot naming the fix command, rather than coming up "green but
+    dead" and 500-ing the first participant who types.
+    """
+
+
+# ── the error map, total by type (§5.3) ──────────────────────────────────────
+
+
+async def _handle_storefront_http_error(_request, exc: StorefrontHTTPError):  # noqa: ANN001
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.error, "detail": exc.detail, **exc.extra},
+    )
+
+
+async def _handle_validation_error(_request, exc: RequestValidationError):  # noqa: ANN001
+    """§5.3 C11: the storefront's own stable `{error, field}`, never FastAPI's
+    `loc` shape.
+
+    The selection rule is pinned by the plan and is not an implementation
+    detail: the **first** entry of `exc.errors()` — declaration order for a
+    single request model — and `field` is the **last element** of its `loc`, so
+    the client sees `displayName`, never `body.displayName`. A response
+    therefore never carries two field names, and the client's own bounds keep
+    the common case from round-tripping at all.
+    """
+    errors = exc.errors()
+    field = ""
+    if errors:
+        loc = errors[0].get("loc") or ()
+        if loc:
+            field = str(loc[-1])
+    return JSONResponse(
+        status_code=422, content={"error": "validation_failed", "field": field}
+    )
+
+
+def _cross_cutting_json(request, handler_token: str) -> JSONResponse:  # noqa: ANN001
+    try:
+        answer = cross_cutting_response(
+            handler_token, request.method, request.url.path
+        )
+    except KeyError:
+        # An **unclassified** route, which is a different fault from a
+        # `no graph access` one but has the same right answer. Caught here
+        # rather than left to propagate, because propagating means raising
+        # inside an exception handler — Starlette's own `500`, with none of the
+        # log line below (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`,
+        # P10-8). `cross_cutting_response` keeps raising, deliberately: the gate
+        # reads that seam and *wants* the `KeyError`, which is the route-table
+        # assertion firing from the inside.
+        answer = None
+    if answer is None:
+        # Unreachable by construction: a `no graph access` route issues no
+        # query, and the route-table assertion keeps `ROUTE_CLASSES` exactly the
+        # registered route set. Reaching it means one of those two is false, so
+        # say so loudly and answer the conservative code — *unknown*, never
+        # "nothing changed".
+        _log.error(
+            "a typed graph handler fired on %s %s, which §5.3 classifies as "
+            "issuing no query at all — this is a defect, not a row",
+            request.method, request.url.path,
+        )
+        return JSONResponse(
+            status_code=504,
+            content={"error": "state_unknown", "detail": "unclassified route"},
+        )
+    status, token = answer
+    return JSONResponse(status_code=status, content={"error": token})
+
+
+async def _handle_graph_unavailable(request, _exc):  # noqa: ANN001
+    return _cross_cutting_json(request, _GRAPH_UNAVAILABLE)
+
+
+async def _handle_graph_timeout(request, _exc):  # noqa: ANN001
+    return _cross_cutting_json(request, _GRAPH_TIMEOUT)
+
+
+# Handlers that re-shape a response the route itself already declares, rather
+# than producing one of §5.3's three cross-cutting rows. They contribute
+# nothing to the `{handlers} × {routes}` cross product; what covers them is the
+# declaration half plus the per-route contract tests, which prove each declared
+# entry is actually producible.
+ENVELOPE_HANDLERS: frozenset[type[BaseException]] = frozenset(
+    {StorefrontHTTPError, RequestValidationError}
+)
+
+# ── the handlers the storefront app carries but does not register ────────────
+#
+# `create_app` builds **one** FastAPI app, so the framework's own defaults and
+# `app.py`'s legacy error map are on the storefront deployment too. The gate
+# enumerates `app.exception_handlers` **whole** — it used to subtract a
+# baseline app's handlers, which hid twelve of the seventeen and with them the
+# one that provably fires (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`,
+# P10-1: `POST /shop/api/messages` answered `404
+# {"error":"ThreadNotFoundError"}`, a `(route, response)` pair no rule covers).
+#
+# So every handler on the app must be classified. This bucket is the one that
+# produces **no** `(route, response)` row on a `/shop/api` route; the value is
+# the reason. `ServiceError` is deliberately **not** here — it is the one that
+# provably fires, so the storefront overrides it (`RESHAPED_HANDLERS` below)
+# rather than excusing it.
+#
+# **Every reason below is a checked claim, not prose — except one.** Prose is
+# what P11-1 found all eleven were. Nine are checked by the two mechanisms
+# below, both AST-read by `tests/test_storefront_api.py`. The exception is
+# `WorkflowConfigError`, whose reason is **prose**: its only raise sites are
+# `guards.py`'s fourteen, reached through
+# `Services` → `self._executor` → `executor` → `guards`, which is outside every
+# scope either mechanism walks — and it is not a `ServiceError` subclass
+# either, so neither partition below covers it (`## Pass 15`, P15-3).
+# `WebSocketRequestValidationError`'s is checked only indirectly:
+# `storefront_routes` iterates `entry.methods`, which a websocket route does
+# not carry.
+#
+# Each mechanism is stated here at the reach it actually has, **as the syntax
+# it walks rather than as the behaviour it means to cover**. Six passes of
+# this review found the same defect — a rule written broader than the walk
+# beneath it, each time inside the artifact that closed the previous one — and
+# every one of those rules named a semantic scope ("any path", "any local name",
+# "a route reaches", "the names bound to it") that no finite reader implements.
+# So what follows names node types, file boundaries, closed method sets and the
+# exact string comparison the value side is; where a reader stops, it stops at
+# a shape you can point at (`## Pass 13`, `## Pass 14`, `## Pass 15`).
+#
+# *"No storefront route calls layer X"* is
+# `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`.
+# It pins the set of `Services` methods reached by: (1) `<prefix>.<name>`
+# attribute access anywhere in `build_storefront_router`; and (2) the same
+# access in every `Storefront` method the router reaches through
+# `shop.<method>`, closed over `self.<method>` to a fixpoint. On each leg
+# `<prefix>` starts as the seed attribute — `shop._services`/`self._services`
+# for the collaborator, `shop`/`self` for the frontier — and is closed to a
+# fixpoint over the local names that scope binds to it.
+#
+# **That closure has two axes, and both are narrow.** *Target* — the name has
+# to be bound by one of the eight `ast` node types below. *Value* — the
+# expression it is bound to has to **unparse to a string that is already a
+# prefix** (`ast.unparse(value) in prefixes`): exact source-text identity, not
+# an analysis of what the expression denotes. So on the collaborator leg
+# `svc = self._services` adds `svc`, and `me = self` adds nothing: `'self'` is
+# a prefix on the *frontier* leg, where `me.<method>` is duly followed, and is
+# not one on the collaborator leg, whose prefix is `'self._services'`, so
+# `me._services.<name>` is invisible there. **That asymmetry is a documented
+# stop, and it is measured, not assumed** (`## Pass 15`, P15-1): `me = self`
+# then `me._services.start_workflow_run(...)` on the router-reached
+# `Storefront.join` survives the two-file suite at **185 passed**, where
+# `svc = self._services` on the same injection point fails it at **1/184**.
+#
+# **Nine today. A tenth reddens when it is written on one of those prefixes
+# directly, or through a local name bound — in one of the eight forms below —
+# to an expression whose source text is exactly one of them.** A tenth written
+# any other way does not; the stop list below is where those shapes are named.
+#
+# **"Bound" is a closed list of eight `ast` node types**, not a promise about
+# names: `Assign`, `AnnAssign`, `NamedExpr`, `For`, `AsyncFor`, `comprehension`,
+# `withitem`, `MatchAs` — and three of those are read **narrower than the node
+# type**. `For`/`AsyncFor`/`comprehension` are read only over a literal
+# `Tuple`/`List`/`Set` iterable, that being the only iterable whose elements a
+# reader running nothing can see; `Assign`'s sequence destructuring is paired
+# only when both sides are literal sequences of equal length with no `*` on
+# either, and `svc, *_ = ...` is declined loudly rather than guessed.
+#
+# Every *other* name-binding node in the grammar is classified as unable to
+# carry an alias, each with the reason, and that classification is held against
+# `ast`'s own enumeration of binding nodes by
+# `test_the_alias_reader_covers_every_binding_form_the_grammar_has` — so a
+# binding form nobody classified fails rather than passing quietly, **so long
+# as it carries one of the eight `_fields` names that enumeration keys on**
+# (`target`, `targets`, `optional_vars`, `name`, `names`, `asname`, `arg`,
+# `rest`). A future node spelled `_fields = ('var', 'value')` would open a hole
+# in silence; no node in Python 3.12 does (`## Pass 15`, P15-5).
+#
+# Deriving the prefixes instead of listing three spellings was P13-1; deriving
+# them over `ast.Assign` alone still let `svc: object = self._services`
+# through, annotated local assignment being a house idiom in both files
+# (P14-2). **That spelling is not S9's shape:**
+# `docs/plans/salesperson-ui.md` v1.25 puts the trigger on the turn worker,
+# reaching the service layer through `trigger.maybe_trigger`, whose own
+# `start_workflow_run` call site (`trigger.py:82`) is outside all four scopes
+# below. The reach therefore does **not** move at S9, and this guard is a
+# **service-surface tripwire**: red means a `Services` call was acquired
+# through the storefront's own `self._services` rather than through the
+# trigger (`## Pass 15`, P15-2).
+#
+# **Where it stops, as syntax.** Two rules generate every stop: a prefix is
+# followed only where it is *written*, as `<name>.<attr>`; and a binding
+# extends the prefix set only when the bound expression's **source text** is
+# already a prefix. What that leaves outside the walk, each shape run against
+# the delivered reader rather than argued (`## Pass 15`, P15-1 and Appendix
+# P15-A):
+#
+#   * a **call argument** — `_go(self._services)`; the parameter is bound by
+#     the caller, which is the one non-reach no enumeration of binding forms
+#     can ever close;
+#   * a **return value**; an **attribute** store (`self._svc = self._services`
+#     — a *local* store is followed, an attribute store is not); `getattr`;
+#   * an alias of the **receiver**, on the two collaborator legs:
+#     `me = self` then `me._services.<name>`, whose value text `self` is not
+#     the prefix `self._services`. The frontier legs, seeded on `shop`/`self`,
+#     do follow it — the asymmetry is stated above and measured;
+#   * any value the reader would have to **evaluate**: a conditional
+#     expression (`svc = self._services if c else self._services`), a container
+#     round-trip (`pair = [self._services]` then `svc = pair[0]`), a
+#     non-literal iterable (`for svc in self._pool`).
+#
+# That is a statement about the walk, not a claim about the code; the moment
+# one of those is written, this comment is what has to change with it. Closing
+# the value axis is alias analysis rather than one more node type, and the
+# chain that tried five times to widen its way there is stopped by decision,
+# not by oversight (`docs/plans/salesperson-ui-coordination.md`, "STOPPED —
+# the stopping rule fired").
+#
+# *"No storefront route raises it"* is
+# `test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`,
+# over four scopes: `storefront_api.py` and `storefront.py` **whole** — a raise
+# one helper call out of a route body is a raise on the route, and so is one
+# inside the `Storefront` method the route calls (P12-2) — plus, in each
+# collaborator module, the methods the reach walk above measures **closed over
+# the `self.<name>` calls those methods make**, to a fixpoint. Both
+# collaborator files are read at those methods only, because both are shared
+# with the legacy surface; the `Repository` seed is the union of the router's
+# `repo.<name>` calls and the reached `Storefront` methods' `self._repo.<name>`
+# calls, so S10 moving the first onto `Storefront` re-points that leg instead
+# of emptying it. Composing the two guards is what closed P13-2: the reach
+# guard says *which* collaborator methods a request runs, never *what they
+# raise*. Closing the composed set over `self.<name>` is what closed P14-1: the
+# walk had stopped at the reach guard's frontier, and a bare `HTTPException` in
+# a sibling of a reached `Services` method, and one in the `Repository` method
+# `Storefront.join` calls, each answered `410 {"detail":"gone"}` with every
+# guard green.
+#
+# **Where it stops, as syntax:** at any call that is not `self.<name>` on the
+# walked class — `Services` into `Repository`, `Repository` into redis, and a
+# module-level helper in either collaborator file. None of that is walked, and
+# none of it is excused here **except `WorkflowConfigError`**, whose raise
+# sites are `guards.py`'s fourteen — reached only through
+# `Services` → `self._executor` → `executor` → `guards`, squarely this unwalked
+# region — and which no mechanism in this file checks (`## Pass 15`, P15-3).
+# For the rest: the graph faults are S8's typed handlers' own rows and the
+# `ServiceError` family is covered by the
+# `SERVICE_ERROR_RESPONSES`/`SERVICE_ERRORS_UNREACHABLE` partition.
+# `WorkflowConfigError` falls in neither, being no `ServiceError` subclass.
+#
+# **Two classes the walk reports belong to neither exception family** —
+# `RuntimeError` (`services._dispatch_write`'s two invariant alarms) and
+# `MemberIdCollisionError` (`repository.ensure_participant`'s namespace
+# refusal, on `POST /shop/api/session`'s path through `Storefront.join`).
+# Neither is a `(route, response)` pair: both are internal-invariant alarms
+# that answer a bare `500`, which is the operator-facing answer they are for,
+# and neither can be caused by anything a client sends. Their reasons live at
+# `NON_FAMILY_RAISES` in the test file, asserted as an **equality** against the
+# four scopes' raises minus the two families — so neither an extended allowlist
+# nor a reason whose raise is gone survives (P13-3, P14-4).
+#
+# **This block is the statement's only home.** §5.1's S9 row is licensed to
+# cite it by file and line; a row that *restates* it makes a second copy with
+# nothing holding the two together, which is how the previous restatement came
+# to name an exception the code does not raise at that call (P14-3, P14-5).
+INHERITED_HANDLERS: dict[type[BaseException], str] = {
+    # FastAPI/Starlette defaults, on every app ever built.
+    StarletteHTTPException: (
+        "the framework default. No `/shop/api` route raises a bare "
+        "`HTTPException` anywhere the guard above reaches — `storefront_api.py` "
+        "and `storefront.py` whole, plus the `Services`/`Repository` methods "
+        "the reach walk measures, closed over their own `self.<name>` calls — "
+        "they raise `StorefrontHTTPError`, whose own handler "
+        "wins the MRO walk (asserted by "
+        "`test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`; "
+        "`_raised_refusals`, which this cited until P11-2, collects "
+        "`StorefrontHTTPError` calls only and so could not see a bare one) — "
+        "and the `405` Starlette raises for an unmatched method is not a "
+        "`(METHOD, path)` this table keys on"
+    ),
+    WebSocketRequestValidationError: (
+        "the framework default; the storefront registers no websocket route"
+    ),
+    # `app.py`'s `_register_error_handlers`, minus `ServiceError`. All eleven
+    # belong to the legacy REST router, which `dev_surface=False` does not
+    # mount and which no storefront route calls into — **except the three
+    # below**, which S9's trigger enqueue made reachable without moving the
+    # reach either guard walks (see this module's own S9 note, above, and
+    # `docs/plans/salesperson-ui.md` §5.1's S9 row). `WorkflowDefNotFoundError`
+    # is not one of the three: its raise sites (`materialize_def`,
+    # `get_workflow_def_structure`, `diff_def_snapshot`) are outside every call
+    # `trigger.maybe_trigger` makes, so its excuse stays true as written —
+    # pinned by `test_the_trigger_never_reads_a_workflow_def_so_that_excuse_stays_pinned`
+    # (P27-2), since neither static guard's walk reaches `trigger.py` at all.
+    WorkflowDefSpecError: "workflow authoring; no storefront route publishes a def",
+    WorkflowDefNotFoundError: "workflow authoring; no storefront route reads a def",
+    WorkflowDefConflictError: "workflow authoring; no storefront route publishes a def",
+    # The three measured exemptions (S9, P23-3's growth of S9e's obligation):
+    # reached only through `trigger.maybe_trigger` → `services.start_workflow_run`
+    # / `resume_workflow_run` on the storefront's own turn worker, **after**
+    # `POST /shop/api/messages` has already answered its `200` — never a
+    # `(route, response)` pair, so no §5.2/§5.3 row, per the standard
+    # `WorkflowConfigError`'s row already sets (P11-1). `_run_turn`'s own
+    # `except Exception` (storefront.py) isolates whichever of the three fires
+    # and surfaces it as `turn.lastTurn == "failed"` on the participant's next
+    # `GET /shop/api/state` — measured at that response boundary, not at the
+    # raise, because the raise itself is invisible to both guards
+    # (`SERVICE_LAYER_REACH_TODAY`'s own comment names the call site,
+    # `trigger.py:82`, as outside all four scopes either walks).
+    WorkflowRunNotFoundError: (
+        "reached via `trigger.maybe_trigger` on the turn worker (§4.4) when "
+        "`start_workflow_run`'s snapshot/trigger-message anchor misses; "
+        "isolated by `_run_turn`'s own failure-handling and surfaced as "
+        "`turn.lastTurn == 'failed'`, never a `(route, response)` pair since "
+        "the `200` has already been sent — measured by "
+        "`test_a_missing_start_snapshot_reached_via_the_trigger_isolates_and_reports_failed`"
+    ),
+    WorkflowRunNotWaitingError: "run control; no storefront route resumes a run",
+    WorkflowInputRejectedError: (
+        "reached via `trigger.maybe_trigger` on the turn worker (§4.4) when "
+        "`start_workflow_run`'s `run_ctx` (§4.5's `{\"language\": …}`) exceeds "
+        "`MAX_CONFIG_LEN`; isolated by `_run_turn`'s own failure-handling and "
+        "surfaced as `turn.lastTurn == 'failed'`, never a `(route, response)` "
+        "pair since the `200` has already been sent — measured by "
+        "`test_an_oversized_run_ctx_reached_via_the_trigger_isolates_and_reports_failed`"
+    ),
+    WorkflowConfigError: "guard evaluation, inside the executor — off the request path",
+    WorkflowEngineDisabledError: (
+        "reached via `trigger.maybe_trigger` on the turn worker (§4.4) "
+        "whenever `Services._executor` is unwired; isolated by `_run_turn`'s "
+        "own failure-handling and surfaced as `turn.lastTurn == 'failed'`, "
+        "never a `(route, response)` pair since the `200` has already been "
+        "sent — measured by "
+        "`test_an_unwired_executor_reached_via_the_trigger_isolates_and_reports_failed`. "
+        "It is also raised by the legacy `POST /workflow-runs`, which is not "
+        "mounted here — but that is no longer why it is excused"
+    ),
+    SearchNotAvailableError: (
+        "raised by `search_documents`, which no storefront route calls"
+    ),
+}
+
+# The one inherited handler the storefront **overrides** instead of excusing,
+# because it is the one that provably fires: the storefront calls the same
+# `services` layer the legacy surface does, and `app.py`'s handler answers
+# `{"error": "<Python class name>"}` — which is not a contract. §5.3's client
+# rules dispatch on a plan token, so a class name reaching a participant is an
+# unruled `(route, response)` arriving from the server (P10-1).
+RESHAPED_HANDLERS: frozenset[type[BaseException]] = frozenset({ServiceError})
+
+# `ServiceError` subclass -> the storefront response it re-shapes into. Keyed
+# by **type**, not by route, so the mapping is total over the family wherever
+# it fires; which routes it can fire *on* is `SERVICE_ERROR_ROUTES` below.
+#
+# `ThreadNotFoundError`/`UnknownActorError` say the participant's own `Thread`
+# or `User` is gone — the reset window `Storefront._await_quiesce`'s docstring
+# names. Their honest answer is **C3's `401`**: the credential names nothing
+# live, and `resolve_token` (which re-reads the graph on every call) answers
+# `401` on the very next request anyway, so this converges the race with the
+# steady state instead of inventing a third outcome.
+#
+# `UnknownMemberError` is a different thing wearing the same class: the demo
+# `Agent` in `mentions=[agent_id]` is gone. That is not the participant's
+# session, it is §4.9's preflight condition failing *late* — the same operator
+# error `DemoNotSeededError` reports from `join`, so it takes the same token
+# and the same C9 rule ("nothing changed": `_validate_and_derive_role` raises
+# **before** any write).
+SERVICE_ERROR_RESPONSES: dict[type[ServiceError], tuple[int, str]] = {
+    ThreadNotFoundError: (401, "invalid_token"),
+    UnknownActorError: (401, "invalid_token"),
+    UnknownMemberError: (503, "demo_not_seeded"),
+}
+
+# Every other `ServiceError` subclass, with the reason no `/shop/api` route can
+# raise it. **The guard, not the list, is the mechanism**: the tests assert
+# that this dict plus `SERVICE_ERROR_RESPONSES` partition the subclasses of
+# `ServiceError` exactly, so an eighth subclass cannot join the family
+# unnoticed — the same structural shape `StorefrontError`'s guard has.
+SERVICE_ERRORS_UNREACHABLE: dict[type[ServiceError], str] = {
+    ChannelNotFoundError: (
+        "raised by `ensure_thread` from a `channel_id` the caller supplies; no "
+        "storefront route addresses a channel at all (§5.2's invariant)"
+    ),
+    InvalidSearchQueryError: "full-text search; no storefront route searches",
+    EmptyDocumentError: "document ingestion; no storefront route ingests",
+    DocumentTooLargeError: "document ingestion; no storefront route ingests",
+    BatchTooLargeError: "document ingestion; no storefront route ingests",
+    AgentNotFoundError: "document ingestion; no storefront route ingests",
+    MatchNotFoundError: "entity-match confirmation; no storefront route touches it",
+    DocumentNotFoundError: "document deletion; no storefront route deletes documents",
+    DocumentUpdateNotFoundError: (
+        "document-update confirmation; no storefront route touches it"
+    ),
+    MessageTooLongError: (
+        "`services.post_message`'s `MAX_TEXT_LEN` re-check (K-099) — "
+        "`PostMessageIn.text` caps at `MAX_MESSAGE_TEXT_LEN` (2000), below "
+        "`MAX_TEXT_LEN`, so `422 validation_failed` answers first and this is "
+        "unreachable from any client"
+    ),
+    InputBoundError: (
+        "K-101's stored-value bounds; the one this surface calls is "
+        "`services.post_message`'s, and it cannot fire: `PostMessageIn.text`'s "
+        "`_nonblank` validator answers `422 validation_failed` for blank text "
+        "first, and the route always sends `mentions=[agent_id]`, one of 50; "
+        "no storefront route creates a channel or thread or ingests a document "
+        "through `Services` (`Storefront.join` creates its channel and thread "
+        "via `repo.ensure_participant`, which carries no K-101 check)"
+    ),
+    UnknownQuotedMessageError: (
+        "`services.post_message`'s K-094 quote check — `POST /shop/api/messages` "
+        "never passes `quoted_id` (its `PostMessageIn` has no `quotedId` field), "
+        "so the §4 write always reports `quotedFound=true` and this is "
+        "unreachable from any client"
+    ),
+    UnknownOrderTransitionError: (
+        "`services.advance_order`'s guard on an unknown transition string — "
+        "`AdvanceOrderIn.transition` is a `Literal` of exactly the three it "
+        "accepts, so `422 validation_failed` answers first and this is "
+        "unreachable from any client (§5.3 C11)"
+    ),
+}
+
+# The routes a `ServiceError` can actually be raised on, and therefore the
+# cross-product input for the handler above. **Derived by execution, not by
+# reading**: `test_only_post_messages_can_raise_a_service_error` arms each of
+# the three faults in turn and drives all eleven routes, so this set is a
+# measurement rather than a hand-list (`docs/reviews/salesperson-ui-impl.md`
+# `## Pass 10`, P10-11's objection to hand-maintained route sets). It is one
+# route because `POST /shop/api/messages` is the only route whose call reaches
+# `services._validate_and_derive_role`; every other route's service calls are
+# thin reads and writes over the repository, which raises no `ServiceError`.
+SERVICE_ERROR_ROUTES: frozenset[tuple[str, str]] = frozenset(
+    {("POST", f"{API_PREFIX}/messages")}
+)
+
+
+def service_error_response(exc: BaseException) -> tuple[int, str] | None:
+    """`(status, error token)` for one `ServiceError`, or `None` when the
+    storefront has no mapping for it.
+
+    The seam, in the same sense `cross_cutting_response` is one: the live
+    handler and the gate both read it, so a mapping the gate believes in and a
+    handler that has drifted from it cannot coexist. `None` is not a hole — it
+    is the answer the subclass guard exists to keep unreachable.
+    """
+    for klass in type(exc).__mro__:
+        if klass in SERVICE_ERROR_RESPONSES:
+            return SERVICE_ERROR_RESPONSES[klass]
+    return None
+
+
+def _make_service_error_handler(inherited):  # noqa: ANN001, ANN202
+    """The path-scoped `ServiceError` re-shaper (P10-1).
+
+    Two axes, both delegating rather than duplicating. **Off `/shop/api`** the
+    request belongs to whatever else this app serves, and the answer is
+    `inherited` — captured, not re-implemented, so the legacy envelope has one
+    definition and this cannot drift from it. **On `/shop/api` with no
+    mapping** the storefront has nothing honest to say, so it says so in the
+    log and still delegates: a class name reaching a participant is a defect,
+    but inventing a token for a subclass nobody classified would be a worse
+    one. The subclass guard in the tests is what keeps that branch dead.
+
+    **Which mechanism is load-bearing for which claim** (P11-3 — the commit
+    message and §5.3's third narrowing both credited the path check with
+    something it does not do). The delivered legacy surface is byte-identical
+    because this handler is *absent* from it: `create_app` refuses
+    `storefront and dev_surface` together (`app.py:278`) and registers this
+    only `if shop is not None`, so no app that mounts `api.build_router` ever
+    carries it — that, not the path check, is what
+    `test_the_default_deployment_is_untouched_by_the_storefront_parameters`
+    passes on. The path check is what makes the handler correct on an app that
+    carries **both** surfaces, which is a property of the handler rather than
+    of any deployment, so it is pinned by execution against exactly such an app
+    in `test_the_service_error_re_shaper_answers_only_on_shop_api` — without
+    which `startswith(API_PREFIX)` → `True` is a mutation the whole file
+    survives (N-A).
+    """
+
+    async def _handle_service_error(request, exc):  # noqa: ANN001
+        if request.url.path.startswith(API_PREFIX):
+            answer = service_error_response(exc)
+            if answer is not None:
+                status, token = answer
+                return JSONResponse(
+                    status_code=status,
+                    content={"error": token, "detail": str(exc)},
+                )
+            _log.error(
+                "%s reached %s %s with no storefront mapping — the response "
+                "carries a Python class name where §5.3 expects a plan token",
+                type(exc).__name__, request.method, request.url.path,
+            )
+        result = inherited(request, exc)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
+    return _handle_service_error
+
+
+def register_storefront_error_handlers(app: FastAPI) -> None:
+    """Register the storefront's error map on `app` (§5.1 S8).
+
+    Typed throughout, in this codebase's own stated idiom — "without a blanket
+    handler masking real bugs" (`app.py`). Registered on the **storefront**
+    deployment only: the `503 graph_unavailable` half would be an improvement
+    everywhere, but the `504 <op>_state_unknown` half is meaningless without
+    `ROUTE_CLASSES`, and widening the map to the legacy surface is not S8's.
+
+    **Must run after `app.py`'s `_register_error_handlers`**, which is where
+    the `ServiceError` handler this one wraps comes from. Asserted rather than
+    assumed: an absent inherited handler raises here, at wiring time, instead
+    of surfacing as a `TypeError` inside an exception handler on the first
+    `ServiceError` a participant provokes.
+    """
+    inherited_service_error = app.exception_handlers.get(ServiceError)
+    if inherited_service_error is None:
+        raise RuntimeError(
+            "register_storefront_error_handlers must run after "
+            "_register_error_handlers — the storefront's ServiceError handler "
+            "re-shapes on /shop/api and delegates to the inherited one "
+            "everywhere else, and there is nothing to delegate to"
+        )
+    app.add_exception_handler(
+        ServiceError, _make_service_error_handler(inherited_service_error)
+    )
+    app.add_exception_handler(StorefrontHTTPError, _handle_storefront_http_error)
+    app.add_exception_handler(RequestValidationError, _handle_validation_error)
+    app.add_exception_handler(FalkorDBUnreachableError, _handle_graph_unavailable)
+    app.add_exception_handler(
+        redis_exceptions.ConnectionError, _handle_graph_unavailable
+    )
+    app.add_exception_handler(redis_exceptions.TimeoutError, _handle_graph_timeout)
+
+
+# ── S10 tombstone ─────────────────────────────────────────────────────────────
+#
+# Through S8/S9 this section held `_STEP_10_INTERIM` (the move's inventory) and
+# `_PresenterSessions` (the presenter's in-process token store). Both moved to
+# `storefront.py` at S10: the store is now `Storefront`'s own
+# `_presenter_sessions`, minted and verified by `presenter_login`/
+# `verify_presenter_token`, and the router below calls those instead of
+# holding either piece itself. See `storefront.py`'s module docstring for the
+# delivered shape.
+
+
+# ── the router ───────────────────────────────────────────────────────────────
+
+
+def build_storefront_router(shop: Storefront) -> APIRouter:
+    """The eleven `/shop/api` routes (§5.2), to be included at `API_PREFIX`.
+
+    Every route carries a `responses={…}` declaration naming **its own**
+    returns — its status codes and their error tokens, and *not* the three
+    cross-cutting ones, which come from the handler set. FastAPI keeps them on
+    the route object, so the second half of S8's gate reads them back off
+    `app.routes` instead of reading this file.
+    """
+    # One documented coupling instead of several scattered ones, the same
+    # posture `Storefront.__init__` takes towards `Services._repo` and for the
+    # same reason: `Storefront` exposes no accessor for these two. `repo` and
+    # `presenter_key` — the two private reads S10 needed here — are gone: both
+    # moved onto `Storefront` with the presenter routes' bodies
+    # (`presenter_login`, `list_participants`, `reset_all`).
+    services = shop._services  # noqa: SLF001 — the post/read/order service calls
+    agent_id = shop._agent_id  # noqa: SLF001 — the mention every post carries
+
+    router = APIRouter()
+
+    # ── the two credential dependencies (§5.3's credentials table) ───────────
+
+    def get_participant(
+        authorization: str | None = Header(default=None),
+    ) -> ParticipantRecord:
+        """Resolve `Bearer <participantId>.<token>` against the **graph**.
+
+        `resolve_token` is the only participant-resolution path there is — it
+        always re-reads the graph, so a deleted participant stops resolving
+        immediately rather than lingering out of stale memory.
+
+        A *presenter* token presented here parses as participant id
+        `"presenter"`, which no `User` carries, so it resolves to `None` and
+        answers the same `401` as any other bad credential — the auth matrix's
+        second row, held structurally rather than by a special case.
+        """
+        record = shop.resolve_token(authorization)
+        if record is None:
+            raise StorefrontHTTPError(
+                401, "invalid_token", "no valid participant credential"
+            )
+        return record
+
+    def get_presenter(authorization: str | None = Header(default=None)) -> None:
+        """Verify `Bearer presenter.<presenterToken>`.
+
+        §5.3 keeps two responses apart here, and the split is the contract —
+        **stated as the branch below rather than as what it means**, because
+        the looser reading is wider than the code
+        (`docs/reviews/salesperson-ui-impl.md` `## Pass 16`, P16-3):
+
+        - **`403` wrong credential type** only when `parse_bearer` *succeeds*
+          and the principal half is something other than `presenter` — a
+          participant token, typically.
+        - **`401` presenter session gone** for everything else: no header, any
+          header `parse_bearer` rejects (a non-`Bearer` scheme, a missing `.`,
+          an empty half — so `Basic abc`, `Bearer garbage` and
+          `Bearer presenter` all answer `401`, not `403`), and a presenter
+          token this process never minted.
+
+        C2 clears the presenter credential on both; the client cannot act on
+        the difference, but the auth matrix can.
+        """
+        parsed = parse_bearer(authorization)
+        if parsed is None:
+            raise StorefrontHTTPError(
+                401, "presenter_session_gone", "no presenter credential"
+            )
+        principal, token = parsed
+        if principal != PRESENTER_PRINCIPAL:
+            raise StorefrontHTTPError(
+                403, "wrong_credential_type", "not a presenter credential"
+            )
+        if not shop.verify_presenter_token(token):
+            raise StorefrontHTTPError(
+                401, "presenter_session_gone", "presenter session not recognised"
+            )
+
+    # ── no graph access (§5.3) ──────────────────────────────────────────────
+
+    @router.get(
+        "/health",
+        responses={
+            200: {
+                "description": "liveness + the locale list S12c's chooser reads",
+                "x-storefront-tokens": ["ok"],
+            }
+        },
+    )
+    def health() -> dict[str, Any]:
+        """§5.3: deliberately **does not touch the graph**, unlike the
+        platform's `/health`.
+
+        Its two consumers are a liveness probe and S12c's locale chooser, which
+        must render on the join screen before anything else works; coupling it
+        to the graph would hide the language list during an outage and buy
+        nothing, because the storefront deployment already carries the
+        graph-pinging liveness at the bare `GET /health` (§4.9 move 1).
+
+        `storefrontEnabled` reports **this app's own wiring**, not
+        `config.STOREFRONT_ENABLED`. Reading the module constant here would
+        repeat exactly the defect §4.9 rules out for the route-table assertion:
+        `config.py` resolves every flag at *import* time, so every test that
+        builds the app through `create_app(storefront=True, dev_surface=False)`
+        would be told the storefront is disabled by the storefront's own route.
+        Reaching this route *is* the answer, and in production both derive from
+        the one flag anyway (`_build_default_app`).
+        """
+        return {
+            "status": "ok",
+            "storefrontEnabled": True,
+            "locales": list(shop.locales),
+        }
+
+    @router.post(
+        "/presenter/session",
+        responses={
+            200: {
+                "description": "the presenter credential",
+                "x-storefront-tokens": ["ok"],
+            },
+            403: {
+                "description": "wrong key — or no key configured at all",
+                "x-storefront-tokens": ["bad_presenter_key"],
+            },
+            422: {
+                "description": "missing or blank `key` (C11, user-supplied)",
+                "x-storefront-tokens": ["validation_failed"],
+            },
+        },
+    )
+    def presenter_session(body: PresenterSessionIn) -> dict[str, Any]:
+        """Key -> token, **entirely in-process** (§5.3's `no graph access`) —
+        `Storefront.presenter_login` (S10) owns the check, the fixed
+        per-attempt delay and the observational failure count; this route
+        only maps its one refusal.
+        """
+        try:
+            return {"token": shop.presenter_login(body.key)}
+        except BadPresenterKeyError as exc:
+            raise StorefrontHTTPError(
+                403, BadPresenterKeyError.code, str(exc)
+            ) from exc
+
+    # ── the participant surface ─────────────────────────────────────────────
+
+    @router.post(
+        "/session",
+        responses={
+            200: {
+                "description": "the participant credential, minted once",
+                "x-storefront-tokens": ["ok"],
+            },
+            422: {
+                "description": "`displayName` bounds (user-supplied) or "
+                               "`language` not in `locales` (UI-supplied) — C11",
+                "x-storefront-tokens": ["validation_failed"],
+            },
+            503: {
+                "description": "the demo `Agent` is gone, so `ensure_participant` "
+                               "wrote **nothing** — §4.9's preflight condition "
+                               "failing late (C9)",
+                "x-storefront-tokens": ["demo_not_seeded"],
+            },
+        },
+    )
+    def join(body: JoinIn) -> dict[str, Any]:
+        """Provision a participant and mint their credential (§4.3, §4.10).
+
+        **Not idempotent**, decided rather than engineered away (§5.3 C4, R12):
+        a lost response leaves a `User` with a `tokenHash` nobody holds. The
+        alternative — a client-supplied idempotency nonce — would reopen
+        delivered S6 to close a window that needs a FalkorDB socket timeout
+        during the one write a participant makes before they hold any state.
+
+        **`DemoNotSeededError` is `503 demo_not_seeded`, and the argument that
+        it could be left unmapped was wrong** (`docs/reviews/salesperson-ui-impl.md`
+        `## Pass 10`, P10-2). S8 first argued it unreachable because
+        `storefront_preflight` asks the identical `resolve_member_kinds`
+        question at boot and the demo `Agent` survives both resets — but **the
+        preflight is a boot-time check, not an invariant**: deleting the
+        `Agent` out of band after a clean start reproduced a bare
+        `500 Internal Server Error`, in plain text, against the delivered app.
+        Nothing was written when it fires (`ensure_participant` reports
+        `agentMissing` having created nothing), so this is exactly C9's
+        *nothing changed* and the plan carries the row (§5.3, v1.20).
+        """
+        if body.language not in shop.locales:
+            # The same `RequestValidationError` Pydantic would have raised, so
+            # this is one response shape and one code path — and `loc`'s last
+            # element is `language`, which is the field C11 branches on.
+            raise RequestValidationError(
+                [
+                    {
+                        "type": "value_error",
+                        "loc": ("body", "language"),
+                        "msg": f"language must be one of {list(shop.locales)}",
+                        "input": body.language,
+                    }
+                ]
+            )
+        try:
+            record = shop.join(body.displayName, body.language)
+        except DemoNotSeededError as exc:
+            raise StorefrontHTTPError(503, "demo_not_seeded", str(exc)) from exc
+        return {
+            "participantId": record.participant_id,
+            "token": record.token,
+            "displayName": record.display_name,
+            "language": record.language,
+            "welcome": _welcome(record.display_name, record.language),
+        }
+
+    @router.get(
+        "/state",
+        responses={
+            200: {
+                "description": "profile, cart, order and turn — the 2 s poll",
+                "x-storefront-tokens": ["ok"],
+            },
+            401: {
+                "description": "credential rejected (C3)",
+                "x-storefront-tokens": ["invalid_token"],
+            },
+        },
+    )
+    def state(who: ParticipantRecord = Depends(get_participant)) -> dict[str, Any]:
+        return shop.get_state(shop.context_for(who.participant_id))
+
+    @router.get(
+        "/messages",
+        responses={
+            200: {
+                "description": "the participant's own thread, server-resolved",
+                "x-storefront-tokens": ["ok"],
+            },
+            401: {
+                "description": "credential rejected (C3)",
+                "x-storefront-tokens": ["invalid_token"],
+            },
+            422: {
+                "description": "`since`/`limit` out of range (C11, UI-supplied)",
+                "x-storefront-tokens": ["validation_failed"],
+            },
+        },
+    )
+    def messages(
+        who: ParticipantRecord = Depends(get_participant),
+        since: int = Query(0, ge=0),
+        limit: int = Query(DEFAULT_MESSAGE_PAGE, ge=1, le=MAX_MESSAGE_PAGE),
+    ) -> list[dict[str, Any]]:
+        """The participant's transcript since `since` — **a pure read**.
+
+        `since` is always passed explicitly, and that is what puts this route in
+        §5.3's `reads-only` class rather than in `writes`: `services.read_messages`
+        with no `since` takes its cursor path, which *advances the cursor* — a
+        write, on a route polled every 2 s, whose `503`/`504` meaning would then
+        be wrong. The thread id comes from the resolved record, never from the
+        client (§5.2).
+        """
+        return services.read_messages(
+            shop.context_for(who.participant_id),
+            thread_id=who.thread_id, since=since, limit=limit,
+        )
+
+    @router.post(
+        "/messages",
+        responses={
+            200: {
+                "description": "the posted row",
+                "x-storefront-tokens": ["ok"],
+            },
+            401: {
+                "description": "credential rejected (C3)",
+                "x-storefront-tokens": ["invalid_token"],
+            },
+            409: {
+                "description": "that participant already has a turn in flight — "
+                               "**nothing written** (§4.4 measure 1a, C6a)",
+                "x-storefront-tokens": ["turn_in_progress"],
+            },
+            422: {
+                "description": "`text` bounds (C11, user-supplied)",
+                "x-storefront-tokens": ["validation_failed"],
+            },
+            503: {
+                "description": "the post landed in the shutdown window and "
+                               "`enqueue_turn` found the flag already set at "
+                               "its pre-`submit` read — the message is "
+                               "written, no reply is coming (§5.1's S9 row, "
+                               "C14). **Not** the same `503` as "
+                               "`demo_not_seeded`: that one means nothing "
+                               "changed, this one means something did",
+                "x-storefront-tokens": ["turn_not_scheduled"],
+            },
+            500: {
+                "description": "the two refusals `enqueue_turn` can still "
+                               "raise out of `submit` itself — a "
+                               "`shutdown_turns()` landing in the read→submit "
+                               "gap, or thread exhaustion, which queues the "
+                               "work item before it fails so the turn *does* "
+                               "run — plus any unmapped exception out of "
+                               "`services.post_message`. All three are C13's "
+                               "residual, deliberately untyped: widening "
+                               "`turn_not_scheduled` to cover the exhaustion "
+                               "shape would make the token a lie (§5.1's S9 "
+                               "row, `docs/reviews/salesperson-ui-impl.md` "
+                               "`## Pass 23`, P23-2)",
+                "x-storefront-tokens": ["unhandled"],
+            },
+        },
+    )
+    def post_message(
+        body: PostMessageIn, who: ParticipantRecord = Depends(get_participant)
+    ) -> dict[str, Any]:
+        """Post into the participant's own thread, refusing **before** the write
+        when a turn is already in flight (§4.4 measure 1a).
+
+        The refusal is pre-write and server-side on purpose: `trigger` resumes
+        only a `waiting` run, so a message posted while the first turn is still
+        running starts a *second* `WorkflowRun` on the same thread — and a
+        written message with no reply sits in the transcript forever.
+
+        **The gate is a reservation, and that is a clause of sequence rather
+        than a different route shape** (§4.4 measure 1a). `shop.reserve_turn`
+        performs the check and the booking as **one** test-and-set under the
+        turn lock, and its `None` **is** the `409` — raised here, still before
+        the write. A check on this thread followed by a booking after the write
+        let two posts from one participant both book: the turn map holds one
+        slot per participant, so the first worker's clear erased the second,
+        still-running turn's entry and `turn_in_flight` reported idle under a
+        live turn (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-1).
+
+        **Every path from here that never reaches a worker releases the
+        reservation.** `services.post_message` raising is one and a refused
+        `submit` is the other (`Storefront.enqueue_turn` owns the second). A
+        leaked booking `409`-locks that participant for the life of the process
+        (P17-3) — and, worse, §5.3's `504 post_state_unknown` reconciliation
+        then decides *wrongly* rather than losing information, parking that
+        client in *wait, as normal* forever for a turn nobody will run
+        (§5.3 C6b; `## Pass 18`, question 2).
+
+        **The turn is enqueued behind the write, and does not run here**
+        (§4.4 measure 1, §5.1's S9 row). `Storefront.enqueue_turn` submits the
+        reserved turn to the storefront's own bounded executor; the trigger —
+        and therefore `services.start_workflow_run`, up to eight chat
+        completions against a 180 s agent timeout — runs on that worker. This
+        route answers as soon as the message is written, which is why the
+        response never carries a workflow failure: by the time one can happen
+        the `200` has been sent, and the participant's evidence is
+        `GET /shop/api/state`'s `turn` block.
+
+        **The `Future` `enqueue_turn` returns is discarded here, and that is now
+        a deliberate no-op rather than a dropped handle** (P17-9). Waiting on it
+        would undo everything the paragraph above buys; retaining it is
+        `Storefront`'s job and `enqueue_turn` already does it, hanging the future
+        on the booking's own map entry so reset-mine can cancel a turn the pool
+        has not started (S9b). Nothing on this path needs a second copy.
+
+        The gate and the `mentions` are here because both are properties of the
+        *post*, not of the queue. **No `_safe_embed`** (§4.4 measure 3):
+        the `salesperson` def has no `graphrag_retrieve`, so embedding a
+        storefront message is pure GPU contention for zero benefit — and it is
+        the second structural barrier under §4.3 part 4.
+
+        The participant's `ParticipantRecord` is handed to `enqueue_turn`
+        rather than re-resolved on the worker: this thread has already read it
+        from the graph, and it carries the `language` §4.5's `run_ctx` needs.
+        """
+        booking = shop.reserve_turn(who.participant_id)
+        if booking is None:
+            raise StorefrontHTTPError(
+                409, "turn_in_progress", "a turn is already in flight"
+            )
+        ctx = shop.context_for(who.participant_id)
+        try:
+            posted = services.post_message(
+                ctx, thread_id=who.thread_id, text=body.text, mentions=[agent_id],
+            )
+        except BaseException:
+            shop.release_turn(who.participant_id, booking)
+            raise
+        # `enqueue_turn` already released the booking on this branch (§5.1's
+        # S9 row) — this `except` only reshapes the exception, C14. The other
+        # two refusals `enqueue_turn` can raise out of `submit` itself stay a
+        # bare `RuntimeError`, uncaught here on purpose: C13's residual (P23-2).
+        try:
+            shop.enqueue_turn(ctx, who, posted, booking)
+        except TurnNotScheduledError as exc:
+            raise StorefrontHTTPError(503, "turn_not_scheduled", str(exc)) from exc
+        return posted
+
+    @router.get(
+        "/catalog",
+        responses={
+            200: {
+                "description": "every product with `imageUrl` or `null` (§4.7)",
+                "x-storefront-tokens": ["ok"],
+            },
+            401: {
+                "description": "credential rejected (C3)",
+                "x-storefront-tokens": ["invalid_token"],
+            },
+        },
+    )
+    def catalog(
+        _who: ParticipantRecord = Depends(get_participant),
+    ) -> list[dict[str, Any]]:
+        return shop.list_catalog()
+
+    @router.post(
+        "/order/advance",
+        responses={
+            200: {
+                "description": "`{orderId, status}` after the transition",
+                "x-storefront-tokens": ["ok"],
+            },
+            401: {
+                "description": "credential rejected (C3)",
+                "x-storefront-tokens": ["invalid_token"],
+            },
+            404: {
+                "description": "no current order of theirs — an ordinary stale "
+                               "button, never an auth failure (C10)",
+                "x-storefront-tokens": ["no_current_order"],
+            },
+            409: {
+                "description": "the CAS guard did not match — the order already "
+                               "moved on (C10)",
+                "x-storefront-tokens": ["order_transition_refused"],
+            },
+            422: {
+                "description": "unknown `transition` (C11, UI-supplied)",
+                "x-storefront-tokens": ["validation_failed"],
+            },
+        },
+    )
+    def advance_order(
+        body: AdvanceOrderIn, who: ParticipantRecord = Depends(get_participant)
+    ) -> dict[str, Any]:
+        """Drive one lifecycle transition on the participant's **own** order.
+
+        The order id comes from server-side state (§4.6), never from the body —
+        which is what makes both refusals below mean *stale*, never *someone
+        else's*. `advance_own_order` re-checks ownership anyway
+        (`services.order_belongs_to_customer` before the CAS), so the guarantee
+        is structural at two layers rather than by this route's discipline.
+        """
+        ctx = shop.context_for(who.participant_id)
+        current = services.get_current_order(ctx)
+        if current is None:
+            raise StorefrontHTTPError(
+                404, "no_current_order", "no current order for this participant"
+            )
+        try:
+            return shop.advance_own_order(
+                ctx, order_id=current["orderId"], transition=body.transition
+            )
+        except UnknownOrderError as exc:
+            # The order was theirs a moment ago and is not now — a reset or a
+            # racing sweep. Same answer as "no order of theirs": §4.6 makes the
+            # two indistinguishable by construction.
+            raise StorefrontHTTPError(
+                404, "no_current_order", str(exc)
+            ) from exc
+        except OrderTransitionRefusedError as exc:
+            raise StorefrontHTTPError(
+                409, "order_transition_refused", str(exc), status=exc.status
+            ) from exc
+
+    @router.post(
+        "/reset",
+        responses={
+            200: {
+                "description": "`{threadId, language}` — the token survives, so "
+                               "the client returns to the language step (C7)",
+                "x-storefront-tokens": ["ok"],
+            },
+            401: {
+                "description": "credential rejected (C3)",
+                "x-storefront-tokens": ["invalid_token"],
+            },
+            404: {
+                "description": "zero rows — not a participant, or already "
+                               "deleted (C3)",
+                "x-storefront-tokens": ["unknown_participant"],
+            },
+            409: {
+                "description": "`scoped=false` — nothing was reset and nothing "
+                               "will be until the graph is repaired (C6b)",
+                "x-storefront-tokens": ["unscoped_participant"],
+            },
+            503: {
+                "description": "quiesce timeout — **nothing changed** (C9)",
+                "x-storefront-tokens": ["quiesce_timeout"],
+            },
+            504: {
+                "description": "the delete may have committed (§4.8 F8, C4). "
+                               "**Produced by the route**, not by the typed "
+                               "handler, which must not pre-empt it",
+                "x-storefront-tokens": ["reset_state_unknown"],
+            },
+            500: {
+                "description": "a `Thread` UNIQUE violation (or any other "
+                               "unmapped graph error) propagates as `5xx` and "
+                               "is **never retried** (§5.2, C12)",
+                "x-storefront-tokens": ["unhandled"],
+            },
+        },
+    )
+    def reset(who: ParticipantRecord = Depends(get_participant)) -> dict[str, Any]:
+        """"Reset mine" — cancel what is only queued, quiesce the rest, then one
+        atomic delete (§4.8).
+
+        Takes the authenticated record rather than a bare id, so the profile
+        re-write costs no second read: `resolve_token` has just read
+        `displayName`/`language` from the graph on this same request, and those
+        are exactly the fields the reset does not touch.
+
+        **The `503` above did not change meaning when S9b added the cancel**, and
+        C9's "retry is safe" is unaffected: the cancel runs in front of the wait,
+        never in place of it, so a `503` still means the graph was not touched —
+        it now additionally means the turn was **not cancellable** when the reset
+        asked (already on a worker, or reserved by a second tab still inside its
+        message write). `Storefront.reset_participant` carries the one exotic
+        case in which a cancel and a `503` coincide.
+        """
+        try:
+            return shop.reset_participant(who)
+        except QuiesceTimeoutError as exc:
+            raise StorefrontHTTPError(503, "quiesce_timeout", str(exc)) from exc
+        except UnscopedParticipantError as exc:
+            raise StorefrontHTTPError(
+                409, UnscopedParticipantError.code, str(exc)
+            ) from exc
+        except UnknownParticipantError as exc:
+            raise StorefrontHTTPError(404, "unknown_participant", str(exc)) from exc
+        except ResetStateUnknownError as exc:
+            raise StorefrontHTTPError(
+                504, ResetStateUnknownError.code, str(exc), state=exc.state
+            ) from exc
+
+    # ── the presenter surface (S10) ──────────────────────────────────────────
+
+    @router.get(
+        "/presenter/participants",
+        responses={
+            200: {
+                "description": "the roster — exactly §5.2's four keys",
+                "x-storefront-tokens": ["ok"],
+            },
+            401: {
+                "description": "presenter session gone (C2)",
+                "x-storefront-tokens": ["presenter_session_gone"],
+            },
+            403: {
+                "description": "wrong credential type — a participant token "
+                               "(the auth matrix, C2)",
+                "x-storefront-tokens": ["wrong_credential_type"],
+            },
+        },
+        dependencies=[Depends(get_presenter)],
+    )
+    def presenter_participants() -> list[dict[str, Any]]:
+        """§5.2's four keys and nothing more.
+
+        `Storefront.list_participants` (S10) projects six — `channelId` and
+        `threadId` are server-side ids no client needs (§4.3), so they are
+        dropped here rather than narrowed in the query, which both resets
+        also anchor on. **No activity stats**: composing them per participant
+        would be ~150 extra graph queries per presenter poll at 50
+        participants.
+        """
+        return [
+            {
+                "participantId": row["participantId"],
+                "displayName": row["displayName"],
+                "language": row["language"],
+                "joinedAt": row["joinedAt"],
+            }
+            for row in shop.list_participants()
+        ]
+
+    @router.post(
+        "/presenter/reset-all",
+        responses={
+            200: {
+                "description": "`{clearedParticipants}` — plus `incomplete` and "
+                               "`unresolved` when the graph left some "
+                               "participant unresolvable (§5.2)",
+                "x-storefront-tokens": ["ok", "incomplete"],
+            },
+            401: {
+                "description": "presenter session gone (C2)",
+                "x-storefront-tokens": ["presenter_session_gone"],
+            },
+            403: {
+                "description": "wrong credential type (C2)",
+                "x-storefront-tokens": ["wrong_credential_type"],
+            },
+            503: {
+                "description": "quiesce timeout — **nothing changed** (C9)",
+                "x-storefront-tokens": ["quiesce_timeout"],
+            },
+            504: {
+                "description": "the sweep may have committed (§4.8 F8, C4+C5). "
+                               "**Produced by the route**",
+                "x-storefront-tokens": ["reset_state_unknown"],
+            },
+            500: {
+                "description": "an unmapped graph error propagates as `5xx` and "
+                               "is never retried (§5.2, C12) — this query "
+                               "re-mints nothing, so it cannot raise the "
+                               "`Thread` UNIQUE violation reset-mine can",
+                "x-storefront-tokens": ["unhandled"],
+            },
+        },
+        dependencies=[Depends(get_presenter)],
+    )
+    def presenter_reset_all() -> dict[str, Any]:
+        """"Reset everyone" — stop intake, drain, then one atomic sweep
+        (§4.8). `Storefront.reset_all` (S10) owns the whole sequence,
+        including the stop-intake flag S8 deliberately left out of this
+        module; this route only maps its two raises.
+
+        Every participant token is invalidated; the presenter's own is not, so
+        they keep driving the demo through the reset. Their *participant* poll
+        starts `401`-ing within one tick, which is §5.3 C3's headline scenario
+        and C5's evidence.
+        """
+        try:
+            return shop.reset_all()
+        except QuiesceTimeoutError as exc:
+            raise StorefrontHTTPError(503, "quiesce_timeout", str(exc)) from exc
+        except ResetAllStateUnknownError as exc:
+            raise StorefrontHTTPError(
+                504, ResetAllStateUnknownError.code, str(exc),
+                participants=exc.participants,
+            ) from exc
+
+    return router
+
+
+# ── §4.9's readiness preflight ───────────────────────────────────────────────
+
+
+def storefront_preflight(shop: Storefront) -> dict[str, Any]:
+    """Refuse to start a mis-seeded storefront, naming the fix command.
+
+    Three conditions, all of which produce a demo that comes up "green but
+    dead" when they are false: the demo `Agent` resolves in `ws:{WS_ID}` (every
+    storefront post mentions it, and an unresolvable mention raises *before any
+    write*, so every participant's first message would 500); the trigger def's
+    snapshot is materialised into that same workspace (no snapshot, no agent
+    turn); and the catalog is non-empty.
+
+    The image manifest is built here too (§4.7's "at startup only") but is
+    **not** a preflight condition: an empty manifest is a legitimate deployment
+    — the text-only card variant — so the count is logged and startup
+    continues. Building it here rather than leaving it to `list_catalog` is
+    what keeps the first participant's catalog fetch from listing a directory.
+    """
+    ws = shop.ws
+    problems: list[str] = []
+
+    # `resolve_member_kinds` is the same lookup `services.post_message` runs on
+    # every post, so this preflight asks the exact question the demo will.
+    kinds = shop._repo.resolve_member_kinds(  # noqa: SLF001 — see the router
+        ws, ids=[shop._agent_id]  # noqa: SLF001
+    )
+    if kinds.get(shop._agent_id) != "Agent":  # noqa: SLF001
+        problems.append(
+            f"the demo agent {shop._agent_id!r} is not registered in "  # noqa: SLF001
+            f"ws:{ws} — run ./scripts/seed_demo.sh {ws}"
+        )
+
+    ctx = shop.context_for(shop._agent_id)  # noqa: SLF001
+    key, version = config.TRIGGER_DEF_KEY, config.TRIGGER_DEF_VERSION
+    if shop._services.get_snapshot(ctx, key=key, version=version) is None:  # noqa: SLF001
+        problems.append(
+            f"{key}@{version} is not materialized into ws:{ws} — run "
+            f"./scripts/seed_salesperson.sh {ws} (then ./scripts/verify_salesperson.sh {ws})"
+        )
+
+    catalog = shop.list_catalog()
+    if not catalog:
+        problems.append(
+            "the product catalog is empty — run ./scripts/seed_catalog.sh "
+            "(then ./scripts/verify_catalog.sh)"
+        )
+
+    if problems:
+        raise StorefrontPreflightError(
+            "the storefront refuses to start:\n  - " + "\n  - ".join(problems)
+        )
+
+    manifest = shop.build_image_manifest()
+    _log.info(
+        "storefront preflight ok: ws=%s agent=%s def=%s@%s products=%d images=%d",
+        ws, shop._agent_id, key, version, len(catalog), len(manifest),  # noqa: SLF001
+    )
+    return {"products": len(catalog), "images": len(manifest)}

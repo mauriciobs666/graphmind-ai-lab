@@ -145,6 +145,8 @@ class MessageWriteStatus:
     had_head: bool       # first path only: lost the first-post race
     dup_msg: bool        # msgId already exists (retry replay → idempotent success)
     author_found: bool   # authorId resolved to a User or Agent
+    quoted_found: bool = True  # no quote asked, or quotedId resolves in this thread;
+                               # default keeps the §10.1 4-column rows valid
 
 
 @dataclass(frozen=True)
@@ -412,6 +414,15 @@ class Repository:
     #     live-verified on this build.
     #   * Zero rows back = the *anchor* missed (thread / TAIL) → return None; the
     #     service owns the dispatch (QUERIES.md §4 status-row contract).
+    #   * The quote (K-094) resolves via `UNWIND [$quotedId] AS qid` then
+    #     `OPTIONAL MATCH (quoted:Message {msgId: qid})`, never a bare
+    #     `{msgId: $quotedId}`: a NULL parameter in a pattern-property equality
+    #     plans `Node By Label Scan` over every Message (falkordb-quirks.md, "A
+    #     bare pattern-property equality match …"), so every post WITHOUT a quote
+    #     would scan; the rebound variable keeps `Node By Index Scan`. A
+    #     one-element list always yields exactly one row, even `[null]`.
+    #     `quotedId` is therefore always sent (None = no quote); omitting it
+    #     raises `Missing parameters`. Same-thread only (`quoted.threadId`).
 
     @staticmethod
     def _write_status(res) -> MessageWriteStatus | None:
@@ -422,10 +433,12 @@ class Repository:
     def post_first_message(
         self, ws: str, *, thread_id: str, msg_id: str, author_id: str,
         text: str, role: str, created_at: int, mentions: list[str] | None = None,
+        quoted_id: str | None = None,
     ) -> MessageWriteStatus | None:
         """First message in a thread — creates HEAD + TAIL. QUERIES.md §4 v2.
 
-        Mentions ride inside this single GRAPH.QUERY (atomicity rule).
+        Mentions and the optional same-thread quote (`quoted_id` →
+        `REPLY_TO`) ride inside this single GRAPH.QUERY (atomicity rule).
         Returns the status row, or None when the thread anchor is missing.
         """
         res = self._graph(ws).query(
@@ -434,13 +447,17 @@ class Repository:
             "OPTIONAL MATCH (dup:Message {msgId: $msgId}) "
             "OPTIONAL MATCH (ua:User  {userId:  $authorId}) "
             "OPTIONAL MATCH (aa:Agent {agentId: $authorId}) "
-            "WITH t, h, dup, coalesce(ua, aa) AS author "
+            "UNWIND [$quotedId] AS qid "
+            "OPTIONAL MATCH (quoted:Message {msgId: qid}) WHERE quoted.threadId = $threadId "
+            "WITH t, h, dup, coalesce(ua, aa) AS author, quoted "
             "UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid "
             "OPTIONAL MATCH (mu:User  {userId:  mid}) "
             "OPTIONAL MATCH (ma:Agent {agentId: mid}) "
-            "WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems "
-            "WITH t, h, dup, author, mems, "
-            "     (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok "
+            "WITH t, h, dup, author, quoted, collect(DISTINCT coalesce(mu, ma)) AS mems "
+            "WITH t, h, dup, author, quoted, mems, "
+            "     ($quotedId IS NULL OR quoted IS NOT NULL) AS quoteOk "
+            "WITH t, h, dup, author, quoted, mems, quoteOk, "
+            "     (h IS NULL AND dup IS NULL AND author IS NOT NULL AND quoteOk) AS ok "
             "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
             "  CREATE (m:Message {msgId: $msgId, text: $text, role: $role, "
             "                     createdAt: $createdAt, threadId: $threadId}) "
@@ -449,15 +466,18 @@ class Repository:
             "  CREATE (m)-[:POSTED_BY]->(author) "
             "  SET t.updatedAt = $createdAt "
             "  FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) "
+            "  FOREACH (q IN CASE WHEN quoted IS NULL THEN [] ELSE [quoted] END | "
+            "    CREATE (m)-[:REPLY_TO]->(q)) "
             ") "
             "RETURN ok                 AS written, "
             "       h    IS NOT NULL   AS hadHead, "
             "       dup  IS NOT NULL   AS dupMsg, "
-            "       author IS NOT NULL AS authorFound",
+            "       author IS NOT NULL AS authorFound, "
+            "       quoteOk            AS quotedFound",
             {
                 "threadId": thread_id, "msgId": msg_id, "authorId": author_id,
                 "text": text, "role": role, "createdAt": created_at,
-                "mentions": list(mentions or []),
+                "mentions": list(mentions or []), "quotedId": quoted_id,
             },
         )
         return self._write_status(res)
@@ -465,10 +485,12 @@ class Repository:
     def post_subsequent_message(
         self, ws: str, *, thread_id: str, msg_id: str, author_id: str,
         text: str, role: str, created_at: int, mentions: list[str] | None = None,
+        quoted_id: str | None = None,
     ) -> MessageWriteStatus | None:
         """Append a message — moves TAIL forward via NEXT. QUERIES.md §4 v2.
 
-        Mentions ride inside this single GRAPH.QUERY (atomicity rule).
+        Mentions and the optional same-thread quote (`quoted_id` →
+        `REPLY_TO`) ride inside this single GRAPH.QUERY (atomicity rule).
         Returns the status row, or None when the thread has no TAIL yet.
         """
         res = self._graph(ws).query(
@@ -476,13 +498,17 @@ class Repository:
             "OPTIONAL MATCH (dup:Message {msgId: $msgId}) "
             "OPTIONAL MATCH (ua:User  {userId:  $authorId}) "
             "OPTIONAL MATCH (aa:Agent {agentId: $authorId}) "
-            "WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author "
+            "UNWIND [$quotedId] AS qid "
+            "OPTIONAL MATCH (quoted:Message {msgId: qid}) WHERE quoted.threadId = $threadId "
+            "WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author, quoted "
             "UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid "
             "OPTIONAL MATCH (mu:User  {userId:  mid}) "
             "OPTIONAL MATCH (ma:Agent {agentId: mid}) "
-            "WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems "
-            "WITH t, tailRel, prev, dup, author, mems, "
-            "     (dup IS NULL AND author IS NOT NULL) AS ok "
+            "WITH t, tailRel, prev, dup, author, quoted, collect(DISTINCT coalesce(mu, ma)) AS mems "
+            "WITH t, tailRel, prev, dup, author, quoted, mems, "
+            "     ($quotedId IS NULL OR quoted IS NOT NULL) AS quoteOk "
+            "WITH t, tailRel, prev, dup, author, quoted, mems, quoteOk, "
+            "     (dup IS NULL AND author IS NOT NULL AND quoteOk) AS ok "
             "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
             "  CREATE (m:Message {msgId: $msgId, text: $text, role: $role, "
             "                     createdAt: $createdAt, threadId: $threadId}) "
@@ -492,15 +518,18 @@ class Repository:
             "  CREATE (m)-[:POSTED_BY]->(author) "
             "  SET t.updatedAt = $createdAt "
             "  FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) "
+            "  FOREACH (q IN CASE WHEN quoted IS NULL THEN [] ELSE [quoted] END | "
+            "    CREATE (m)-[:REPLY_TO]->(q)) "
             ") "
             "RETURN ok                 AS written, "
             "       false              AS hadHead, "
             "       dup  IS NOT NULL   AS dupMsg, "
-            "       author IS NOT NULL AS authorFound",
+            "       author IS NOT NULL AS authorFound, "
+            "       quoteOk            AS quotedFound",
             {
                 "threadId": thread_id, "msgId": msg_id, "authorId": author_id,
                 "text": text, "role": role, "createdAt": created_at,
-                "mentions": list(mentions or []),
+                "mentions": list(mentions or []), "quotedId": quoted_id,
             },
         )
         return self._write_status(res)
@@ -555,8 +584,8 @@ class Repository:
 
         The §4 subsequent write plus one added guarded UNWIND/FOREACH block that
         resolves seed msgIds to bound `Message` nodes and creates the `EMITTED`
-        edges inside the same guard. Same status-row contract as §4 (None = no
-        TAIL → retry as first). Mentions + seeds both ride inside the single
+        edges inside the same guard. §4's first four columns (no `quotedFound`;
+        None = no TAIL → retry as first). Mentions + seeds both ride inside the single
         GRAPH.QUERY (atomicity rule).
         """
         seed_ids, score_by, rank_by = self._seed_params(seeds)

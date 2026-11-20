@@ -328,6 +328,85 @@ def test_send_message_tool_description_states_the_current_max_text_len(repo):
     assert "at most 8000 characters" in desc
 
 
+
+# ── K-094: send_message quoted_id (through the generated schema) ────────────────
+
+_QUOTE_DETAIL = (
+    "quoted message {q!r} is not a message in thread {t!r}; "
+    "nothing was posted. Retry without the quote, or quote the msgId of a message "
+    "read from this thread."
+)
+
+_QUOTE_DOC = (
+    "Omit `quoted_id` unless you hold the exact `msgId` of a message in thread `re`, "
+    "copied from a `read_messages(re=...)` row; never construct or guess one. A "
+    "`quoted_id` that is not a message in this thread is an error and nothing is posted."
+)
+
+
+def test_send_message_quoted_id_writes_reply_to_and_returns_it(repo, sync_schedule):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    svc = _configure(repo)
+    th = _thread(svc)
+    first = svc.post_message(TEST_CTX, thread_id=th["threadId"], text="one")
+
+    result = asyncio.run(mcp_mod.mcp.call_tool(
+        "send_message", {"body": "re: one", "re": th["threadId"], "quoted_id": first["msgId"]}
+    ))
+
+    posted = _unwrap(result)
+    assert posted["quotedId"] == first["msgId"]
+    assert repo.get_message("test", msg_id=posted["msgId"])["quotedId"] == first["msgId"]
+
+
+def test_send_message_unknown_quoted_id_is_a_tool_error_and_schedules_nothing(repo):
+    from mcp.shared.memory import create_connected_server_and_client_session
+
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    responder = RecordingResponder()
+    worker = RecordingWorker()
+    svc = _configure(repo, responder=responder, embed_worker=worker)
+    th = _thread(svc)
+    svc.post_message(TEST_CTX, thread_id=th["threadId"], text="one")
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *a: fn(*a)  # synchronous: a scheduled job would show
+
+    async def call():
+        async with create_connected_server_and_client_session(
+            mcp_mod.mcp._mcp_server,
+        ) as client:
+            return await client.call_tool(
+                "send_message", {"body": "re", "re": th["threadId"], "quoted_id": "nope"},
+            )
+
+    try:
+        result = asyncio.run(call())
+    finally:
+        mcp_mod._schedule = original
+
+    assert result.isError is True
+    [block] = result.content
+    assert _QUOTE_DETAIL.format(q="nope", t=th["threadId"]) in block.text
+    assert responder.calls == []
+    assert worker.calls == []
+    assert [m["text"] for m in repo.read_thread("test", thread_id=th["threadId"])] == ["one"]
+
+
+def test_send_message_schema_lists_quoted_id_optional_and_unbounded():
+    schema = _tool_schemas()["send_message"]
+
+    assert "quoted_id" in schema["properties"]
+    assert "quoted_id" not in schema.get("required", [])
+    node = _arg(schema, "quoted_id")
+    assert {k for k in _KEYWORDS if k in node} == set()
+
+
+def test_send_message_description_carries_the_quote_guidance():
+    desc = next(
+        t.description for t in asyncio.run(mcp_mod.mcp.list_tools()) if t.name == "send_message"
+    )
+    assert " ".join(_QUOTE_DOC.split()) in " ".join(desc.split())
+
 # ── K-101: bounds declared on the MCP tool signatures (no database) ─────────────
 # Every expected value below is a literal, never a `schemas.MAX_*` constant: the
 # parity test compares MCP against REST, and both read the same constants, so a
