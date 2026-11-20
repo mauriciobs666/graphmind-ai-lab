@@ -1824,18 +1824,19 @@ assert_contains "§14.9 ...and reports currentVersion=false (excluded from searc
 gq "$WS" "MATCH (n:Document) WHERE n.documentId IN ['cd1','cd2'] DETACH DELETE n" > /dev/null
 gq "$WS" "MATCH (c:Chunk) WHERE c.documentId IN ['cd1','cd2'] DETACH DELETE c" > /dev/null
 
-# ── §14.10 update-detection Cypher shapes (document-ingestion2 Stage D, FR-2/
+# ── §14.9 update-detection Cypher shapes (document-ingestion2 Stage D, FR-2/
 # AC-1/AC-2) — analyst review Pass 6 Finding 3: these two shapes were left off
 # the enumerated baseline when Stage D landed; added here per plan §5's
 # "every new Cypher shape... raises the enumerated baseline" instruction ─────
 
 echo ""
-echo "▶ §14.10 update-detection (document-ingestion2 Stage D)"
+echo "▶ §14.9 update-detection (document-ingestion2 Stage D)"
 
-# repository.create_document_with_auto_supersede's atomic write (plan §3.4,
-# repository.py:1779-1838) — verbatim copy of the shipped query. `u1` (Alice)
-# is still the User node seeded back in §2 and never deleted since.
-CREATE_DOC_WITH_AUTO_SUPERSEDE='OPTIONAL MATCH (u:User  {userId:  $ingestedBy}) OPTIONAL MATCH (a:Agent {agentId: $ingestedBy}) WITH u, a, coalesce(u, a) AS ingestor, (coalesce(u, a) IS NOT NULL) AS ok OPTIONAL MATCH (candidate:Document {textNormalizedHash: $textNormalizedHash, currentVersion: true}) WITH u, a, ingestor, ok, candidate ORDER BY candidate.createdAt ASC LIMIT 1 FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (d:Document {documentId: $documentId, title: $title, text: $text, sourceFormat: $sourceFormat, sourceKind: CASE WHEN u IS NOT NULL THEN '"'"'document'"'"' ELSE '"'"'agent'"'"' END, status: '"'"'processing'"'"', pendingJobs: 0, createdAt: $createdAt, currentVersion: true, textNormalizedHash: $textNormalizedHash}) CREATE (d)-[:INGESTED_BY]->(ingestor) FOREACH (ch IN $chunks | CREATE (d)-[:HAS_CHUNK]->(:Chunk {chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId, documentCurrent: true}))) WITH ok, candidate OPTIONAL MATCH (d:Document {documentId: $documentId}) WITH ok, d, candidate, (ok AND candidate IS NOT NULL) AS doSupersede FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END | SET candidate.currentVersion = false, candidate.supersededAt = $createdAt, candidate.supersededBy = '"'"'system'"'"') WITH ok, d, candidate, doSupersede OPTIONAL MATCH (candidate)-[:HAS_CHUNK]->(c:Chunk) WITH ok, d, candidate, doSupersede, collect(c) AS candidateChunks FOREACH (ch IN CASE WHEN doSupersede THEN candidateChunks ELSE [] END | SET ch.documentCurrent = false) WITH ok, d, candidate, doSupersede FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END | CREATE (d)-[:SUPERSEDES {matchId: $matchId, status: '"'"'confirmed'"'"', confidence: 1.0, technique: '"'"'exact_normalized_text_hash'"'"', createdAt: $createdAt, decidedAt: $createdAt, decidedBy: '"'"'system'"'"', resuggestCount: 0, lastResuggestedAt: null}]->(candidate)) RETURN ok AS ingestorFound, d.documentId AS documentId, doSupersede AS autoSuperseded, CASE WHEN doSupersede THEN candidate.documentId ELSE null END AS supersededDocumentId, CASE WHEN doSupersede THEN $matchId ELSE null END AS matchId'
+# repository.create_document_with_auto_supersede's atomic write (plan §3.4) —
+# verbatim copy of the shipped query, actor-resolution branch, with the 8
+# `lshBand<i>` properties K-091 added to the CREATE. `u1` (Alice) is still the
+# User node seeded back in §2 and never deleted since.
+CREATE_DOC_WITH_AUTO_SUPERSEDE='OPTIONAL MATCH (u:User {userId: $ingestedBy}) OPTIONAL MATCH (a:Agent {agentId: $ingestedBy}) WITH coalesce(u, a) AS ingestor, (coalesce(u, a) IS NOT NULL) AS ok, (u IS NOT NULL) AS ingestorIsUser OPTIONAL MATCH (candidate:Document { textNormalizedHash: $textNormalizedHash, currentVersion: true}) WITH ingestor, ok, ingestorIsUser, candidate ORDER BY candidate.createdAt ASC LIMIT 1 FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (d:Document { documentId: $documentId, title: $title, text: $text, sourceFormat: $sourceFormat, sourceKind: CASE WHEN ingestorIsUser THEN '"'"'document'"'"' ELSE '"'"'agent'"'"' END, status: '"'"'processing'"'"', pendingJobs: 0, createdAt: $createdAt, currentVersion: true, textNormalizedHash: $textNormalizedHash, lshBand0: $lshBand0, lshBand1: $lshBand1, lshBand2: $lshBand2, lshBand3: $lshBand3, lshBand4: $lshBand4, lshBand5: $lshBand5, lshBand6: $lshBand6, lshBand7: $lshBand7 }) CREATE (d)-[:INGESTED_BY]->(ingestor) FOREACH (ch IN $chunks | CREATE (d)-[:HAS_CHUNK]->(:Chunk { chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId, documentCurrent: true }) )) WITH ok, candidate OPTIONAL MATCH (d:Document {documentId: $documentId}) WITH ok, d, candidate, (ok AND candidate IS NOT NULL) AS doSupersede FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END | SET candidate.currentVersion = false, candidate.supersededAt = $createdAt, candidate.supersededBy = '"'"'system'"'"' ) WITH ok, d, candidate, doSupersede OPTIONAL MATCH (candidate)-[:HAS_CHUNK]->(c:Chunk) WITH ok, d, candidate, doSupersede, collect(c) AS candidateChunks FOREACH (ch IN CASE WHEN doSupersede THEN candidateChunks ELSE [] END | SET ch.documentCurrent = false) WITH ok, d, candidate, doSupersede FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END | CREATE (d)-[:SUPERSEDES { matchId: $matchId, status: '"'"'confirmed'"'"', confidence: 1.0, technique: '"'"'exact_normalized_text_hash'"'"', createdAt: $createdAt, decidedAt: $createdAt, decidedBy: '"'"'system'"'"', resuggestCount: 0, lastResuggestedAt: null }]->(candidate) ) RETURN ok AS ingestorFound, d.documentId AS documentId, doSupersede AS autoSuperseded, CASE WHEN doSupersede THEN candidate.documentId ELSE null END AS supersededDocumentId, CASE WHEN doSupersede THEN $matchId ELSE null END AS matchId'
 
 # seed the pre-existing currentVersion candidate the new ingest will collide with
 gq "$WS" "CREATE (d:Document {documentId:'asd1', title:'AutoSupersede Old', text:'old text', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true, textNormalizedHash:'hashAS1'})-[:HAS_CHUNK]->(:Chunk {chunkId:'asc1', text:'old text', seq:0, documentId:'asd1', documentCurrent:true})" > /dev/null
@@ -1844,25 +1845,32 @@ gq "$WS" "CREATE (d:Document {documentId:'asd1', title:'AutoSupersede Old', text
 # in ONE query: flip asd1 non-current + stamp supersededAt/supersededBy, bulk-
 # flip its Chunk, and create the SUPERSEDES{status:'confirmed', decidedBy:
 # 'system', confidence:1.0} edge new -> old.
-out=$(gq "$WS" "CYPHER documentId='asd2' title='AutoSupersede New' text='new text' sourceFormat='text' ingestedBy='u1' textNormalizedHash='hashAS1' createdAt=200 chunks=[{chunkId:'asc2',text:'new text',seq:0}] matchId='asm1' $CREATE_DOC_WITH_AUTO_SUPERSEDE")
-assert_contains "§14.10 create_document_with_auto_supersede returns autoSuperseded=true" "true" "$out"
-assert_contains "§14.10 create_document_with_auto_supersede returns the new documentId" "asd2" "$out"
+out=$(gq "$WS" "CYPHER documentId='asd2' title='AutoSupersede New' text='new text' sourceFormat='text' ingestedBy='u1' textNormalizedHash='hashAS1' createdAt=200 chunks=[{chunkId:'asc2',text:'new text',seq:0}] matchId='asm1' lshBand0='as2b0' lshBand1='as2b1' lshBand2='as2b2' lshBand3='as2b3' lshBand4='as2b4' lshBand5='as2b5' lshBand6='as2b6' lshBand7='as2b7' $CREATE_DOC_WITH_AUTO_SUPERSEDE")
+assert_contains "§14.9 create_document_with_auto_supersede returns autoSuperseded=true" "true" "$out"
+assert_contains "§14.9 create_document_with_auto_supersede returns the new documentId" "asd2" "$out"
 
 out=$(rq "$WS" "MATCH (d:Document {documentId:'asd1'}) RETURN d.currentVersion, d.supersededAt, d.supersededBy")
-assert_contains "§14.10 old document flips non-current" "false" "$out"
-assert_contains "§14.10 old document stamped supersededAt" "200" "$out"
-assert_contains "§14.10 old document stamped supersededBy='system'" "system" "$out"
+assert_contains "§14.9 old document flips non-current" "false" "$out"
+assert_contains "§14.9 old document stamped supersededAt" "200" "$out"
+assert_contains "§14.9 old document stamped supersededBy='system'" "system" "$out"
 
 out=$(rq "$WS" "MATCH (c:Chunk {chunkId:'asc1'}) RETURN c.documentCurrent")
-assert_contains "§14.10 old document's chunk bulk-flipped documentCurrent=false" "false" "$out"
+assert_contains "§14.9 old document's chunk bulk-flipped documentCurrent=false" "false" "$out"
 
 out=$(rq "$WS" "MATCH (d:Document {documentId:'asd2'}) RETURN d.currentVersion")
-assert_contains "§14.10 new document is current" "true" "$out"
+assert_contains "§14.9 new document is current" "true" "$out"
+
+# K-091: the ingest write stores every band, each under its own position —
+# including on an auto-superseding ingest, for which detection never runs.
+out=$(rq "$WS" "MATCH (d:Document {documentId:'asd2'}) RETURN d.lshBand0, d.lshBand3, d.lshBand7")
+assert_contains "§14.9 auto-superseding ingest stores lshBand0" "as2b0" "$out"
+assert_contains "§14.9 auto-superseding ingest stores lshBand3" "as2b3" "$out"
+assert_contains "§14.9 auto-superseding ingest stores lshBand7" "as2b7" "$out"
 
 out=$(rq "$WS" "MATCH (a:Document {documentId:'asd2'})-[r:SUPERSEDES {matchId:'asm1'}]->(b:Document {documentId:'asd1'}) RETURN r.status, r.decidedBy, r.confidence")
-assert_contains "§14.10 SUPERSEDES edge status='confirmed'" "confirmed" "$out"
-assert_contains "§14.10 SUPERSEDES edge decidedBy='system'" "system" "$out"
-assert_contains "§14.10 SUPERSEDES edge confidence=1.0" "1" "$out"
+assert_contains "§14.9 SUPERSEDES edge status='confirmed'" "confirmed" "$out"
+assert_contains "§14.9 SUPERSEDES edge decidedBy='system'" "system" "$out"
+assert_contains "§14.9 SUPERSEDES edge confidence=1.0" "1" "$out"
 
 # concurrency-safety claim, query-shape layer (the `threading.Barrier` proof
 # itself lives in test_repository.py, not here): the candidate OPTIONAL MATCH
@@ -1870,11 +1878,43 @@ assert_contains "§14.10 SUPERSEDES edge confidence=1.0" "1" "$out"
 # a document can never match itself as its own candidate — provable in a
 # single call by ingesting brand-new content with NO pre-existing candidate
 # at all: autoSuperseded must come back false, never self-superseded.
-out=$(gq "$WS" "CYPHER documentId='asd3' title='AutoSupersede Fresh' text='fresh text' sourceFormat='text' ingestedBy='u1' textNormalizedHash='hashAS2' createdAt=300 chunks=[{chunkId:'asc3',text:'fresh text',seq:0}] matchId='asm2' $CREATE_DOC_WITH_AUTO_SUPERSEDE")
-assert_contains "§14.10 a document with no real candidate never self-supersedes (autoSuperseded=false)" "false" "$out"
+out=$(gq "$WS" "CYPHER documentId='asd3' title='AutoSupersede Fresh' text='fresh text' sourceFormat='text' ingestedBy='u1' textNormalizedHash='hashAS2' createdAt=300 chunks=[{chunkId:'asc3',text:'fresh text',seq:0}] matchId='asm2' lshBand0='as3b0' lshBand1='as3b1' lshBand2='as3b2' lshBand3='as3b3' lshBand4='as3b4' lshBand5='as3b5' lshBand6='as3b6' lshBand7='as3b7' $CREATE_DOC_WITH_AUTO_SUPERSEDE")
+assert_contains "§14.9 a document with no real candidate never self-supersedes (autoSuperseded=false)" "false" "$out"
 
 out=$(rq "$WS" "MATCH (:Document {documentId:'asd3'})-[r:SUPERSEDES]->() RETURN count(r)")
-assert_contains "§14.10 no SUPERSEDES edge was created for the self-match probe" "0" "$out"
+assert_contains "§14.9 no SUPERSEDES edge was created for the self-match probe" "0" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'asd3'}) RETURN d.lshBand0, d.lshBand7")
+assert_contains "§14.9 plain (non-superseding) ingest stores lshBand0" "as3b0" "$out"
+assert_contains "§14.9 plain (non-superseding) ingest stores lshBand7" "as3b7" "$out"
+
+# K-091: the stored band is what the band-OR shortlist read finds — the
+# write and the read agree on the property names (lshBand5 alone matching).
+# FIND_SHORTLIST_BANDS is defined here, at its first use; its index-scan
+# PROFILE is in the find_update_shortlist block below.
+FIND_SHORTLIST_BANDS='MATCH (d:Document {currentVersion: true}) WHERE d.lshBand0 = $band0 OR d.lshBand1 = $band1 OR d.lshBand2 = $band2 OR d.lshBand3 = $band3 OR d.lshBand4 = $band4 OR d.lshBand5 = $band5 OR d.lshBand6 = $band6 OR d.lshBand7 = $band7 RETURN d.documentId AS documentId, d.title AS title, d.text AS text LIMIT $limit'
+out=$(rq "$WS" "CYPHER band0='x0' band1='x1' band2='x2' band3='x3' band4='x4' band5='as3b5' band6='x6' band7='x7' limit=5 $FIND_SHORTLIST_BANDS")
+assert_contains "§14.9 a band written at ingest is found by the band-OR shortlist read" "asd3" "$out"
+
+# K-091 backfill shapes (repository.list_documents_missing_lsh_bands /
+# set_document_lsh_bands, scripts/backfill_document_lsh_bands.sh). asd1 was
+# seeded raw above with no bands, so it is the one band-less document here.
+LIST_MISSING_BANDS='MATCH (d:Document) WHERE d.lshBand0 IS NULL OR d.lshBand1 IS NULL OR d.lshBand2 IS NULL OR d.lshBand3 IS NULL OR d.lshBand4 IS NULL OR d.lshBand5 IS NULL OR d.lshBand6 IS NULL OR d.lshBand7 IS NULL RETURN d.documentId, d.title, d.text ORDER BY d.documentId'
+out=$(rq "$WS" "$LIST_MISSING_BANDS")
+assert_contains     "§14.9 backfill listing includes a band-less (non-current) document (asd1)" "asd1" "$out"
+assert_not_contains "§14.9 backfill listing excludes a document the ingest write banded (asd2)" "asd2" "$out"
+
+SET_DOC_BANDS='MATCH (d:Document {documentId: $documentId}) SET d.lshBand0 = $lshBand0, d.lshBand1 = $lshBand1, d.lshBand2 = $lshBand2, d.lshBand3 = $lshBand3, d.lshBand4 = $lshBand4, d.lshBand5 = $lshBand5, d.lshBand6 = $lshBand6, d.lshBand7 = $lshBand7 RETURN count(d)'
+SET_BAND_PARAMS="documentId='asd1' lshBand0='as1b0' lshBand1='as1b1' lshBand2='as1b2' lshBand3='as1b3' lshBand4='as1b4' lshBand5='as1b5' lshBand6='as1b6' lshBand7='as1b7'"
+prof=$(gp "$WS" "CYPHER $SET_BAND_PARAMS $SET_DOC_BANDS")
+assert_index_scan "§14.9 backfill band write anchors on Document.documentId's index" "$prof"
+out=$(gq "$WS" "CYPHER $SET_BAND_PARAMS $SET_DOC_BANDS")
+assert_contains "§14.9 backfill band write reports the document it stamped" "1" "$out"
+out=$(rq "$WS" "MATCH (d:Document {documentId:'asd1'}) RETURN d.lshBand0, d.lshBand7")
+assert_contains "§14.9 backfill band write stores lshBand0" "as1b0" "$out"
+assert_contains "§14.9 backfill band write stores lshBand7" "as1b7" "$out"
+out=$(rq "$WS" "$LIST_MISSING_BANDS")
+assert_not_contains "§14.9 backfill listing is empty of asd1 once stamped (idempotent)" "asd1" "$out"
 
 # repository.find_update_shortlist's two signals (plan §3.4/§4.1,
 # repository.py:1878-1906) — both scoped to currentVersion documents only.
@@ -1893,25 +1933,24 @@ gq "$WS" "CREATE (:Document {documentId:'lsd5', title:'Random unrelated memo', t
 # inline pattern-property (analyst review Pass 6 Finding 1 — this exact
 # combination, not byte-identical to the simpler shape graph-dba originally
 # profiled; PROFILE below confirms it still folds into one index scan here).
-FIND_SHORTLIST_BANDS='MATCH (d:Document {currentVersion: true}) WHERE d.lshBand0 = $band0 OR d.lshBand1 = $band1 OR d.lshBand2 = $band2 OR d.lshBand3 = $band3 OR d.lshBand4 = $band4 OR d.lshBand5 = $band5 OR d.lshBand6 = $band6 OR d.lshBand7 = $band7 RETURN d.documentId AS documentId, d.title AS title, d.text AS text LIMIT $limit'
 BAND_PARAMS="band0='zz0' band1='zz1' band2='zz2' band3='probeBand3' band4='zz4' band5='zz5' band6='zz6' band7='zz7' limit=5"
 
 prof=$(gp "$WS" "CYPHER $BAND_PARAMS $FIND_SHORTLIST_BANDS")
-assert_index_scan "§14.10 find_update_shortlist band-OR anchors on a single Node By Index Scan" "$prof"
+assert_index_scan "§14.9 find_update_shortlist band-OR anchors on a single Node By Index Scan" "$prof"
 
 out=$(rq "$WS" "CYPHER $BAND_PARAMS $FIND_SHORTLIST_BANDS")
-assert_contains     "§14.10 band-OR shortlist includes the current-version band match (lsd1)"    "lsd1" "$out"
-assert_not_contains "§14.10 band-OR shortlist excludes the non-current band match (lsd2)"        "lsd2" "$out"
-assert_not_contains "§14.10 band-OR shortlist excludes a document sharing no band (lsd5)"         "lsd5" "$out"
+assert_contains     "§14.9 band-OR shortlist includes the current-version band match (lsd1)"    "lsd1" "$out"
+assert_not_contains "§14.9 band-OR shortlist excludes the non-current band match (lsd2)"        "lsd2" "$out"
+assert_not_contains "§14.9 band-OR shortlist excludes a document sharing no band (lsd5)"         "lsd5" "$out"
 
 # signal 2: the title-fuzzy full-text lookup, `currentVersion` filtered
 # post-YIELD (repository.py find_update_shortlist).
 FIND_SHORTLIST_TITLE="CALL db.idx.fulltext.queryNodes('Document', \$fuzzyQuery) YIELD node AS d WHERE d.currentVersion = true RETURN d.documentId AS documentId, d.title AS title, d.text AS text LIMIT \$limit"
 
 out=$(rq "$WS" "CYPHER fuzzyQuery='%Quarterly%' limit=5 $FIND_SHORTLIST_TITLE")
-assert_contains     "§14.10 title-fuzzy shortlist includes the current-version title match (lsd3)" "lsd3" "$out"
-assert_not_contains "§14.10 title-fuzzy shortlist excludes the non-current title match (lsd4)"     "lsd4" "$out"
-assert_not_contains "§14.10 title-fuzzy shortlist excludes a document with no title match (lsd5)"  "lsd5" "$out"
+assert_contains     "§14.9 title-fuzzy shortlist includes the current-version title match (lsd3)" "lsd3" "$out"
+assert_not_contains "§14.9 title-fuzzy shortlist excludes the non-current title match (lsd4)"     "lsd4" "$out"
+assert_not_contains "§14.9 title-fuzzy shortlist excludes a document with no title match (lsd5)"  "lsd5" "$out"
 
 # Defect 1 fix (document-ingestion2 QA report, "Report (Draft)" is one of its
 # characterization-table titles): repository.find_update_shortlist now builds
@@ -1927,8 +1966,8 @@ assert_not_contains "§14.10 title-fuzzy shortlist excludes a document with no t
 gq "$WS" "CREATE (:Document {documentId:'lsd6', title:'Report (Draft)', text:'t', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true})" > /dev/null
 
 out=$(rq "$WS" "CYPHER fuzzyQuery='%Report% %Draft%' limit=5 $FIND_SHORTLIST_TITLE")
-assert_not_contains "§14.10 escaped title-fuzzy query for a metacharacter-bearing title raises no RediSearch syntax error" "Syntax error" "$out"
-assert_contains     "§14.10 escaped title-fuzzy query still matches the metacharacter-bearing title (lsd6)" "lsd6" "$out"
+assert_not_contains "§14.9 escaped title-fuzzy query for a metacharacter-bearing title raises no RediSearch syntax error" "Syntax error" "$out"
+assert_contains     "§14.9 escaped title-fuzzy query still matches the metacharacter-bearing title (lsd6)" "lsd6" "$out"
 
 # cleanup this section's fixture
 gq "$WS" "MATCH (n:Document) WHERE n.documentId IN ['asd1','asd2','asd3','lsd1','lsd2','lsd3','lsd4','lsd5','lsd6'] DETACH DELETE n" > /dev/null

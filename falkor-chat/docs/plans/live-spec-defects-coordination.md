@@ -13,10 +13,10 @@ Sequencing: implementer units run one at a time — they share `repository.py`/`
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
-| U1 K-091 band write + backfill | `tdd-engineer` | `a06eeb5521c81ccf1` | in-flight (fix: surviving mutant) | code + tests | `analyst` → — | 196k / 66 |
+| U1 K-091 band write + backfill | `tdd-engineer` | `a06eeb5521c81ccf1`; F6 fix `a7afd84687b716cf5` | accepted | code + tests | `analyst` `a20ec9d1e5163523e` → approve w/ suggestions (Pass 2) | 250k / 88 + 76k / 13 |
 | U2 K-097 CAS design + ABA check | `graph-dba` | `a8a5e4080fa48fd8c` | accepted | `docs/plans/workflow-input-cas-graph.md` | `analyst` `a0052887e4da8f4a4` → approve w/ suggestions (Pass 2) | 215k / 50 |
 | U3 K-097 implementation | `tdd-engineer` | — | queued (after U2 gate, U1) | code + tests | `analyst` → — | — |
-| U4 K-098 GRAPH.CONFIG sizing | `graph-dba` | `a02427cdbdf32b4c8` | in-flight | `docs/plans/graph-config-defaults-graph.md` | `analyst` → — | — |
+| U4 K-098 GRAPH.CONFIG sizing | `graph-dba` | `a02427cdbdf32b4c8` | gated | `docs/plans/graph-config-defaults-graph.md` | `analyst` `a34f76a361e21f807` → — | 240k / 77 |
 | U5 K-098 set values | `devops` | — | queued (after U4 gate) | deployment config | `analyst` → — | — |
 | U6 K-096 budget failure reporting | `tdd-engineer` | — | queued (after U1) | code + tests | `analyst` → — | — |
 | U7 K-095 AGENT_NAME removal | `coder` | — | queued (after U6) | code | `analyst` → — | — |
@@ -39,3 +39,8 @@ milestone close (human applies); `server/.env.example` and start scripts for K-0
 - 2026-11-20 U9 gate: `docs/reviews/message-quoting.md`. Six premises verified by execution. M1–M3/m1–m4 were routed back to `architect`. The review proposes two `falkor-chat/REVIEW.md` lines; they are applied verbatim at K-094's close (step 4).
 - 2026-11-20 U1 delivered, with a solo re-run by `teco` (pytest 3672, queries 475/475). The delegate's two earlier failing query runs coincided with a concurrent `cpg/` pytest. `teco`'s mutant (ingest shingles the raw text, not the normalized text) survived 807 tests, so it went back to the delegate before the gate.
 - 2026-11-20 U9 accepted (Pass 2 approve). N3 was fixed by `teco`, a one-sentence edit in the plan's §4. N4 (truncating the echoed `quoted_id` in the error detail) goes to U10's brief as optional.
+- 2026-11-20 U1 fix: one helper, `update_detection.document_lsh_bands`, now used by ingest, detection and backfill (`teco` grep: no other pipeline). The raw-text mutant is killed. Delegate's counts: pytest 3676, queries 475/475. Gate review: `docs/reviews/document-lsh-bands-impl.md`.
+- 2026-11-20 U4 delivered. The live THREAD/OMP counts are 8, not 4 (auto-sized). AOF/maxmemory (§4.3) fall outside the key list; scope goes to the stakeholder after the gate, along with the shared `falkordb-dev` restart. Six quirk entries were held back because my brief's fence blocked them; to be revisited after the gate. Evidence is being copied to `docs/reviews/graph-config-defaults-evidence/`.
+- 2026-11-20 U1 gate: approve with suggestions. Five argument- and fixture-level mutants survived (F1/F2); F3 adds a band-count guard. The live half of F4 (restarting the servers, `--apply` per workspace, the live near-duplicate probe) is held for the K-091 close as a stakeholder decision. Live today: 522/522 `ws:agent-team` and 29/29 `ws:acme` documents carry no bands. Two `falkor-chat/REVIEW.md` lines are proposed, to be applied at the close.
+- 2026-11-20 U1 Pass 2: all five survivors killed. F6 (the copy guard reads by regex; shell mutants C1/C2 survive) came from the fix itself, so this is the stopping signal: a fresh `tdd-engineer` takes it, since the original sits at 250k context, and `teco` verifies C1/C2 itself with no Pass 3.
+- 2026-11-20 U1 accepted. `teco` verified F6: C1 and a fresh duplicate `SET_DOC_BANDS=` mutant each turn `test_query_copies.py` red, and the real file passes 7. Delegate's suites: pytest 3694, queries 475/475. Still pending for K-091's close: live spec, rollout (server restarts, `--apply` per workspace, live probe; stakeholder decision), and two `falkor-chat/REVIEW.md` lines.

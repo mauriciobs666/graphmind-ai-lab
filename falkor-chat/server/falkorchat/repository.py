@@ -18,6 +18,7 @@ from redis.exceptions import ResponseError
 from . import config, db
 from .extraction import normalize_name
 from .querygen import DEFAULT_QUERY_TIMEOUT_MS, CompiledQuery
+from .update_detection import LSH_BAND_COUNT as _LSH_BAND_COUNT
 
 
 class EmbeddingDimensionError(Exception):
@@ -159,6 +160,18 @@ class DocumentWriteStatus:
 
 
 _FUZZY_TOKEN_UNSAFE = re.compile(r"[^\w]", re.UNICODE)
+
+
+def _lsh_band_params(lsh_bands: list[str]) -> dict[str, str]:
+    """`{lshBand0: …, lshBand7: …}` for a band write (K-091). Exactly
+    `LSH_BAND_COUNT` bands or `ValueError`: the `Document.lshBand<i>` indexes
+    are 0..7, so a short list would leave a document missing bands and a long
+    one would write unindexed properties."""
+    if len(lsh_bands) != _LSH_BAND_COUNT:
+        raise ValueError(
+            f"expected exactly {_LSH_BAND_COUNT} LSH bands, got {len(lsh_bands)}"
+        )
+    return {f"lshBand{i}": band for i, band in enumerate(lsh_bands)}
 
 
 def _escape_fuzzy_token(tok: str) -> str:
@@ -1825,7 +1838,7 @@ class Repository:
         self, ws: str, *, document_id: str, title: str, text: str,
         text_normalized_hash: str, source_format: str, ingested_by: str,
         created_at: int, chunks: list[dict[str, Any]], match_id: str,
-        produced_by: str | None = None,
+        lsh_bands: list[str], produced_by: str | None = None,
     ) -> dict[str, Any]:
         """FR-2/AC-1 auto-tier update detection, folded into document creation
         itself — mirrors `create_entity_with_auto_match`'s concurrency-fix
@@ -1883,6 +1896,18 @@ class Repository:
         `False`. `chunkCount` is computed app-side from `len(chunks)` — no
         extra aggregation needed in the query.
 
+        **`lsh_bands`** (K-091): the new document's MinHash LSH bands, computed
+        app-side by the caller (`update_detection.document_lsh_bands`, the one
+        pipeline detection and the backfill also use, as `text_normalized_hash`
+        is computed app-side), stored as `lshBand0..7` on the `CREATE` — the
+        properties `find_update_shortlist`'s band lookup reads, on both
+        ingestor-resolution branches. Exactly 8 bands, else `ValueError`
+        before any query runs (`_lsh_band_params`).
+        Written here, not by `background._safe_detect_update`, because that
+        job is never scheduled for an auto-superseded ingest (nor when no
+        embed worker or extraction pipeline is wired), and every ingest
+        passes through this write.
+
         **`produced_by`** (optional, additive — `agent-knowledge-base-strategy.md`
         §4.1): when given, the ingestor-resolution clause matches ONLY
         `(a:Agent {agentId: $producedBy})` — `ingested_by`/`$ingestedBy` plays no
@@ -1907,6 +1932,8 @@ class Repository:
             params["producedBy"] = produced_by
         else:
             params["ingestedBy"] = ingested_by
+        params.update(_lsh_band_params(lsh_bands))
+        band_props = "".join(f", lshBand{i}: $lshBand{i}" for i in range(_LSH_BAND_COUNT))
 
         res = self._graph(ws).query(
             resolve +
@@ -1923,6 +1950,7 @@ class Repository:
             "    sourceKind: CASE WHEN ingestorIsUser THEN 'document' ELSE 'agent' END, "
             "    status: 'processing', pendingJobs: 0, createdAt: $createdAt, "
             "    currentVersion: true, textNormalizedHash: $textNormalizedHash"
+            + band_props +
             "  }) "
             "  CREATE (d)-[:INGESTED_BY]->(ingestor) "
             "  FOREACH (ch IN $chunks | "
@@ -1967,6 +1995,34 @@ class Repository:
             "autoSuperseded": bool(row[2]), "supersededDocumentId": row[3],
             "matchId": row[4], "ingestorFound": bool(row[0]),
         }
+
+    def list_documents_missing_lsh_bands(self, ws: str) -> list[dict[str, Any]]:
+        """Every `Document` lacking any of `lshBand0..7`, current or not (K-091
+        backfill listing — read-only). A full `Document` scan by design: a
+        one-off operator read, not a hot path."""
+        missing = " OR ".join(f"d.lshBand{i} IS NULL" for i in range(_LSH_BAND_COUNT))
+        res = self._graph(ws).ro_query(
+            f"MATCH (d:Document) WHERE {missing} "
+            "RETURN d.documentId, d.title, d.text ORDER BY d.documentId"
+        )
+        return [
+            {"documentId": r[0], "title": r[1], "text": r[2]} for r in res.result_set
+        ]
+
+    def set_document_lsh_bands(
+        self, ws: str, *, document_id: str, lsh_bands: list[str],
+    ) -> bool:
+        """Stamp `lshBand0..7` on one existing `Document` (K-091 backfill
+        write). Anchored on the unique `documentId`; returns whether the
+        document existed. Exactly 8 bands, else `ValueError` (`_lsh_band_params`)."""
+        params: dict[str, Any] = {**_lsh_band_params(lsh_bands), "documentId": document_id}
+        set_clause = ", ".join(f"d.lshBand{i} = $lshBand{i}" for i in range(_LSH_BAND_COUNT))
+        res = self._graph(ws).query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            f"SET {set_clause} RETURN count(d)",
+            params,
+        )
+        return bool(res.result_set and res.result_set[0][0])
 
     def find_update_shortlist(
         self, ws: str, *, bands: list[str], title: str, limit: int = 5,

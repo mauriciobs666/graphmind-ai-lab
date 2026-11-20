@@ -261,7 +261,7 @@ class FakeRepo:
     def create_document_with_auto_supersede(
         self, ws, *, document_id, title, text, text_normalized_hash,
         source_format, ingested_by, created_at, chunks, match_id,
-        produced_by=None,
+        lsh_bands, produced_by=None,
     ):
         """Mirrors `create_document` above, plus the FR-2/AC-1 auto-tier: a
         `currentVersion` document already sharing `text_normalized_hash` is
@@ -308,7 +308,7 @@ class FakeRepo:
             "status": "processing", "createdAt": created_at,
             "ingestedByKind": actor_label, "ingestedById": resolved_actor,
             "chunks": chunks, "textNormalizedHash": text_normalized_hash,
-            "currentVersion": True,
+            "currentVersion": True, "lshBands": lsh_bands,
         }
         auto_superseded = candidate_id is not None
         if auto_superseded:
@@ -946,6 +946,66 @@ def test_ingest_document_byte_identical_modulo_whitespace_auto_supersedes():
     second = svc.ingest_document(CTX, text="hello world\nsame content.")
     assert second["autoSuperseded"] is True
     assert second["supersededDocumentId"] == first["documentId"]
+
+
+def test_ingest_document_passes_the_lsh_bands_of_its_normalized_text_to_the_write():
+    """K-091: `ingest_document` computes the document's 8 LSH bands off the
+    same normalized text the hash uses and hands them to the ingest write —
+    the one write every `Document` passes through, auto-superseding or not."""
+    from falkorchat import update_detection as ud
+
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+    text = " ".join(f"word{i}" for i in range(40))
+
+    result = svc.ingest_document(CTX, text=text)
+
+    expected = ud.lsh_bands(ud.minhash_signature(ud.shingles(ud.normalize_text(text))))
+    assert len(expected) == 8
+    assert repo.documents[result["documentId"]]["lshBands"] == expected
+
+
+def test_ingest_document_bands_are_computed_from_the_normalized_text_not_the_raw_text():
+    """K-091: the stored bands must equal what `background._safe_detect_update`
+    computes for the same document, which shingles `normalize_text(text)`.
+    The text here is one `normalize_text` changes (case, runs of whitespace),
+    so raw-text shingling would yield different bands."""
+    from falkorchat import update_detection as ud
+
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+    text = "  The QUICK   Brown fox\n\tJumps over THE lazy   Dog, twice.  Then Rests. "
+    assert ud.normalize_text(text) != text  # the fixture must exercise normalization
+
+    result = svc.ingest_document(CTX, text=text)
+
+    expected = ud.lsh_bands(ud.minhash_signature(ud.shingles(ud.normalize_text(text))))
+    raw = ud.lsh_bands(ud.minhash_signature(ud.shingles(text)))
+    assert expected != raw  # otherwise this test could not tell the two apart
+    assert repo.documents[result["documentId"]]["lshBands"] == expected
+
+
+def test_ingest_document_bands_cover_the_whole_text_of_a_multi_chunk_document():
+    """K-091 F2: the bands are those of the whole document text, not of a
+    prefix or the first chunk — pinned exactly on a text that splits into
+    several chunks, whose tail carries shingles no prefix has."""
+    from falkorchat import update_detection as ud
+
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+    text = " ".join(f"Paragraph {i} states a distinct Fact number {i}." for i in range(600))
+    assert len(text) > 20_000
+
+    result = svc.ingest_document(CTX, text=text)
+
+    assert result["chunkCount"] > 1
+    expected = ud.lsh_bands(ud.minhash_signature(ud.shingles(ud.normalize_text(text))))
+    head = ud.lsh_bands(ud.minhash_signature(ud.shingles(ud.normalize_text(text[:2000]))))
+    assert expected != head  # a prefix pipeline must be distinguishable
+    assert repo.documents[result["documentId"]]["lshBands"] == expected
 
 
 def test_ingest_document_genuinely_different_content_never_auto_supersedes():

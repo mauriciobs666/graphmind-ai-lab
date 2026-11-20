@@ -1316,12 +1316,13 @@ class Services:
         text_normalized_hash = update_detection.content_hash(
             update_detection.normalize_text(text)
         )
+        lsh_bands = update_detection.document_lsh_bands(text)
         result = self._repo.create_document_with_auto_supersede(
             ctx.ws, document_id=document_id, title=title or source_label or "",
             text=text, text_normalized_hash=text_normalized_hash,
             source_format=source_format, ingested_by=ctx.actor,
             created_at=now, chunks=chunks, match_id=self._id(),
-            produced_by=produced_by,
+            lsh_bands=lsh_bands, produced_by=produced_by,
         )
         if not result["ingestorFound"]:
             if produced_by is not None:

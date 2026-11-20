@@ -218,3 +218,16 @@ def test_lsh_bands_near_duplicate_documents_collide_on_at_least_one_band():
     bands_a = set(ud.lsh_bands(sig_a, b=8))
     bands_b = set(ud.lsh_bands(sig_b, b=8))
     assert bands_a & bands_b  # at least one shared band fingerprint
+
+
+def test_document_lsh_bands_is_the_normalize_shingle_minhash_band_pipeline():
+    """K-091: the one band computation shared by ingest, detection and the
+    backfill — normalize first, so case and whitespace variants agree."""
+    from falkorchat import update_detection as ud
+
+    text = "  Some   MIXED case\n\ttext, spread over   several Words here. "
+    explicit = ud.lsh_bands(ud.minhash_signature(ud.shingles(ud.normalize_text(text))))
+
+    assert ud.document_lsh_bands(text) == explicit
+    assert ud.document_lsh_bands(text) == ud.document_lsh_bands(ud.normalize_text(text))
+    assert len(explicit) == ud.LSH_BAND_COUNT

@@ -148,7 +148,12 @@ def minhash_signature(shingles: set[str], k: int = 32) -> list[int]:
     ]
 
 
-def lsh_bands(signature: list[int], b: int = 8) -> list[str]:
+# The number of LSH bands, and so of `Document.lshBand<i>` properties —
+# `scripts/bootstrap_schema.sh` creates one range index per band, 0..7.
+LSH_BAND_COUNT = 8
+
+
+def lsh_bands(signature: list[int], b: int = LSH_BAND_COUNT) -> list[str]:
     """Bands a MinHash `signature` into `b` short fingerprint strings, one per
     `Document.lshBand<i>` property (plan §4 Stage D) — the standard LSH-
     banding technique for near-duplicate candidate generation: two documents
@@ -177,3 +182,13 @@ def lsh_bands(signature: list[int], b: int = 8) -> list[str]:
         band_bytes = ",".join(str(v) for v in chunk).encode("utf-8")
         bands.append(hashlib.md5(band_bytes).hexdigest()[:16])  # noqa: S324 - not a security use
     return bands
+
+
+def document_lsh_bands(text: str) -> list[str]:
+    """The `Document.lshBand<i>` values for a document's raw `text` — the one
+    pipeline (`normalize_text` -> `shingles` -> `minhash_signature` ->
+    `lsh_bands`) shared by the ingest write (`Services.ingest_document`), the
+    suggested-tier read (`background._safe_detect_update`) and the K-091
+    backfill script, so the stored bands and the probed bands can never be
+    computed two different ways."""
+    return lsh_bands(minhash_signature(shingles(normalize_text(text))))

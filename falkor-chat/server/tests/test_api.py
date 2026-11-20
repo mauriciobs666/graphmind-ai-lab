@@ -1180,6 +1180,101 @@ def test_ingest_document_plausible_edit_produces_pending_suggestion_via_backgrou
     assert client.get(f"/documents/{old_id}").status_code == 200
 
 
+def _stored_lsh_bands(repo, document_id):
+    """`Document.lshBand0..7` as stored, read raw (test-only)."""
+    [row] = repo._graph("test").ro_query(
+        "MATCH (d:Document {documentId: $documentId}) RETURN "
+        + ", ".join(f"d.lshBand{i}" for i in range(8)),
+        {"documentId": document_id},
+    ).result_set
+    return row
+
+
+def test_ingest_document_near_duplicate_with_unrelated_title_is_suggested_through_the_band_signal(
+    wired_real_ingestion,
+):
+    """K-091: a near-duplicate whose title shares no word with its
+    predecessor's is still suggested — the title lookup cannot find it, so
+    only the stored LSH bands can put the predecessor on the shortlist."""
+    client, repo = wired_real_ingestion
+    base_text = " ".join(f"clause{i} of the supplier agreement terms" for i in range(60))
+
+    first = client.post("/documents", json={"text": base_text, "title": "Alpha Memo"})
+    assert first.status_code == 201
+    old_id = first.json()["documentId"]
+    # the title signal alone cannot reach the predecessor
+    assert all(
+        c["documentId"] != old_id
+        for c in repo.find_update_shortlist(
+            "test", bands=["zzzzzzzzzzzzzzzz"] * 8, title="Zebra Notes",
+        )
+    )
+
+    edited_text = base_text + " plus one closing clause appended at the very end"
+    second = client.post("/documents", json={"text": edited_text, "title": "Zebra Notes"})
+    assert second.status_code == 201
+    assert second.json()["autoSuperseded"] is False
+    new_id = second.json()["documentId"]
+
+    pending = client.get("/document-updates/pending").json()
+    assert any(
+        u["documentA"] == new_id and u["documentB"] == old_id for u in pending
+    ), f"expected a band-signal suggestion, got {pending}"
+
+
+def test_ingest_document_case_and_whitespace_varied_near_duplicate_is_suggested_through_the_band_signal(
+    wired_real_ingestion,
+):
+    """K-091: the bands stored at ingest and the bands detection computes for
+    the next document must come from the same normalized text. Here the
+    near-duplicate re-cases and re-spaces every word of its predecessor (plus
+    one appended clause, so it is not an exact-hash auto-supersede) under an
+    unrelated title: raw-text bands share nothing, normalized bands collide,
+    so only a normalized pipeline on both sides suggests it."""
+    client, _repo = wired_real_ingestion
+    base_text = " ".join(f"Clause {i} of the Supplier Agreement terms." for i in range(60))
+    variant = "  ".join(base_text.upper().split()) + " PLUS ONE CLOSING CLAUSE."
+
+    first = client.post("/documents", json={"text": base_text, "title": "Alpha Memo"})
+    assert first.status_code == 201
+    old_id = first.json()["documentId"]
+    second = client.post("/documents", json={"text": variant, "title": "Zebra Notes"})
+    assert second.status_code == 201
+    assert second.json()["autoSuperseded"] is False
+    new_id = second.json()["documentId"]
+
+    pending = client.get("/document-updates/pending").json()
+    assert any(
+        u["documentA"] == new_id and u["documentB"] == old_id for u in pending
+    ), f"expected a band-signal suggestion, got {pending}"
+
+
+def test_ingest_document_auto_superseding_ingest_still_stores_its_lsh_bands(
+    wired_real_ingestion,
+):
+    """K-091: suggested-tier detection is never scheduled for an
+    auto-superseded ingest, yet that document becomes the current version a
+    later edit must be shortlisted against — so its bands must come from the
+    ingest write itself, not from the detection job."""
+    from falkorchat import update_detection as ud
+
+    client, repo = wired_real_ingestion
+    first = client.post(
+        "/documents", json={"text": "Hello   World\nThis is the content.", "title": "Doc"}
+    )
+    assert first.status_code == 201
+    second = client.post(
+        "/documents", json={"text": "hello world\nthis is the content.", "title": "Doc v2"}
+    )
+    assert second.status_code == 201
+    assert second.json()["autoSuperseded"] is True
+
+    expected = ud.lsh_bands(ud.minhash_signature(ud.shingles(
+        ud.normalize_text("hello world\nthis is the content.")
+    )))
+    assert _stored_lsh_bands(repo, second.json()["documentId"]) == expected
+
+
 def test_ingest_document_background_embed_failure_reaches_failed(conn):
     # Only embed_worker wired, deliberately mismatched dim: the embedder
     # returns a vector one dimension too long, so every embed job for this

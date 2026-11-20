@@ -270,8 +270,7 @@ def _safe_detect_update(repo: Any, ws: str, document_id: str) -> None:
         text = document.get("text") or ""
         title = document.get("title") or ""
         doc_shingles = update_detection.shingles(update_detection.normalize_text(text))
-        signature = update_detection.minhash_signature(doc_shingles)
-        bands = update_detection.lsh_bands(signature)
+        bands = update_detection.document_lsh_bands(text)
         candidates = repo.find_update_shortlist(ws, bands=bands, title=title)
 
         best_ratio = 0.0

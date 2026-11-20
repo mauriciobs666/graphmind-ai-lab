@@ -1533,6 +1533,7 @@ def test_get_document_history_single_version_with_no_supersession(repo):
 def _auto_supersede(
     repo, *, document_id, text_normalized_hash, match_id, created_at=100,
     ingested_by="u1", title="t", text="x", chunks=None, produced_by=None,
+    lsh_bands=None,
 ):
     return repo.create_document_with_auto_supersede(
         "test", document_id=document_id, title=title, text=text,
@@ -1542,7 +1543,16 @@ def _auto_supersede(
             {"chunkId": f"{document_id}-c0", "text": text, "seq": 0}
         ],
         match_id=match_id, produced_by=produced_by,
+        lsh_bands=lsh_bands if lsh_bands is not None else _bands_of(text),
     )
+
+
+def _bands_of(text):
+    """The 8 LSH bands of `text`, computed the way `Services.ingest_document`
+    does (K-091)."""
+    from falkorchat import update_detection as ud
+
+    return ud.lsh_bands(ud.minhash_signature(ud.shingles(ud.normalize_text(text))))
 
 
 def test_create_document_with_auto_supersede_no_candidate_writes_plain_document(repo):
@@ -1561,6 +1571,107 @@ def test_create_document_with_auto_supersede_no_candidate_writes_plain_document(
     doc = repo.get_document("test", document_id="d1")
     assert doc["text"] == "x"
     assert doc["title"] == "t"
+
+
+def test_create_document_with_auto_supersede_stores_each_lsh_band_on_the_document(repo, conn):
+    """K-091: the ingest write stores the 8 bands it is given as
+    `Document.lshBand0..7`, each in its own position — the properties
+    `find_update_shortlist`'s band lookup reads."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    bands = [f"band-{i}-value" for i in range(8)]
+
+    _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+        lsh_bands=bands,
+    )
+
+    [row] = _probe(
+        conn,
+        "MATCH (d:Document {documentId:'d1'}) RETURN "
+        + ", ".join(f"d.lshBand{i}" for i in range(8)),
+    )
+    assert row == bands
+
+
+def test_create_document_with_auto_supersede_stores_each_lsh_band_on_the_produced_by_branch(
+    repo, conn,
+):
+    """K-091 F2: the `produced_by` ingestor-resolution prefix is a separate
+    literal query text (how agents ingest into `ws:agent-team`), so the band
+    properties are asserted on that branch too, not only the default one."""
+    repo.ensure_agent("test", agent_id="bot1", name="Bot One")
+    bands = [f"agent-band-{i}" for i in range(8)]
+
+    result = _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+        produced_by="bot1", lsh_bands=bands,
+    )
+
+    assert result["ingestorFound"] is True
+    [row] = _probe(
+        conn,
+        "MATCH (d:Document {documentId:'d1'}) RETURN "
+        + ", ".join(f"d.lshBand{i}" for i in range(8)),
+    )
+    assert row == bands
+
+
+def test_create_document_with_auto_supersede_stores_bands_on_an_auto_superseding_document(
+    repo, conn,
+):
+    """K-091: the auto-superseding ingest carries its bands too — the
+    suggested-tier job never runs for it, so the ingest write is the only
+    place they can come from."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _auto_supersede(repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1")
+    bands = [f"b{i}" for i in range(8)]
+
+    result = _auto_supersede(
+        repo, document_id="d2", text_normalized_hash="hash-a", match_id="m2",
+        lsh_bands=bands, created_at=200,
+    )
+
+    assert result["autoSuperseded"] is True
+    [row] = _probe(
+        conn,
+        "MATCH (d:Document {documentId:'d2'}) RETURN "
+        + ", ".join(f"d.lshBand{i}" for i in range(8)),
+    )
+    assert row == bands
+
+
+@pytest.mark.parametrize("count", [0, 7, 9])
+def test_create_document_with_auto_supersede_rejects_a_band_list_not_of_length_8(repo, conn, count):
+    """K-091 F3: the bands are `Document.lshBand0..7` — exactly 8, one per
+    index. A shorter list would create a document missing bands, a longer
+    one would write unindexed `lshBand8+`; both raise, and nothing is written."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+
+    with pytest.raises(ValueError, match="8"):
+        _auto_supersede(
+            repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+            lsh_bands=[f"b{i}" for i in range(count)],
+        )
+
+    assert _probe(conn, "MATCH (d:Document {documentId:'d1'}) RETURN d") == []
+
+
+@pytest.mark.parametrize("count", [0, 7, 9])
+def test_set_document_lsh_bands_rejects_a_band_list_not_of_length_8(repo, conn, count):
+    """K-091 F3: the backfill writer holds the same invariant as the ingest
+    write — exactly 8 bands, or `ValueError` and no write."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.create_document(
+        "test", document_id="d1", title="T", text="x", source_format="text",
+        ingested_by="u1", created_at=1, chunks=[{"chunkId": "c0", "text": "x", "seq": 0}],
+    )
+
+    with pytest.raises(ValueError, match="8"):
+        repo.set_document_lsh_bands(
+            "test", document_id="d1", lsh_bands=[f"b{i}" for i in range(count)],
+        )
+
+    assert _probe(conn, "MATCH (d:Document {documentId:'d1'}) RETURN d.lshBand0") == [[None]]
 
 
 def test_create_document_with_auto_supersede_unknown_actor_nothing_written(repo):
@@ -1755,7 +1866,7 @@ def test_create_document_with_auto_supersede_concurrent_calls_produce_exactly_on
                 text_normalized_hash="hash-race", source_format="text",
                 ingested_by="u1", created_at=created_at,
                 chunks=[{"chunkId": f"{document_id}-c0", "text": "same content", "seq": 0}],
-                match_id=match_id,
+                match_id=match_id, lsh_bands=_bands_of("same content"),
             )
         except Exception as exc:  # noqa: BLE001 - surfaced via `errors` below
             errors.append(exc)
@@ -1783,29 +1894,74 @@ def _document_with_lsh(
 ):
     """Seed a document via `create_document_with_auto_supersede` (a fresh
     hash each time, since `find_update_shortlist` tests want independent
-    documents, not auto-superseding siblings), then stamp its LSH bands the
-    way `background._safe_detect_update` would (computed app-side off
-    `update_detection`, written directly here since `create_document_with_
-    auto_supersede` itself has no LSH-band-writing responsibility — that's
-    a suggested-tier concern, entirely orthogonal to the auto tier's atomic
-    write)."""
-    from falkorchat import update_detection as ud
-
+    documents, not auto-superseding siblings), with its LSH bands computed
+    the way `Services.ingest_document` does — the ingest write stores them
+    (K-091), so the shortlist tests read what production writes."""
+    bands = _bands_of(text)
     result = repo.create_document_with_auto_supersede(
         "test", document_id=document_id, title=title, text=text,
         text_normalized_hash=f"hash-{document_id}", source_format="text",
         ingested_by=ingested_by, created_at=created_at,
         chunks=[{"chunkId": f"{document_id}-c0", "text": text, "seq": 0}],
-        match_id=f"m-{document_id}",
-    )
-    bands = ud.lsh_bands(ud.minhash_signature(ud.shingles(ud.normalize_text(text))))
-    set_clause = ", ".join(f"d.lshBand{i} = $band{i}" for i in range(len(bands)))
-    params = {f"band{i}": b for i, b in enumerate(bands)}
-    params["documentId"] = document_id
-    repo._graph("test").query(
-        f"MATCH (d:Document {{documentId: $documentId}}) SET {set_clause}", params,
+        match_id=f"m-{document_id}", lsh_bands=bands,
     )
     return result, bands
+
+
+def _plain_document(repo, document_id):
+    """A band-less document, as written before K-091 (`create_document`)."""
+    repo.create_document(
+        "test", document_id=document_id, title=f"T-{document_id}", text="body",
+        source_format="text", ingested_by="u1", created_at=1,
+        chunks=[{"chunkId": f"{document_id}-c0", "text": "body", "seq": 0}],
+    )
+
+
+def test_list_documents_missing_lsh_bands_lists_any_missing_band_current_or_not(repo, conn):
+    """K-091 F1: the backfill listing's contract, on the shipped method —
+    a document missing ANY band is listed (not just one missing `lshBand0`),
+    whether current or not; a document with all 8 is never listed, current
+    or not. Axes: band presence (none / some / all) x `currentVersion`."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    seven = {f"b{i}": f"v{i}" for i in range(7)}
+    _plain_document(repo, "some-current")  # bands 0..6, lshBand7 absent
+    repo._graph("test").query(
+        "MATCH (d:Document {documentId:'some-current'}) SET "
+        + ", ".join(f"d.lshBand{i} = $b{i}" for i in range(7)),
+        seven,
+    )
+    _plain_document(repo, "none-current")
+    _plain_document(repo, "none-noncurrent")
+    _document_with_lsh(repo, document_id="all-current", text="banded current")
+    _document_with_lsh(repo, document_id="all-noncurrent", text="banded old")
+    repo._graph("test").query(
+        "MATCH (d:Document) WHERE d.documentId IN ['none-noncurrent', 'all-noncurrent'] "
+        "SET d.currentVersion = false"
+    )
+
+    listed = [d["documentId"] for d in repo.list_documents_missing_lsh_bands("test")]
+
+    assert listed == ["none-current", "none-noncurrent", "some-current"]
+
+
+def test_set_document_lsh_bands_stamps_all_8_and_reports_whether_the_document_exists(repo, conn):
+    """K-091 F1: the backfill write stamps each band in its own position and
+    returns True; on an id with no document it writes nothing and returns
+    False (the script's `wrote N/M` count depends on it)."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _plain_document(repo, "d1")
+    bands = [f"band-{i}" for i in range(8)]
+
+    assert repo.set_document_lsh_bands("test", document_id="d1", lsh_bands=bands) is True
+    assert repo.set_document_lsh_bands("test", document_id="ghost", lsh_bands=bands) is False
+
+    [row] = _probe(
+        conn,
+        "MATCH (d:Document {documentId:'d1'}) RETURN "
+        + ", ".join(f"d.lshBand{i}" for i in range(8)),
+    )
+    assert row == bands
+    assert _probe(conn, "MATCH (d:Document) RETURN count(d)") == [[1]]
 
 
 def test_find_update_shortlist_finds_a_band_matching_candidate(repo):
