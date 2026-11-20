@@ -1,0 +1,21 @@
+  ✓ mn3 drops unknown mention 'nope'
+
+▶ §9.1/§9.2 since-reads with mention flag (chronological, (createdAt,msgId) order)
+  ✓ §9.1 returns mn1 (after since)
+  ✓ §9.1 returns mn2
+  ✓ §9.1 chronological order (mn1 before mn2; mention flagged, not resorted)
+  ✗ §9.1 since=4001 includes mn3
+    expected to contain: mn3
+    got: m.msgId
+mn3
+Cached execution: 0
+Query internal execution time: 0.481879 milliseconds
+  ✓ §9.1 since=4001 excludes mn1
+  ✓ §9.1 since=4001 excludes mn2
+  ✓ §9.2 composite keyset since-read uses Message.createdAt index
+  ✓ §9.2 composite keyset since-read uses Message.createdAt index (no label scan)
+/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_mut_1.txt:615: Results: 480/486 passed
+/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_mut_2.txt:617: Results: 480/486 passed
+/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_1.txt:587: Results: 486/486 passed
+/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_3.txt:592: Results: 485/486 passed
+/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_2.txt:587: Results: 486/486 passed

@@ -2477,9 +2477,11 @@ class Services:
              `ctx.input.decision`) and bound the **merged** size here — pydantic
              only ever sees the submitted input, never the ctx it merges into (m-5).
           5. **One query (D-F):** the merged ctx rides inside the resume CAS
-             (§12.13). Zero rows ⇒ the run stopped being `waiting` under us (a
-             concurrent submitter won) ⇒ 409 with **nothing written** — the input is
-             visibly rejected, never silently lost, and never a wrong branch.
+             (§12.13), with the `ctxVersion` from the **same** `get_run` whose
+             `ctx` step 4 merged onto (K-097). Zero rows ⇒ the run is no longer
+             the wait instance that was read (a concurrent resume won, even one
+             whose drive re-parked it) ⇒ 409 with **nothing written** — the input
+             is visibly rejected, never silently lost, and never a wrong branch.
 
         A drive fault after that point is D-G's failed envelope, not a 500.
         """
@@ -2521,12 +2523,13 @@ class Services:
         status, error, read_ctx = self._drive_and_report(
             ctx, run_id=run_id,
             drive=lambda: executor.resume(
-                ctx, run_id=run_id, run_ctx_json=merged_json
+                ctx, run_id=run_id, run_ctx_json=merged_json,
+                ctx_version=run["ctxVersion"],
             ),
         )
         if status is None:
-            # The CAS found the run no longer `waiting` — neither the flip nor the
-            # ctx was written (§12.13's live-verified zero-row contract).
+            # The CAS found the run no longer the wait instance that was read —
+            # neither the flip, the ctx nor the version was written (§12.13).
             raise WorkflowRunNotWaitingError(
                 f"workflow run {run_id!r} was resumed concurrently — the input was "
                 f"not applied; re-read the run and retry"
@@ -2806,8 +2809,10 @@ class Services:
             harm: a mismatched `atStepKey` can only ever misfire the escalation
             guard on a def that later cycles back to the exact same step, which
             is already the plan's own accepted residual, §8); or the CAS itself
-            lost the race (a concurrent human `POST .../input`, or a second
-            sweep tick/process). Harmless, not an error, either way.
+            found the run no longer the wait instance step 5.1 read (K-097: a
+            concurrent human `POST .../input`, a chat resume, or a second sweep
+            tick/process resumed it — even if that drive re-parked it at the same
+            step). Harmless, not an error, either way.
           * **faulted** — `_drive_or_fault` caught one of its four named
             drive-time faults, an unnamed exception escaped the drive call
             entirely (batch isolation, below), or the merged ctx (current
@@ -2879,8 +2884,10 @@ class Services:
                 continue
 
             # (v3, plan §3.5 step 5.2) Merge the step-scoped escalation marker
-            # onto the CURRENT ctx (never a stale one) — the exact same merge
-            # shape `submit_workflow_input` already uses for human input
+            # onto the CURRENT ctx (never a stale one). The CAS below carries this
+            # read's `ctxVersion` (K-097), so a resume landing between this read and
+            # the CAS, even one that re-parks at the same step, refuses it. The
+            # merge is the exact same shape `submit_workflow_input` already uses for human input
             # (`services.py` above: `_load_json_dict` → `.update(...)` →
             # `_dump_ctx`), with one engine-owned key instead of caller-supplied
             # ones.
@@ -2910,8 +2917,9 @@ class Services:
             try:
                 status, error, _fault_ctx = self._drive_or_fault(
                     ctx, run_id=run_id,
-                    drive=lambda rid=run_id, mj=merged_json: executor.resume(
-                        ctx, run_id=rid, run_ctx_json=mj
+                    drive=lambda rid=run_id, mj=merged_json,
+                    v=run["ctxVersion"]: executor.resume(
+                        ctx, run_id=rid, run_ctx_json=mj, ctx_version=v,
                     ),
                 )
             except Exception as exc:  # noqa: BLE001 — deliberate batch isolation

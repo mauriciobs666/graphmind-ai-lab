@@ -103,11 +103,13 @@ class WorkflowRunNotFoundError(Exception):
 class WorkflowRunNotWaitingError(Exception):
     """Input was submitted to a run that is not parked (`waiting`) (K-024 D-G).
 
-    The §12.13 resume-with-ctx CAS returns zero rows for **two** reasons — the run
-    does not exist, or it exists but is not `waiting` — and the query cannot tell
-    them apart. The service splits them with a prior `get_run`: absent →
-    `WorkflowRunNotFoundError` (404); present-but-not-waiting (or the CAS lost to a
-    concurrent submitter) → this (409). Re-exported by `services`.
+    The §12.13 resume-with-ctx CAS returns zero rows for **three** reasons — the
+    run does not exist, it exists but is not `waiting`, or it is `waiting` but no
+    longer at the `ctxVersion` the caller read (K-097: a concurrent resume won,
+    even one whose drive re-parked it) — and the query cannot tell them apart. The
+    service splits out the first with a prior `get_run`: absent →
+    `WorkflowRunNotFoundError` (404); the other two → this (409), both meaning
+    "re-read the run and retry". Re-exported by `services`.
     """
 
 
@@ -3003,43 +3005,53 @@ class Repository:
         the one that observes `status = 'waiting'` flips it — the loser sees
         `running`, the `WHERE` fails, and gets `None` (no re-entry). Clears
         `waitingThreadId` so the run is no longer discoverable as parked.
+
+        K-097: bumps `ctxVersion` (compares nothing — it writes no ctx, so it has no
+        ctx read to compare). It still ends a wait instance, so a pending versioned
+        CAS (§12.13) taken against that wait is refused even when this resume's
+        drive re-parks the run (the ABA, `docs/plans/workflow-input-cas-graph.md`).
         """
         res = self._graph(ws).query(
             "MATCH (r:WorkflowRun {runId: $runId}) "
             "WHERE r.status = 'waiting' "
-            "SET r.status = 'running', r.waitingThreadId = '' "
+            "SET r.status = 'running', r.waitingThreadId = '', "
+            "    r.ctxVersion = coalesce(r.ctxVersion, 0) + 1 "
             "RETURN r.runId AS runId, r.status AS status",
             {"runId": run_id},
         )
         return self._status_row(res)
 
     def resume_run_with_ctx(
-        self, ws: str, *, run_id: str, ctx: str
+        self, ws: str, *, run_id: str, ctx: str, ctx_version: int
     ) -> dict[str, Any] | None:
-        """Guarded CAS `waiting → running` **that also writes `ctx`**. §12.13.
+        """Versioned CAS `waiting → running` **that also writes `ctx`**. §12.13.
 
-        Parent: §12.4 (`resume_run`), which stays in use unchanged for the
-        chat/trigger resume path (no ctx is submitted there). This variant is §12.4
-        plus one `SET` term and is the human/signal-input path for a `process` run
-        (K-024 **D-F**): the submitted input, already validated and merged into the
-        run ctx service-side, rides **inside** the CAS so the write and the flip
-        cannot be split.
+        The human/signal-input path for a `process` run (K-024 **D-F**) and the
+        timer sweep's release: the input, already validated and merged into the run
+        ctx service-side, rides **inside** the CAS so the write and the flip cannot
+        be split. `ctx` is the FULL merged run ctx; `ctx_version` is the
+        `ctxVersion` the caller read (`get_run`) **together with the ctx it merged
+        onto** — keyword-only and required, so no caller can skip the compare.
 
-        Zero-row contract (live-verified, QUERIES.md §12.13 — the whole D-F argument
-        rests on it): a run that is not `waiting` matches the node but fails the
-        `WHERE` ⇒ **`None` and NOTHING is written — neither the status flip nor the
-        ctx**. Only the CAS *winner's* ctx is ever persisted, so "which input
-        advanced the run" and "which input is in `ctx`" can never disagree; the
-        loser's input is rejected (409), never silently lost. A missing `runId` is
-        likewise zero rows — the service splits the two cases with a prior
-        `get_run` (absent → 404, present-but-not-waiting → 409).
+        K-097 (`docs/plans/workflow-input-cas-graph.md` §2): a status-only compare
+        matches `waiting` again once a winner's drive re-parks the run (the ABA), so
+        the CAS also compares `coalesce(r.ctxVersion, 0)` and bumps it. A read of
+        `(waiting, v)` names one wait instance; the CAS succeeds only if no resume
+        and no ctx write has happened since.
+
+        Zero-row contract: a run that is not `waiting`, or not at the read
+        `ctxVersion`, matches the node but fails the `WHERE` ⇒ **`None` and NOTHING
+        is written** — no flip, no ctx, no version bump. The two causes are not
+        distinguished: both mean "re-read and retry" (409). A missing `runId` is
+        likewise zero rows — the service splits it out with its prior `get_run`.
         """
         res = self._graph(ws).query(
             "MATCH (r:WorkflowRun {runId: $runId}) "
-            "WHERE r.status = 'waiting' "
-            "SET r.status = 'running', r.waitingThreadId = '', r.ctx = $ctx "
+            "WHERE r.status = 'waiting' AND coalesce(r.ctxVersion, 0) = $ctxVersion "
+            "SET r.status = 'running', r.waitingThreadId = '', r.ctx = $ctx, "
+            "    r.ctxVersion = $ctxVersion + 1 "
             "RETURN r.runId AS runId, r.status AS status",
-            {"runId": run_id, "ctx": ctx},
+            {"runId": run_id, "ctx": ctx, "ctxVersion": ctx_version},
         )
         return self._status_row(res)
 
@@ -3069,12 +3081,17 @@ class Repository:
 
         The executor calls this on `stepCount > maxSteps` (step-budget exceeded,
         §7), stamping a diagnostic note into `ctx`. `None` = run not found.
+
+        K-097: bumps `ctxVersion`, keeping "every ctx write to an existing run bumps
+        it" true. Not load-bearing (a terminal run already fails §12.13's status
+        guard).
         """
         res = self._graph(ws).query(
             "MATCH (r:WorkflowRun {runId: $runId}) "
             "OPTIONAL MATCH (r)-[atRel:AT_STEP]->() "
             "DELETE atRel "
-            "SET r.status = 'failed', r.endedAt = $endedAt, r.ctx = $ctx "
+            "SET r.status = 'failed', r.endedAt = $endedAt, r.ctx = $ctx, "
+            "    r.ctxVersion = coalesce(r.ctxVersion, 0) + 1 "
             "RETURN r.runId AS runId, r.status AS status",
             {"runId": run_id, "endedAt": ended_at, "ctx": ctx},
         )
@@ -3118,7 +3135,10 @@ class Repository:
         """Read a run's state. QUERIES.md §12.7 (RO).
 
         `atStepKey` is `None` for terminal runs (`AT_STEP` cleared). `None` when
-        the run does not exist.
+        the run does not exist. `ctxVersion` (K-097) is `coalesce(r.ctxVersion, 0)`:
+        a run is created without the property, so a never-resumed run reads 0. It
+        is read in the same query as `ctx`, which is what lets a caller hand
+        §12.13 the version that belongs to the ctx it merged onto.
         """
         res = self._graph(ws).ro_query(
             "MATCH (r:WorkflowRun {runId: $runId}) "
@@ -3128,7 +3148,8 @@ class Repository:
             "       r.maxSteps AS maxSteps, r.trace AS trace, r.ctx AS ctx, "
             "       r.startedAt AS startedAt, r.endedAt AS endedAt, "
             "       r.waitingThreadId AS waitingThreadId, cur.key AS atStepKey, "
-            "       snap.key AS defKey, snap.version AS defVersion",
+            "       snap.key AS defKey, snap.version AS defVersion, "
+            "       coalesce(r.ctxVersion, 0) AS ctxVersion",
             {"runId": run_id},
         )
         if not res.result_set:
@@ -3139,6 +3160,7 @@ class Repository:
             "maxSteps": row[3], "trace": row[4], "ctx": row[5],
             "startedAt": row[6], "endedAt": row[7], "waitingThreadId": row[8],
             "atStepKey": row[9], "defKey": row[10], "defVersion": row[11],
+            "ctxVersion": row[12],
         }
 
     def read_step_runs(self, ws: str, *, run_id: str) -> list[dict[str, Any]]:

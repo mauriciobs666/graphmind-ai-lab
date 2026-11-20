@@ -1,0 +1,12 @@
+present pipe_q hay=small needle=mn3 -> matched 2000/2000
+present pipe_q hay=big needle=needle -> matched 0/2000
+absent pipe_q hay=small needle=zzz -> matched 0/2000
+absent pipe_q hay=big needle=zzz -> matched 0/2000
+present herestr hay=small needle=mn3 -> matched 2000/2000
+present herestr hay=big needle=needle -> matched 2000/2000
+absent herestr hay=small needle=zzz -> matched 0/2000
+absent herestr hay=big needle=zzz -> matched 0/2000
+present pipe_noq hay=small needle=mn3 -> matched 2000/2000
+present pipe_noq hay=big needle=needle -> matched 2000/2000
+absent pipe_noq hay=small needle=zzz -> matched 0/2000
+absent pipe_noq hay=big needle=zzz -> matched 0/2000

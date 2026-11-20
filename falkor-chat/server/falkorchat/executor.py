@@ -609,7 +609,8 @@ class WorkflowExecutor:
         return self._drive(ctx, run)
 
     def resume(
-        self, ctx: CallContext, *, run_id: str, run_ctx_json: str | None = None
+        self, ctx: CallContext, *, run_id: str, run_ctx_json: str | None = None,
+        ctx_version: int | None = None,
     ) -> str | None:
         """Resume a parked (`waiting`) run on a human reply. The `waiting→running`
         CAS is single-flight (§12.4): if it does not apply (the run is not waiting,
@@ -619,14 +620,23 @@ class WorkflowExecutor:
         `run_ctx_json` (K-024 **D-F**) carries a FULL merged run ctx to be written
         **inside** the CAS (§12.13) instead of the plain flip (§12.4) — so only the
         CAS winner's ctx is ever persisted and a loser writes neither the flip nor
-        the ctx. Omitted ⇒ the chat/trigger path, byte-identical in behaviour to
-        before. The post-CAS `get_run` below is what makes the just-written ctx the
-        one `_drive_loop` loads."""
+        the ctx. Omitted ⇒ the chat/trigger path, unchanged apart from §12.4's
+        `ctxVersion` bump (K-097). The post-CAS `get_run` below is what makes the just-written ctx the
+        one `_drive_loop` loads.
+
+        `ctx_version` (K-097) is required with `run_ctx_json`: the `ctxVersion` read
+        together with the ctx the caller merged onto. A version miss is a refused
+        CAS like a status miss (`None`, nothing written). Checked with `is None`,
+        never falsiness — 0 is the normal first value."""
+        if run_ctx_json is not None and ctx_version is None:
+            raise ValueError(
+                "resume with run_ctx_json requires the ctx_version read with that ctx"
+            )
         cas = (
             self._repo.resume_run(ctx.ws, run_id=run_id)
             if run_ctx_json is None
             else self._repo.resume_run_with_ctx(
-                ctx.ws, run_id=run_id, ctx=run_ctx_json
+                ctx.ws, run_id=run_id, ctx=run_ctx_json, ctx_version=ctx_version,
             )
         )
         if cas is None:

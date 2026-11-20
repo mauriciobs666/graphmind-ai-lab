@@ -1,0 +1,114 @@
+### compare dropped: exit=1 6 failed, 480 passed, 1 warning in 9.19s
+   red: test_a_chat_resume_and_repark_in_the_gap_refuses_the_submitter
+   red: test_a_human_repark_in_the_sweeps_read_to_cas_gap_lands_the_run_in_raced
+   red: test_a_repark_during_validation_refuses_the_merge_built_on_the_earlier_read
+   red: test_aba_reparked_at_another_step_keeps_the_input_the_guard_branched_on
+   red: test_aba_reparked_at_the_same_step_refuses_the_stale_submitter
+   red: test_ctx_version_moves_on_every_resume_and_ctx_write_and_nowhere_else
+### 12.13 bump dropped: exit=1 6 failed, 480 passed, 1 warning in 8.41s
+   red: test_a_human_repark_in_the_sweeps_read_to_cas_gap_lands_the_run_in_raced
+   red: test_a_repark_during_validation_refuses_the_merge_built_on_the_earlier_read
+   red: test_aba_reparked_at_another_step_keeps_the_input_the_guard_branched_on
+   red: test_aba_reparked_at_the_same_step_refuses_the_stale_submitter
+   red: test_ctx_version_moves_on_every_resume_and_ctx_write_and_nowhere_else
+   red: test_the_sweep_resumes_a_due_run_that_carries_no_ctx_version
+### resume_run bump dropped: exit=1 2 failed, 484 passed, 1 warning in 8.02s
+   red: test_a_chat_resume_and_repark_in_the_gap_refuses_the_submitter
+   red: test_ctx_version_moves_on_every_resume_and_ctx_write_and_nowhere_else
+### resume_run bump = constant 1: exit=1 2 failed, 484 passed, 1 warning in 7.70s
+   red: test_a_chat_resume_and_repark_in_the_gap_refuses_the_submitter
+   red: test_ctx_version_moves_on_every_resume_and_ctx_write_and_nowhere_else
+### fail_run bump dropped: exit=1 1 failed, 485 passed, 1 warning in 7.91s
+   red: test_ctx_version_moves_on_every_resume_and_ctx_write_and_nowhere_else
+### compare without coalesce: exit=1 38 failed, 448 passed, 1 warning in 8.51s
+   red: test_a_caught_fault_keeps_its_exception_as_the_error_not_the_ctx_note
+   red: test_a_chat_resume_and_repark_in_the_gap_refuses_the_submitter
+   red: test_a_declared_value_that_fires_no_guard_re_parks
+   red: test_a_human_repark_in_the_sweeps_read_to_cas_gap_lands_the_run_in_raced
+   red: test_a_repark_during_validation_refuses_the_merge_built_on_the_earlier_read
+   red: test_a_step_that_declares_nothing_accepts_any_non_reserved_key
+   red: test_a_wait_step_accepts_exactly_its_declared_signal
+   red: test_a_waiting_envelope_is_never_read_back_so_a_concurrent_writer_cannot_leak_in
+   red: test_aba_reparked_at_another_step_keeps_the_input_the_guard_branched_on
+   red: test_aba_reparked_at_the_same_step_refuses_the_stale_submitter
+   red: test_an_empty_input_is_rejected_for_free
+   red: test_cas_contention_human_resolves_first_the_sweep_never_touches_it
+   red: test_cas_contention_sweep_resolves_first_a_second_human_submit_gets_409
+   red: test_ctx_version_moves_on_every_resume_and_ctx_write_and_nowhere_else
+   red: test_drive_fault_on_input_returns_200_with_a_failed_envelope
+   red: test_input_that_exhausts_the_budget_reports_the_graphs_ctx_and_reason
+   red: test_model_resolution_fault_on_input_returns_200_with_a_failed_envelope
+   red: test_not_yet_resume_survives_unbroken_on_a_timer_bearing_step
+   red: test_provider_call_fault_on_input_returns_200_with_a_failed_envelope
+   red: test_repeated_invalid_values_never_exhaust_the_budget
+   red: test_rest_input_that_exhausts_the_budget_reports_the_graphs_ctx
+   red: test_rest_round_trip_start_then_input
+   red: test_step_scoped_marker_does_not_leak_across_different_timer_steps
+   red: test_submit_input_merges_flat_into_ctx_and_drives
+   red: test_submit_input_preserves_existing_ctx_keys
+   red: test_submit_input_to_a_non_waiting_run_is_rejected
+   red: test_sweep_after_resuming_a_run_a_second_submit_gets_the_existing_409
+   red: test_sweep_batch_isolation_a_fault_on_one_candidate_does_not_stop_the_rest
+   red: test_sweep_bucket_raced_on_a_stale_scanned_step_key_not_just_status
+   red: test_sweep_buckets_a_release_that_exhausts_the_budget_as_resumed_not_faulted
+   red: test_sweep_faults_a_candidate_whose_merged_ctx_would_exceed_max_config_len
+   red: test_sweep_faults_a_due_run_whose_escalation_branch_reaches_an_unimplemented_step
+   red: test_sweep_respects_the_limit
+   red: test_sweep_skips_a_candidate_before_its_due_time_and_resumes_it_after[human]
+   red: test_sweep_skips_a_candidate_before_its_due_time_and_resumes_it_after[wait]
+   red: test_the_clean_path_envelope_ctx_still_equals_the_persisted_merge
+   red: test_the_failed_envelope_ctx_is_the_graphs_post_fault_ctx_not_the_submission
+   red: test_the_sweep_resumes_a_due_run_that_carries_no_ctx_version
+### get_run without coalesce: exit=1 39 failed, 447 passed, 1 warning in 11.63s
+   red: test_a_caught_fault_keeps_its_exception_as_the_error_not_the_ctx_note
+   red: test_a_chat_resume_and_repark_in_the_gap_refuses_the_submitter
+   red: test_a_declared_value_that_fires_no_guard_re_parks
+   red: test_a_human_repark_in_the_sweeps_read_to_cas_gap_lands_the_run_in_raced
+   red: test_a_repark_during_validation_refuses_the_merge_built_on_the_earlier_read
+   red: test_a_step_that_declares_nothing_accepts_any_non_reserved_key
+   red: test_a_wait_step_accepts_exactly_its_declared_signal
+   red: test_a_waiting_envelope_is_never_read_back_so_a_concurrent_writer_cannot_leak_in
+   red: test_aba_reparked_at_another_step_keeps_the_input_the_guard_branched_on
+   red: test_aba_reparked_at_the_same_step_refuses_the_stale_submitter
+   red: test_an_empty_input_is_rejected_for_free
+   red: test_cas_contention_human_resolves_first_the_sweep_never_touches_it
+   red: test_cas_contention_sweep_resolves_first_a_second_human_submit_gets_409
+   red: test_ctx_version_moves_on_every_resume_and_ctx_write_and_nowhere_else
+   red: test_drive_fault_on_input_returns_200_with_a_failed_envelope
+   red: test_input_that_exhausts_the_budget_reports_the_graphs_ctx_and_reason
+   red: test_model_resolution_fault_on_input_returns_200_with_a_failed_envelope
+   red: test_not_yet_resume_survives_unbroken_on_a_timer_bearing_step
+   red: test_provider_call_fault_on_input_returns_200_with_a_failed_envelope
+   red: test_repeated_invalid_values_never_exhaust_the_budget
+   red: test_rest_input_that_exhausts_the_budget_reports_the_graphs_ctx
+   red: test_rest_input_to_a_non_waiting_run_is_409
+   red: test_rest_round_trip_start_then_input
+   red: test_step_scoped_marker_does_not_leak_across_different_timer_steps
+   red: test_submit_input_merges_flat_into_ctx_and_drives
+   red: test_submit_input_preserves_existing_ctx_keys
+   red: test_submit_input_to_a_non_waiting_run_is_rejected
+   red: test_sweep_after_resuming_a_run_a_second_submit_gets_the_existing_409
+   red: test_sweep_batch_isolation_a_fault_on_one_candidate_does_not_stop_the_rest
+   red: test_sweep_bucket_raced_on_a_stale_scanned_step_key_not_just_status
+   red: test_sweep_buckets_a_release_that_exhausts_the_budget_as_resumed_not_faulted
+   red: test_sweep_faults_a_candidate_whose_merged_ctx_would_exceed_max_config_len
+   red: test_sweep_faults_a_due_run_whose_escalation_branch_reaches_an_unimplemented_step
+   red: test_sweep_respects_the_limit
+   red: test_sweep_skips_a_candidate_before_its_due_time_and_resumes_it_after[human]
+   red: test_sweep_skips_a_candidate_before_its_due_time_and_resumes_it_after[wait]
+   red: test_the_clean_path_envelope_ctx_still_equals_the_persisted_merge
+   red: test_the_failed_envelope_ctx_is_the_graphs_post_fault_ctx_not_the_submission
+   red: test_the_sweep_resumes_a_due_run_that_carries_no_ctx_version
+### submit: version re-read at CAS time: exit=1 1 failed, 485 passed, 1 warning in 7.95s
+   red: test_a_repark_during_validation_refuses_the_merge_built_on_the_earlier_read
+### sweep: version re-read at CAS time: exit=0 486 passed, 1 warning in 7.64s
+### executor guard removed: exit=1 1 failed, 481 passed, 1 warning, 4 errors in 8.63s
+   red: test_add_to_cart_second_product_added_cleanly_alongside_first
+   red: test_adjust_cart_item_decrement_to_zero_deletes_node_and_edge
+   red: test_adjust_cart_item_decrement_updates_in_place
+   red: test_adjust_cart_item_over_removal_deletes_rather_than_going_negative
+   red: test_executor_resume_with_a_ctx_but_no_version_raises_and_writes_nothing
+copies restored = live tree
+### executor guard removed: exit=1 1 failed, 485 passed, 1 warning in 7.77s
+   red: test_executor_resume_with_a_ctx_but_no_version_raises_and_writes_nothing
+copies restored = live tree

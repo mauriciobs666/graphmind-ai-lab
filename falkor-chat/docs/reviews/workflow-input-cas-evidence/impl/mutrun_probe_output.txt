@@ -1,0 +1,3 @@
+### sweep: version re-read at CAS time: exit=1 1 failed, 486 passed, 1 warning in 7.53s
+   red: test_a_human_repark_right_after_the_sweeps_read_lands_in_raced
+copies restored = live tree

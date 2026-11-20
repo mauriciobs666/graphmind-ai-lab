@@ -1020,13 +1020,18 @@ assert_contains "§12.9 find_waiting_run_for_thread finds wr1" "wr1" "$out"
 prof=$(gp "$WS" 'CYPHER threadId="th1" MATCH (r:WorkflowRun {status:"waiting"}) WHERE r.waitingThreadId = $threadId RETURN r.runId LIMIT 1')
 assert_index_scan "§12.9 resume lookup anchors on WorkflowRun.status index (no label scan)" "$prof"
 
-# 12.4 resume_run: waiting -> running (single-flight)
-out=$(gq "$WS" 'CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "waiting" SET r.status="running", r.waitingThreadId="" RETURN "status="+r.status AS s')
+# 12.4 resume_run: waiting -> running (single-flight); bumps ctxVersion (K-097), compares nothing
+RESUME='MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "waiting" SET r.status="running", r.waitingThreadId="", r.ctxVersion = coalesce(r.ctxVersion, 0) + 1 RETURN "status="+r.status AS s'
+out=$(gq "$WS" "CYPHER runId=\"wr1\" $RESUME")
 assert_contains "§12.4 resume_run CAS waiting->running (winner)" "status=running" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"}) RETURN "v="+coalesce(toString(r.ctxVersion),"absent") AS s')
+assert_contains "§12.4 resume_run bumps ctxVersion from absent to 1" "v=1" "$out"
 
-# concurrent second resume -> zero rows (single-flight guard)
-out=$(gq "$WS" 'CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "waiting" SET r.status="running", r.waitingThreadId="" RETURN "status="+r.status AS s')
+# concurrent second resume -> zero rows (single-flight guard), and no second bump
+out=$(gq "$WS" "CYPHER runId=\"wr1\" $RESUME")
 assert_not_contains "§12.4 second concurrent resume is a no-op (single-flight)" "status=running" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"}) RETURN "v="+coalesce(toString(r.ctxVersion),"absent") AS s')
+assert_contains "§12.4 the refused resume did not bump ctxVersion" "v=1" "$out"
 
 echo ""
 echo "▶ §12.12/§12.13 untriggered start + resume-with-ctx (K-024 process flow, U0)"
@@ -1062,27 +1067,50 @@ prof=$(gp "$WS" "CYPHER runId=\"wru_prof\" defKey=\"wf_review\" defVersion=\"1\"
 assert_index_scan "§12.12 start_run_untriggered anchors on WorkflowDefSnapshot index" "$prof"
 gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru_prof"}) DETACH DELETE r' > /dev/null
 
-# 12.13 resume_run_with_ctx: §12.4 + one SET term — the ctx write rides the CAS (D-F)
-RESUME_CTX='MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "waiting" SET r.status="running", r.waitingThreadId="", r.ctx=$ctx RETURN "status="+r.status+" ctx="+r.ctx AS s'
+# 12.13 resume_run_with_ctx: the versioned CAS (K-097) — compares coalesce(ctxVersion, 0)
+# with the version the service read together with the ctx it merged onto, writes the
+# merged ctx inside the flip (D-F), and bumps the version
+RESUME_CTX='MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "waiting" AND coalesce(r.ctxVersion, 0) = $ctxVersion SET r.status="running", r.waitingThreadId="", r.ctx=$ctx, r.ctxVersion = $ctxVersion + 1 RETURN "status="+r.status+" ctx="+r.ctx AS s'
+VERSION_OF='MATCH (r:WorkflowRun {runId:"wru1"}) RETURN "v="+coalesce(toString(r.ctxVersion),"absent")+" ctx="+r.ctx AS s'
 
 gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) SET r.status="waiting", r.waitingThreadId="", r.ctx="{\"request\":1}"' > /dev/null
-out=$(gq "$WS" "CYPHER runId=\"wru1\" ctx=\"{\\\"request\\\":1,\\\"decision\\\":\\\"approve\\\"}\" $RESUME_CTX")
-assert_contains "§12.13 resume_run_with_ctx flips waiting->running AND writes ctx" 'status=running ctx={"request":1,"decision":"approve"}' "$out"
+out=$(gq "$WS" "$VERSION_OF")
+assert_contains "§12.13 a START_UNTRIG run carries no ctxVersion" "v=absent" "$out"
+out=$(gq "$WS" "CYPHER runId=\"wru1\" ctxVersion=0 ctx=\"{\\\"request\\\":1,\\\"decision\\\":\\\"approve\\\"}\" $RESUME_CTX")
+assert_contains "§12.13 CAS at ctxVersion=0 on a run with no ctxVersion flips AND writes ctx" 'status=running ctx={"request":1,"decision":"approve"}' "$out"
+out=$(gq "$WS" "$VERSION_OF")
+assert_contains "§12.13 the winning CAS sets the raw ctxVersion to 1" "v=1" "$out"
 
-# the CAS loser (run already running): zero rows, and its ctx is NOT written
-out=$(gq "$WS" "CYPHER runId=\"wru1\" ctx=\"{\\\"decision\\\":\\\"LOSER\\\"}\" $RESUME_CTX")
+# the CAS loser on a running run (version matches): the status guard alone refuses it
+out=$(gq "$WS" "CYPHER runId=\"wru1\" ctxVersion=1 ctx=\"{\\\"decision\\\":\\\"LOSER\\\"}\" $RESUME_CTX")
 assert_not_contains "§12.13 resume-with-ctx of a non-waiting run is zero rows" "status=running" "$out"
-out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) RETURN "ctx="+r.ctx AS s')
+out=$(gq "$WS" "$VERSION_OF")
 assert_not_contains "§12.13 CAS loser wrote no ctx (nothing written, not just no flip)" "LOSER" "$out"
 assert_contains "§12.13 winner ctx survives the loser attempt" 'ctx={"request":1,"decision":"approve"}' "$out"
 
+# the ABA replay: the winner's drive re-parks the run (§12.3); a CAS carrying the stale
+# version read before the win is refused, even though the status is `waiting` again
+gq "$WS" 'CYPHER runId="wru1" threadId="" MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "running" SET r.status="waiting", r.waitingThreadId=$threadId RETURN r.status' > /dev/null
+out=$(gq "$WS" "CYPHER runId=\"wru1\" ctxVersion=0 ctx=\"{\\\"decision\\\":\\\"LOSER\\\"}\" $RESUME_CTX")
+assert_not_contains "§12.13 ABA: a stale ctxVersion on a re-parked run is zero rows" "status=running" "$out"
+assert_not_contains "§12.13 ABA: the stale CAS sets no property" "Properties set" "$out"
+out=$(gq "$WS" "$VERSION_OF")
+assert_not_contains "§12.13 ABA: the stale CAS wrote no ctx" "LOSER" "$out"
+assert_contains "§12.13 ABA: the version stays 1 and the winner's ctx survives" 'v=1 ctx={"request":1,"decision":"approve"}' "$out"
+
+# a CAS with the fresh version is accepted (no false refusal)
+out=$(gq "$WS" "CYPHER runId=\"wru1\" ctxVersion=1 ctx=\"{\\\"decision\\\":\\\"fresh\\\"}\" $RESUME_CTX")
+assert_contains "§12.13 a CAS at the current ctxVersion wins" 'status=running ctx={"decision":"fresh"}' "$out"
+out=$(gq "$WS" "$VERSION_OF")
+assert_contains "§12.13 the fresh CAS bumps ctxVersion to 2" "v=2" "$out"
+
 # missing run -> zero rows (WorkflowRunNotFound is the service's business, not the query's)
-out=$(gq "$WS" "CYPHER runId=\"ghost\" ctx=\"{}\" $RESUME_CTX")
+out=$(gq "$WS" "CYPHER runId=\"ghost\" ctxVersion=0 ctx=\"{}\" $RESUME_CTX")
 assert_not_contains "§12.13 resume-with-ctx of a missing run is zero rows" "status=running" "$out"
 
-# PROFILE: point lookup on WorkflowRun.runId, no label scan
+# PROFILE: point lookup on WorkflowRun.runId, no label scan (the compare is a residual Filter)
 gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) SET r.status="waiting"' > /dev/null
-prof=$(gp "$WS" "CYPHER runId=\"wru1\" ctx=\"{}\" $RESUME_CTX")
+prof=$(gp "$WS" "CYPHER runId=\"wru1\" ctxVersion=2 ctx=\"{}\" $RESUME_CTX")
 assert_index_scan "§12.13 resume_run_with_ctx anchors on WorkflowRun.runId index" "$prof"
 
 echo ""
@@ -1172,8 +1200,10 @@ echo "▶ §12.5 fail_run (step budget) + complete_run — terminal clears AT_ST
 
 # step-budget fail: seed wr3 with stepCount 13 > maxSteps 12, fail_run
 gq "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"wr3", defKey:"wf_review", defVersion:"1", status:"running", startedAt:7000, ctx:"{}", trace:false, maxSteps:12, stepCount:13, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger)' > /dev/null
-out=$(gq "$WS" 'CYPHER runId="wr3" endedAt=7100 ctx="{\"error\":\"step budget exceeded\"}" MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[atRel:AT_STEP]->() DELETE atRel SET r.status="failed", r.endedAt=$endedAt, r.ctx=$ctx RETURN "status="+r.status AS s')
+out=$(gq "$WS" 'CYPHER runId="wr3" endedAt=7100 ctx="{\"error\":\"step budget exceeded\"}" MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[atRel:AT_STEP]->() DELETE atRel SET r.status="failed", r.endedAt=$endedAt, r.ctx=$ctx, r.ctxVersion = coalesce(r.ctxVersion, 0) + 1 RETURN "status="+r.status AS s')
 assert_contains "§12.5 fail_run (step budget) sets failed" "status=failed" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr3"}) RETURN "v="+coalesce(toString(r.ctxVersion),"absent") AS s')
+assert_contains "§12.5 fail_run bumps ctxVersion (a ctx write to an existing run)" "v=1" "$out"
 out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr3"})-[:AT_STEP]->() RETURN count(*) AS n')
 assert_contains "§12.5 fail_run clears AT_STEP" "0" "$out"
 

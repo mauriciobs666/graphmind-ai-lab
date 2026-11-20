@@ -665,7 +665,10 @@ class _IntrudeAfterDriveRepo:
     def get_run(self, ws, *, run_id):
         self.get_run_calls += 1
         if self.get_run_calls > 1:
-            self._repo.resume_run_with_ctx(ws, run_id=run_id, ctx=self._intruder_ctx)
+            version = self._repo.get_run(ws, run_id=run_id)["ctxVersion"]
+            self._repo.resume_run_with_ctx(
+                ws, run_id=run_id, ctx=self._intruder_ctx, ctx_version=version,
+            )
             self._repo.suspend_run(ws, run_id=run_id, thread_id="")
         return self._repo.get_run(ws, run_id=run_id)
 
