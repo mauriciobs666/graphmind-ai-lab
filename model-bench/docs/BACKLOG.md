@@ -200,5 +200,6 @@ documented there as current behavior until fixed.
 - The exit-5 message names `results/transcripts/<runId>.jsonl`, which no run writes.
 - A plain `compare` (no `--models`) pairs the first two arms by file-name order, not the newest.
 - `validate --strict` raises `NotImplementedError` (exit 1 with a traceback) instead of refusing.
+- A timeout from LM Studio during `run`'s start-of-run residency check or catalog read (`residency()`, `catalog()`) raises `LMStudioUnreachable`, which `cli` does not catch: a traceback with exit 1 where the other probes exit 3 (analyst Pass 2, `model-bench/docs/reviews/small-model-benchmarking-manual.md`, read from code, not reproduced).
 
 - **Done when:** each is fixed or removed, with the spec section updated in the same change.

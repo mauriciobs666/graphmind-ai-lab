@@ -2,6 +2,16 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-20 — user manual updated for decision points
+
+**What:** `docs/manuals/small-model-benchmarking.md` (`tico`): new Walkthrough 9 (decision-point packs,
+`run --candidate`, replicates, `compare --session --models`, reading met / not met / not assessable),
+`run --reference` described as accepted and ignored, the plain `compare` verdict covering only the first
+two arms, the exit-code FAQ extended. **Checked:** `analyst` `docs/reviews/small-model-benchmarking-manual.md`
+(Pass 2 approve with suggestions) and `qa-engineer` `docs/test-reports/small-model-benchmarking-manual-report.md`
+(PASS, three low defects fixed). Open: an unhandled LM Studio timeout at the start-of-run residency and
+catalog reads (`docs/BACKLOG.md`).
+
 ## 2026-11-20 — model-bench live spec (live-specs L6), inside the typed-decision-models close
 
 **What:** `docs/plans/live-specs.md` §5 L6. New whole-component live spec `docs/DESIGN.md` (§1–§11:
