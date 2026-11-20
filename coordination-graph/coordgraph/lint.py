@@ -18,7 +18,7 @@ from .discover import discover
 from .history import HistoryIndex, find_id_tokens
 from .parse.backlog import BacklogDoc, BacklogParseError, Item, parse_backlog
 from .scope import load_legacy_paths
-from .shapes import Candidates, Reason, classify, offline_candidates
+from .shapes import UNSCOPED, Candidates, Reason, classify, offline_candidates
 
 MAP_OPEN = "<!-- coordgraph:milestone-map -->"
 MAP_CLOSE = "<!-- /coordgraph:milestone-map -->"
@@ -143,7 +143,7 @@ def _item_findings(item: Item, rules, history: HistoryIndex, known_refs: set[str
         if kind == "scheme" and rules is not None and (problem := _canonical_problem(rules, token)):
             out.append(Finding(p, ln, "error", "malformed-id", f"{label}: Depends on {token}: {problem}"))
             continue
-        scope = item.scope or "unscoped"
+        scope = item.scope or UNSCOPED
         if candidates(token, scope) & known_refs:
             continue
         if history.delivered(token, scope, candidates) is not None:

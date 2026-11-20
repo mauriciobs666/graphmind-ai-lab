@@ -27,6 +27,11 @@ header), the `sync`, `rebuild`, `drift`, `query`, `bootstrap` subcommands, each 
 Live tests (ephemeral container only): AC-2, AC-4, AC-6 (the note 7.3 rows), AC-7 and plan3 section 6
 test 13 (the legs that need no S7a view).
 
+S3 gate fixes (`claude/docs/reviews/coordination-graph-impl.md` `## S3b`): an unsafe indexed value is a `store.UnsafeValue`
+(a `StoreError` and a `KeyHygieneError`), so it fails one path instead of aborting `sync`, `parity` and `drift`; parity
+also compares node labels and relationship types; `drift` reports `stale-parser`; `shapes.offline_candidates` drops the
+bare string for a scope-qualified legacy token, as `identity` does. `PARSER_VERSION` still 1 (stakeholder decision).
+
 ## 2026-11-20 — S1e: backlog parser, history match, offline CLI; history coverage probe
 
 Delivered the remainder of base-plan step S1 (`claude/docs/plans/coordination-graph.md` §4, with

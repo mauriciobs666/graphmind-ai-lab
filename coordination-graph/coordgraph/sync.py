@@ -18,7 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -39,8 +39,11 @@ ORPHAN_SWEEPS = (
     ("Item", "HAS_ITEM",
      "MATCH (u:Item) OPTIONAL MATCH (s:Source)-[:HAS_ITEM]->(u) WITH u, s WHERE s IS NULL DELETE u RETURN count(u)"),
 )
-EXPORT = ("MATCH (s:Source) OPTIONAL MATCH (s)-[]->(c) "
-          "RETURN s.path AS path, properties(s) AS meta, collect(properties(c)) AS kids")
+# Per source: its labels, its properties, and each child as `[relationship type, child labels, child properties]`
+# (the CASE keeps a childless source from collecting a `[null, null, null]` row).
+EXPORT = ("MATCH (s:Source) OPTIONAL MATCH (s)-[r]->(c) "
+          "RETURN s.path AS path, labels(s) AS labels, properties(s) AS meta, "
+          "collect(CASE WHEN c IS NULL THEN null ELSE [type(r), labels(c), properties(c)] END) AS kids")
 
 
 # --- parsing one source -------------------------------------------------------------------------
@@ -174,12 +177,24 @@ class Snapshot:
     row_count: int
     meta_hash: str
     children: dict[str, str]
+    labels: tuple[str, ...]  # the source's labels, sorted
+    shapes: dict[str, tuple[str, tuple[str, ...]]]  # child key -> (relationship type, sorted labels)
 
 
-def snapshot(meta: Mapping, kids: list[Mapping]) -> Snapshot:
+def snapshot(meta: Mapping, kids: list[Mapping], labels: Iterable[str], shapes: Iterable[tuple[str, Iterable[str]]]
+             ) -> Snapshot:
+    """`kids` and `shapes` are parallel: one `(relationship type, labels)` per child."""
     meta = {k: v for k, v in meta.items() if k not in VOLATILE}
     return Snapshot(str(meta.get("kind")), meta.get("docStatus"), str(meta.get("sha256")),
-                    meta.get("rowCount", 0), canon_hash(meta), {child_key(k): canon_hash(k) for k in kids})
+                    meta.get("rowCount", 0), canon_hash(meta), {child_key(k): canon_hash(k) for k in kids},
+                    tuple(sorted(labels)),
+                    {child_key(k): (rel, tuple(sorted(lab))) for k, (rel, lab) in zip(kids, shapes)})
+
+
+def expected_shape(kind: str) -> tuple[tuple[str, ...], tuple[str, tuple[str, ...]] | None]:
+    """The labels a `kind` source carries and the `(relationship, child labels)` of its children (`KINDS`)."""
+    label, rel, child = store.KINDS[kind]
+    return ("Source", label), (None if rel is None else (rel, (child,)))
 
 
 def expected_snapshots(parser: Parser) -> tuple[dict[str, Snapshot], list[Outcome]]:
@@ -189,11 +204,12 @@ def expected_snapshots(parser: Parser) -> tuple[dict[str, Snapshot], list[Outcom
     for path, kind in parser.found.items():
         try:
             kind, meta, rows = parser.parse(path)
-        except BacklogParseError as exc:
+            written_meta, written_rows = store.write_form(kind, meta, rows)
+        except (BacklogParseError, store.StoreError) as exc:
             failed.append(Outcome(path, "failed", str(exc)))
             continue
-        written_meta, written_rows = store.write_form(kind, meta, rows)
-        out[path] = snapshot(written_meta, written_rows)
+        labels, shape = expected_shape(kind)
+        out[path] = snapshot(written_meta, written_rows, labels, [shape] * len(written_rows))
     return out, failed
 
 
@@ -203,7 +219,8 @@ def actual_snapshots(graph) -> dict[str, Snapshot]:
     total = graph.query("MATCH (s:Source) RETURN count(s)").result_set[0][0]
     if len(rows) != total:  # a capped reply looks complete
         raise store.StoreError(f"export returned {len(rows)} rows for {total} sources")
-    return {r[0]: snapshot(r[1], list(r[2])) for r in rows}
+    return {path: snapshot(meta, [k[2] for k in kids], labels, [(k[0], k[1]) for k in kids])
+            for path, labels, meta, kids in rows}
 
 
 @dataclass
@@ -243,6 +260,8 @@ def _diff_source(path: str, want: Snapshot, got: Snapshot) -> list[str]:
            for name, attr in (("kind", "kind"), ("docStatus", "doc_status"), ("sha256", "sha256"),
                               ("rowCount", "row_count"))
            if getattr(want, attr) != getattr(got, attr)]
+    if want.labels != got.labels:
+        out.append(f"{path}: labels {list(got.labels)!r}, expected {list(want.labels)!r}")
     if want.meta_hash != got.meta_hash and not out:
         out.append(f"{path}: source properties differ")
     for key in sorted(set(want.children) | set(got.children)):
@@ -252,6 +271,9 @@ def _diff_source(path: str, want: Snapshot, got: Snapshot) -> list[str]:
             out.append(f"{path}: child {key!r} in graph, not in the file")
         elif want.children[key] != got.children[key]:
             out.append(f"{path}: child {key!r} differs")
+        elif want.shapes[key] != got.shapes[key]:
+            (wr, wl), (gr, gl) = want.shapes[key], got.shapes[key]
+            out.append(f"{path}: child {key!r} is {gr} {list(gl)!r}, expected {wr} {list(wl)!r}")
     return out
 
 

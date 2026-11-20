@@ -128,6 +128,47 @@ def test_a_store_error_on_one_path_is_reported_not_raised(repo):
     assert out[R] == "failed" and out[L] == "synced"
 
 
+def long_item_id(monkeypatch, bad_path=R):
+    """A parser that 'forgot' the byte limit: one path comes back with a 600-byte indexed `itemId`."""
+    real = sync.Parser.parse
+
+    def parse(self, path):
+        kind, meta, rows = real(self, path)
+        return kind, ({**meta, "itemId": "x" * 600} if path == bad_path else meta), rows
+
+    monkeypatch.setattr(sync.Parser, "parse", parse)
+
+
+def test_an_unsafe_indexed_value_on_one_path_fails_that_path_only_in_every_sync_entry_point(repo, monkeypatch):
+    long_item_id(monkeypatch)
+    for run in (lambda g: sync.sync_all(g, parser(repo)), lambda g: sync.sync_changed(g, parser(repo)),
+                lambda g: sync.sync_paths(g, parser(repo), [R, L, B])):
+        g = MemGraph()
+        out = {o.path: o for o in run(g)}
+        assert out[R].status == "failed" and "itemId" in out[R].detail
+        assert out[L].status == "synced" and out[B].status == "synced" and R not in g.sources
+
+
+def test_an_unsafe_value_does_not_skip_the_prune_and_parity_names_the_path(repo, monkeypatch):
+    g = MemGraph()
+    sync.sync_all(g, parser(repo))
+    (repo / B).unlink()  # B sorts before R: the prune must still run after R fails
+    long_item_id(monkeypatch)
+    out = statuses(sync.sync_all(g, parser(repo), force=True))
+    assert out[R] == "failed" and out[B] == "deleted" and B not in g.sources
+    p = sync.parity(g, parser(repo))
+    assert not p.ok and any(d.startswith(f"{R}: does not parse:") for d in p.diffs)
+
+
+def test_drift_flags_a_changed_file_whose_parse_is_unsafe_instead_of_raising(repo, monkeypatch):
+    g = MemGraph()
+    sync.sync_all(g, parser(repo))
+    put(repo, R, REVIEW + "\nmore\n")
+    long_item_id(monkeypatch)
+    d = {x.path: x for x in drift.check(g, parser(repo)).drifts}
+    assert d[R].state == "changed" and "does not parse" in d[R].note
+
+
 def test_a_file_that_keeps_changing_is_a_failure_not_a_silent_success(repo):
     g = MemGraph()
     p = parser(repo)
@@ -162,6 +203,17 @@ def test_rebuild_is_an_unconditional_replace_with_a_passing_parity_and_a_stamp(b
     assert sorted(g.writes) == sorted([L, B, R]) and res2.ok
 
 
+def test_rebuild_reports_orphans_a_bug_signal_and_is_not_ok(built, monkeypatch):
+    repo, g, _ = built
+    g.orphans = {"Unit": 2}
+    monkeypatch.setattr(sync.store, "bootstrap", lambda *a: None)
+    res = sync.rebuild(None, g, "k", parser(repo))
+    assert res.orphans == {"Unit": 2, "Item": 0} and res.parity.ok and not res.ok
+    lines = res.render().splitlines()
+    assert "ORPHANS Unit: 2 deleted (a bug signal)" in lines and not any(l.startswith("ORPHANS Item") for l in lines)
+    assert sync.rebuild(None, g, "k", parser(repo)).ok  # the sweep deleted them
+
+
 def test_rebuild_prunes_a_source_that_left_the_disk(built):
     repo, g, _ = built
     (repo / R).unlink()
@@ -186,6 +238,24 @@ def mutated(built, mutate):
 def test_parity_names_a_property_changed_on_one_unit(built):
     p = mutated(built, lambda g: g.sources[L][2][1].__setitem__("statusToken", "paused"))
     assert p.diffs == [f"{L}: child '{L}#U2' differs"]
+
+
+def test_parity_names_a_source_whose_label_moved_from_backlog_to_ledger(built):
+    p = mutated(built, lambda g: g.source_labels.__setitem__(B, ["Source", "Ledger"]))
+    assert p.diffs == [f"{B}: labels ['Ledger', 'Source'], expected ['Backlog', 'Source']"]
+
+
+def test_parity_names_a_child_with_the_wrong_relationship_type_or_label(built):
+    p = mutated(built, lambda g: g.child_shapes.__setitem__(L, ("HAS_ITEM", ["Unit"])))
+    assert p.diffs == [f"{L}: child '{L}#U1 first' is HAS_ITEM ['Unit'], expected HAS_UNIT ['Unit']",
+                       f"{L}: child '{L}#U2' is HAS_ITEM ['Unit'], expected HAS_UNIT ['Unit']"]
+    p = mutated(built, lambda g: g.child_shapes.__setitem__(B, ("HAS_ITEM", ["Unit"])))
+    assert len(p.diffs) == 2 and all("is HAS_ITEM ['Unit'], expected HAS_ITEM ['Item']" in d for d in p.diffs)
+
+
+def test_parity_reports_a_wrong_row_count_by_name(built):
+    p = mutated(built, lambda g: g.sources[L][1].__setitem__("rowCount", 7))
+    assert p.diffs == [f"{L}: rowCount 7, expected 2"]
 
 
 def test_parity_distinguishes_absent_from_empty_on_a_child(built):
@@ -272,6 +342,18 @@ def test_drift_diffs_rows_by_key_changed_added_and_removed(repo):
                                      (f"{L}#U2", "changed"), (f"{L}#U3", "added in file")])
 
 
+def test_drift_flags_a_source_written_by_an_older_parser_with_unchanged_bytes(repo):
+    g = MemGraph()
+    sync.sync_all(g, parser(repo))
+    g.sources[B][1]["parserVersion"] = PARSER_VERSION - 1
+    rep = drift.check(g, parser(repo))
+    assert [(d.path, d.state, d.note) for d in rep.drifts] == [
+        (B, "stale-parser", f"parserVersion {PARSER_VERSION - 1}, current {PARSER_VERSION}")]
+    assert not rep.clean and f"  stale-parser\t{B}\t→ file wins; run coordgraph sync\tparserVersion" in drift.render_header(rep, True)
+    sync.sync_all(g, parser(repo))
+    assert drift.check(g, parser(repo)).clean
+
+
 def test_drift_restricts_to_the_covered_paths(repo):
     g = MemGraph()
     sync.sync_all(g, parser(repo))
@@ -308,6 +390,15 @@ def test_header_shape_hook_state_registry_line_and_row_flags(repo):
         "Synced: never – never (0 sources) · Hook: active")
 
 
+def test_relative_makes_an_absolute_path_repo_relative_and_leaves_a_relative_one_alone(tmp_path):
+    from coordgraph.commands_store import _relative
+    assert _relative(tmp_path, str(tmp_path / "a" / "docs" / "BACKLOG.md")) == "a/docs/BACKLOG.md"
+    assert _relative(tmp_path, str(tmp_path / "a" / ".." / "b.md")) == "b.md"
+    assert _relative(tmp_path, "a/docs/BACKLOG.md") == "a/docs/BACKLOG.md"
+    with pytest.raises(ValueError):
+        _relative(tmp_path, "/elsewhere/x.md")
+
+
 # --- the sync path stays offline (plan3 section 6 test 12) -------------------------------------------------
 
 def run_py(code, env=None, cwd=None):
@@ -333,3 +424,19 @@ def test_a_sync_run_with_a_bogus_work_items_root_still_mirrors_and_loads_no_wili
             "assert not [m for m in ('coordgraph.identity', 'wilib') if m in sys.modules]\n")
     out = run_py(code, {"COORDGRAPH_WI_ROOT": "/nonexistent"})
     assert out.returncode == 0, out.stderr
+
+
+def test_a_read_view_with_a_bogus_work_items_root_reports_registry_unavailable(repo):
+    """Plan3 test 12, second half: `drift` and `query` still print their header, with the degraded registry line."""
+    code = ("import types\nfrom coordgraph import commands_store as c, config\nfrom tests.memgraph import MemGraph\n"
+            "class G(MemGraph):\\n"
+            "    def ro_query(self, q):\\n        return types.SimpleNamespace(header=[[1, 'n']], result_set=[[1]])\\n"
+            f"root = {str(repo)!r}\ng = G()\n"
+            "from coordgraph import sync\nsync.sync_all(g, sync.Parser.for_root(root))\n"
+            "c._target = lambda a: (config.Config.from_env(), 'k', __import__('pathlib').Path(root), None, g)\n"
+            "A = types.SimpleNamespace(paths=[], covers=[], cypher='RETURN 1')\n"
+            "assert c.drift_cmd(A) == 0\nassert c.query_cmd(A) == 0\n")
+    code = code.replace("\\n", "\n")
+    out = run_py(code, {"COORDGRAPH_WI_ROOT": "/nonexistent", "COORDGRAPH_REPO_ROOT": str(repo)})
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.count("Registry: unavailable — identities compared as written") == 2, out.stdout

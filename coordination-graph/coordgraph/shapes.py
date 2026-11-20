@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
+UNSCOPED = "unscoped"  # lint's stand-in for a referrer with no backlog scope
 LEGACY_BARE = re.compile(r"[A-Z]-\d+")
 LEGACY_QUALIFIED = re.compile(r"[a-z0-9][a-z0-9-]*:[A-Z]-\d+")
 SCHEME = re.compile(r"[A-Z]{2,6}(?:-[A-Z]\d+|-FR\d+[a-z]?|-AC\d+[a-z]?)+")
@@ -38,5 +39,9 @@ def qualify(token: str, scope: str) -> str:
 
 
 def offline_candidates(token: str, scope: str) -> set[str]:
-    """Candidates with no registry: the token as written and its scope-qualified form."""
-    return {token, qualify(token, scope)}
+    """Candidates with no registry (plan3 3.1 steps 1(a)/3, what `identity.Identity` yields when unavailable): a
+    bare legacy token with a real referrer scope is denoted by its qualified form alone (the bare string would also
+    match another home's `K-065`); anything else is the token as written."""
+    if scope and scope != UNSCOPED:
+        return {qualify(token, scope)}
+    return {token}

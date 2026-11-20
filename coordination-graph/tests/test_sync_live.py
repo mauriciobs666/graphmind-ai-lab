@@ -174,6 +174,16 @@ def test_rebuild_twice_is_idempotent_and_prunes_a_source_that_left_the_disk(sync
     assert sync.parity(graph, parser(synced)).ok
 
 
+def test_rebuild_with_a_parentless_unit_exits_1_names_the_orphans_and_deletes_them(synced, capsys):
+    _, graph = graph_of(synced)
+    graph.query("CREATE (:Unit {key:'orphan#U1', statusToken:'queued'}), (:Item {ref:'x:K-9'})")
+    code, out = run(capsys, "rebuild")
+    assert code == 1 and "ORPHANS Unit: 1 deleted (a bug signal)" in out and "ORPHANS Item: 1 deleted" in out
+    assert rows(graph, "MATCH (n) WHERE n:Unit AND n.key = 'orphan#U1' OR n:Item AND n.ref = 'x:K-9' RETURN count(n)") == [[0]]
+    code, out = run(capsys, "rebuild")
+    assert code == 0 and "ORPHANS" not in out
+
+
 def test_parity_catches_every_planted_identity_mutant_live(synced):
     p = parser(synced)
     _, graph = graph_of(synced)
@@ -192,6 +202,20 @@ def test_parity_catches_every_planted_identity_mutant_live(synced):
         g.query(cypher, {"p": path})
         got = sync.parity(g, p)
         assert not got.ok and all(d.startswith(f"{path}:") for d in got.diffs), (cypher, got.diffs)
+
+
+def test_parity_catches_a_source_relabelled_and_a_child_relinked_live(synced):
+    p = parser(synced)
+    _, graph = graph_of(synced)
+    graph.query("MATCH (s:Source {path:$p}) REMOVE s:Backlog SET s:Ledger", {"p": B})
+    got = sync.parity(graph, p)
+    assert got.diffs == [f"{B}: labels ['Ledger', 'Source'], expected ['Backlog', 'Source']"]
+    assert {o.status for o in sync.sync_all(graph, p, force=True)} == {"synced"}
+    assert sync.parity(graph, p).ok
+    graph.query("MATCH (s:Source {path:$p})-[r:HAS_UNIT]->(u:Unit {unitKey:'U2'}) "
+                "CREATE (s)-[:HAS_ITEM]->(u) DELETE r", {"p": L})
+    got = sync.parity(graph, p)
+    assert got.diffs == [f"{L}: child '{L}#U2' is HAS_ITEM ['Unit'], expected HAS_UNIT ['Unit']"]
 
 
 # --- AC-4: drift and query -----------------------------------------------------------------------------------
@@ -213,6 +237,14 @@ def test_ac4_a_hand_edit_without_the_hook_is_flagged_row_by_row_and_a_deleted_fi
     assert code == 0 and "Drift: none" in out
     assert run(capsys, "sync", "--all")[0] == 0
     assert "Drift: none" in run(capsys, "drift")[1]
+
+
+def test_drift_flags_a_stale_parser_version_live(synced, capsys):
+    _, graph = graph_of(synced)
+    graph.query("MATCH (s:Source {path:$p}) SET s.parserVersion = 0", {"p": R})
+    code, out = run(capsys, "drift")
+    assert code == 1 and f"stale-parser\t{R}" in out and "parserVersion 0, current" in out
+    assert run(capsys, "sync", "--all")[0] == 0 and run(capsys, "drift")[0] == 0
 
 
 def test_drift_reports_the_disabled_hook_and_the_registry_line(synced, capsys):

@@ -81,6 +81,12 @@ class StoreError(RuntimeError):
     """A write or bootstrap that did not complete; the message names what and why."""
 
 
+class UnsafeValue(StoreError, KeyHygieneError):
+    """A key or indexed value the write boundary refuses. A `StoreError` so every caller that already
+    reports a failed source (`sync`, `parity`, `drift`) handles it; still a `KeyHygieneError` for `except` sites
+    that name the hygiene failure. (`keys.py` cannot subclass `StoreError`: `store` imports it.)"""
+
+
 class RefusedEndpoint(StoreError):
     """The target FalkorDB is not the explicitly named ephemeral one."""
 
@@ -121,7 +127,7 @@ def _present(props: Mapping) -> dict:
 
 def _unique(value, what: str) -> str:
     if not isinstance(value, str) or not value or safe_key(value) != value:
-        raise KeyHygieneError(f"{what} is not a safe UNIQUE value: {value!r}")
+        raise UnsafeValue(f"{what} is not a safe UNIQUE value: {value!r}")
     return value
 
 
@@ -130,7 +136,7 @@ def _indexed(props: dict, *names: str) -> None:
         if name in props:
             props[name] = value = norm_value(props[name])
             if not value or len(value.encode("utf-8")) > MAX_KEY_BYTES:
-                raise KeyHygieneError(f"indexed {name} must be non-empty and <= {MAX_KEY_BYTES} bytes: {value[:60]!r}")
+                raise UnsafeValue(f"indexed {name} must be non-empty and <= {MAX_KEY_BYTES} bytes: {value[:60]!r}")
 
 
 def _scrub(value, count: list[int]):

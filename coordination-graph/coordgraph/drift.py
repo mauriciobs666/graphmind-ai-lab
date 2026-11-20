@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 from . import store
 from .parse.backlog import BacklogParseError
+from .parse.source import PARSER_VERSION
 from .sync import Parser, canon_hash, child_key, sha_of
 
 CHILD_QUERY = "MATCH (s:Source {path: $path})-[]->(c) RETURN properties(c)"
@@ -22,7 +23,7 @@ WIN = "→ file wins; run coordgraph sync"
 @dataclass
 class SourceDrift:
     path: str
-    state: str  # changed | unsynced | gone
+    state: str  # changed | unsynced | gone | stale-parser
     rows: list[tuple[str, str]] = field(default_factory=list)  # (child key, changed|added in file|removed from file)
     note: str = ""
 
@@ -52,8 +53,8 @@ def _stamp(ms: int | None) -> str:
 def check(graph, parser: Parser, paths: Iterable[str] | None = None) -> DriftReport:
     """Drift over `paths` (default: every covered file and every stored source)."""
     want = None if paths is None else set(paths)
-    rows = graph.query("MATCH (s:Source) RETURN s.path, s.sha256, s.syncedAt").result_set
-    stored = {r[0]: (r[1], r[2]) for r in rows if want is None or r[0] in want}
+    rows = graph.query("MATCH (s:Source) RETURN s.path, s.sha256, s.syncedAt, s.parserVersion").result_set
+    stored = {r[0]: (r[1], r[2], r[3]) for r in rows if want is None or r[0] in want}
     candidates = {p for p in parser.found if want is None or p in want}
     drifts: list[SourceDrift] = []
     for path in sorted(candidates | set(stored)):
@@ -65,16 +66,19 @@ def check(graph, parser: Parser, paths: Iterable[str] | None = None) -> DriftRep
             drifts.append(SourceDrift(path, "gone"))
         elif sha_of(file) != stored[path][0]:
             drifts.append(_changed(graph, parser, path))
-    times = [t for _, t in stored.values() if isinstance(t, int)]
+        elif stored[path][2] != PARSER_VERSION:  # same bytes, but `sync --all` would rewrite the source
+            drifts.append(SourceDrift(path, "stale-parser",
+                                      note=f"parserVersion {stored[path][2]}, current {PARSER_VERSION}"))
+    times = [t for _, t, _ in stored.values() if isinstance(t, int)]
     return DriftReport(len(stored), min(times, default=None), max(times, default=None), drifts)
 
 
 def _changed(graph, parser: Parser, path: str) -> SourceDrift:
     try:
         kind, meta, rows = parser.parse(path)
-    except BacklogParseError as exc:
+        _, now = store.write_form(kind, meta, rows)
+    except (BacklogParseError, store.StoreError) as exc:
         return SourceDrift(path, "changed", note=f"does not parse: {exc}")
-    _, now = store.write_form(kind, meta, rows)
     have = {child_key(p): canon_hash(p) for (p,) in graph.query(CHILD_QUERY, {"path": path}).result_set}
     new = {child_key(p): canon_hash(p) for p in now}
     out = [(k, "changed") for k in new if k in have and new[k] != have[k]]

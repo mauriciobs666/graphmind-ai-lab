@@ -83,6 +83,16 @@ def test_a_scheme_reference_is_never_scope_qualified_a_bare_legacy_one_always_is
     assert not any(c.startswith("cpg:") for c in offline_candidates("GAL-I02-K0042", "cpg"))
 
 
+def test_offline_candidates_match_the_identity_resolver_when_the_registry_is_unavailable():
+    """plan3 3.1 steps 1(a)/3: a bare legacy token qualified by its referrer's scope drops the bare string."""
+    from coordgraph.identity import Identity
+    for token, scope in (("K-065", "falkor-chat"), ("K-065", "unscoped"), ("K-065", ""), ("falkor-chat:K-065", "cpg"),
+                         ("GAL-F0042", "cpg"), ("not-a-token", "cpg")):
+        assert offline_candidates(token, scope) == Identity(None).candidates(token, scope), (token, scope)
+    assert offline_candidates("K-065", "falkor-chat") == {"falkor-chat:K-065"}
+    assert offline_candidates("K-065", "unscoped") == {"K-065"}
+
+
 def test_history_and_backlog_paths_pair_up():
     assert history_path_for("falkor-chat/docs/BACKLOG.md") == "falkor-chat/docs/HISTORY.md"
     assert history_path_for("docs/BACKLOG.md") == "docs/HISTORY.md"

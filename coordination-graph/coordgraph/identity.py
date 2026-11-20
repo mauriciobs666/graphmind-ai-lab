@@ -18,9 +18,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from .lint import default_wi_root
-from .shapes import classify, qualify
+from .shapes import UNSCOPED, classify, qualify
 
-UNSCOPED = "unscoped"  # lint's stand-in for a referrer with no backlog scope
 _UNIT_REF = re.compile(r"[a-z0-9][a-z0-9-]*:\S+")
 
 
