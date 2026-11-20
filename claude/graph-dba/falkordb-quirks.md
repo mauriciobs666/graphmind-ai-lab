@@ -891,6 +891,16 @@ to the general fact here.
   downstream of it runs — no `SET` is partially applied**. Don't read the absent `Filter`
   operator as "the predicate was dropped".
 
+- **An unindexed `coalesce(r.prop, 0) = $v` term added to that guarded CAS becomes a residual
+  `Filter` above the scan; the indexed `status` term still folds into the scan** (verified
+  2026-11-20, module `41811`, scratch `ws:probe-k097`, deleted after; K-097
+  `falkor-chat/docs/plans/workflow-input-cas-graph.md` §2). `MATCH (r:WorkflowRun {runId:$id})
+  WHERE r.status = 'waiting' AND coalesce(r.ctxVersion, 0) = $v SET …` profiles `Node By Index
+  Scan` → `Filter` → `Update`. A stale `$v` gives scan 1 / `Filter` 0 / `Update` 0
+  (`properties_set=0`). A non-waiting run gives scan 0. The zero-row "nothing written" contract
+  holds either way. `coalesce` over a missing property works as a version default for legacy
+  nodes.
+
 - **Two independently-indexed properties on the same label, both `AND`-ed plain `WHERE`
   predicates (not a `{prop:$x}` pattern-property match) — a numeric range AND a `status IN
   [...]` list — fold into ONE `Node By Index Scan`, not "pick one, filter the other"**

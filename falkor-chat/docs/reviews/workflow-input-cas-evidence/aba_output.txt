@@ -1,0 +1,65 @@
+PART A — shipped status-only CAS (real Services/Executor/Repository)
+
+=== A1 R-1 baseline: A drives to terminal before B's CAS ===
+ start: status=waiting atStep=approval ctx={}
+   [inject] B has read+merged; B's CAS is about to land.
+   [inject] B's merged ctx = {"decision":"reject"}
+   [A] response: {'runId': 'id1', 'status': 'done', 'ctx': {'decision': 'approve'}}
+   [inject] A done: status=done atStep=None stepCount=3 ctx={"decision":"approve"}
+ [B] response: 409 workflow run 'id1' was resumed concurrently — the input was not applied; re-read the run and retry
+ final: status=done atStep=None stepCount=3 ctx={"decision":"approve"}
+ StepRun trail: ['approval', 'approval', 'granted']
+
+=== A2 ABA, re-park at a DIFFERENT step ===
+ start: status=waiting atStep=approval ctx={}
+   [inject] B has read+merged; B's CAS is about to land.
+   [inject] B's merged ctx = {"decision":"reject"}
+   [A] response: {'runId': 'id2', 'status': 'waiting', 'ctx': {'decision': 'approve'}}
+   [inject] A done: status=waiting atStep=provision stepCount=3 ctx={"decision":"approve"}
+ [B] response: 200 {'runId': 'id2', 'status': 'waiting', 'ctx': {'decision': 'reject'}}
+ final: status=waiting atStep=provision stepCount=4 ctx={"decision":"reject"}
+ StepRun trail: ['approval', 'approval', 'provision', 'provision']
+ ABA-A2 verdict: REPRODUCED - ctx.decision = reject but the trail advanced approval->provision on decision == 'approve'
+
+=== A3 ABA, re-park at the SAME step ===
+ start: status=waiting atStep=note ctx={}
+   [inject] B has read+merged; B's CAS is about to land.
+   [inject] B's merged ctx = {"other":"from-B"}
+   [A] response: {'runId': 'id3', 'status': 'waiting', 'ctx': {'comment': 'from-A'}}
+   [inject] A done: status=waiting atStep=note stepCount=2 ctx={"comment":"from-A"}
+ [B] response: 200 {'runId': 'id3', 'status': 'waiting', 'ctx': {'other': 'from-B'}}
+ final: status=waiting atStep=note stepCount=3 ctx={"other":"from-B"}
+ StepRun trail: ['note', 'note', 'note']
+ ABA-A3 verdict: REPRODUCED - A's accepted (200) key 'comment' present in final ctx: False
+
+PART B — proposed versioned CAS (raw Cypher on the same scratch graph)
+ legacy keys: ['runId', 'status', 'ctx', 'waitingThreadId', 'stepCount', 'maxSteps', 'startedAt']
+ B1: B reads status=waiting ctx={"seed":1} ctxVersion=0 (coalesce default)
+     A CAS rows: [['legacy1', 'running', 1]]
+     A drive re-parks: [['legacy1', 'waiting']]
+     state before B's CAS: [['waiting', '{"seed":1,"decision":"approve"}', 1]]
+     B CAS (stale v=0) rows: [] properties_set=0
+     state after B's CAS: ['waiting', '{"seed":1,"decision":"approve"}', 1]
+ B1 verdict: REFUSED, nothing written
+ B2: plain (chat) resume: [['v2', 'running', 1]] then re-park: [['v2', 'waiting']]
+     B CAS (stale v=0) rows: []; state: [['waiting', '{}', 1]]
+ B3: fresh CAS (v=1) rows: [['v2', 'running', 2]]
+
+ PROFILE CAS — winner (v matches):
+    Results | Records produced: 1, Execution time: 0.000175 ms
+        Project | Records produced: 1, Execution time: 0.001285 ms
+            Update | Records produced: 1, Execution time: 0.052665 ms
+                Filter | Records produced: 1, Execution time: 0.001555 ms
+                    Node By Index Scan | (r:WorkflowRun) | Records produced: 1, Execution time: 0.011575 ms
+
+ PROFILE CAS — loser (stale v):
+    Results | Records produced: 0, Execution time: 0.000090 ms
+        Project | Records produced: 0, Execution time: 0.000104 ms
+            Update | Records produced: 0, Execution time: 0.000506 ms
+                Filter | Records produced: 0, Execution time: 0.001471 ms
+                    Node By Index Scan | (r:WorkflowRun) | Records produced: 1, Execution time: 0.010125 ms
+
+ PROFILE read (get_run's added column):
+    Results | Records produced: 1, Execution time: 0.000150 ms
+        Project | Records produced: 1, Execution time: 0.001913 ms
+            Node By Index Scan | (r:WorkflowRun) | Records produced: 1, Execution time: 0.006501 ms

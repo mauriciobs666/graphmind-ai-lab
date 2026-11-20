@@ -1,0 +1,8 @@
+PROFILE CAS, run 'running', version MATCHES:
+    Results | Records produced: 0, Execution time: 0.000087 ms
+        Project | Records produced: 0, Execution time: 0.000169 ms
+            Update | Records produced: 0, Execution time: 0.000490 ms
+                Filter | Records produced: 0, Execution time: 0.000268 ms
+                    Node By Index Scan | (r:WorkflowRun) | Records produced: 0, Execution time: 0.017203 ms
+after: [['running', '{"keep":1}', 4]]
+deleted ws:probe-k097-review2 still listed: False
