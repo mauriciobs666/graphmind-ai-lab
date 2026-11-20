@@ -372,7 +372,7 @@ planted wrong-data start (`graph-dba-r3/rollback_rehearsal.txt`).
    (`docker ps --format '{{.Names}} {{.Image}}' | awk '$2 ~ /^cypher-mcp:/ {print $1}' | xargs -r docker stop`).
    `redis-cli CLIENT LIST` must then print one line, its own. Then freeze writes until the stop:
    `redis-cli CLIENT PAUSE 1800000 WRITE`. It holds every `GRAPH.QUERY`, reads included, while the
-   `GRAPH.RO_QUERY` inventory, `SAVE` and the shutdown save still run (`graph-dba-r3/pause_probe.txt`).
+   `GRAPH.RO_QUERY` inventory, `SAVE` and the shutdown save still run (`graph-dba-r3/pause_probe.txt`). On abort before step 5: `redis-cli CLIENT UNPAUSE`, then step 9.
 3. **Inventory before** (read-only):
    ```bash
    inv() { redis-cli GRAPH.LIST | sort | while read -r g; do
@@ -404,7 +404,7 @@ planted wrong-data start (`graph-dba-r3/rollback_rehearsal.txt`).
    whatever the new instance holds over `dump.rdb`, and an auto-save may already have done so
    (`analyst/pass2/rollback_overwrite_probe.txt`). So exit without saving, then restore the copy:
    ```bash
-   redis-cli SHUTDOWN NOSAVE || docker kill falkordb-dev    # SIGKILL if it does not answer
+   timeout 30 redis-cli SHUTDOWN NOSAVE || docker kill falkordb-dev    # SIGKILL if it does not answer
    docker run --rm -v falkordb-data:/d -v "$B":/b --entrypoint cp falkordb/falkordb:v4.18.11 -a /b/dump.rdb /d/dump.rdb
    FALKORDB_ARGS="MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000" ./scripts/start_falkordb.sh -d
    ```

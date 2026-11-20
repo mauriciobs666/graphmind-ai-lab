@@ -1,0 +1,2 @@
+cpg_y nodes=60000 edges=30000 indexes=1
+ws:a nodes=50000 edges=20000 indexes=1

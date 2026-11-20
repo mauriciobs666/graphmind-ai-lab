@@ -435,3 +435,112 @@ M2), which has not been applied yet. Source: P2-M1. Replace it with:
   the wrong state over the copy. Its rehearsal covers the branch where the restart succeeds with
   wrong data, not only the branch where it fails to start. A verify step that checks one workspace
   is a bound, not proof.
+
+## Pass 3
+
+> 2026-11-20 · against `91c53a2d` · scoped to the Pass 2 stopping condition.
+> Evidence: `graph-config-defaults-evidence/analyst/pass3/`.
+> Containers: `analyst-k098-p3` and `analyst-k098-hang`, plus the named volume `analyst-k098-live`.
+> All are removed. Nothing ran on `falkordb-dev` or `ws:test`.
+
+**Verdict: approve with suggestions.**
+
+All three conditions are met.
+
+**One finding remains: P3-m1.** The revision's own fallback line produced it, so it is in scope. It
+is a one-token fix that `teco` can apply verbatim before `devops` runs Step 4. It does not need a
+Pass 4.
+
+CPG: considered, not relevant — a container restart runbook and engine config; no call-graph question.
+
+### Stopping condition
+
+**1. Rollback rehearsed with a planted wrong-data start: met.** I did not reuse graph-dba's
+rehearsal. I ran my own on a **named** docker volume, the same kind as `falkordb-data`
+(`pass3/rehearse.sh`), using Step 4's lines as written and the prototype edited script.
+
+| Step | Result |
+|---|---|
+| Quiesce | `CLIENT LIST` printed one line with the browser up; `CLIENT PAUSE … WRITE` returned `OK` |
+| Save | `SAVE` ran and `LASTSAVE` advanced |
+| Stop | `stop.log` ends `DB saved on disk` / `ready to exit` |
+| Backup | copied with the pinned image |
+| New start, then plant | planted 10k deletes plus a `BGSAVE`; step 7 `diff` exited 1 |
+| **Branch A** | `SHUTDOWN NOSAVE`, restore, old args: **diff exit 0** |
+| **Branch B** | a second plant plus `BGSAVE`, restore, then `2769a99c`'s script (rehearsal-only `sed` of its volume name; 0 live-volume references left): **diff exit 0**; positive control exit 1 |
+
+**2. Pinned sha: met.** The rollback uses `2769a99c`, with a `git log` check at apply time.
+
+**3. P2-m1, P2-m2 and P2-m3: applied.**
+- **P2-m1:** K-093 now records the block (`falkor-chat/docs/BACKLOG.md:922-924`). Filing the query
+  unit as its own item stays a K-098-close task, as Pass 2 worded it.
+- **P2-m2:** Step 3 now names `compose.yaml:3-4` and README `:103-104`.
+- **P2-m3:** §8 is a one-line pointer to `falkor-chat/docs/BACKLOG.md` `### GAL-I02-K0004`. The dated
+  sentence is gone. The note shrank to 4,666 words (`wc -w`), so the growth-stops check passes.
+- **The persistence item's home:** it is filed in falkor-chat's own backlog, not the root one (root
+  `docs/BACKLOG.md` belongs to `cpg/`).
+- **The quirks entries it cites:** they exist and match the evidence. They are working-tree only
+  (`claude/graph-dba/falkordb-quirks.md`, uncommitted, at `:1267-1294`). Commit them with K-098, or
+  the item's citation dangles.
+
+### The reviser's departures from my recipe
+
+All four are sound.
+- **The restore always runs.** This is right: an auto-save can overwrite `dump.rdb` before anyone
+  notices. Both rehearsals plant exactly that state with `BGSAVE`.
+- **The copy uses the pinned image** (`--entrypoint cp`). This is right: nothing is pulled, and the
+  file ownership survives the round trip (root-owned copy, restored and loaded).
+- **The full quiesce plus `CLIENT PAUSE WRITE`.** This is right, and `CLIENT LIST` = 1 is reachable
+  with the console browser running. Step 9 was not rehearsed. It is read-only verification after
+  restarting clients, so I accept that.
+- **The `docker kill` fallback.** It is right as an intent, but see P3-m1.
+
+### P3-m1 (minor) — the fallback never fires on an instance that does not answer
+
+`redis-cli SHUTDOWN NOSAVE || docker kill falkordb-dev` falls through only on an *error*.
+`redis-cli` has no default timeout, so against a frozen server it hangs and the `||` never runs.
+
+**Verified** (`pass3/hang_fallback_probe.txt`): I froze a server with `docker pause` and ran the
+line. It was still hanging at the outer 20 s limit (exit 124), and the fallback had not run. That is
+exactly the case the fallback is for. An operator stuck there may reach for `docker stop`, the one
+command Step 8 forbids. `docker kill` itself works on a paused container.
+
+**Fix:** `timeout 30 redis-cli SHUTDOWN NOSAVE || docker kill falkordb-dev`.
+
+**Nit:** Step 2 leaves writes paused for 30 min if the procedure is abandoned before step 5 (for
+example, `LASTSAVE` did not advance). Add "on abort before step 5: `redis-cli CLIENT UNPAUSE`, then
+step 9."
+
+### Live-spec sections K-098's close must update
+
+These are note §6's list, re-checked against my Pass 1 unfiltered grep:
+- **DESIGN §10**, the tuning bullet: the decided values, `config/falkordb.env`, and booleans as
+  `yes`/`no`.
+- **DESIGN §10**, the TIMEOUT-posture bullet: writes gain the memory bound, still with no time bound.
+- **DESIGN §10**, the Observability bullet: the `mem consumption exceeded capacity` error and the
+  `GRAPH.INFO` waiting-queries signal.
+- **DESIGN §9**, write-paths table, Backfill/import row.
+- **QUERIES §18.7**, the reset failure boundary: an atomic `ResponseError` on the cap.
+- **DESIGN §13**, the open-question sentence moves to the resolved list.
+
+Not K-098's:
+- DESIGN §10's persistence bullet goes with `GAL-I02-K0004`.
+- QUERIES §6 and DESIGN §8 go with the bounded-`hybrid_search` unit at its own close.
+
+### Final proposed REVIEW.md lines (verbatim)
+
+Sources:
+- the status-flag line: B1;
+- the restart line: M2 and P2-M1; it supersedes the Pass 1 wording;
+- the fallback line: P3-m1;
+- the component line: M1.
+
+None is enforced by an existing test, CI job or hook. No prunes.
+
+**Root `REVIEW.md`, `## Always check`, additions:**
+- A procedure that waits on a status flag before an irreversible step names the state in which the flag already reads "done" before the work has run (scheduled, queued, never-run defaults). It requires a counter or timestamp that proves the work ran.
+- A plan step that restarts a shared stateful service has five parts. It verifies before the stop that the state was saved. It copies the saved state out. It records an inventory of every graph or key before the stop and compares it after the restart. It names a rollback that cannot persist the wrong state over the copy. Its rehearsal covers the branch where the restart succeeds with wrong data, not only the branch where it fails to start. A verify step that checks one workspace is a bound, not proof.
+- A fallback written as `<command> || <fallback>` for a peer that may not answer is checked against a hang, not only an error. The probe freezes the peer (for example `docker pause`) and asserts the fallback runs within a stated time.
+
+**`falkor-chat/REVIEW.md`, `## Always check`, addition:**
+- A per-query memory or size bound sized from measured reads is checked at the read's full fan-out. Per-seed aggregation scales with k (the ANN fan-out) and with each seed's edges, so a measurement with one heavy seed among k is a bound, not the worst case.

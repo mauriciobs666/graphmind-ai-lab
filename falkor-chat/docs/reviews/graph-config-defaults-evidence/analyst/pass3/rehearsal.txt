@@ -1,0 +1,32 @@
+## seed 'live' (old args, BROWSER on as in falkordb-dev)
+## step 2 CLIENT LIST lines with browser up, no other client: 1
+id=22 cmd=client|list user=default redir=-1 resp=2 lib-name= lib-ver= io-thread=
+pause: OK
+## step 3
+cpg_y nodes=60000 edges=30000 indexes=1
+ws:a nodes=60000 edges=30000 indexes=1
+## step 4
+OK
+LASTSAVE advanced: yes
+## step 5
+* DB saved on disk
+# Redis is now ready to exit, bye bye...
+backup: root 4288574
+## step 6 (edited script, new args)
+Module args:             THREAD_COUNT 8 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000
+## plant wrong data + auto-save stand-in
+Nodes deleted: 10000
+Background saving started
+## step 7
+diff exit=1 (want 1)
+## step 8 branch A, verbatim lines
+branch A diff exit=0 (want 0); MQQ=25
+## step 8 branch B: unresponsive instance (SIGSTOP the server so redis-cli cannot answer) -> fallback docker kill; pinned 2769a99c
+Nodes deleted: 20000
+Background saving started
+gone after fallback
+pinned script volume refs left to live volume: 0
+branch B diff exit=0 (want 0)
+positive control exit=1 (want 1)
+0
+0

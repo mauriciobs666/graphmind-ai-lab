@@ -1,0 +1,5 @@
+frozen (docker pause) server, the note's line run under an outer 20 s timeout:
+exit=124 after 20 s (124 = the line hung; the || fallback never ran)
+docker kill on the paused container: analyst-k098-hang
+container gone
+0
