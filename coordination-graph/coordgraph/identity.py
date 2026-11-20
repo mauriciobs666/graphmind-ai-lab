@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import re
 import sys
-from datetime import datetime, timezone
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from .lint import default_wi_root
-from .shapes import classify, offline_candidates, qualify
+from .shapes import classify, qualify
 
 UNSCOPED = "unscoped"  # lint's stand-in for a referrer with no backlog scope
 _UNIT_REF = re.compile(r"[a-z0-9][a-z0-9-]*:\S+")
@@ -140,12 +140,14 @@ class Identity:
         name = token
         if route == "legacy-bare" and scope and scope != UNSCOPED:
             name = qualify(token, scope)
-        return self._through_registry(token, name, route, scope)
+        return self._through_registry(token, name, route)
 
-    def _through_registry(self, token: str, name: str, route: str, scope: str) -> Resolution:
-        written = frozenset(offline_candidates(token, scope))
+    def _through_registry(self, token: str, name: str, route: str) -> Resolution:
+        # A bare token the referrer's scope qualified is denoted by the qualified name alone: the bare
+        # string would also match another home's `K-065` (plan3 3.1 step 3).
+        as_written = frozenset({name})
         if self.registry is None:
-            return Resolution(token, "unavailable", route, candidates=written,
+            return Resolution(token, "unavailable", route, candidates=as_written,
                               reason=f"registry unavailable ({self.why or 'not loaded'}): "
                                      "identities compared as written")
         try:
@@ -154,8 +156,8 @@ class Identity:
             if exc.code == 5:
                 return Resolution(token, "unminted", route, candidates=frozenset({name}), reason=str(exc))
             state = "ambiguous" if exc.code == 3 else "unknown"
-            return Resolution(token, state, route, candidates=written, reason=str(exc))
-        cands = {rec["id"], rec["uid"], token, *rec["aliases"]}
+            return Resolution(token, state, route, candidates=as_written, reason=str(exc))
+        cands = {rec["id"], rec["uid"], name, *rec["aliases"]}
         if (legacy := self.registry.legacy_name(rec["uid"])) is not None:
             cands.add(legacy)
         state = "retired" if rec["retired"] else "resolved"

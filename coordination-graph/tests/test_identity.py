@@ -119,11 +119,16 @@ class TestExitMapping:
         r = identity(*KAIZEN, MINTED_K065, ev("retire", uid="GAL-I02-K0042")).resolve("GAL-I02-K0042", "cpg")
         assert r.state == "retired" and "falkor-chat:K-065" in r.candidates
 
-    def test_registry_unavailable_compares_as_written_in_both_forms(self):
+    def test_registry_unavailable_compares_as_written_qualified_when_the_scope_qualified_it(self):
         r = Identity(None).resolve("K-065", "falkor-chat")
         assert r.state == "unavailable"
-        assert r.candidates == {"K-065", "falkor-chat:K-065"}
+        assert r.candidates == {"falkor-chat:K-065"}
         assert "unavailable" in r.reason
+        assert Identity(None).resolve("K-065", "unscoped").candidates == {"K-065"}
+
+    def test_unknown_bare_legacy_keeps_only_its_qualified_form(self):
+        r = identity(*KAIZEN).resolve("K-065", "bogus")  # `bogus` is not a declared home
+        assert r.state == "unknown" and r.candidates == {"bogus:K-065"}
 
 
 class TestPlantedRename:
@@ -156,6 +161,24 @@ class TestPlantedRename:
     def test_scheme_reference_joins_the_item_still_headed_with_the_legacy_name(self):
         idn = identity(*KAIZEN, MINTED_K065)
         assert "falkor-chat:K-065" in idn.candidates("GAL-I02-K0042", "cpg")
+
+    def test_one_number_minted_in_two_scopes_gives_disjoint_candidates(self):
+        """Plan3 section 3.1 step 3 / test 9: two distinct items never share a candidate."""
+        cobb = new("GAL-I02-K0043", "K", parent="GAL-I02", legacy={"home": "teco", "name": "K-065"})
+        idn = identity(*KAIZEN, MINTED_K065, cobb)
+        a, b = idn.candidates("K-065", "falkor-chat"), idn.candidates("K-065", "teco")
+        assert a & b == set()
+        assert "K-065" not in a and "K-065" not in b
+        assert a == {"GAL-I02-K0042", "falkor-chat:K-065"} and b == {"GAL-I02-K0043", "teco:K-065"}
+
+    def test_bare_without_a_scope_keeps_itself_and_is_ambiguous(self):
+        r = identity(*KAIZEN, MINTED_K065).resolve("K-065", "unscoped")
+        assert r.state == "ambiguous" and r.candidates == {"K-065"}
+
+    def test_a_stored_bare_string_no_longer_joins_a_qualified_reference(self):
+        # ruling consequence: the stored bare `K-065` is not a candidate of `falkor-chat:K-065`
+        idn = identity(*KAIZEN, MINTED_K065)
+        assert "K-065" not in idn.candidates("falkor-chat:K-065", "cpg")
 
     def test_unminted_legacy_does_not_join_the_scheme_world(self):
         idn = identity(*KAIZEN)
