@@ -58,7 +58,7 @@ EXPECTED: dict[str, str] = {
     "lifted_of": "UNWIND $pairs AS q MATCH (l:Link {linkId: q[0]})-[r:LIFTED_VIA]->(t) WHERE r.siteId = q[1] RETURN q[0], q[1], r.ord, labels(t)[0], coalesce(t.callSiteId, t.symbolId), t.repoId, t.unitId, t.path, r.line, r.urlPath, r.verbPath, r.viaSiteId, r.viaLine, coalesce(t.calleeName, t.qname) ORDER BY q[0], q[1], r.ord",
     "bound_out": "UNWIND $pairs AS q MATCH (l:Link {linkId: q[0]})-[b:BOUND_BY]->(e:ConfigEntry) WHERE b.siteId = q[1] RETURN q[0], q[1], b.ord, e.entryId, e.repoId, e.unitId, e.path, e.line, e.keyPath, e.launchKind, e.protocol, e.port, e.envVar, e.mountPath, e.service, e.argv0, b.port, b.portOrigin, b.packId ORDER BY q[0], q[1], b.ord",
     "bound_of_link": "UNWIND $ids AS i MATCH (l:Link {linkId: i})-[b:BOUND_BY]->(e:ConfigEntry) RETURN i, e.entryId, b.siteId, b.ord, e.repoId, e.unitId, e.path, e.line, e.keyPath, e.launchKind, b.port, b.portOrigin, b.packId ORDER BY i, e.entryId, b.siteId, b.ord",
-    "candidate_count": "UNWIND $pairs AS q MATCH (c:CallSite {callSiteId: q[0]})-[v:VIA]->(l:Link {linkId: q[1]}) MATCH (s:Symbol)-[:HAS_CALL]->(c) MATCH (s)-[:HAS_CALL]->(:CallSite)-[v2:VIA]->(l2:Link) WHERE v2.consumerKey = v.consumerKey RETURN q[0], q[1], count(DISTINCT l2)",
+    "candidate_count": "UNWIND $pairs AS q MATCH (c:CallSite {callSiteId: q[0]})-[v:VIA]->(l:Link {linkId: q[1]}) MATCH (s:Symbol)-[:HAS_CALL]->(c) MATCH (s)-[:HAS_CALL]->(c2:CallSite)-[v2:VIA]->(l2:Link) WHERE coalesce(v2.consumerKey, 0) = coalesce(v.consumerKey, 0) AND CASE WHEN v.consumerKey IS NULL THEN c2 = c ELSE true END RETURN q[0], q[1], count(DISTINCT l2)",
 }
 # the templated names, one text per label of the row's set (the ``<Label>`` token is chosen by the engine from a fixed set, never by a caller)
 for _lab in ("CallSite", "Param", "Ret", "Cond"):
@@ -85,6 +85,16 @@ def _params_for(text: str) -> dict:
 
 
 # ------------------------------------------------------------------------------------- (a) the texts
+
+def test_candidate_count_text_groups_a_keyless_edge_by_its_own_site_and_a_keyed_edge_by_its_key():
+    """A wiring guard over the text (the Cypher itself runs only in ``-m live``): the sibling is bound as its own ``CallSite`` variable, an absent key equals an absent key
+    (``coalesce`` on both edges' keys), and a keyless edge is tied to its own site (``c2 = c``) so the owner's other keyless sites, with their own fan-out, do not join its group."""
+    text = reader.QUERIES["candidate_count"]
+    assert "(s)-[:HAS_CALL]->(c2:CallSite)-[v2:VIA]->(l2:Link)" in text
+    assert "coalesce(v2.consumerKey, 0) = coalesce(v.consumerKey, 0)" in text
+    assert re.search(r"CASE WHEN v\.consumerKey IS NULL THEN c2 = c ELSE true END", text)
+    assert "count(DISTINCT l2)" in text
+
 
 def test_every_text_of_the_plan_is_the_one_in_the_code_character_for_character():
     assert dict(reader.QUERIES) == EXPECTED

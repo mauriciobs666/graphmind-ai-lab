@@ -236,12 +236,24 @@ def test_a_via_hop_carries_the_candidate_count_n_of_its_site_and_link():
     assert [h["candidateCount"] for h in item["chain"] if "candidateCount" in h] == [3]
 
 
-def test_an_unknown_candidate_count_is_a_build_error_never_one():
-    g, ids_ = link_world(consumer_key="GET /x")
+def test_a_keyless_via_hop_counts_only_the_links_of_its_own_site_not_those_of_the_owners_other_sites():
+    g, ids_ = link_world(consumer_key="GET /x", sibling_links=2)
     for p in g.rows.edges[("CallSite", "VIA", "Link")]:
-        p["p"].pop("consumerKey")      # the assembler writes the key only when it is not null: the read then has no row (graph-dba G1)
+        p["p"].pop("consumerKey")      # the assembler writes the key only when it is not null (an unknown-key / shell-dynamic consumer); each keyless site has its own fan-out
+    doc, _ = built(g, ids_, cp_anchor, "cp1")
+    via = next(h for h in item_of(doc, ids_, "getHealth")["chain"] if h.get("edgeType") == "VIA")
+    assert via["candidateCount"] == 1
+
+
+def test_a_candidate_count_the_store_returns_no_row_for_is_a_build_error_never_one():
+    g, ids_ = link_world(consumer_key="GET /x")
+
+    class NoCountRows(AnswerReader):
+        def read(self, name, params=None):
+            return [] if name == "candidate_count" else super().read(name, params)
+
     with pytest.raises(AB.BuildError, match="candidate"):
-        built(g, ids_, cp_anchor, "cp1")
+        built(g, ids_, cp_anchor, "cp1", reader=NoCountRows(g))
 
 
 def test_a_link_hop_carries_the_lifted_chain_of_the_site_it_was_entered_for_in_order():

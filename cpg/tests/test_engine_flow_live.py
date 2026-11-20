@@ -5,8 +5,8 @@ Same rules as ``tests/test_engine_bfs_live.py``: needs ``CCG_FALKORDB_PORT`` (th
 live key as admin and reads it as ``ccg_engine_<s>`` only (``CypherReader``).
 
 Two things only the store can show: the flow walks over ``CypherReader`` (the ``units`` read returns ``flowAvailable`` and ``language`` as the gate reads them) agree with the
-walks over ``MemoryReader``; and ``candidate_count`` returns **no row**, not ``1``, for a ``VIA`` edge with no ``consumerKey`` (``docs/reviews/connected-code-graph-p1-21.md``
-Pass 2 G1), which ``bfs.candidate_counts`` reads as "N unknown" (``None``).
+walks over ``MemoryReader``; and ``candidate_count`` counts a ``VIA`` edge with no ``consumerKey`` among the keyless links of its own site, and returns **no row**, not ``1``, for a site with no owner
+(``docs/reviews/connected-code-graph-p1-21.md`` Pass 2 G1), which ``bfs.candidate_counts`` reads as "N unknown" (``None``).
 """
 from __future__ import annotations
 
@@ -98,12 +98,12 @@ def test_the_live_units_read_gives_the_gate_its_flag_and_language(world):
     assert (items["G"].status, items["G"].reason) == ("possible", "flow-unavailable:javascript")
 
 
-def test_live_candidate_count_has_no_row_for_a_via_edge_without_a_consumer_key_and_the_engine_reads_it_as_unknown(world):
+def test_live_candidate_count_of_a_keyless_via_edge_is_the_fan_out_of_its_own_site_and_has_no_row_for_an_ownerless_site(world):
     rd = CypherReader(world.db, SYSTEM)
-    pair = ["via:c3", "via:L3"]
-    assert rd.read("candidate_count", {"pairs": [pair]}) == []                                  # the absent-key row: no row, not 1
+    assert rd.read("candidate_count", {"pairs": [["via:c3", "via:L3"]]}) == [("via:c3", "via:L3", 2)]       # c3 -> L3, L6; the other keyless site c4 (shell-dynamic, one provider) is not in its group
+    assert rd.read("candidate_count", {"pairs": [["via:c4", "via:L4"]]}) == [("via:c4", "via:L4", 1)]
     assert rd.read("candidate_count", {"pairs": [["via:c1", "via:L1"]]}) == [("via:c1", "via:L1", 2)]
-    got = bfs.candidate_counts(rd, [("via:c3", "via:L3"), ("via:c1", "via:L1"), ("via:orphan", "via:L1")])
-    assert got == {("via:c3", "via:L3"): None, ("via:c1", "via:L1"): 2, ("via:orphan", "via:L1"): None}
-    mem = bfs.candidate_counts(MemoryReader(world.graph), [("via:c3", "via:L3"), ("via:c1", "via:L1"), ("via:orphan", "via:L1")])
-    assert mem == got
+    pairs = [("via:c3", "via:L3"), ("via:c3", "via:L6"), ("via:c4", "via:L4"), ("via:c1", "via:L1"), ("via:orphan", "via:L1")]
+    got = bfs.candidate_counts(rd, pairs)
+    assert got == {("via:c3", "via:L3"): 2, ("via:c3", "via:L6"): 2, ("via:c4", "via:L4"): 1, ("via:c1", "via:L1"): 2, ("via:orphan", "via:L1"): None}
+    assert bfs.candidate_counts(MemoryReader(world.graph), pairs) == got

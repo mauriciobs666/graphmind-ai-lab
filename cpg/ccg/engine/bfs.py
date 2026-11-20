@@ -538,10 +538,11 @@ ADAPTERS: dict[str, Adapter] = {
 def candidate_counts(reader: Reader, pairs: Sequence[tuple[str, str]]) -> dict[tuple[str, str], int | None]:
     """``N`` of each ``(siteId, linkId)`` ``VIA`` hop: the links of the site's owner that carry the same ``consumerKey``, itself included (``-p1-graph.md`` §5).
 
-    **A pair the read returns no row for is ``None``, "N unknown", never ``0`` or ``1``** (``docs/reviews/connected-code-graph-p1-21.md`` Pass 2 G1): the read joins on
-    ``consumerKey`` and the assembler writes the key only when it is not null, and it joins the site's owner; an absent key or a site with no owner therefore returns nothing,
-    and ``1`` would claim "no other candidate" where the answer is "not known". The schema's ``candidateCount`` is ``>= 1`` on every ``VIA`` hop, so the builder
-    (``ccg.engine.answer_build``) raises a ``BuildError`` for a ``None``, never defaults it.
+    The assembler writes ``consumerKey`` only when it is not null, so an ``unknown-key``/``shell-dynamic`` ``VIA`` edge has none. The linker gives each such site an edge to
+    every provider of its own kind, so a keyless edge counts **its own site's** keyless links (the providers that consumer may call), never the owner's other sites'.
+    **A pair the read still returns no row for is ``None``, "N unknown", never ``0`` or ``1``** (``docs/reviews/connected-code-graph-p1-21.md`` Pass 2 G1): the read joins the site's
+    owner, so a site with no owner returns nothing, and ``1`` would claim "no other candidate" where the answer is "not known". The schema's ``candidateCount`` is ``>= 1`` on every
+    ``VIA`` hop, so the builder (``ccg.engine.answer_build``) raises a ``BuildError`` for a ``None``, never defaults it.
     """
     wanted = list(dict.fromkeys(tuple(p) for p in pairs))
     out: dict[tuple[str, str], int | None] = dict.fromkeys(wanted)

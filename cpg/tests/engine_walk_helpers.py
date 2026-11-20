@@ -180,13 +180,15 @@ class MemoryReader:
         return []       # asked by ``pairs``, answered in ``read``
 
     def _candidate_count(self, site, link):
-        """``candidate_count``: no row when the ``VIA`` edge has no ``consumerKey`` or the site has no owner (``docs/reviews/connected-code-graph-p1-21.md`` G1); else the links of the owner's sites that
-        carry the same key, the pair's own included."""
-        keys = [p.get("consumerKey") for lid, p in self.outof("CallSite", "VIA", "Link", site) if lid == link and p.get("consumerKey") is not None]
+        """``candidate_count``: no row when the site has no owner (``docs/reviews/connected-code-graph-p1-21.md`` G1); else the links of the owner's sites that carry the same key, the pair's own included.
+        A keyless edge (the ``unknown-key``/``shell-dynamic`` consumer) is grouped **per site**: its own fan-out, as the store text's ``CASE`` arm does."""
+        keys = [p.get("consumerKey") for lid, p in self.outof("CallSite", "VIA", "Link", site) if lid == link]
         owners = [s for s, _ in self.into("Symbol", "HAS_CALL", "CallSite", site)]
         if not keys or not owners:
             return []
-        links = {lid for o in owners for sib, _ in self.outof("Symbol", "HAS_CALL", "CallSite", o) for lid, p in self.outof("CallSite", "VIA", "Link", sib) if p.get("consumerKey") == keys[0]}
+        key = keys[0]
+        links = {lid for o in owners for sib, _ in self.outof("Symbol", "HAS_CALL", "CallSite", o) if key is not None or sib == site
+                 for lid, p in self.outof("CallSite", "VIA", "Link", sib) if p.get("consumerKey") == key}
         return [(site, link, len(links))]
 
     # -- impact

@@ -293,8 +293,10 @@ bound_of_link    UNWIND $ids AS i MATCH (l:Link {linkId: i})-[b:BOUND_BY]->(e:Co
                         b.port, b.portOrigin, b.packId
                  ORDER BY i, e.entryId, b.siteId, b.ord                       (-answer-spec2.md §3.3 wiring items)
 candidate_count  UNWIND $pairs AS q MATCH (c:CallSite {callSiteId: q[0]})-[v:VIA]->(l:Link {linkId: q[1]})
-                 MATCH (s:Symbol)-[:HAS_CALL]->(c) MATCH (s)-[:HAS_CALL]->(:CallSite)-[v2:VIA]->(l2:Link)
-                 WHERE v2.consumerKey = v.consumerKey RETURN q[0], q[1], count(DISTINCT l2)   ($pairs = [siteId, linkId]; v1 D6, self included)
+                 MATCH (s:Symbol)-[:HAS_CALL]->(c) MATCH (s)-[:HAS_CALL]->(c2:CallSite)-[v2:VIA]->(l2:Link)
+                 WHERE coalesce(v2.consumerKey, 0) = coalesce(v.consumerKey, 0) AND CASE WHEN v.consumerKey IS NULL THEN c2 = c ELSE true END
+                 RETURN q[0], q[1], count(DISTINCT l2)   ($pairs = [siteId, linkId]; v1 D6, self included)
+                 -- a keyed edge counts its owner's links of equal key; a keyless one (unknown-key, shell-dynamic: the linker gives each such site its own fan-out) counts its own site's keyless links; a site with no owner returns no row
 ```
 
 Each `bound_out` row is a `Bound` of `-answer-spec2.md` §3.2, port fields included. For `bound_of_link` the engine
@@ -446,7 +448,7 @@ Neither regex holds the length, so the script checks it separately.
   Scan` (verified). The harness supplies parameter values: a `{path: $path}` text explained without them returns
   `Missing parameters`. (c) `name_in`/`name_out` on a resolved site with two same-name candidates return only the
   non-resolved one with `count(x) == 1`, and on an unresolved site all candidates with `0`. (d) `candidate_count`
-  returns 2 for a site with two `VIA` edges of equal `consumerKey`. (e) `bound_out` for (link, site A) returns only
+  returns 2 for a site with two `VIA` edges of equal `consumerKey`, and, for a keyless `VIA` edge, its own site's fan-out only: an owner with a keyless site linked to two providers and another keyless site linked to one gives 2 and 1 (the keyed edges and the other keyless site do not join). (e) `bound_out` for (link, site A) returns only
   A's chain when the link has a second site with its own chain (verified), and its entry columns map onto valid
   `Bound` objects for a mixed chain. (f) `bound_of_link` over a link whose entry binds two sites returns it once per
   edge in `(entryId, siteId, ord)` order, and the engine's pick is the lowest `(siteId, ord)` row with a `keyPath`.

@@ -481,19 +481,27 @@ def test_the_rows_that_enter_function_are_the_closed_list_of_the_spec_and_only_i
 # --------------------------------------------------------------------------- (e) a missing candidate_count row is "N unknown"
 
 def via_graph():
-    """``F`` owns three call sites: ``c1``/``c2`` carry ``VIA`` edges of key ``k`` to two links, ``c3`` a ``VIA`` edge with no ``consumerKey``; ``orphan`` is no symbol's."""
+    """``F`` owns three call sites: ``c1``/``c2`` carry ``VIA`` edges of key ``k`` to two links, ``c3`` an ``unknown-key`` site (no ``consumerKey``) linked to two providers of its kind (``L3``, ``L6``), ``c4`` a ``shell-dynamic`` site (no key) linked to the one provider ``L4`` of its own kind;
+    ``orphan`` is no symbol's. Each keyless site's fan-out is its own, so the two keyless sites of one owner must not share a group."""
     g = G()
-    g.sym("F"), g.site("c1", "F"), g.site("c2", "F"), g.site("c3", "F"), g.link("L1"), g.link("L2"), g.link("L3")
+    g.sym("F"), g.site("c1", "F"), g.site("c2", "F"), g.site("c3", "F"), g.site("c4", "F"), g.link("L1"), g.link("L2"), g.link("L3"), g.link("L4"), g.link("L6")
     g.via("c1", "L1", key="k"), g.via("c2", "L2", key="k")
     g.edge("CallSite", "VIA", "Link", "c3", "L3", status="confirmed", reason="key-match")
+    g.edge("CallSite", "VIA", "Link", "c3", "L6", status="possible", reason="unknown-key")
+    g.edge("CallSite", "VIA", "Link", "c4", "L4", status="possible", reason="shell-dynamic")
     g.node("CallSite", callSiteId="orphan", repoId="repo-a", unitId="ua", path="a.py", line=1, calleeName="f"), g.via("orphan", "L1", key="k")
     return g
 
 
-def test_candidate_count_is_n_for_a_key_and_none_for_an_absent_key_or_an_ownerless_site_never_one_or_zero():
-    got = bfs.candidate_counts(MemoryReader(via_graph()), [("c1", "L1"), ("c2", "L2"), ("c3", "L3"), ("orphan", "L1"), ("c1", "L3")])
-    assert got == {("c1", "L1"): 2, ("c2", "L2"): 2, ("c3", "L3"): None, ("orphan", "L1"): None, ("c1", "L3"): None}
-    assert got[("c3", "L3")] is None and got[("orphan", "L1")] is None
+def test_candidate_count_is_n_for_a_key_the_keyless_links_of_the_same_site_for_an_absent_key_and_none_for_an_ownerless_site():
+    got = bfs.candidate_counts(MemoryReader(via_graph()), [("c1", "L1"), ("c2", "L2"), ("c3", "L3"), ("c3", "L6"), ("c4", "L4"), ("orphan", "L1"), ("c1", "L3")])
+    assert got == {("c1", "L1"): 2, ("c2", "L2"): 2, ("c3", "L3"): 2, ("c3", "L6"): 2, ("c4", "L4"): 1, ("orphan", "L1"): None, ("c1", "L3"): None}   # keyless: that site's own providers only
+
+
+def test_a_keyless_via_edge_alone_counts_one_and_the_keyed_siblings_do_not_join_its_group():
+    g = via_graph()
+    g.sym("H"), g.site("h1", "H"), g.link("L5"), g.edge("CallSite", "VIA", "Link", "h1", "L5", status="possible", reason="unknown-key")
+    assert bfs.candidate_counts(MemoryReader(g), [("h1", "L5")]) == {("h1", "L5"): 1}
 
 
 def test_candidate_counts_asks_once_and_not_at_all_for_no_pairs():

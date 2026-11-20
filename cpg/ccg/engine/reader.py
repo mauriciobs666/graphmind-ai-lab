@@ -113,7 +113,7 @@ _EVIDENCE = {
     "lifted_of": "UNWIND $pairs AS q MATCH (l:Link {linkId: q[0]})-[r:LIFTED_VIA]->(t) WHERE r.siteId = q[1] RETURN q[0], q[1], r.ord, labels(t)[0], coalesce(t.callSiteId, t.symbolId), t.repoId, t.unitId, t.path, r.line, r.urlPath, r.verbPath, r.viaSiteId, r.viaLine, coalesce(t.calleeName, t.qname) ORDER BY q[0], q[1], r.ord",
     "bound_out": "UNWIND $pairs AS q MATCH (l:Link {linkId: q[0]})-[b:BOUND_BY]->(e:ConfigEntry) WHERE b.siteId = q[1] RETURN q[0], q[1], b.ord, e.entryId, e.repoId, e.unitId, e.path, e.line, e.keyPath, e.launchKind, e.protocol, e.port, e.envVar, e.mountPath, e.service, e.argv0, b.port, b.portOrigin, b.packId ORDER BY q[0], q[1], b.ord",
     "bound_of_link": "UNWIND $ids AS i MATCH (l:Link {linkId: i})-[b:BOUND_BY]->(e:ConfigEntry) RETURN i, e.entryId, b.siteId, b.ord, e.repoId, e.unitId, e.path, e.line, e.keyPath, e.launchKind, b.port, b.portOrigin, b.packId ORDER BY i, e.entryId, b.siteId, b.ord",
-    "candidate_count": "UNWIND $pairs AS q MATCH (c:CallSite {callSiteId: q[0]})-[v:VIA]->(l:Link {linkId: q[1]}) MATCH (s:Symbol)-[:HAS_CALL]->(c) MATCH (s)-[:HAS_CALL]->(:CallSite)-[v2:VIA]->(l2:Link) WHERE v2.consumerKey = v.consumerKey RETURN q[0], q[1], count(DISTINCT l2)",
+    "candidate_count": "UNWIND $pairs AS q MATCH (c:CallSite {callSiteId: q[0]})-[v:VIA]->(l:Link {linkId: q[1]}) MATCH (s:Symbol)-[:HAS_CALL]->(c) MATCH (s)-[:HAS_CALL]->(c2:CallSite)-[v2:VIA]->(l2:Link) WHERE coalesce(v2.consumerKey, 0) = coalesce(v.consumerKey, 0) AND CASE WHEN v.consumerKey IS NULL THEN c2 = c ELSE true END RETURN q[0], q[1], count(DISTINCT l2)",
 }
 
 
