@@ -1,6 +1,6 @@
 # Live Specs — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** —
+> **Status:** archived · **Owner:** `teco` · **Tracks:** —
 
 Build chain for `docs/requirements/live-specs.md` (Ready for design, `analyst` Pass 3 approve with
 suggestions, `docs/reviews/live-specs.md`). Touches agent prompts/config → code-implementation
@@ -54,3 +54,4 @@ commit rule (commit per unit after its gate). Unit set per `docs/plans/live-spec
 - 2026-10-31: Close step (4): teco applied the three proposed root `REVIEW.md` additions verbatim (Pass 8: unchanged lines; Pass 9: fact stated twice, endorsed by Pass 17; Pass 17: whole-component inventory), 468→574 w. Integrity check: the diff has exactly those 7 added lines and no removals, and the proposals hold no prunes (Passes 10, 14, 16, 18, 19 proposed none; Pass 4's drafts were superseded by the Pass 6 seeds). None narrows, so no `cobb` gate.
 - 2026-10-31: Follow-ups outside chain: `audit-team.sh` check 7 also flags `docs/plans/standard-local-model.md` l.53/l.275 (Windows-home path, committed `185e326b`; owner `architect`, other coordination). `cobb` notes falkor-chat `REVIEW.md` *Evidence bar* review-safe-subset line (N5) is narrowing by effect under `teco.md` (a); its next amendment goes through `cobb`.
 - 2026-10-31: S6 clause is `security-expert`'s own replacement text, applied verbatim; not re-gated by its author (same practice as S1–S4). `cobb` ruled yes on the open question (narrowing gate also checks the line against every prompt carrying the precedence sentence) → L3e: `cobb` applies its proposed text to `teco.md` Feature close "Narrowing" bullet, `analyst` gates (teco does not gate its own prompt).
+- 2026-11-20: L6 verified by `teco` (commit `13d1ba30`): `analyst` Pass 2 approve; proposed root `REVIEW.md` line applied verbatim (addition, not narrowing); model-bench suite re-run 3655 passed / 2 xfailed; §11 inventory covers every tracked file (packs via the `packs/<pack-id>/` row → `FORMATS.md` §1). All units accepted; milestone closed, five live-specs documents flipped to `archived`.

@@ -1,6 +1,6 @@
 # Live specs — agent/prompt-safety gate on `analyst.md` (L3a)
 
-> **Status:** active · **Owner:** `security-expert` · **Tracks:** —
+> **Status:** archived · **Owner:** `security-expert` · **Tracks:** —
 
 ## Pass 1
 

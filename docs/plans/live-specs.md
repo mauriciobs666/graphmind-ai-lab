@@ -1,6 +1,6 @@
 # Live specs — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.2
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — · **Version:** 1.2
 
 *Revision note — 2026-10-31 (v1.1):* reworked per `docs/reviews/live-specs.md` Pass 4 and the stakeholder's answers of the same day; v1.2 (2026-10-31) folds in Pass 5.
 

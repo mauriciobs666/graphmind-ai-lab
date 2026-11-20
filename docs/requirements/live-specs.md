@@ -1,6 +1,6 @@
 # Live specs — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-19
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-19
 
 ## Intent
 
