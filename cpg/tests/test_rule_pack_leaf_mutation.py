@@ -797,7 +797,8 @@ def _file_pack_mutant(pack: dict, path: tuple):
 
 # The packs that are files only: id -> (the test module whose `behaviour_failures` is the pack's contract, the leaf count).
 # P1-49 registers `python-http-client`: its contract also carries the `httpx.Client` base-URL binding and `negatives.yaml`.
-FILE_PACKS = {"shell-mcp-call": ("test_pack_shell_mcp_call", 24), "python-http-client": ("test_pack_python_http_client", 162)}
+FILE_PACKS = {"shell-mcp-call": ("test_pack_shell_mcp_call", 24), "python-http-client": ("test_pack_python_http_client", 162),
+              "ts-mcp-client": ("test_pack_ts_mcp_client", 26)}
 
 
 def file_pack_survivors(pid: str = "shell-mcp-call") -> tuple[int, set[str]]:
@@ -822,7 +823,7 @@ def test_every_leaf_of_a_files_only_pack_is_caught_by_its_behavioural_contract(p
 # matters. The sibling swap replaces a leaf with another value that the pack itself holds under the same key name (`callee: get` ->
 # `post`, `literal: GET` -> `POST`, `lifting: py-get` -> `py-post`): still schema-valid for those keys, so only behaviour can kill it.
 # `FILE_PACK_SWAP_SURVIVORS` lists the leaves whose swap is equivalent by design (a label no runtime reads).
-FILE_PACK_SWAP_SURVIVORS = {"python-http-client": {"urlBindings[0].id"}}
+FILE_PACK_SWAP_SURVIVORS = {"python-http-client": {"urlBindings[0].id"}, "ts-mcp-client": {"urlBindings[0].id"}}
 
 
 def _file_pack_set(pack: dict, path: tuple, value):
@@ -875,3 +876,13 @@ def test_a_sibling_value_swap_of_python_http_client_leaves_is_caught_by_behaviou
 
 def test_the_python_http_client_leaf_mutants_die_behaviourally_and_at_the_validator_in_these_numbers():
     assert file_pack_death_split("python-http-client") == (81, 81, 0)
+
+
+def test_a_sibling_value_swap_of_ts_mcp_client_leaves_is_caught_by_behaviour():
+    count, alive = file_pack_swap_survivors("ts-mcp-client")
+    assert count == 16
+    assert alive == FILE_PACK_SWAP_SURVIVORS["ts-mcp-client"], sorted(alive ^ FILE_PACK_SWAP_SURVIVORS["ts-mcp-client"])
+
+
+def test_the_ts_mcp_client_leaf_mutants_die_behaviourally_and_at_the_validator_in_these_numbers():
+    assert file_pack_death_split("ts-mcp-client") == (6, 20, 0)

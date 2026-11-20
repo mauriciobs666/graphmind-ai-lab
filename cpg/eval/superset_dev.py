@@ -91,6 +91,8 @@ EXTRA_PIN_FILES = (
     "cpg/packs/severity-rules/pack.yaml",
     "cpg/packs/shell-mcp-call/negatives.yaml",
     "cpg/packs/shell-mcp-call/pack.yaml",
+    "cpg/packs/ts-mcp-client/negatives.yaml",
+    "cpg/packs/ts-mcp-client/pack.yaml",
 )
 RESULT_PATH = "cpg/eval/results/ccg-p1-flow-fallback-v1.json"
 SYSTEM = "flowfb"

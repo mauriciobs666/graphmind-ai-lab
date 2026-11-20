@@ -801,7 +801,7 @@ def test_a_complete_assembly_failure_before_the_load_is_not_swallowed(world, mon
 def test_the_default_pack_set_is_every_pack_directory_but_the_one_run_packs_refuses():
     on_disk = {d.name for d in (RF.CPG / "packs").iterdir() if d.is_dir()}
     assert set(RF.DEFAULT_PACKS) == on_disk - {"paper-inhouse-bus"} and len(RF.DEFAULT_PACKS) == len(set(RF.DEFAULT_PACKS))
-    assert set(RF.DEFAULT_PACKS) == {"fastapi", "fastmcp", "fetch", "infra-signatures", "kafka", "python-http-client", "severity-rules", "shell-mcp-call"}
+    assert set(RF.DEFAULT_PACKS) == {"fastapi", "fastmcp", "fetch", "infra-signatures", "kafka", "python-http-client", "severity-rules", "shell-mcp-call", "ts-mcp-client"}
 
 
 def test_the_packs_reach_the_linker_and_the_assembler_as_loaded(world, monkeypatch):

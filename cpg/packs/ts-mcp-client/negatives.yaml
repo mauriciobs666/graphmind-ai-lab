@@ -1,0 +1,16 @@
+# Call-site shapes the pack must NOT turn into a consumer, per lifting id (P1-52). Each case is a hand-built TypeScript file (`imports`)
+# holding one call `callee` (`resolution`) whose object-literal `name` field is the constant `name` (or, with `name: null`, none). Run by
+# `negatives_failures` in tests/test_pack_ts_mcp_client.py. A string or a comment naming `callTool` has no call record at all, so it is the
+# empty-file case `no-call-record`.
+negatives:
+  ts-call-tool:
+    no-sdk-import: {imports: [react, "./names"], callee: callTool, resolution: unresolved, name: get_item}
+    no-imports: {imports: [], callee: callTool, resolution: unresolved, name: get_item}
+    relative-import-of-the-wrapper: {imports: ["../mcp/client"], callee: callTool, resolution: unresolved, name: reindex}
+    sdk-lookalike-package: {imports: ["@modelcontextprotocol-x/sdk/client"], callee: callTool, resolution: unresolved, name: get_item}
+    resolved-call-to-a-local-function: {imports: ["@modelcontextprotocol/sdk/client/index.js"], callee: callTool, resolution: resolved, name: get_item}
+    no-call-record: {imports: ["@modelcontextprotocol/sdk/client/index.js"], callee: null}
+    call-without-a-name: {imports: ["@modelcontextprotocol/sdk/client/index.js"], callee: callTool, resolution: unresolved, name: null}
+    other-method-name: {imports: ["@modelcontextprotocol/sdk/client/index.js"], callee: listTools, resolution: unresolved, name: get_item}
+    similar-method-name: {imports: ["@modelcontextprotocol/sdk/client/index.js"], callee: callToolStream, resolution: unresolved, name: get_item}
+    another-package-of-the-same-scope: {imports: ["@modelcontextprotocol/inspector"], callee: callTool, resolution: unresolved, name: get_item}

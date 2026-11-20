@@ -1,0 +1,33 @@
+# P1-52: the TypeScript MCP-client consumer (`@modelcontextprotocol/sdk`: `client.callTool({ name, ... })`). Not in the rule-pack spec
+# (docs/plans/connected-code-graph-rule-pack-spec.md): `status: paper` is the only value the v1 format allows, not a claim that no runtime
+# exists. Plan: docs/plans/connected-code-graph-p1-linking.md, P1-52.
+# The lifted role is named `url` because that is the only lifted-role name the runtime and the schema's `lifted` enum carry; here it
+# holds the TOOL NAME (the `name` field of the call's object-literal argument, `a0.name`).
+# The SDK's own `callTool` is `unresolved` in the stored bundles, so the seed is that call, gated by the file importing the SDK. A prefix
+# matcher would not match the import (its separator is `.`), hence the glob. `ownSite`: the call inside a wrapper is the lifted leaf.
+# URL binding: `new URL("http://localhost:8200/mcp")` sits in the file that builds the transport, the consumer in another file of the unit
+# (LNK-12: `Admin.tsx::onReindex`), so the scope is `unit`, not `file` (gate review B2). Known limit, pinned by a test: any other literal
+# `new URL(...)` in the unit adds an alternative to the URL set of every `mcp_tool` consumer of the unit.
+packFormat: 1
+id: ts-mcp-client
+version: 0.1.0
+kind: framework
+vocabVersion: "1.0"
+status: paper
+link: [{kind: mcp_tool, matcher: exact}]
+urlBindings:
+  - id: ts-mcp-url
+    kinds: [mcp_tool]
+    urlSources:
+      - {callsite: {callee: URL}, arg: a0, scope: unit}
+liftings:
+  - id: ts-call-tool
+    role: {kind: mcp_tool, slot: url}
+    seeds:
+      - {call: {callee: callTool, resolution: [unresolved]}, arg: a0.name, scope: {imports: [{module: {glob: "@modelcontextprotocol/sdk/**"}}]}}
+    ownSite: true
+rules:
+  - id: ts-call-tool
+    match: {lifted: {lifting: ts-call-tool}}
+    extract: {tool: {lifted: url}}
+    emit: [{consumes: {kind: mcp_tool, key: "{tool}"}}]

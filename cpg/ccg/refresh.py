@@ -78,7 +78,7 @@ from ccg.units import Unit, discover_units
 CPG = Path(__file__).resolve().parent.parent
 DEFAULT_MANIFEST = CPG / "ccg" / "system.yaml"
 #: Every pack ``run_packs`` runs (``paper-inhouse-bus`` has a ``query`` subject it refuses): the plan leaves the set to the caller.
-DEFAULT_PACKS = ("fastapi", "fastmcp", "fetch", "infra-signatures", "kafka", "python-http-client", "severity-rules", "shell-mcp-call")
+DEFAULT_PACKS = ("fastapi", "fastmcp", "fetch", "infra-signatures", "kafka", "python-http-client", "severity-rules", "shell-mcp-call", "ts-mcp-client")
 OVERRIDES = ("local", "hosted")
 STAGES = ("sweep", "discover", "build", "resolve", "link", "assemble", "load", "swap")
 

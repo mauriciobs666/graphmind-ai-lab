@@ -19,7 +19,7 @@ from packrt_helpers import CPG, PACKS
 from ccg.rulepack import load_pack
 
 SRC = sorted((CPG / "ccg" / "packrt").glob("*.py"))
-SERVED = ("fastapi", "fetch", "fastmcp", "shell-mcp-call", "python-http-client")
+SERVED = ("fastapi", "fetch", "fastmcp", "shell-mcp-call", "python-http-client", "ts-mcp-client")
 SCHEMA = CPG / "ccg" / "schemas" / "rule-pack-v1.schema.json"
 TOKEN = re.compile(r"[A-Za-z_]\w*")
 # Tokens the runtime has to spell although a served pack also spells them: (file, kind, token); "*" is any file.
