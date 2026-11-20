@@ -606,6 +606,13 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
   of the fixture build (with the P1-52 pack present) differs from the pre-edit one by exactly five rows: LNK-16 `port-shared` appears; LNK-45
   gains `BOUND_BY` ord 0 and 1; LNK-02 and LNK-06 go `key-match` to `binding-confirmed`; LNK-12 loses its `job` provider link and its `svc`
   link becomes `binding-confirmed`. Any other changed row stops the unit. Must not regress: LNK-13/14/15/22, AC6-EX-1/4, `UNIT_FLOORS` (68, 67), the walk rows.
+- **53c (`tdd-engineer`, serial after 53b; it regenerates the same pinned SHAs and family counts):** the AC-6 example-config floor at P1
+  (2: AC6-EX-1, AC6-EX-4) counts instances whose P1 form carries the `example-config` reason, not manifest rows gated P1. EX-4 does not
+  today: `fx-svc/clients/peer.py` reads `os.environ["FX_PEER_BASE"]`, and `bind.py` reads only `environ.get`/`getenv` (`_ENV_READS`), so
+  its link is `possible`/`partial-key`. Edit `peer.py` to `os.environ.get("FX_PEER_BASE", "")`, drop EX-4's `p1Form` from the manifest
+  (its `reason: example-config` is then the P1 form) and keep the Compose-example binding as is. Done: the pin's Link tier asserts EX-4
+  `possible`/`example-config` through the example Compose chain; if the binding does not take, the floor is 1 and the question returns
+  to the stakeholder (accept 1, or restore AC6-EX-2 at P1 with JS environment records).
 
 ## P1-17 · linker — `tdd-engineer`
 
