@@ -210,6 +210,9 @@ Everything below lives in `ws:{workspaceId}` unless marked `reference`.
 // Authorship, mentions, provenance, read state
 (:Message)-[:POSTED_BY]->(:User|:Agent)                // exactly one author
 (:Message)-[:MENTIONS_MEMBER]->(:User|:Agent)          // resolved @mentions, written with the message
+(:Message)-[:REPLY_TO]->(:Message)                     // the quoted message: same thread, at most one per
+                                                       // message, written by the QUERIES §4 post paths,
+                                                       // read by get_message (quotedId)
 (:Message)-[:EMITTED {score, rank}]->(:Message|:Chunk) // an AI answer's retrieval seeds
 (:User|:Agent)-[:HAS_CURSOR]->(:ReadCursor {cursorId, memberId, threadId, lastReadAt, lastReadMsgId})
 
@@ -241,7 +244,6 @@ Everything below lives in `ws:{workspaceId}` unless marked `reference`.
 
 // Read by queries but written by no current code path (dormant schema)
 (:Message)-[:MENTIONS]->(:Entity)                      // hybrid_search's co-occurrence expansion
-(:Message)-[:REPLY_TO]->(:Message)                     // get_message's quoted-message lookup
 
 // Workflow ↔ chat linkage (§6.2)
 (:WorkflowRun)-[:TRIGGERED_BY]->(:Message)
@@ -335,10 +337,13 @@ Two cases — both must be a single `GRAPH.QUERY` (atomic):
 - **Subsequent messages** — match the current `TAIL`, link `prev -[:NEXT]-> m`, move `TAIL` to
   `m` (delete the old `TAIL` edge, create the new one), and attach `(m)-[:POSTED_BY]->(author)`.
 
-Both bump `Thread.updatedAt`. The service picks the variant by checking whether the thread
+Both bump `Thread.updatedAt`. Either variant optionally quotes a message: it creates
+`(m)-[:REPLY_TO]->(quoted)` when the quoted `msgId` is a message in the same thread, and otherwise
+refuses the whole write (`quotedFound=false`, nothing written). The service picks the variant by checking whether the thread
 already has a `HEAD` (`SERVER.md` §1.4 keeps this dispatch inside `post_message`), then re-dispatches on the
 **status row** each write returns: a lost first-post race (`hadHead`) retries as subsequent, a
-TAIL-less subsequent retries as first, and a replayed `msgId` (`dupMsg`) is idempotent success —
+TAIL-less subsequent retries as first, a replayed `msgId` (`dupMsg`) is idempotent success, and
+an unresolvable quote (`quotedFound=false` on a row that is neither written, a replay, nor a lost race; QUERIES §4) is a caller error —
 see the §9 table and QUERIES.md §4. The re-dispatch loop is bounded at 4 attempts — a tripwire,
 not a real retry budget: ping-pong between the two paths is impossible by contract (a headed
 thread always has a TAIL), so hitting the bound means the invariant broke. `createdAt` comes from
@@ -894,7 +899,7 @@ traversal — read-only queries, routable to a replica.
 
 | Operation | Pattern | Notes |
 |---|---|---|
-| Post message | Guarded `CREATE` inside `FOREACH`+`CASE` per path + relink `Thread TAIL → NEXT` (QUERIES.md §4) | Two separate self-guarding variants (first vs subsequent — see §5.3), never a conditional MERGE of the two paths. `MENTIONS_MEMBER` edges (and, for an AI answer, `EMITTED` seeds) ride the same query. Always returns a **status row**; retry-idempotency comes from that `dupMsg` status, **not** from the uniqueness constraint — a replayed MERGE re-runs the relink clauses and corrupts the chain. The `Message.msgId` uniqueness constraint stays as the concurrency backstop (rollback verified all-or-nothing). O(1) append. |
+| Post message | Guarded `CREATE` inside `FOREACH`+`CASE` per path + relink `Thread TAIL → NEXT` (QUERIES.md §4) | Two separate self-guarding variants (first vs subsequent — see §5.3), never a conditional MERGE of the two paths. `MENTIONS_MEMBER` edges (and, for an AI answer, `EMITTED` seeds) and an optional same-thread `REPLY_TO` ride the same query. Always returns a **status row**; retry-idempotency comes from that `dupMsg` status, **not** from the uniqueness constraint — a replayed MERGE re-runs the relink clauses and corrupts the chain. The `Message.msgId` uniqueness constraint stays as the concurrency backstop (rollback verified all-or-nothing). O(1) append. |
 | Create channel / thread | plain `CREATE` (server-minted uuid ids) | **Non-idempotent** — a retried create mints a new id; the uniqueness constraints backstop. A MERGE on a fresh uuid could never match. |
 | Ensure member / storefront participant | guarded `CREATE` with a status row | Member ids are unique across `User`/`Agent`; a participant is created with its own `Channel` (`participantId` set), `Thread` and both `MEMBER_OF` edges in one query. |
 | Advance read cursor | `MERGE` on `HAS_CURSOR`→`ReadCursor {cursorId}` + composite monotonic guard | Never moves backward on a stale or tie-smaller replay. |

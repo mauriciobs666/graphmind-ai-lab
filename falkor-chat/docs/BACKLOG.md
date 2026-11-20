@@ -103,6 +103,21 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `docs/plans/graph-config-defaults-graph.md` §5 Step 4, every graph's inventory diffing to 0; and
   DESIGN §10's persistence bullet states what shipped (or "AOF off" if declined).
 
+### GAL-I02-K0005 — `quotedId` is written but read back only by `get_message`; surface it on `read_thread` and the §9 reads, plus an MCP read-back (🔵 proposed — `docs/plans/message-quoting.md` §3.5, 2026-11-20)
+
+> A post can quote a same-thread message (REST `quotedId`, MCP `send_message` `quoted_id`), and
+> `GET /messages/{mid}` returns it, but `read_thread` and the QUERIES §9.1/§9.2 since-reads carry
+> no `quotedId`, and MCP has no tool that returns it. So an MCP agent can quote and cannot see a
+> quote. These are the hot reads, and adding a column changes their row contract, so the change
+> needs one `GRAPH.PROFILE` pass over all three. The web UI's quote rendering needs `read_thread`
+> anyway, so that UI change is the natural carrier.
+- **Scope:** `quotedId` (the `REPLY_TO` target's `msgId`, or `null`) on `read_thread`, §9.1 and
+  §9.2, through REST and MCP `read_messages`; QUERIES §4/§9 and SERVER §1.4/§2.2 updated at close.
+- **Done when:** a quoted message read through each of the three reads (REST and MCP) carries
+  `quotedId`, an unquoted one carries `null`, and a profile shows each read still index-anchored
+  with no added scan.
+- **Owner:** `architect` (plan), then `tdd-engineer`.
+
 ### K-082 — Storefront demo: optional long-conversation KV stress rerun (🔵 proposed — carried from K-066, closed 2026-10-22)
 
 > The demo runs on `ministral-3-3b` (`-c 8192 --gpu max`) plus the 0.6B embedder, and

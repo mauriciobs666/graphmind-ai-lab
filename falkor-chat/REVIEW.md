@@ -32,6 +32,8 @@
 - A guard that proves a name is read (or unread) is checked with a planted comment-only and a
   string-only mention of the name. A regex or grep over source text counts prose: `config.X`
   is cited in docstrings across `falkorchat/`. A text match is a bound; count AST loads.
+- When a change touches a query whose copies are inlined in `scripts/test_queries.sh`, the sweep that finds those copies matches a clause of the query body, never the composed status string. In an implementation review, compare each copy with the text the method actually sends, after normalizing literals and parameters.
+- When a query's correctness or cost rests on a clause planning as an index scan, a pytest EXPLAINs the text the method actually sends (captured at the graph call). It asserts the presence of `Node By Index Scan | (<var>:<Label>)` for that clause. Absence of `All Node Scan` doesn't count: a `Label Scan` regression, or an error string, passes it.
 
 ## Evidence bar
 

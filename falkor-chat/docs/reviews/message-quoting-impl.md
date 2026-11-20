@@ -167,3 +167,86 @@ No prune is proposed: no existing line in `falkor-chat/REVIEW.md` is now enforce
   gave 2 failed (both `[None-…]` index cases) and 10 passed.
 - **Suites:** `test_queries.sh` 495/495 (output `impl/tq.out`); `pytest -q` 3762 passed,
   14 deselected, 1 xfailed in 74 s.
+
+## Close check
+
+> 2026-11-20 · step 3 of the feature close: the writer's uncommitted DESIGN/QUERIES/SERVER/BACKLOG edits, checked against shipped `496c5d40` · docs-only, no suites run (U12 owns `ws:test`)
+
+**Verdict: approve with suggestions.** Every contract the shipped diff changed is in the spec,
+and the spec says nothing the code contradicts on the §4 bodies, the status row or the front
+doors. There are two minor fixes, both one-line rewrites. Neither blocks the close; apply them
+before the `HISTORY.md` entry.
+
+**Checks run**
+- **The §4 Cypher blocks are byte-equal, modulo whitespace, to the sent text.** *Run.* I loaded
+  `repository.py` from `git show 496c5d40:…` (not the working tree: a later unit has since edited
+  the §6 hybrid-search query in it), captured the string each method passes to `query`/`ro_query`
+  through a recording stub, and compared it with every ```` ```cypher ```` block in QUERIES.md.
+  `post_first_message` matches block 12 exactly, `post_subsequent_message` block 13, and
+  `get_message` block 16. The parameter sets carry `quotedId`.
+  The comparator can fail: it reports the §10.1 `post_agent_answer*` blocks as non-matching. The
+  only difference is `{ score:` versus `{score:`, whitespace inside a map literal, and those
+  bodies were unchanged by this feature. This is pre-existing and cosmetic, and not a finding for
+  this close. My check is independent of the writer's `extract_q.py`, which is a static AST read
+  of a file path; mine is a runtime capture of the committed blob.
+- **The status-row order matches `_dispatch_write`.** *Traced.* QUERIES §4: "`written` or
+  `dupMsg`, then `authorFound`, then `hadHead`, then `quotedFound`" is the code's order. Also
+  true as stated: `dupMsg` is success whatever `quotedFound` says, `hadHead` takes precedence on
+  the first path, and the §10.1 rows have no `quotedFound`.
+- **The cited quirk entry is committed.** *Run.* "A bare pattern-property equality match …" is
+  in `HEAD:claude/graph-dba/falkordb-quirks.md` at line 791 (`git log -S`: since `fb10a7a3`). The
+  working-tree diff to that file (+16 lines) belongs to others and is not what the spec cites.
+- **No change history in the spec.** *Run.* Scanning the added lines for `K-094`, dates and
+  "now/previously/used to/was/added/new" finds only "one added block" in §10.1, which predates
+  this edit. The "Post a reply" heading keeps its place as a two-line pointer, so the numbering
+  holds. The `REPLY_TO` move in DESIGN §5.1 deletes the dormant-schema line rather than
+  annotating it "formerly dormant".
+- **Absolute words and second copies.** *Run.* An unfiltered grep of the three spec files for
+  `REPLY_TO|quotedId|quoted_id|quotedFound` finds 34 lines (DESIGN 7, QUERIES 22, SERVER 5), each read. "at most one per
+  message", "never a bare …", "always sent" and "no separate reply query" hold against the
+  code. Storefront resets `DETACH DELETE` their victims, so same-thread edges never dangle.
+  SERVER's REST-parity addition ("an optional `quotedId` that is `send_message`'s `quoted_id`")
+  matches `api.post_message` → `quoted_id=body.quotedId`. One second copy is wrong; see C1.
+- **`GAL-I02-K0005` is sound.** *Read.* The ID is registered in `.work-items/registry.jsonl`
+  (`new`, type K, parent `GAL-I02`, home `falkor-chat`, slug `quoted-id-read-back`, uncommitted
+  with the rest). The body is present-tense and forward-looking, and names the three reads,
+  both transports and the profile obligation. Its done-condition can fail either way (a missing
+  `quotedId`, or an added scan). It is a correct split of plan §3.5's deferral.
+
+**Findings**
+
+**C1 (minor) — DESIGN §5.3's new clause contradicts QUERIES §4 on a replay.** "an unresolvable
+quote (`quotedFound=false` on a row that lost no race) is a caller error" also covers a
+`dupMsg=true` replay whose quote no longer resolves. That row is
+`(written=F, hadHead=F, dupMsg=T, authorFound=T, quotedFound=F)`, measured in plan review
+Appendix A and pinned by `test_post_subsequent_message_replay_wins_over_unresolvable_quote`.
+The code and QUERIES §4 treat it as success. **Fix:** "… and an unresolvable quote
+(`quotedFound=false` on a row that is neither written, a replay, nor a lost race) is a caller
+error". Or drop the clause and cite QUERIES §4's order sentence, which is the one home of the
+dispatch order.
+
+**C2 (minor, teco's commit, outside the spec) — `496c5d40` committed a mutated copy of the whole
+server package and two full suite copies as review evidence.** These are 44 files under
+`docs/reviews/message-quoting-evidence/impl/`: `mut/falkorchat/*`, ~17k lines, including a
+`repository.py` with the **bare `{msgId: $quotedId}` form**; plus `mut_tq.sh` and `old_tq.sh`,
+~2k lines each. Every unfiltered sweep the REVIEW.md files mandate over `falkor-chat/` now hits a
+stale, deliberately wrong copy of production code. A future "no bare form remains" check would
+report a false positive, or be filtered around, at which point it becomes a bound. **Fix:** in a
+follow-up commit, remove `mut/`, `mut_tq.sh` and `old_tq.sh`, and keep `cmp*.py`, the plugins,
+`mutate.py`, the `spec_*.json` files and `tq.out`. The copies are reproducible: `old_tq.sh` is
+`git show 496c5d40^:…`, and the mutant is the one-line `sed` stated in this review's Appendix.
+
+**Final `falkor-chat/REVIEW.md` proposals, restated verbatim** (`## Always check`; no prune). C2
+does not change either.
+
+- When a change touches a query whose copies are inlined in `scripts/test_queries.sh`, the sweep
+  that finds those copies matches a clause of the query body, never the composed status string.
+  In an implementation review, compare each copy with the text the method actually sends, after
+  normalizing literals and parameters.
+- When a query's correctness or cost rests on a clause planning as an index scan, a pytest
+  EXPLAINs the text the method actually sends (captured at the graph call). It asserts the
+  presence of `Node By Index Scan | (<var>:<Label>)` for that clause. Absence of `All Node Scan`
+  doesn't count: a `Label Scan` regression, or an error string, passes it.
+
+Evidence: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/k094/close/cmpq.py`
+(run with the directory as its argument; it reads `repository_496.py`, extracted from the commit).

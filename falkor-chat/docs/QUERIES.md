@@ -232,13 +232,17 @@ OPTIONAL MATCH (t)-[:HEAD]->(h)
 OPTIONAL MATCH (dup:Message {msgId: $msgId})
 OPTIONAL MATCH (ua:User  {userId:  $authorId})
 OPTIONAL MATCH (aa:Agent {agentId: $authorId})
-WITH t, h, dup, coalesce(ua, aa) AS author
+UNWIND [$quotedId] AS qid
+OPTIONAL MATCH (quoted:Message {msgId: qid}) WHERE quoted.threadId = $threadId
+WITH t, h, dup, coalesce(ua, aa) AS author, quoted
 UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid
 OPTIONAL MATCH (mu:User  {userId:  mid})
 OPTIONAL MATCH (ma:Agent {agentId: mid})
-WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems
-WITH t, h, dup, author, mems,
-     (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok
+WITH t, h, dup, author, quoted, collect(DISTINCT coalesce(mu, ma)) AS mems
+WITH t, h, dup, author, quoted, mems,
+     ($quotedId IS NULL OR quoted IS NOT NULL) AS quoteOk
+WITH t, h, dup, author, quoted, mems, quoteOk,
+     (h IS NULL AND dup IS NULL AND author IS NOT NULL AND quoteOk) AS ok
 FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
   CREATE (m:Message {msgId: $msgId, text: $text, role: $role,
                      createdAt: $createdAt, threadId: $threadId})
@@ -247,11 +251,14 @@ FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
   CREATE (m)-[:POSTED_BY]->(author)
   SET t.updatedAt = $createdAt
   FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))
+  FOREACH (q IN CASE WHEN quoted IS NULL THEN [] ELSE [quoted] END |
+    CREATE (m)-[:REPLY_TO]->(q))
 )
 RETURN ok                 AS written,
        h    IS NOT NULL   AS hadHead,
        dup  IS NOT NULL   AS dupMsg,
-       author IS NOT NULL AS authorFound
+       author IS NOT NULL AS authorFound,
+       quoteOk            AS quotedFound
 ```
 
 ### Post a subsequent message in a thread (`post_subsequent_message` — self-guarding)
@@ -261,13 +268,17 @@ MATCH (t:Thread {threadId: $threadId})-[tailRel:TAIL]->(prev:Message)
 OPTIONAL MATCH (dup:Message {msgId: $msgId})
 OPTIONAL MATCH (ua:User  {userId:  $authorId})
 OPTIONAL MATCH (aa:Agent {agentId: $authorId})
-WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author
+UNWIND [$quotedId] AS qid
+OPTIONAL MATCH (quoted:Message {msgId: qid}) WHERE quoted.threadId = $threadId
+WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author, quoted
 UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid
 OPTIONAL MATCH (mu:User  {userId:  mid})
 OPTIONAL MATCH (ma:Agent {agentId: mid})
-WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems
-WITH t, tailRel, prev, dup, author, mems,
-     (dup IS NULL AND author IS NOT NULL) AS ok
+WITH t, tailRel, prev, dup, author, quoted, collect(DISTINCT coalesce(mu, ma)) AS mems
+WITH t, tailRel, prev, dup, author, quoted, mems,
+     ($quotedId IS NULL OR quoted IS NOT NULL) AS quoteOk
+WITH t, tailRel, prev, dup, author, quoted, mems, quoteOk,
+     (dup IS NULL AND author IS NOT NULL AND quoteOk) AS ok
 FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
   CREATE (m:Message {msgId: $msgId, text: $text, role: $role,
                      createdAt: $createdAt, threadId: $threadId})
@@ -277,11 +288,14 @@ FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
   CREATE (m)-[:POSTED_BY]->(author)
   SET t.updatedAt = $createdAt
   FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))
+  FOREACH (q IN CASE WHEN quoted IS NULL THEN [] ELSE [quoted] END |
+    CREATE (m)-[:REPLY_TO]->(q))
 )
 RETURN ok                 AS written,
        false              AS hadHead,
        dup  IS NOT NULL   AS dupMsg,
-       author IS NOT NULL AS authorFound
+       author IS NOT NULL AS authorFound,
+       quoteOk            AS quotedFound
 ```
 
 ### Status-row contract (service dispatch)
@@ -296,6 +310,12 @@ unambiguously means "anchor missing":
 | `dupMsg=true` | msgId already exists | **idempotent success** (retry replay) |
 | `hadHead=true` (first path) | lost the first-post race | re-dispatch as subsequent |
 | `authorFound=false` | unknown member | 4xx, nothing written |
+| `quotedFound=false` | `$quotedId` is not a message in this thread (unknown id, another thread's message, or a headless thread on the first path) | 4xx, nothing written |
+
+The service checks the row in this order: `written` or `dupMsg`, then `authorFound`, then
+`hadHead`, then `quotedFound`. So `dupMsg=true` is success whatever `quotedFound` says, and on the
+first path `hadHead=true` takes precedence: the re-dispatched subsequent write decides the quote.
+`quotedFound` is `true` when no quote was asked for. The §10.1 rows have no `quotedFound` column.
 
 ### Write-path invariants (live-verified)
 
@@ -319,6 +339,17 @@ unambiguously means "anchor missing":
   so a duplicate can only be a replay of our own write — payload equality is not re-checked. If
   msgIds ever become client-supplied, add a payload checksum before honoring `dupMsg` as
   idempotent success.
+- **The quote resolves through `UNWIND [$quotedId] AS qid`, never a bare
+  `(quoted:Message {msgId: $quotedId})`.** A NULL parameter in a pattern-property equality plans
+  `Node By Label Scan` over every `Message` (`claude/graph-dba/falkordb-quirks.md`, "A bare
+  pattern-property equality match …"), and `$quotedId` is NULL on every post without a quote. The
+  rebound variable plans `Node By Index Scan | (quoted:Message)` for NULL and for a real id. A
+  one-element list always yields exactly one row, even `[null]`, so the `UNWIND` needs no `CASE`
+  guard. `$quotedId` is always sent (`null` = no quote); omitting it raises
+  `Missing parameters`.
+- **A quote is same-thread only** (`WHERE quoted.threadId = $threadId`). The `OPTIONAL MATCH …
+  WHERE` folds "no such msgId" and "msgId in another thread" into `quoted IS NULL`; a message
+  without `threadId` cannot be quoted until `scripts/backfill_thread_ids.sh` stamps it. At most one `REPLY_TO` per message; the edge carries no properties.
 - **`threadId` is written inline and is deliberately unindexed** — navigation/display metadata
   for §9.2/§5 results; §9.1 remains the canonical thread walk. Skipping the index saves
   per-workspace RAM and write cost.
@@ -343,27 +374,10 @@ creates `(:Message)-[:MENTIONS_MEMBER]->(member)` edges *inside* it — atomical
   edges `[u3, a7]`, one result row. Validating that unknown mentions are an error vs. silently
   dropped is a **service-layer** decision; the query itself skips them.
 
-### Post a reply (REPLY_TO inside the guarded FOREACH — live-verified)
+### Post a reply
 
-Anchor the quoted message alongside the other anchors and create the edge **inside** the guard
-(shown for the subsequent path; the first path is analogous):
-
-```cypher
-MATCH (t:Thread {threadId: $threadId})-[tailRel:TAIL]->(prev:Message)
-MATCH (quoted:Message {msgId: $quotedMsgId})
-OPTIONAL MATCH (dup:Message {msgId: $msgId})
-…same WITH chain, carrying quoted…
-FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
-  CREATE (m:Message { … })
-  …
-  CREATE (m)-[:REPLY_TO]->(quoted)
-  …
-)
-RETURN …same status row…
-```
-
-*Library query, suite-verified. No server write path creates `REPLY_TO`; the server
-only reads it (`get_message`, below).*
+Both write paths above take `$quotedId` and create `(m)-[:REPLY_TO]->(quoted)` inside their guard;
+there is no separate reply query. `get_message` (below) reads the edge back as `quotedId`.
 
 ### Read a full thread (in order) (`read_thread`)
 ```cypher
@@ -851,10 +865,11 @@ RETURN ok                 AS written,
        author IS NOT NULL AS authorFound
 ```
 
-*This is the §4 subsequent write with **one added block**: a second guarded `UNWIND` resolves the
+*This is the §4 subsequent write without its quote clauses (an agent answer never quotes), with
+**one added block**: a second guarded `UNWIND` resolves the
 seed ids to bound `Message`/`Chunk` nodes (`collect(DISTINCT coalesce(sm, sc))` — dedups, drops
 unknown seeds like the mention block), and a nested `FOREACH` creates the `EMITTED` edges inside the
-guard. Status-row contract is identical to §4 (zero rows = no TAIL → retry as first-path;
+guard. Status-row contract is §4's first four columns (no `quotedFound`; zero rows = no TAIL → retry as first-path;
 `dupMsg=true` = idempotent replay). `$seedIds = []` is a **verified no-op** — the `CASE` guard keeps
 the write itself alive (a bare `UNWIND []` would collapse the row stream before the `FOREACH`), so
 this same query serves non-provenance writes too.*

@@ -5,6 +5,76 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-20 — K-094 closed: posts can quote a same-thread message (`REPLY_TO` written by the §4 post paths)
+
+- **Cause.** `get_message` read `(m)-[:REPLY_TO]->(quoted)` as `quotedId`, but no server write
+  path created the edge, and DESIGN §5.1 listed it as dormant schema. The stakeholder chose to
+  add quoting, server-side only. Plan `docs/plans/message-quoting.md`, reviewed in
+  `docs/reviews/message-quoting.md` (Pass 2, approve).
+- **What (commit `496c5d40`).**
+  - `Repository.post_first_message` / `post_subsequent_message` take `quoted_id=None` and always
+    send `$quotedId`. Each resolves the quote inside the same `GRAPH.QUERY` through
+    `UNWIND [$quotedId] AS qid` + `OPTIONAL MATCH (quoted:Message {msgId: qid}) WHERE
+    quoted.threadId = $threadId`, writes `REPLY_TO` in a nested `FOREACH` inside the guard, adds
+    `AND quoteOk` to `ok`, and returns a fifth column, `quotedFound`. The `UNWIND` rebinding is
+    there because a bare `{msgId: $quotedId}` with a NULL parameter plans a `Node By Label Scan`
+    over every `Message`, i.e. on every post without a quote.
+  - `MessageWriteStatus.quoted_found: bool = True` (last field). The default keeps the §10.1
+    four-column rows and positional `_write_status` valid. The §10.1 query texts are unchanged.
+  - `Services._dispatch_write` raises the new `UnknownQuotedMessageError(ServiceError)` after the
+    `had_head` branch, so `dupMsg` stays success and a lost first-post race re-decides the quote
+    on the subsequent path. `Services.post_message` threads `quoted_id` and returns `quotedId`.
+  - Front doors: `schemas.PostMessageIn.quotedId` (unbounded, looked up only), `api.post_message`,
+    and `mcp.send_message`, whose docstring tells a model to omit `quoted_id` unless it holds a
+    `msgId` read from this thread.
+  - `storefront_api.SERVICE_ERRORS_UNREACHABLE` gains the new error: the storefront route never
+    passes `quoted_id`. A new test pins that on the wire.
+  - `scripts/test_queries.sh`: all 12 inlined §4 copies plus a new first-path profile twin are on
+    the new text; new index-anchored assertions; three refusal cases.
+- **Public contract additions.**
+  - REST `POST /threads/{tid}/messages` accepts an optional `quotedId`; an unknown or other-thread
+    id answers `400` `UnknownQuotedMessageError` and writes nothing. The response carries
+    `quotedId` (`null` without a quote), and so does the storefront's `POST /shop/api/messages`
+    response, always `null`.
+  - REST `GET /messages/{mid}` returns `quotedId` from a front-door write.
+  - MCP `send_message(body, re, mentions=None, frm=None, quoted_id=None)`; an unresolvable
+    `quoted_id` is a tool error, and nothing is posted or scheduled.
+- **Verified.** In the implementing run, on the pre-commit tree: full `pytest -q` `3743 passed,
+  14 deselected, 1 xfailed` (`wf_repo` tests included; they wipe `reference-test`, never the
+  live `reference`), and `./scripts/test_queries.sh` `495/495`. The index guard was red before
+  the text swap (`487/489`, exactly the two new assertions). 38 mutants on side copies, all
+  killed:
+  - the plan's rejected bare `{msgId: $quotedId}` form, killed only by the new method-level
+    EXPLAIN pytest and the suite's index assertions;
+  - the argued-down quote-before-`had_head` order;
+  - a service pre-read in place of the in-query check;
+  - the data plumbing: the `$threadId` same-thread guard, the `quotedFound` column, and
+    `quoted_id` threading at each layer.
+- **Gate and close check.** `docs/reviews/message-quoting-impl.md`:
+  - The gate approved, with two nits. It accepted four departures from the plan: the
+    method-level index EXPLAIN pytest, the storefront partition-guard entry, leaving the echoed id
+    untruncated (N4), and keeping the first-path `REPLY_TO`.
+  - § Close check: approve with suggestions. C1 (the DESIGN §5.3 dispatch clause contradicted
+    QUERIES §4 on a replay) was reworded to "on a row that is neither written, a replay, nor a
+    lost race; QUERIES §4". C2 (`496c5d40` committed a mutated package copy and two full suite
+    copies as evidence) was resolved by removing them in `9247276f`.
+- **Spec.** `docs/DESIGN.md` §5.1 (`REPLY_TO` moved from dormant schema to the chat edges), §5.3,
+  §9 "Post message" row. `docs/QUERIES.md` §4: both bodies, the status-row contract
+  (`quotedFound=false`, check order, `hadHead` precedence), two write-path invariants (the
+  `UNWIND [$quotedId]` reason, citing `claude/graph-dba/falkordb-quirks.md`; same-thread only),
+  "Post a reply" reduced to a pointer; §10.1 ("§4's first four columns"). `docs/SERVER.md` §1.4
+  (`POST` and `GET` message rows, the `400` error-envelope examples) and §2.2 (`send_message`
+  row, argument bounds, REST parity).
+- **Follow-up.** `GAL-I02-K0005` (`docs/BACKLOG.md`, "Open follow-ups"): surface `quotedId` on
+  `read_thread` and the §9.1/§9.2 reads, plus an MCP read-back. Until then an MCP agent can quote
+  but cannot read a quote back.
+- **`REVIEW.md`.** `falkor-chat/REVIEW.md` `## Always check` gains two lines (source: the plan
+  review's M1/M2 and the gate's departure-1 ruling):
+  - the sweep for a query's inlined `test_queries.sh` copies matches a clause of the body, and in
+    an implementation review each copy is compared with the text the method actually sends;
+  - a clause whose correctness or cost rests on an index scan gets a pytest that EXPLAINs the
+    sent text and asserts the presence of `Node By Index Scan | (<var>:<Label>)`.
+
 ## 2026-11-20 — K-095 closed: the dead `config.AGENT_NAME` and its server-facing mentions removed
 
 - **Cause.** `config.py` read `FALKORCHAT_AGENT_NAME` into `AGENT_NAME`, and nothing in

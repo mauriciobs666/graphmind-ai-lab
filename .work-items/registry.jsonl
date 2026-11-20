@@ -9,3 +9,4 @@
 {"evid":"34b5fcc0e0b5453a","ts":1795195669254738159,"ev":"link","rel":"relates","from":"GAL-F0003","to":"GAL-F0002","op":"add"}
 {"evid":"eee649c95c4942cd","ts":1795199102565832803,"ev":"new","id":"GAL-I02-K0003","type":"K","parent":"GAL-I02","home":"falkor-chat","slug":"thread-reply-resume-budget-error","title":"A thread-reply resume returns no error on a step-budget failure"}
 {"evid":"29b31ae426234bae","ts":1795214271293044518,"ev":"new","id":"GAL-I02-K0004","type":"K","parent":"GAL-I02","home":"falkor-chat","slug":"graph-persistence-safety","title":"FalkorDB persistence safety: AOF and maxmemory on falkordb-dev"}
+{"evid":"ffa9c2f98abb4f86","ts":1795215876000409796,"ev":"new","id":"GAL-I02-K0005","type":"K","parent":"GAL-I02","home":"falkor-chat","slug":"quoted-id-read-back"}

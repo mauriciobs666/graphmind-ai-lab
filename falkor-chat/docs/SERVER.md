@@ -263,9 +263,9 @@ lives.
 | `GET /channels[?limit=]` | `list_channels` | §3 list channels in a workspace |
 | `POST /channels/{cid}/threads` | `create_thread` | §3 create a thread → **201** |
 | `GET /channels/{cid}/threads[?limit=]` | `list_threads` | §3 list recent threads in a channel |
-| `POST /threads/{tid}/messages` | `post_message` (+ the out-of-band policy, §1.12) | §2 member-kind lookup, then §4 first message / subsequent message (+ mentions) → **201** |
+| `POST /threads/{tid}/messages` | `post_message` (+ the out-of-band policy, §1.12) | §2 member-kind lookup, then §4 first message / subsequent message (+ mentions, + optional same-thread quote `quotedId`) → **201**; an unknown or other-thread `quotedId` → `400` `UnknownQuotedMessageError`, nothing written |
 | `GET /threads/{tid}/messages[?since=&limit=]` | `read_thread` / `read_messages` | §4 full thread when neither param is given; either param → §9.1 window as a **pure read** (`since` defaults to 0, `limit` to 50; the browser never touches cursors). An explicit `since` is a plain `>` and may re-deliver or skip rows within that exact millisecond |
-| `GET /messages/{mid}` | `get_message` | §4 get a single message (workspace-global by `msgId`; the body carries `threadId`); `404` when absent |
+| `GET /messages/{mid}` | `get_message` | §4 get a single message (workspace-global by `msgId`; the body carries `threadId`, and `quotedId` is the quoted message's `msgId`, or `null`); `404` when absent |
 | `GET /search?q=[&limit=]` | `search_messages` | §5 full-text keyword search |
 | `GET /threads/{tid}/participants` | `list_thread_participants` | §2 list thread participants |
 | `GET /threads/{tid}/workflow-runs[?limit=]` | `list_workflow_runs_for_thread` | §12.14 every run this thread has had |
@@ -327,7 +327,8 @@ every sampled run posted, else `degraded` — never folded into `ready`.
 **Error envelope.** A `ServiceError` answers `{"error": <class name>, "detail": …}` — `404` for
 `ChannelNotFoundError`, `ThreadNotFoundError`, `MatchNotFoundError`, `DocumentNotFoundError`,
 `DocumentUpdateNotFoundError` and `AgentNotFoundError`, `400` for every other subclass (e.g.
-`DocumentTooLargeError`, `BatchTooLargeError`, `InputBoundError`, `UnknownActorError`, an unresolvable mention).
+`DocumentTooLargeError`, `BatchTooLargeError`, `InputBoundError`, `UnknownActorError`, an unresolvable mention,
+`UnknownQuotedMessageError`).
 `WorkflowDefSpecError` → `400`, `WorkflowDefNotFoundError` → `404`, `WorkflowDefConflictError` →
 `409`, `SearchNotAvailableError` → `503`, and the run errors below use the same envelope. A plain
 `HTTPException` 404 (the "… not found" rows above) answers FastAPI's `{"detail": …}`; a request
@@ -1091,7 +1092,7 @@ advertised in the tool's `inputSchema`; the service-only ones are stated in its 
 
 | MCP tool | Service method | `QUERIES.md` |
 |---|---|---|
-| `send_message(body, re, mentions=None, frm=None)` | `post_message` (+ the out-of-band policy, §1.12) | §2 member-kind lookup, §4 first/subsequent (+ mentions) |
+| `send_message(body, re, mentions=None, frm=None, quoted_id=None)` | `post_message` (+ the out-of-band policy, §1.12) | §2 member-kind lookup, §4 first/subsequent (+ mentions, + optional same-thread quote) |
 | `read_messages(re=None, since=None, limit=50, advance=True)` | `read_messages` | §9.1 (thread) / §9.2 (room-wide); §9.3/§9.4 cursor |
 | `create_thread(channel_id, title)` | `create_thread` | §3 create a thread |
 | `create_channel(name)` | `create_channel` | §3 create a channel |
@@ -1134,8 +1135,8 @@ Each document and review tool has the semantics of its REST twin (§1.4).
   twin; `create_channel` `name`; `create_thread` `title`; both search tools' `query`/`limit`; every
   list `limit`; `ingest_document` `title`/`source_label`/`source_format`. Service-only: a non-blank
   `body` (whitespace passes `min_length=1`), `ingest_document` `text`, and the batch cap
-  (an empty `items` answers `[]`, writing nothing). Undeclared: id arguments and `produced_by`,
-  which are only looked up.
+  (an empty `items` answers `[]`, writing nothing). Undeclared: id arguments (`send_message` `quoted_id` among them) and
+  `produced_by`, which are only looked up.
 - **`ingest_documents` per-item receipts.** `items` is a list of objects whose fields are untyped,
   so a non-object entry fails the whole call as a validation error, while a bad field inside an
   object becomes that item's own `{"status":"error","error":…,"errorType":…}` receipt and the rest
@@ -1143,7 +1144,8 @@ Each document and review tool has the semantics of its REST twin (§1.4).
   `produced_by`; `EmptyDocumentError`/`DocumentTooLargeError` for a blank or oversized `text`;
   `InputBoundError` for a `title` or `source_label` that is over-long or not a string, or a
   `source_format` that is empty, over-long or `null`.
-- **REST mention parity:** `POST /threads/{tid}/messages` also accepts an optional `mentions[]`.
+- **REST mention parity:** `POST /threads/{tid}/messages` also accepts an optional `mentions[]`,
+  and an optional `quotedId` that is `send_message`'s `quoted_id`.
 
 ### 2.3 Client connection contract
 
