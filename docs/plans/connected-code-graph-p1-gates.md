@@ -122,13 +122,13 @@ needs from `match_keys.py` is **imported**, never reimplemented.
 
 ## P1-33 · P1 test plan — `qa-engineer`
 
-`docs/test-plans/connected-code-graph-p1.md`: risk-based, from the fixtures plan's rows (P1 89 of 134; no `fx-lib`
+`docs/test-plans/connected-code-graph-p1.md`: risk-based, from the fixtures plan's rows (P1 87 of 134; no `fx-lib`
 row; TP-014) and the ACs of the P1 row, listing for each row the build it needs and the step that supplies it.
 **Gate:** `analyst`. **Needs:** 00.
 
 ## P1-41 · fixture gate, part 1: the P1 rows — `qa-engineer`
 
-Execute, on the materialized fixture system (`cpg/fixtures/materialize.py`) built through P1-20: the **89 rows
+Execute, on the materialized fixture system (`cpg/fixtures/materialize.py`) built through P1-20: the **87 rows
 whose earliest gate is P1** (`docs/test-plans/connected-code-graph-fixtures.md` §6) — every link kind and status P1
 builds, including LNK-19/LNK-20 (P1-46's pack), the cross-repo Compose context → unit case (asserted by `test_linker_bind.py` on real extractor records, not by a fixture row at P1: `LNK-15`'s own binding needs the environment-variable name, a P2 item, so `LNK-15` expects `confirmed`/`key-match` here and `LNK-13`'s unknown base makes it `possible`/`partial-key` (P1-49); `OV-2` is P3; `-p0-compose-binding.md`), the 8000/8200 URL binding with the example config `possible`, mount composition, the
 AC-1 lifting chain (field path, two levels) and multi-candidate links (first real cases),
@@ -141,7 +141,7 @@ matches no row of any manifest, whatever the row's gate; a link of a row gated P
 asserted at P1", never red. **Statuses** are asserted in the P1 form of index §5 (the flow-dependent rows). **Entry
 criterion:** the source amendments have landed, in this order: this ruling (`architect`); then the manifests, the
 fixtures plan (the P1-form status, the third P1 example-config row `AC6-EX-4`, a per-gate AC-6 census in
-`test_fixtures.py`, the 89/134 counts, the `OV-2` sentence) and the test plan (`qa-engineer`); then the `analyst`
+`test_fixtures.py`, the 87/134 counts, the `OV-2` sentence) and the test plan (`qa-engineer`); then the `analyst`
 re-gate of the test plan. **Output:** the report section. **Gate:** `analyst`.
 
 **Ruling after the re-derivation (what `qa-engineer` changes).** Source: `docs/test-reports/connected-code-graph-p1-41-rederivation-report.md`, ruled in index §5.
