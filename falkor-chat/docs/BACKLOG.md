@@ -40,6 +40,17 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
+### GAL-I02-K0002 — Live-verify the K-102 embed-timeout retry on the MCP ingest path (🔵 proposed — `docs/test-reports/embed-order-swaps-report.md`, 2026-11-20)
+
+> K-102's `retry_timeouts=True` on `EMBED_CHUNK_RETRY` is covered by unit tests and the diagnosis,
+> but no live run has shown it preventing a failure: the REST A/B measurement saw zero embed
+> timeouts in every arm, including the old-code baseline. The failures happened on the MCP
+> `ingest_document` path (per-job threads, `ws:agent-team`), which that run did not exercise.
+- **Done when:** an ingest through the MCP path, with an LM Studio model swap forced mid-ingest
+  (one-model-at-a-time host: no foreign model resident), either reaches `ready` with at least one
+  logged embed retry, or shows the failure still occurs and what blocks the retry.
+- **Owner:** `qa-engineer`.
+
 ### K-082 — Storefront demo: optional long-conversation KV stress rerun (🔵 proposed — carried from K-066, closed 2026-10-22)
 
 > The demo runs on `ministral-3-3b` (`-c 8192 --gpu max`) plus the 0.6B embedder, and
