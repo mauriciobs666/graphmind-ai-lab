@@ -96,13 +96,25 @@ Override default ports:
 FALKORDB_PORT=6380 FALKORDB_WEB_PORT=3001 ./scripts/start_falkordb.sh
 ```
 
+The engine's `GRAPH.CONFIG` load-time values (thread counts, query memory cap, queue depth, …)
+come from `config/falkordb.env`, one file per deployment
+(sizing: `falkor-chat/docs/plans/graph-config-defaults-graph.md`). Other overrides:
+`FALKORDB_ENV_FILE` (another env file), `FALKORDB_THREAD_COUNT` (wins over the file's value),
+`FALKORDB_ARGS` (a full module-arg string, used as-is with no env file read) and
+`FALKORDB_VOLUME` (data volume, default `falkordb-data`; point it at a scratch directory for a
+dry run, never at the live volume).
+
 **One-command alternative — Docker Compose.** `compose.yaml` runs FalkorDB **and** the
 M1 server (REST + MCP + web UI) together:
 
 ```bash
-docker compose up --build     # FalkorDB :6379/:3000 + server at http://localhost:8000
-docker compose down           # stop — data persists in falkordb-data; never `down -v`
+docker compose --env-file config/falkordb.env up --build   # FalkorDB :6379/:3000 + server at http://localhost:8000
+docker compose --env-file config/falkordb.env down         # stop — data persists in falkordb-data; never `down -v`
 ```
+
+Pass `--env-file config/falkordb.env` to every compose command. Without it, any command that
+loads `compose.yaml` (`up`, `ps` and `down` included) refuses, so compose never starts FalkorDB on
+the image's own module args.
 
 The FalkorDB service uses the same image, ports, and `falkordb-data` volume as the script,
 so pick one at a time: stop `falkordb-dev` before `compose up` (they share the ports *and*

@@ -1,0 +1,47 @@
+baseline: (0, '46 passed in 0.79s')
+KILLED  M1 drop -e FALKORDB_ARGS (detached): 12 failed, 34 passed in 0.86s
+KILLED  M2 drop -e FALKORDB_ARGS (foreground): 1 failed, 45 passed in 0.82s
+KILLED  M3 env file wins over caller env: 2 failed, 44 passed in 0.81s
+KILLED  M4 full FALKORDB_ARGS ignored: 1 failed, 45 passed in 0.82s
+KILLED  M5 no missing-file check: 2 failed, 44 passed in 0.83s
+KILLED  M6 unknown key accepted: 17 failed, 29 passed in 0.41s
+KILLED  M7 last line w/o newline dropped: 1 failed, 45 passed in 0.78s
+KILLED  M8 no CR strip: 2 failed, 44 passed in 0.74s
+KILLED  M9 volume hard-coded: 1 failed, 45 passed in 0.80s
+KILLED  M10 MODULE_ARGS may be empty: 1 failed, 45 passed in 0.83s
+SURVIVED M11 value eval'd (sourced semantics): 46 passed in 0.78s
+KILLED  M12 banner drops module args: 1 failed, 45 passed in 0.84s
+KILLED  M13 env ASYNC_DELETE 1: 6 failed, 40 passed in 0.83s
+KILLED  M14 env MAX_QUEUED_QUERIES 25: 5 failed, 41 passed in 0.81s
+KILLED  M15 env QUERY_MEM_CAPACITY 0: 5 failed, 41 passed in 0.84s
+KILLED  M16 env OMP_THREAD_COUNT 8: 5 failed, 41 passed in 0.91s
+KILLED  M17 env drops TIMEOUT/RESULTSET (image keys): 5 failed, 41 passed in 1.00s
+KILLED  M18 compose drops THREAD_COUNT token: 6 failed, 40 passed in 1.51s
+KILLED  M19 compose defaults both vars (no refusal): 3 failed, 43 passed in 2.39s
+KILLED  M20 compose defaults THREAD_COUNT only: 2 failed, 44 passed in 1.45s
+KILLED  M21 duplicate-key check removed: 1 failed, 45 passed in 1.09s
+KILLED  M22 seen-set never updated: 1 failed, 45 passed in 0.97s
+KILLED  M23 value class check removed: 13 failed, 33 passed in 1.43s
+KILLED  M24 no-'=' check removed: 1 failed, 45 passed in 1.03s
+KILLED  M25 reviewer's class ^[A-Za-z0-9_. -]*$: 3 failed, 43 passed in 1.56s
+KILLED  M26 class admits quotes: 1 failed, 45 passed in 0.89s
+KILLED  M27 class admits #: 2 failed, 44 passed in 1.06s
+KILLED  M28 class admits $: 1 failed, 45 passed in 1.36s
+KILLED  M29 class admits =: 1 failed, 45 passed in 1.45s
+KILLED  M30 class unanchored: 13 failed, 33 passed in 2.45s
+KILLED  M31 class too strict (no dot/dash): 1 failed, 45 passed in 1.87s
+SURVIVED M32 split on last '=' (key%=*): 46 passed in 1.34s
+SURVIVED M33 IFS='=' read (old reader, n1): 46 passed in 0.94s
+KILLED  M34 n2: dir accepted as env file: 1 failed, 45 passed in 0.91s
+KILLED  M35 n2: old 'not found' message: 1 failed, 45 passed in 0.89s
+KILLED  M36 default IFS (edge whitespace trimmed): 3 failed, 43 passed in 0.92s
+33/36 killed
+
+# Survivors, judged equivalent (pass 2):
+# M11 eval: the value class admits only [A-Za-z0-9_.- ], so eval "$key=\"$value\"" assigns the same
+#     string as printf -v for every accepted value; the injection guard is now the class itself
+#     (M23 removing it and M28 admitting '$' are both killed).
+# M32 last-'=' split: an accepted line has exactly one '=' (the class excludes '='), so first- and
+#     last-'=' splits agree; a two-'=' line is refused either way (unknown key vs value class).
+# M33 IFS='=' with ONE read variable strips nothing (probe: printf 'K=a 1=\n' | IFS='=' read -r l
+#     -> [K=a 1=]); the old reader's stripping came from splitting into two variables.

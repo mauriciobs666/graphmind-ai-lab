@@ -1,0 +1,74 @@
+### k098-devops-u5-new: env  FALKORDB_VOLUME=<scratch dir> FALKORDB_PORT=16399 ./scripts/start_falkordb.sh -d
+start_falkordb.sh exit=0
+Data volume:             <scratch dir> (persists across restarts)
+Module args:             THREAD_COUNT 8 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000
+-- MODULE LIST args:
+args THREAD_COUNT 8 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000 name vectorset ver 1 path  args  
+-- GRAPH.CONFIG GET:
+THREAD_COUNT=8
+OMP_THREAD_COUNT=1
+CACHE_SIZE=25
+MAX_QUEUED_QUERIES=320
+QUERY_MEM_CAPACITY=67108864
+ASYNC_DELETE=1
+TIMEOUT=1000
+RESULTSET_SIZE=10000
+-- volume mount:
+bind -> /var/lib/falkordb/data
+stopped (--rm removes it)
+
+### k098-devops-u5-tc4: env FALKORDB_THREAD_COUNT=4 FALKORDB_VOLUME=<scratch dir> FALKORDB_PORT=16398 ./scripts/start_falkordb.sh -d
+start_falkordb.sh exit=0
+Data volume:             <scratch dir> (persists across restarts)
+Module args:             THREAD_COUNT 4 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000
+-- MODULE LIST args:
+args THREAD_COUNT 4 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000 name vectorset ver 1 path  args  
+-- GRAPH.CONFIG GET:
+THREAD_COUNT=4
+OMP_THREAD_COUNT=1
+CACHE_SIZE=25
+MAX_QUEUED_QUERIES=320
+QUERY_MEM_CAPACITY=67108864
+ASYNC_DELETE=1
+TIMEOUT=1000
+RESULTSET_SIZE=10000
+-- volume mount:
+bind -> /var/lib/falkordb/data
+stopped (--rm removes it)
+
+### k098-devops-u5-ctrl: env FALKORDB_ARGS=MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000 FALKORDB_VOLUME=<scratch dir> FALKORDB_PORT=16397 ./scripts/start_falkordb.sh -d
+start_falkordb.sh exit=0
+Data volume:             <scratch dir> (persists across restarts)
+Module args:             MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000
+-- MODULE LIST args:
+args MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000 name vectorset ver 1 path  args  
+-- GRAPH.CONFIG GET:
+THREAD_COUNT=8
+OMP_THREAD_COUNT=8
+CACHE_SIZE=25
+MAX_QUEUED_QUERIES=25
+QUERY_MEM_CAPACITY=0
+ASYNC_DELETE=1
+TIMEOUT=1000
+RESULTSET_SIZE=10000
+-- volume mount:
+bind -> /var/lib/falkordb/data
+stopped (--rm removes it)
+
+### k098-devops-u5-bad: env FALKORDB_MODULE_ARGS=OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE 1 TIMEOUT 1000 RESULTSET_SIZE 10000 FALKORDB_VOLUME=<scratch dir> FALKORDB_PORT=16396 ./scripts/start_falkordb.sh -d
+start_falkordb.sh exit=0
+Data volume:             <scratch dir> (persists across restarts)
+Module args:             THREAD_COUNT 8 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE 1 TIMEOUT 1000 RESULTSET_SIZE 10000
+-- no PONG within 20 s; container state: 
+error: no such object: k098-devops-u5-bad
+
+### bad value, same args without --rm so the abort log survives
+state=exited exit=1
+1:M 20 Nov 2026 23:05:51.280 # Module /var/lib/falkordb/bin/falkordb.so initialization failed. Module not loaded
+1:M 20 Nov 2026 23:05:51.287 # Can't load module from /var/lib/falkordb/bin/falkordb.so: server aborting
+removed k098-devops-u5-badlog
+
+### leftovers (must be empty):
+(none)
+### falkordb-dev untouched:
+falkordb-dev Up 45 hours

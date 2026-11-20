@@ -1,7 +1,13 @@
 # falkor-chat dev stack: FalkorDB + the M1 server (REST + MCP + web UI).
 #
-#   docker compose up --build        # both services; UI at http://localhost:8000
-#   docker compose down              # stop (NEVER `down -v` — the volume is shared live data)
+#   docker compose --env-file config/falkordb.env up --build   # both services; UI at http://localhost:8000
+#   docker compose --env-file config/falkordb.env down         # stop (NEVER `down -v` — the volume is shared live data)
+#
+# Pass `--env-file config/falkordb.env` to every compose command: without it, any command that loads
+# this file (`up`, `create`, `start`, `run`, `ps`, `logs`, `stop`, `down`, …) refuses while
+# interpolating the falkordb service's FALKORDB_ARGS; the few that do not load it (`images`, `top`,
+# `events`, `exec`) cannot start a container. So compose never starts FalkorDB on the image's own
+# module args by accident.
 #
 # The falkordb service is the same image/ports/volume as scripts/start_falkordb.sh —
 # stop the `falkordb-dev` container first if it is running (both bind :6379 and
@@ -12,6 +18,10 @@ name: falkor-chat
 services:
   falkordb:
     image: falkordb/falkordb:v4.18.11
+    environment:
+      # Per-deployment values live in config/falkordb.env: run `docker compose --env-file config/falkordb.env up`.
+      # This REPLACES the image's own FALKORDB_ARGS; sizing: falkor-chat/docs/plans/graph-config-defaults-graph.md.
+      FALKORDB_ARGS: "THREAD_COUNT ${FALKORDB_THREAD_COUNT:?run docker compose --env-file config/falkordb.env} ${FALKORDB_MODULE_ARGS:?run docker compose --env-file config/falkordb.env}"
     ports:
       - "${FALKORDB_PORT:-6379}:6379"
       - "${FALKORDB_WEB_PORT:-3000}:3000"

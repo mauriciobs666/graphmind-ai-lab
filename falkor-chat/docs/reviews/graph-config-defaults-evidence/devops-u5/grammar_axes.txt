@@ -1,0 +1,50 @@
+plain                        expect=same   SAME     script='THREAD_COUNT 8 TIMEOUT 1000 ASYNC_DELETE yes'
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000 ASYNC_DELETE yes'
+comments-and-blank-lines     expect=same   SAME     script='THREAD_COUNT 8 TIMEOUT 1000'
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+crlf-with-blank-and-comment  expect=same   SAME     script='THREAD_COUNT 8 TIMEOUT 1000'
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+no-final-newline             expect=same   SAME     script='THREAD_COUNT 8 TIMEOUT 1000'
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+dotted-and-dashed-words      expect=same   SAME     script='THREAD_COUNT 8 X 1.5 Y -1'
+                                             compose='THREAD_COUNT 8 X 1.5 Y -1'
+repeated-key                 expect=refuse refused  script="REFUSED: duplicate key 'FALKORDB_THREAD_COUNT' in /tmp/tmpslf622uv/falkor-chat/config/falkordb.env"
+                                             compose='THREAD_COUNT 4 TIMEOUT 1000'
+double-quotes                expect=refuse refused  script="REFUSED: FALKORDB_MODULE_ARGS in /tmp/tmp6bu7of6_/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+single-quotes                expect=refuse refused  script="REFUSED: FALKORDB_MODULE_ARGS in /tmp/tmp42kzxdi5/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+inline-comment               expect=refuse refused  script="REFUSED: FALKORDB_THREAD_COUNT in /tmp/tmpwqebgy05/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+hash-in-word                 expect=refuse refused  script="REFUSED: FALKORDB_MODULE_ARGS in /tmp/tmpih_nh8qf/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000#x'
+dollar-var                   expect=refuse refused  script="REFUSED: FALKORDB_MODULE_ARGS in /tmp/tmpdcremepl/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT /home/mauricio'
+dollar-brace                 expect=refuse refused  script="REFUSED: FALKORDB_MODULE_ARGS in /tmp/tmpwxf42lj4/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT /home/mauricio'
+trailing-equals              expect=refuse refused  script="REFUSED: FALKORDB_MODULE_ARGS in /tmp/tmp5ygriazm/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000='
+export-prefix                expect=refuse refused  script="REFUSED: unknown key 'export FALKORDB_THREAD_COUNT' in /tmp/tmp9qy0pjpu/falkor-chat/config/falkordb.env"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+leading-whitespace-line      expect=refuse refused  script="REFUSED: unknown key '  FALKORDB_THREAD_COUNT' in /tmp/tmp17_mgsao/falkor-chat/config/falkordb.env"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+indented-comment             expect=refuse refused  script="REFUSED: unknown key '  # c' in /tmp/tmp0fc7bljw/falkor-chat/config/falkordb.env"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+space-before-equals          expect=refuse refused  script="REFUSED: unknown key 'FALKORDB_THREAD_COUNT ' in /tmp/tmpt3fq1vew/falkor-chat/config/falkordb.env"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+leading-space-in-value       expect=refuse refused  script="REFUSED: FALKORDB_THREAD_COUNT in /tmp/tmp88cl1dgc/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+trailing-space-in-value      expect=refuse refused  script="REFUSED: FALKORDB_THREAD_COUNT in /tmp/tmp_qiip9j9/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+double-space-in-value        expect=refuse refused  script="REFUSED: FALKORDB_MODULE_ARGS in /tmp/tmpw8zs3zdh/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT  1000'
+tab-in-value                 expect=refuse refused  script="REFUSED: FALKORDB_MODULE_ARGS in /tmp/tmp6jti1r0t/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT\t1000'
+backslash                    expect=refuse refused  script="REFUSED: FALKORDB_MODULE_ARGS in /tmp/tmp_arkvcl2/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000\\'
+yaml-colon-form              expect=refuse refused  script="REFUSED: unknown key 'FALKORDB_THREAD_COUNT: 8' in /tmp/tmpn69rcc7_/falkor-chat/config/falkordb.env"
+                                             compose='THREAD_COUNT 8 TIMEOUT 1000'
+no-equals                    expect=refuse refused  script="REFUSED: FALKORDB_THREAD_COUNT in /tmp/tmpkj42vroo/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='REFUSED: error while interpolating services.falkordb.environment.FALKORDB_ARGS: required '
+empty-value                  expect=refuse refused  script="REFUSED: FALKORDB_THREAD_COUNT in /tmp/tmp1sjgmtv1/falkor-chat/config/falkordb.env: write KEY=value, the value as words of letters, digits, '_', '.', '-' separated by single spaces (no quotes, comments, '$' or '=')"
+                                             compose='REFUSED: error while interpolating services.falkordb.environment.FALKORDB_ARGS: required '

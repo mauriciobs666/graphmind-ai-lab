@@ -6,7 +6,7 @@
 # default resolves the same way (`parents[2]/config/models.json`), so config/
 # is copied in at the same sibling depth as web/.
 #
-#   docker compose up            # preferred — wires FalkorDB too (compose.yaml)
+#   docker compose --env-file config/falkordb.env up   # preferred — wires FalkorDB too (compose.yaml)
 #   docker build -t falkorchat . # image only
 
 FROM python:3.12-slim

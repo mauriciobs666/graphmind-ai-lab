@@ -1,0 +1,13 @@
+$ docker compose --env-file config/falkordb.env config --format json  # .services.falkordb.environment shown
+{'FALKORDB_ARGS': 'THREAD_COUNT 8 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000'}
+$ docker compose config   # no --env-file (must refuse)
+exit=1
+error while interpolating services.falkordb.environment.FALKORDB_ARGS: required variable FALKORDB_THREAD_COUNT is missing a value: run docker compose --env-file config/falkordb.env
+$ docker compose ps   # no --env-file (must refuse)
+exit=1
+error while interpolating services.falkordb.environment.FALKORDB_ARGS: required variable FALKORDB_THREAD_COUNT is missing a value: run docker compose --env-file config/falkordb.env
+$ docker compose down   # no --env-file (must refuse)
+exit=1
+error while interpolating services.falkordb.environment.FALKORDB_ARGS: required variable FALKORDB_THREAD_COUNT is missing a value: run docker compose --env-file config/falkordb.env
+$ FALKORDB_THREAD_COUNT=4 docker compose --env-file config/falkordb.env config   # shell env wins, as in the script
+{'FALKORDB_ARGS': 'THREAD_COUNT 4 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000'}
