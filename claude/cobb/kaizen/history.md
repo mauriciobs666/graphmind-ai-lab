@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-11-20 — coordination-graph S0: hook-firing probe authored
+- **What:** Added `claude/cobb/scripts/hook-probe.sh` (observe-only JSON logger; exit-2 sentinel leg) and `claude/cobb/scripts/hook-probe.md` (runbook, settings snippet for PostToolUse + PostToolUseFailure, legs L1-L7). Both temporary; stakeholder applies the settings edit and removes it after.
+- **Why:** plan S0 (`claude/docs/plans/coordination-graph.md`); `coordination-graph3.md` changes nothing for S0. Result still owed to `skills/agent-standards/claude-code.md` after the run.
+- **Plan items:** —
+
 ## 2026-11-20 — coordination-graph S2 gate fixes (`claude/docs/reviews/coordination-graph-s2.md`)
 - **What:** M1: ingested the 3 never-synced sections of keyed files by the §5 new-claim procedure (`produced_by=cobb`, title = heading, text = section body): ops-quirks "ingest_document auto-supersedes…" `493e42d4`, qa-testing-techniques "Parse-checking Mermaid…" `1f92add0`, test-design-techniques "hand-built rejected alternative…" `8a1de3df`; each observed `ready`, text byte-equal to the section (graph text vs file; `get_document` on `1f92add0` checked by eye), chunks embedded, manifest entries added with `verified: true`; `check_content_loss.py --live` 0 findings on the three files' new claims. No deletion. K-058 rewritten (5 claim-less sections, drifted list, `falkordb-quirks.md` waits for its markers, bullet-marker convention; delivery narrative trimmed). m2: checker docstring corrected (both marker shapes are stored). m3: `drop_split_marker` limited to a section's first non-blank line, selftest added (26/26). m4: `kb-files.txt` records why `python-web-quirks.md` is excluded. Found, not in the review: qa-testing-techniques claim `781c055d` is NOT_FOUND against its section (drift), added to K-058.
 - **Why:** analyst S2 gate, approve with suggestions.
