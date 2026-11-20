@@ -100,3 +100,8 @@
 {"evid":"876a8a2b89044452","ts":1795217079229388747,"ev":"new","id":"GAL-F0005","type":"F","parent":null,"home":"decision-models","title":"Hand-off prompt parity for join-in and message type"}
 {"evid":"a9d53af875cb4e1b","ts":1795217079268728978,"ev":"new","id":"GAL-F0006","type":"F","parent":null,"home":"decision-models","title":"Per-label `minConfidence` (former U6a)"}
 {"evid":"79441808011d4d43","ts":1795217079306344360,"ev":"new","id":"GAL-F0007","type":"F","parent":null,"home":"decision-models","title":"Fine-tuning a decision model (§Q7)"}
+{"evid":"1279054ab3f141a4","ts":1795217079764940678,"ev":"new","id":"GAL-F0008","type":"F","parent":null,"home":"mcp-monitor","title":"Persistent dedupe state across a restart"}
+{"evid":"5b5bccdc3aaf47ed","ts":1795217079803095912,"ev":"new","id":"GAL-F0009","type":"F","parent":null,"home":"mcp-monitor","title":"Unbounded dedupe-set growth"}
+{"evid":"ef25e9c687dd425a","ts":1795217079837093570,"ev":"new","id":"GAL-F0010","type":"F","parent":null,"home":"mcp-monitor","title":"Optional Docker packaging"}
+{"evid":"2151340330d147c1","ts":1795217079870589651,"ev":"new","id":"GAL-F0011","type":"F","parent":null,"home":"mcp-monitor","title":"Config hot-reload"}
+{"evid":"a4888aa92452418c","ts":1795217079907612035,"ev":"new","id":"GAL-F0012","type":"F","parent":null,"home":"mcp-monitor","title":"Authentication / production hardening"}
