@@ -218,7 +218,8 @@ Everything below lives in `ws:{workspaceId}` unless marked `reference`.
 
 // GraphRAG corpus
 (:Document {documentId, title, text, sourceFormat, sourceKind, status, pendingJobs, createdAt,
-            currentVersion, supersededAt, supersededBy, textNormalizedHash})
+            currentVersion, supersededAt, supersededBy, textNormalizedHash,
+            lshBand0, lshBand1, lshBand2, lshBand3, lshBand4, lshBand5, lshBand6, lshBand7})
   // status ∈ processing|ready|failed; sourceKind ∈ document|agent, derived from the
   // ingesting member's label, never trusted from the caller
 (:Document)-[:INGESTED_BY]->(:User|:Agent)
@@ -296,9 +297,11 @@ Everything below lives in `ws:{workspaceId}` unless marked `reference`.
   full text; the
   exact-identity key of automatic supersede (§9). A content fingerprint, not an identity, so it
   carries no constraint.
-- `Document.lshBand0..7` — indexed (§7.1) and read by update detection's candidate shortlist, but
-  **no write path sets them**, so that shortlist signal never matches a stored document; only the
-  title-fuzzy signal shortlists a candidate today.
+- `Document.lshBand0..7` — the 8 MinHash LSH bands of the document's normalized text, computed
+  app-side by `update_detection.document_lsh_bands` and written by the ingest create (QUERIES
+  §14.9); indexed (§7.1) and read by update detection's candidate shortlist, alongside the
+  title-fuzzy signal. A document ingested before the create stored them lacks them until
+  `scripts/backfill_document_lsh_bands.sh` stamps them (behaviour: QUERIES §14.9).
 - `WorkspaceConfig` — one node per workspace. An absent override property means "no override";
   `''` is never written for "none".
 - `Product.productId` is a deterministic slug of the product name, so a re-seed reproduces
@@ -767,7 +770,7 @@ rather than a node property:
 | `Entity` | `nameNormalized` | exact-tier fusion `=` lookup; distinct real entities can share `(nameNormalized, type)` before fusion runs |
 | `Document` | `currentVersion` | current-version filters (many documents share `true`) |
 | `Document` | `textNormalizedHash` | automatic-supersede exact lookup (a fingerprint, so no constraint) |
-| `Document` | `lshBand0` … `lshBand7` | update-detection shortlist (an 8-way `OR`, one `Node By Index Scan`); no write path sets these today (§5.1) |
+| `Document` | `lshBand0` … `lshBand7` | update-detection shortlist (an 8-way `OR`, one `Node By Index Scan`; §5.1) |
 
 > `Message.threadId` is **deliberately unindexed** (§5.1) — nav metadata, not an anchor.
 
@@ -881,7 +884,7 @@ traversal — read-only queries, routable to a replica.
 | Advance read cursor | `MERGE` on `HAS_CURSOR`→`ReadCursor {cursorId}` + composite monotonic guard | Never moves backward on a stale or tie-smaller replay. |
 | Backfill / import | `UNWIND $rows AS row …` in chunks, or `falkordb-py` bulk loader | Never one giant CREATE — bound transaction memory; size batches (writes ignore TIMEOUT — §10) |
 | Embed message / chunk | background job: compute embedding → `SET n.embedding = vecf32($v)` | Decoupled from the post/ingest path; a failure is logged, never surfaced to the caller. |
-| Ingest document | one guarded `CREATE` of `Document` + `INGESTED_BY` + every `Chunk`/`HAS_CHUNK` (chunks split app-side) | Chunking splits on paragraph breaks, then sentence ends (`. `, `! `, `? ` or a newline), then a hard cut at 1000 chars; every chunk after the first is prefixed with the previous chunk's last 150 chars, so a chunk can reach 1150 chars. Non-idempotent like channel creation. If a current `Document` has the same `textNormalizedHash`, the same query supersedes it (`SUPERSEDES` `confirmed`, technique `exact_normalized_text_hash`). |
+| Ingest document | one guarded `CREATE` of `Document` + `INGESTED_BY` + every `Chunk`/`HAS_CHUNK` (chunks split app-side) | Chunking splits on paragraph breaks, then sentence ends (`. `, `! `, `? ` or a newline), then a hard cut at 1000 chars; every chunk after the first is prefixed with the previous chunk's last 150 chars, so a chunk can reach 1150 chars. Non-idempotent like channel creation. The create also stores the document's `textNormalizedHash` and `lshBand0..7` (§5.1). If a current `Document` has the same `textNormalizedHash`, the same query supersedes it (`SUPERSEDES` `confirmed`, technique `exact_normalized_text_hash`). |
 | Document background jobs | per chunk, one embed job and one extract job, each scheduled independently; the order they are scheduled in is `SERVER.md` §1.12 | `pendingJobs` is set to the job count before any job starts; each job decrements it once with its **final** outcome. `status` becomes `failed` at the first failed job, `ready` when the count reaches 0 with none failed; both flips guard on `processing`, so the first terminal write wins. A job retries a transient provider error (connection kinds; HTTP 408, 429, 5xx; known LM Studio error text) up to 4 attempts with 2 s / 8 s / 30 s nominal back-off, and stops retrying once its document is no longer `processing`; an embed job also retries a timeout, an extract job does not. |
 | Update detection | background job per ingested document; when it is scheduled is `SERVER.md` §1.12 | Shortlists current documents (LSH bands, title full-text fuzzy), scores each by shingled Jaccard in Python, and records a `pending` `SUPERSEDES` suggestion (technique `shingled_jaccard_overlap`, `confidence` = the ratio) for the best candidate at or above 0.1. Shingles are 5-word windows of the same normalized text `textNormalizedHash` hashes. A rejected suggestion that recurs is reopened (`resuggestCount` +1), never duplicated. |
 | Confirm / reject a supersede | `SET` on the edge by `matchId` | Confirming sets the old `Document`'s `currentVersion` and its chunks' `documentCurrent` to `false` in the same query. |

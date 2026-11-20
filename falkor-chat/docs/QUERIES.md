@@ -2465,9 +2465,17 @@ unverified); chains are short. A `seen` set guards against a cycle; ties resolve
 
 The server's document create. One atomic `GRAPH.QUERY` resolves the ingestor, looks up the oldest
 current document with the same normalized-text hash, creates the new document (§14.1's shape plus
-`textNormalizedHash`), and — only when the ingestor resolved and a candidate exists — supersedes the
-candidate with a `system`-confirmed `SUPERSEDES` edge. Folding lookup and create into one query
-closes the race where two concurrent ingests of the same content each miss the other.
+`textNormalizedHash` and `lshBand0..7`), and — only when the ingestor resolved and a candidate
+exists — supersedes the candidate with a `system`-confirmed `SUPERSEDES` edge. Folding lookup and
+create into one query closes the race where two concurrent ingests of the same content each miss the
+other.
+
+`$lshBand0..7` are the new document's MinHash LSH bands, computed app-side by
+`update_detection.document_lsh_bands` — the one band pipeline (`normalize_text` → `shingles` →
+`minhash_signature` → `lsh_bands`) that the shortlist read below and the backfill (§14.9's last
+entry) also use, so stored and probed bands are computed the same way. Both band writes (this create
+and `set_document_lsh_bands`) take exactly 8 bands: any other count raises `ValueError` before a
+query runs.
 
 The query starts with one of two ingestor-resolution prefixes — two literal texts, because a single
 text with a possibly-`NULL` `$producedBy` plans `Node By Label Scan` + `Filter` when the parameter
@@ -2501,7 +2509,9 @@ FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
     sourceFormat: $sourceFormat,
     sourceKind: CASE WHEN ingestorIsUser THEN 'document' ELSE 'agent' END,
     status: 'processing', pendingJobs: 0, createdAt: $createdAt,
-    currentVersion: true, textNormalizedHash: $textNormalizedHash
+    currentVersion: true, textNormalizedHash: $textNormalizedHash,
+    lshBand0: $lshBand0, lshBand1: $lshBand1, lshBand2: $lshBand2, lshBand3: $lshBand3,
+    lshBand4: $lshBand4, lshBand5: $lshBand5, lshBand6: $lshBand6, lshBand7: $lshBand7
   })
   CREATE (d)-[:INGESTED_BY]->(ingestor)
   FOREACH (ch IN $chunks |
@@ -2543,16 +2553,18 @@ RETURN ok AS ingestorFound, d.documentId AS documentId,
 candidate. A node created inside `FOREACH` is out of scope after it, hence the indexed re-`MATCH` of
 `d` by `documentId`. Every conditional step is guarded on `doSupersede`, so an unresolvable actor
 writes nothing and leaves every existing document untouched (`ingestorFound=false` → the service
-raises `UnknownActorError`). A resolved `produced_by` always yields `sourceKind: 'agent'`. The
-repository adds `chunkCount = len(chunks)` app-side.*
+raises `UnknownActorError`). A resolved `produced_by` always yields `sourceKind: 'agent'`. The bands
+are written on both ingestor-resolution prefixes, and on an auto-superseding ingest too — the
+suggested-tier detection below is not scheduled for that ingest, so this write is what bands every
+ingested document. The repository adds `chunkCount = len(chunks)` app-side.*
 
 **`find_update_shortlist` — the suggested tier's candidate read**
 
 Run by `background._safe_detect_update`, scheduled after an ingest the exact tier did not
 auto-supersede, and only when an embed worker or extraction pipeline is wired (`SERVER.md` §1.12). It
-computes MinHash LSH bands of the new document's normalized text
-(`update_detection.lsh_bands`, 8 bands) and a title, then unions two read-only lookups, both limited
-to current versions and de-duplicated by `documentId` in Python:
+computes the new document's 8 MinHash LSH bands with `update_detection.document_lsh_bands` (the
+pipeline the ingest write stores them with) and takes its title, then unions two read-only lookups,
+both limited to current versions and de-duplicated by `documentId` in Python:
 
 ```cypher
 // band signal — one OR term per band, generated for i in 0..len(bands)-1
@@ -2575,12 +2587,38 @@ or underscore-only is dropped (a lone `%_%` is a syntax error), and no call is m
 left. Title-tokenization questions are open as **K-064**. The band `OR` across the indexed
 `Document.lshBand0..7` properties is live-verified to plan as a single `Node By Index Scan`.*
 
-**No server path writes `Document.lshBand0..7`.** The bands are computed only for this read, so the
-band lookup matches no document and the title lookup is the only signal that produces candidates.
+The band lookup matches a document whose stored bands (written by the ingest write above, or by the
+backfill below) share at least one band with the new document's; the title lookup is the
+complementary signal.
 
 The detector then scores each candidate (excluding the document itself) by exact shingled Jaccard
 in Python and, for the best one at or above the noise floor of `0.1`, records a `pending`
 suggestion with `create_or_reopen_supersede_suggestion` (§14.8).
+
+**`list_documents_missing_lsh_bands` / `set_document_lsh_bands` — the band backfill**
+
+Called only by the backfill script, `scripts/backfill_document_lsh_bands.py` (run through its
+`.sh` wrapper; dry run by default, `--apply` to write), for documents ingested before the ingest
+write stored bands. The listing is read-only (`ro_query`) and
+selects every `Document` missing any band, current or not — a full `Document` scan, acceptable for
+a one-off operator read:
+
+```cypher
+MATCH (d:Document) WHERE d.lshBand0 IS NULL OR d.lshBand1 IS NULL OR d.lshBand2 IS NULL OR d.lshBand3 IS NULL OR d.lshBand4 IS NULL OR d.lshBand5 IS NULL OR d.lshBand6 IS NULL OR d.lshBand7 IS NULL
+RETURN d.documentId, d.title, d.text ORDER BY d.documentId
+```
+
+The script computes each listed document's bands from its stored `text` with
+`update_detection.document_lsh_bands` (a `null` text as `""`) and writes them, one query per
+document, anchored on the unique `documentId`:
+
+```cypher
+MATCH (d:Document {documentId: $documentId})
+SET d.lshBand0 = $lshBand0, d.lshBand1 = $lshBand1, d.lshBand2 = $lshBand2, d.lshBand3 = $lshBand3, d.lshBand4 = $lshBand4, d.lshBand5 = $lshBand5, d.lshBand6 = $lshBand6, d.lshBand7 = $lshBand7 RETURN count(d)
+```
+*`set_document_lsh_bands` returns whether the document existed (`count(d)` > 0). Its 8-band
+`ValueError` is the band-write rule stated under the create above. A backfilled document is no
+longer listed, so a re-run writes nothing it already wrote.*
 
 ---
 

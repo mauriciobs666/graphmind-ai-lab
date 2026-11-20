@@ -230,3 +230,71 @@ The run covered the five pytest files above (842 tests), restored by copy with s
 Separately, the band-OR shortlist read that this diff added inline (`test_queries.sh:1893`) is a sixth copy with no variable, so nothing guards it.
 
 **Fix.** Get each copy's value from bash: `bash -c "$(grep "^NAME=" test_queries.sh); printf %s \"\$NAME\""`. For C1 this yields `…queryNodes('Document', ) …`, which differs from the shipped text (verified). Also assert exactly one `^NAME=` definition, which C2 would fail. Then route `:1893` through the `FIND_SHORTLIST_BANDS` variable. C1 and C2 must turn the guard red.
+
+## Close check
+
+**Scope.** I checked the uncommitted spec edits against the shipped commit `4d35b84e`:
+- `git diff -- docs/QUERIES.md docs/DESIGN.md docs/BACKLOG.md`;
+- the writer's claim that `SERVER.md` needs no change.
+
+The working-tree code equals `4d35b84e` (`git diff --stat 4d35b84e -- server scripts` is empty). I did not run the suites, because `ws:test` is held by K-096. The one test run was `test_query_copies` driven against a scratch copy of `test_queries.sh`. It is graph-free: `conftest.py`'s only autouse fixture sets model-config env vars.
+
+**Verdict: approve with suggestions.** There is no blocker. Every Cypher block matches what the code sends, and rows 1–10 are all resolved. Two minor wording findings, C-1 and C-2, can be fixed at the close or left for later. Neither is a contract contradiction.
+
+**Cypher blocks** (I rendered each query with a capturing fake graph and compared it with the QUERIES §14.9 blocks):
+
+| Block | Result |
+|---|---|
+| Default prefix + shared body | Equal to the shipped text once whitespace, including whitespace around punctuation, is ignored |
+| `produced_by` prefix + shared body | Same as the default prefix |
+| `list_documents_missing_lsh_bands` | Equal after collapsing runs of whitespace |
+| `set_document_lsh_bands` | Equal after collapsing runs of whitespace |
+| Band shortlist | Unchanged; its `…` elision is the pre-existing, declared shape |
+
+**Absolute words** (each verified by an unfiltered grep over `falkor-chat/`, excluding `.venv` and `server/tests/`):
+- **"the one band pipeline … the shortlist read and the backfill also use":** `document_lsh_bands(` is called only at `services.py:1319`, `background.py:273` and `backfill_document_lsh_bands.py:54`.
+- **"Called only by the backfill script":** the only non-test callers are `backfill_document_lsh_bands.py:44,53`.
+- **"this write is what bands every ingested document":** true. Every ingest goes through `Services.ingest_document`, which is called by REST, MCP and the batch path (`services.py:1437`). `create_document` has no non-test caller.
+- **"every `Document` missing any band, current or not":** true, and pinned by the F1 test.
+- **"exactly 8 bands … `ValueError` before any query runs":** true for both writers (Pass 2 probe). Over-scoped in one place: see C-1.
+
+**Rows 1–10:** all resolved. I grepped the living docs (`docs/*.md`, excluding `archive/`, `reviews/`, `plans/` and `HISTORY`) for "No server path writes", "no write path sets" and "no path writes the bands". No band-related hit remains outside the K-091 backlog item itself, which leaves `BACKLOG.md` at the close as a delivered item.
+
+DESIGN §7.1 now cites §5.1 instead of restating the fact, which resolves the row 8 duplication.
+
+**Numbering and history:**
+- No heading line changed in either spec file.
+- `K-091` appears nowhere in QUERIES or DESIGN.
+- "A document ingested before the create stored them lacks them" describes a live data condition an operator acts on, not change history. It follows the `Message.threadId` bullet's precedent.
+
+**`SERVER.md`: the writer's claim holds.**
+- Its ingest rows (`:278-279`, `:1090-1091`) cite §14.9 by number, and the REST/MCP surfaces, errors and §1.12 scheduling are unchanged.
+- `ValueError` cannot be reached from ingest, which always passes 8 bands.
+- `SERVER.md` lists no operator scripts.
+
+**F6: fixed** in `4d35b84e`. The copy is now evaluated by bash, and the guard asserts exactly one definition. Pass 2's mutants C1 and C2, run against a scratch copy, now turn red (`FIND_SHORTLIST_TITLE` and `LIST_MISSING_BANDS` respectively). The baseline stays green. Line 1893 now uses `$FIND_SHORTLIST_BANDS`.
+
+### C-1 — minor — "The repository takes exactly 8 bands" is broader than the code
+
+QUERIES §14.9 (create entry): "The repository takes exactly 8 bands: any other count raises `ValueError` before a query runs." `find_update_shortlist` has no such guard. It builds its query from `len(bands)` (`repository.py:2070-2072`), and the band-signal comment in the same section says so ("generated for i in 0..len(bands)-1").
+
+**Fix.** Scope the sentence to "Both band writes (this create and `set_document_lsh_bands`) take exactly 8 bands…". The `set_document_lsh_bands` note can then cite it instead of repeating it.
+
+### C-2 — minor — The backfill script's behaviour is stated in two spec sections
+
+Both DESIGN §5.1's `lshBand` bullet ("dry run without `--apply`; idempotent") and QUERIES §14.9's backfill entry ("dry run by default, `--apply` to write"; "a re-run writes nothing it already wrote") describe the script. Both copies match the code (`backfill_document_lsh_bands.py` `run`/`main`).
+
+Per `REVIEW.md` ("a fact stated in two sections"), keep the behaviour in QUERIES §14.9. The DESIGN bullet should only name the script and cite §14.9.
+
+**Nit (outside the spec, not caused by this diff):** the rewritten K-064 item still quotes a docstring at `repository.py:1863-1868` ("a cheap complementary booster…"). That text no longer exists in `repository.py` (`grep -n complementary` finds nothing). Drop the quotation or re-point it at the next rewrite.
+
+### Proposed REVIEW.md lines (final)
+
+Target: `falkor-chat/REVIEW.md`, `## Always check`. Both are additions. No line in that file is now enforced elsewhere, so there is no prune.
+
+`tests/test_query_copies.py` enforces line 1 only for the five §14.9 copies, so the rule still changes what a reviewer does for every other copy. F6 extended line 1's wording.
+
+- Sources: F1 and F6 (this review):
+  > A `test_queries.sh` assertion runs a hand copy of a repository query, so it pins the copy, not the method. A contract claimed for the method needs a pytest over the real method that a mutant of the method turns red. A check that a copy matches the method reads the copy's value as bash evaluates it, from exactly one definition, never by parsing the source.
+- Source: F2, mutant ML (this review):
+  > A property added to a query that has alternative literal prefixes or branches (`$ingestedBy` / `$producedBy`) is asserted as written on every branch, not only on the default one.

@@ -18,11 +18,12 @@ Sequencing: implementer units run one at a time — they share `repository.py`/`
 | U3 K-097 implementation | `tdd-engineer` | — | queued (after U2 gate, U1) | code + tests | `analyst` → — | — |
 | U4 K-098 GRAPH.CONFIG sizing | `graph-dba` | `a02427cdbdf32b4c8` | gated | `docs/plans/graph-config-defaults-graph.md` | `analyst` `a34f76a361e21f807` → — | 240k / 77 |
 | U5 K-098 set values | `devops` | — | queued (after U4 gate) | deployment config | `analyst` → — | — |
-| U6 K-096 budget failure reporting | `tdd-engineer` | — | queued (after U1) | code + tests | `analyst` → — | — |
+| U6 K-096 budget failure reporting | `tdd-engineer` | `ade689ec2f7ffb5cc` | in-flight | code + tests | `analyst` → — | — |
 | U7 K-095 AGENT_NAME removal | `coder` | — | queued (after U6) | code | `analyst` → — | — |
 | U8 K-093 MENTIONS | — | — | abandoned | stakeholder 2026-11-20: leave open, out of this batch | — → — | — |
 | U9 K-094 quoting plan | `architect` | `ae4cd56c931f9746a` | accepted | `docs/plans/message-quoting.md` | `analyst` `a5276e9a50a55ecea` → approve (Pass 2) | 212k / 58 |
 | U10 K-094 implementation | `tdd-engineer` | — | queued (after U9 gate) | code + tests | `analyst` → — | — |
+| C1 K-091 close: spec update | `tdd-engineer` | `a1093354e3d6b012f` | accepted | QUERIES §14.9, DESIGN §5.1/§7.1, BACKLOG K-064 | `analyst` `a20ec9d1e5163523e` (`docs/reviews/document-lsh-bands-impl.md` § Close check) → approve w/ suggestions | 136k / 31 |
 
 Documentation impact (for each item's close, not its build unit): the DESIGN/SERVER/QUERIES
 sections each item names; `docs/HISTORY.md` entry per item; `docs/BACKLOG.md` item removed at
@@ -44,3 +45,5 @@ milestone close (human applies); `server/.env.example` and start scripts for K-0
 - 2026-11-20 U1 gate: approve with suggestions. Five argument- and fixture-level mutants survived (F1/F2); F3 adds a band-count guard. The live half of F4 (restarting the servers, `--apply` per workspace, the live near-duplicate probe) is held for the K-091 close as a stakeholder decision. Live today: 522/522 `ws:agent-team` and 29/29 `ws:acme` documents carry no bands. Two `falkor-chat/REVIEW.md` lines are proposed, to be applied at the close.
 - 2026-11-20 U1 Pass 2: all five survivors killed. F6 (the copy guard reads by regex; shell mutants C1/C2 survive) came from the fix itself, so this is the stopping signal: a fresh `tdd-engineer` takes it, since the original sits at 250k context, and `teco` verifies C1/C2 itself with no Pass 3.
 - 2026-11-20 U1 accepted. `teco` verified F6: C1 and a fresh duplicate `SET_DOC_BANDS=` mutant each turn `test_query_copies.py` red, and the real file passes 7. Delegate's suites: pytest 3694, queries 475/475. Still pending for K-091's close: live spec, rollout (server restarts, `--apply` per workspace, live probe; stakeholder decision), and two `falkor-chat/REVIEW.md` lines.
+- 2026-11-20 K-091 close step 4: the review's two final lines were applied verbatim to `falkor-chat/REVIEW.md` `## Always check`. Integrity check: the diff is exactly those two additions; no prunes were proposed or made; neither line narrows a check, so no `cobb` gate. Step 5 (HISTORY) goes to the spec writer after C-1/C-2.
+- 2026-11-20 K-091 closed: spec, `REVIEW.md` lines and HISTORY entry committed together. Rollout (restarts, `--apply`, live probe) awaits the stakeholder. The K-091 backlog item is removed at milestone close (human applies).

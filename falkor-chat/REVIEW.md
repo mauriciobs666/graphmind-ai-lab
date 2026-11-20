@@ -25,6 +25,8 @@
 - A change to how a model is loaded (context length, offload, quantization) in
   `scripts/` is checked for its effect on spec'd behavior (`DESIGN.md` §1.3, e.g. what an embed
   or a turn can cover), not only for the script's own contract.
+- A `test_queries.sh` assertion runs a hand copy of a repository query, so it pins the copy, not the method. A contract claimed for the method needs a pytest over the real method that a mutant of the method turns red. A check that a copy matches the method reads the copy's value as bash evaluates it, from exactly one definition, never by parsing the source.
+- A property added to a query that has alternative literal prefixes or branches (`$ingestedBy` / `$producedBy`) is asserted as written on every branch, not only on the default one.
 
 ## Evidence bar
 

@@ -814,16 +814,20 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > of `"Beta Doc v2 clean title"`, even though both share two distinctive words. Any ordinary
 > revision suffix ("v2", "Draft", "Final", "Updated") defeats the signal for its own predecessor
 > unless the predecessor's title happens to already contain that exact word. This is narrower than
-> the method's own docstring promises ("a cheap complementary booster... title-fuzzy match...
-> when non-empty," `repository.py:1863-1868`, plan §3.4) — a reasonable reader expects any shared
-> distinctive word to shortlist a candidate for the precise Jaccard check to then judge.
+> plan §3.4's complementary title signal implies, and `Repository.find_update_shortlist`'s docstring
+> says only "One `%token%` fuzzy term per title word" and does not say the terms are AND-ed — a
+> reasonable reader expects any shared distinctive word to shortlist a candidate for the precise
+> Jaccard check to then judge.
 >
-> **In production this is the only shortlist signal.** The design makes the LSH band lookup the
-> primary net and title-fuzzy the complement (ML note §4.1), but no path writes the bands (K-091),
-> so today title-fuzzy alone decides which candidates the Jaccard check ever sees, and its
-> narrowness limits suggested-tier recall directly. Stage E's live AC-2 passes (report TP-04,
-> TP-07) both reused the predecessor's title, so the title lookup found them; with no stored bands,
-> the band signal cannot have. Once K-091 lands, this narrows a secondary signal again.
+> **It is the complementary signal, not the only one.** The LSH band lookup is the primary net and
+> title-fuzzy the complement (ML note §4.1). The ingest write stores every new document's bands
+> (QUERIES §14.9), so the band lookup can shortlist a near-duplicate whatever its title; a document
+> ingested before that carries bands only once `scripts/backfill_document_lsh_bands.sh --apply`
+> has run on its workspace, and until then title-fuzzy alone can shortlist it. So this narrowness
+> costs recall where a revision's text has drifted too far to share a band but its title still
+> shares words — and, before the backfill, on every older predecessor. Stage E's live AC-2 passes
+> (report TP-04, TP-07) reused the predecessor's title and predate stored bands, so they exercised
+> only the title lookup.
 >
 > **The decision is a design call, not a mechanical fix**: explicit-OR the per-token fuzzy terms
 > (`%tok1%|%tok2%|...`) trades recall up against precision down (a title sharing just one common

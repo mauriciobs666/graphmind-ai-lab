@@ -5,6 +5,39 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-20 — K-091 closed: `Document.lshBand0..7` stored at ingest, plus a one-off backfill
+
+- **Cause.** `find_update_shortlist`'s LSH band lookup read `Document.lshBand0..7`, but no write path
+  stored them, so the band signal matched nothing and title-fuzzy alone shortlisted candidates for
+  the suggested tier.
+- **What (commit `4d35b84e`).** `create_document_with_auto_supersede` stores the new document's
+  `lshBand0..7` on its `CREATE`, on both ingestor-resolution prefixes and on an auto-superseding
+  ingest (which never schedules detection). `update_detection.document_lsh_bands` is the one band
+  pipeline, shared by ingest (`Services.ingest_document`), detection (`background._safe_detect_update`)
+  and the backfill. Both band writers take exactly 8 bands (`LSH_BAND_COUNT`) or raise `ValueError`
+  before any query runs. New `Repository.list_documents_missing_lsh_bands` /
+  `set_document_lsh_bands` back `scripts/backfill_document_lsh_bands.sh` (dry run by default,
+  `--apply` to write, idempotent; a failing workspace is reported and the rest still run, exit 1).
+  `server/tests/test_query_copies.py` guards `test_queries.sh`'s §14.9 hand copies against the
+  shipped query text, reading each copy as bash evaluates it, from exactly one definition.
+- **Verified.** At the commit the delegate reported server suite 3694 passed and `test_queries.sh`
+  475/475. Gate and close check: `docs/reviews/document-lsh-bands-impl.md` — Pass 1 approve with
+  suggestions, Pass 2 approve with suggestions (all Pass 1 surviving mutants killed), Close check
+  approve with suggestions (C-1 and C-2 wording fixes applied).
+- **Spec.** `docs/QUERIES.md` §14.9 (ingest `CREATE` gains `lshBand0..7`, the band pipeline and the
+  8-band rule, shortlist names `document_lsh_bands`, new backfill entry); `docs/DESIGN.md` §5.1
+  (`Document` property list and `lshBand0..7` bullet), §7.1 (index row cites §5.1), §9 ("Ingest
+  document" row). `docs/SERVER.md` unchanged (no REST/MCP contract changed). `docs/BACKLOG.md`
+  K-064 rewritten: title-fuzzy is the complementary signal again.
+- **`REVIEW.md`.** `falkor-chat/REVIEW.md` `## Always check` gains two lines: a `test_queries.sh`
+  hand copy pins the copy, not the method (a method contract needs a pytest a mutant turns red; a
+  copy-match check reads the copy as bash evaluates it, from one definition); and a property added
+  to a query with alternative literal prefixes is asserted on every branch.
+- **Open: the live rollout**, held for a stakeholder decision — restart every server serving a
+  workspace on this code, run `backfill_document_lsh_bands.sh <wsId> --apply` per workspace (then a
+  dry run showing 0), and run the live near-duplicate probe. A live read on 2026-11-20 found 522/522
+  `ws:agent-team` and 29/29 `ws:acme` documents without bands.
+
 ## 2026-11-20 — GAL-I01-D0001 closed: suites no longer wipe the live `reference` graph
 
 - **Cause.** `db.reference_graph()` hardcoded `select_graph("reference")`, so the `wf_repo` fixture
