@@ -203,16 +203,26 @@ deliberately not mirrored (FR-1). The graph can only report "not in any open bac
 (:KbFile {path UNIQUE, sha256, syncedAt})
   -[:HAS_SECTION]->
 (:KbSection {key UNIQUE = '<path>#<headingKey>', path, heading, ord,
-             sectionHash, state: 'synced'|'pending', pendingSince,
+             sectionHash, mode: 'whole'|'bullets', needsResplit, state: 'synced'|'pending',
+             pendingSince,
              documentIds: [..], claimTitles: [..], claimHashes: [..], syncedAt,
-             pendingDocumentIds: [..], pendingSectionHash, pendingClaimHashes: [..],
+             pendingDocumentIds: [..], pendingClaimTitles: [..], pendingClaimHashes: [..],
+             pendingKeepHashes: [..], pendingMode, pendingSectionHash,
              leaseToken, leaseUntil})
 ```
 
-While `state = 'pending'`, `documentIds`/`claimHashes`/`sectionHash` still describe the **old,
-still-served** claim(s), and the `pending*` properties describe the new document(s) submitted but
-not yet retrievable — so a crash, a rollback or a `kb-finish` run always knows both sets: which to
-delete on success and which to delete on failure. On `synced` the `pending*` properties are
+`mode` is the split mode the mapped documents were made with (`whole`: one document per `##`
+section; `bullets`: one per top-level bullet). `needsResplit` is `true` only when the section is
+`whole` but its mapping still holds more than one document (a file that was split before); it is
+absent otherwise, and `kb-status` flags it.
+
+While `state = 'pending'`, `documentIds`/`claimHashes`/`claimTitles`/`sectionHash`/`mode` still
+describe the **old, still-served** claim(s). The `pending*` properties describe only the **new**
+documents submitted but not yet retrievable (`pendingDocumentIds`/`pendingClaimHashes`/
+`pendingClaimTitles`, parallel lists), plus `pendingKeepHashes` — the hashes of the old claims
+whose normalized text is unchanged and are therefore **kept, not re-posted** — and `pendingMode`.
+A crash, a rollback or a `kb-finish` run always knows both sets: the old ids whose hash is not in
+`pendingKeepHashes` are deleted on success, the pending ids on failure. On `synced` the `pending*` properties are
 removed (`SET ks.pendingDocumentIds = null` removes the property **[live, throwaway container,
 2026-10-22]**); they are
 never present on a `synced` section.
@@ -695,17 +705,18 @@ Two windows remain, so the mapping must be **reconciled**, not trusted:
    keys) — a snapshot can fall between them. Mitigate with a two-phase marker, append-before-delete
    (plan §3.5):
    - **before** calling falkor-chat: `SET ks.state='pending', ks.pendingSince=$now,
-     ks.pendingSectionHash=$h`;
+     ks.pendingSectionHash=$h, ks.pendingKeepHashes=$keep, ks.pendingMode=$mode`;
    - **after** `POST /documents` returns: `SET ks.pendingDocumentIds=$newIds,
-     ks.pendingClaimHashes=$newHashes` (old `documentIds` untouched — the old claim is still
-     served);
+     ks.pendingClaimHashes=$newHashes, ks.pendingClaimTitles=$newTitles` — only the claims whose
+     text changed are posted (old `documentIds` untouched — the old claims are still served);
    - **swap** (in `kb-sync`, or later in `kb-finish`), once the §6.4 reconcile query shows every
-     new chunk embedded — **in rule L3's order** (below): renew, delete the old ids in
-     falkor-chat, then one fenced statement
-     `SET ks.documentIds=ks.pendingDocumentIds, ks.claimHashes=ks.pendingClaimHashes,
-     ks.sectionHash=ks.pendingSectionHash, ks.state='synced', ks.syncedAt=$now,
-     ks.pendingDocumentIds=null, ks.pendingClaimHashes=null, ks.pendingSectionHash=null,
-     ks.pendingSince=null`;
+     new chunk embedded — **in rule L3's order** (below): renew, delete the old ids **not** in
+     `pendingKeepHashes` in falkor-chat, then one fenced statement that **merges** the kept old
+     claims with the new ones: `SET ks.documentIds=$ids, ks.claimHashes=$hashes,
+     ks.claimTitles=$titles` (kept old entries plus the pending ones; in `kb-sync` ordered as the
+     file's claims, in `kb-finish` kept first, then pending), `ks.sectionHash=<pendingSectionHash>,
+     ks.mode=<pendingMode>, ks.needsResplit=<true|null>, ks.state='synced', ks.syncedAt=$now`, the
+     six `pending*` properties and `ks.pendingSince` set to `null`, and the lease release;
    - **give up** (embed failed or cap passed): renew (L1), delete the *pending* ids in falkor-chat, then clear
      the `pending*` properties and set `state='synced'` with the **old** `sectionHash` kept — the
      old ids stay mapped and served, `kb-status` flags the section stale (file hash ≠
@@ -770,8 +781,8 @@ Fencing protects the graph; the three rules below protect **falkor-chat**, whose
   holder can know or serve them; deleting them is always safe and is the only way they do not end
   up current and unmapped. (A process that dies between the `POST` and that write leaves the same
   orphan; `kb-reconcile` finds it through the `kb-mirror` identity, plan §3.5.)
-- **L3 — swap order.** Renew (L1) → delete the old ids in falkor-chat → the fenced swap `SET`
-  (with the release folded in). Old ids are deleted only under a lease renewed just before, so an
+- **L3 — swap order.** Renew (L1) → delete the dropped old ids (those not kept) in falkor-chat →
+  the fenced swap `SET` (with the release folded in). Old ids are deleted only under a lease renewed just before, so an
   expired holder can never delete documents a new holder is serving; if the swap `SET` itself then
   returns 0 rows (lease lost during the deletes), stop and report pending — the new holder sees
   the old ids 404 and the pending ids still recorded, and completes the swap.
@@ -791,8 +802,9 @@ in this order:
 
 1. renew (L1), then `DELETE` every id in `pendingDocumentIds` through falkor-chat (a 404 counts
    as done);
-2. one fenced statement clearing `pendingDocumentIds`, `pendingClaimHashes`, `pendingSectionHash`
-   (state stays `pending`; `documentIds`/`sectionHash` — the old served claim — untouched);
+2. one fenced statement clearing all six `pending*` properties (`pendingDocumentIds`,
+   `pendingClaimHashes`, `pendingClaimTitles`, `pendingKeepHashes`, `pendingMode`,
+   `pendingSectionHash`) (state stays `pending`; `documentIds`/`sectionHash` — the old served claim — untouched);
 3. submit the new text through the normal flow above (new `pendingSectionHash`, renew, `POST`,
    record the new pending ids — L1 and L2 apply).
 
