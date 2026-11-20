@@ -1,22 +1,27 @@
 # Cross-initiative coordination — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Version:** 4 · **Extends:** `claude/docs/requirements/coordination-graph.md` · **Last updated:** 2026-11-03 · **Reviews:** `docs/reviews/cross-initiative-coordination.md`
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Version:** 4 · **Extends:** `claude/docs/requirements/coordination-graph.md` · **Last updated:** 2026-11-20 · **Reviews:** `docs/reviews/cross-initiative-coordination.md` · **Item:** `GAL-F0003`
 
 ## Intent
 `claude/docs/requirements/coordination-graph.md` already puts a mirror of every coordination
 ledger in the graph (file authoritative, rebuildable, drift visible, in-flight view across
 components, per-unit lookup). This document adds only what that one does not cover, for two needs:
-(1) **overlap** — a new idea, ledger or plan touching ground another in-flight initiative already
+(1) **overlap** — a new idea, ledger or plan touching ground another in-flight coordination already
 covers, today found only by chance (the `document-ingestion` overlap that opened this topic);
 (2) **parallel runs** — telling which units can be dispatched now without colliding.
+
+**Terminology.** A *coordination* is one in-flight ledger and its units. The work-item standard's
+*initiative* (`I03`-level theme grouping features) is a different thing and is not meant here. A
+coordination corresponds to a feature (`GAL-F0003` for this one) when one is registered; ledger
+units are not work items unless registered as tasks (`docs/plans/work-item-numbering.md` §3.9).
 
 ## Problem & current state
 Ledgers record a unit's owner, status and deliverable but not what it needs or what it touches;
 dependencies live in the plan's step table. Nothing says an agent must check what is in flight
-before starting related work. The in-flight view from `coordination-graph.md` shows initiatives
-and units, but not whether two initiatives overlap, nor which queued units are safe to run now.
+before starting related work. The in-flight view from `coordination-graph.md` shows coordinations
+and units, but not whether two coordinations overlap, nor which queued units are safe to run now.
 
 ## User stories
-- As the stakeholder, I want any overlap between a new idea or initiative and one in flight raised
+- As the stakeholder, I want any overlap between a new idea or coordination and one in flight raised
   to me, so I decide to merge, sequence or run independently.
 - As a `tico`, `teco` or `architect`, I want to check what is in flight for overlap before I
   start, so adjacent work surfaces early.
@@ -27,7 +32,7 @@ Terms and mechanisms not defined here come from `coordination-graph.md`: ledger 
 freshness (its FR-2 to FR-5), the in-flight view (FR-6), leaving the view when `archived` (FR-9),
 and "touched areas" as files, graph keys or facts (FR-13, FR-14).
 
-- **FR-1** — Each in-flight entry carries a one-line description of what the initiative is, so
+- **FR-1** — Each in-flight entry carries a one-line description of what the coordination is, so
   overlap can be judged without reading the ledger. (Its ledger path is already required by
   `coordination-graph.md` AC-5.)
 - **FR-2** — `tico` (requirements interview), `teco` (before opening a ledger) and `architect`
@@ -36,14 +41,15 @@ and "touched areas" as files, graph keys or facts (FR-13, FR-14).
 - **FR-3** — On a plausible overlap the finder stops and raises it to the stakeholder; it never
   decides to merge, sequence or run independently.
 - **FR-4** — A ledger unit carries, as recorded facts, the units it **needs** and the **areas it
-  touches**, in the same sense as `coordination-graph.md` FR-14. A need is recorded as the needed unit's task ID or feature ID when it has one (`GAL-F0042-T03`, `GAL-F0042`), otherwise `<ledger-slug>:<unit>`; within one ledger, its unit id. Needs are compared by resolved identity, never by raw text. A unit whose facts are missing or
+  touches**, in the same sense as `coordination-graph.md` FR-14. A need is recorded as the needed unit's task ID or feature ID when it has one (illustrative IDs: `GAL-F0042-T03`, `GAL-F0042`), otherwise `<ledger-slug>:<unit>`; within one ledger, its unit id. Needs are compared by resolved identity, never by raw text. A unit whose facts are missing or
   unparseable stays visible in the in-flight view, is excluded from FR-5, and is listed with what
   is missing; it is never silently dropped. An explicit "none" is a recorded fact, not a missing
   one.
 - **FR-5** — A ready-now view lists units that are `queued` and whose needs are all met, and flags
   any that share a touched area with a unit already running. A need is met when that unit is
   `accepted`, including a unit in another ledger, and including one whose ledger is archived (its
-  status is read from the record, not only from the in-flight view). A need that cannot be found,
+  status is read from the record, not only from the in-flight view). A need on a feature ID is met when every ledger carrying that `Item:` is archived or all
+  its units are `accepted` (in a ledger that is not archived, an `abandoned` unit does not count). A need that cannot be found,
   or whose status is unknown, is listed as unresolvable and the unit is not ready. A unit is
   running while `in-flight`, `delivered`, `gated` or `paused`. Two units overlap as in
   `coordination-graph.md` FR-13(b). It flags; it does not decide.
@@ -58,7 +64,7 @@ and "touched areas" as files, graph keys or facts (FR-13, FR-14).
 - Registering a still-`Interviewing` requirements document. Two concurrent interviews colliding
   is not caught by this mechanism. Noted, not solved here.
 - Automatic conflict resolution of any kind (FR-3); an automated similarity score for overlap.
-- Any change to how a single initiative's units are sequenced, delegated or reviewed.
+- Any change to how a single coordination's units are sequenced, delegated or reviewed.
 - Everything `coordination-graph.md` already specifies (mirror, freshness, in-flight view).
 - Block format, ingest trigger, graph home, schema, write path and any file-reading service for
   FR-6: `architect` decisions; a file-reading service is a new capability and `security-expert`
@@ -67,11 +73,11 @@ and "touched areas" as files, graph keys or facts (FR-13, FR-14).
   routed through `cobb`, and FR-2 and FR-4 for new ledgers depend on it.
 
 ## Acceptance criteria
-- **AC-1** (FR-1) — Given an in-flight initiative, when the view is queried, then its entry shows a
+- **AC-1** (FR-1) — Given an in-flight coordination, when the view is queried, then its entry shows a
   one-line description and its ledger path.
-- **AC-2** (FR-2, FR-3) — Given two initiatives with overlapping scope, when a `tico` interview, a
+- **AC-2** (FR-2, FR-3) — Given two coordinations with overlapping scope, when a `tico` interview, a
   `teco` kickoff and an `architect` plan for a third, related piece of work each runs its check,
-  then each surfaces the existing initiative and raises it to the stakeholder without resolving it.
+  then each surfaces the existing coordination and raises it to the stakeholder without resolving it.
 - **AC-3** (FR-4) — Given a unit with a malformed `needs` fact, when the view is queried, then the
   unit appears, is absent from the ready-now view, and is listed with what is missing.
 - **AC-4** (FR-5) — Given running unit R (`in-flight`) and queued units: A (all needs `accepted`,
@@ -79,7 +85,9 @@ and "touched areas" as files, graph keys or facts (FR-13, FR-14).
   (needs only a `accepted` unit in another ledger) and E (needs a unit that cannot be found), then
   the view lists A, B and D; flags A against R and neither B nor D; does not list C; and lists E as
   unresolvable. Repeating with R `delivered`, `gated` or `paused` still flags A; with R `accepted`
-  it does not. A need on a unit of an archived ledger counts as met.
+  it does not. A need on an `accepted` unit of an archived ledger counts as met. A need on feature F is met when
+  every ledger carrying `Item: F` is archived (even if it holds an `abandoned` unit) or has all
+  units `accepted`, and not met when a non-archived ledger has an `abandoned` or unfinished unit.
 - **AC-5** (FR-6) — Given a closing report edited in the file, when a reader asks the view for it,
   then it obtains the edited text, and any copy shown carries its sync time.
 - **AC-6** (FR-7) — Given the `connected-code-graph` ledger after `teco` records FR-4 facts, then
@@ -173,3 +181,8 @@ the record. A need that cannot be found is listed as unresolvable. FR-5.
 2026-11-02 — Does a `paused` unit hold its areas? → Yes. FR-5.
 2026-11-03 — Readback of v4 delivered; confirm and flip to Ready for design? → Confirmed by the stakeholder. Status flipped to Ready for design (latest `analyst` verdict: approve with suggestions, Pass 2). The last edit round after Pass 2 was not re-reviewed. FR-1 to FR-7.
 2026-11-10 — How does a `needs` entry cite a unit (open item from `docs/plans/work-item-numbering.md` §3.9; wording from `docs/plans/cross-initiative-coordination-ids.md` (d))? → Task or feature scheme ID when it has one, else `<ledger-slug>:<unit>`, local unit id within one ledger; compared by resolved identity. FR-4.
+2026-11-20 — Is a `needs` on a feature ID met when its ledger(s) are archived or all units accepted? → Yes; `abandoned` does not count. FR-5, AC-4.
+2026-11-20 — "Initiative" collides with the work-item standard's `I`-level theme: how to resolve? → Prose says "coordination", slug unchanged, terminology note added. Intent, FR-1, FR-5, AC-1, AC-2.
+2026-11-20 — Register this feature in the work-item registry? → Yes; `GAL-F0003`, `relates` `GAL-F0002`. Header `Item:`.
+2026-11-20 — Does an archived ledger make every need on its units met (AC-4 read unconditional)? → No; only on an `accepted` unit, as FR-5 says. AC-4.
+2026-11-20 — Feature need when an archived ledger holds an `abandoned` unit? → Archived wins: met. FR-5, AC-4.

@@ -1,6 +1,6 @@
 # Work-item scheme IDs in the coordination-graph backlog parser — plan extension
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `claude/docs/plans/coordination-graph.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `claude/docs/plans/coordination-graph.md` · **Extended by:** `claude/docs/plans/coordination-graph3.md` · **Item:** `GAL-F0002`
 
 Extends `claude/docs/plans/coordination-graph.md` (the base plan stays authoritative). States only
 the change: the backlog parser must accept work-item scheme IDs (`GAL-F0042`,

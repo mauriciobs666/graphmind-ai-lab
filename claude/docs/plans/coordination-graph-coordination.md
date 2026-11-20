@@ -1,6 +1,6 @@
 # Coordination graph — docs-only coordination
 
-> **Status:** active · **Owner:** `tico` · **Tracks:** —
+> **Status:** active · **Owner:** `tico` · **Tracks:** — · **Item:** `GAL-F0002`
 
 Docs-only chain: requirements → plan + graph note → independent review → revision. Hands the
 whole remaining chain to `teco` at the first unit that needs an implementer (plan §4, S0 onward).
@@ -48,3 +48,21 @@ whole remaining chain to `teco` at the first unit that needs an implementer (pla
   self-supersede on retry, test with a late-committing fake) carried to the S6 analyst gate.
   Chain terminal; every document committed together. Next unit (plan §4 S0/S1/S1b/S1c) needs
   implementers → whole remaining chain goes to `teco`, which resumes from this ledger.
+
+## Addendum — work-item standard alignment (docs-only, 2026-11-20)
+
+Opened by `tico` at the stakeholder's request; touches no code. The base chain above is closed.
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| A1 Consistency audit vs work-item standard | `analyst` | af99b743e0528def6 | gated | `claude/docs/reviews/coordination-graph.md` Pass 5 | analyst → **needs-changes** (1 blocker, 5 major, 6 minor, 2 nit); D1–D4 answered 2026-11-20 | — |
+| A2 Requirements edits (terminology, Item/Aliases FR/AC) | `tico` | — | delivered (uncommitted; FR-16/AC-15, FR-5/AC-4 feature need, terminology note) | both requirements documents | A5 | — |
+| A3 Plan extension (header fields, item identity) | `architect` | ad678a043ab5b3b04 | delivered (uncommitted) | `claude/docs/plans/coordination-graph3.md` | A5 | — |
+| A4 Graph note (identity key) | `graph-dba` | ad66c46cd139b3542 | delivered (uncommitted; note v3) | `claude/docs/plans/coordination-graph-graph.md` | A5 | — |
+| A5 Re-review | `analyst` | a5ce726ff5b1723b7 | gated | `claude/docs/reviews/coordination-graph.md` Pass 6 | analyst → **needs-changes** (0 blocker, 2 major, 5 minor, 1 nit) | — |
+| A6 Plan3 fixes (P6-M1, M2, m2, m3, retry) | `architect` | ad678a043ab5b3b04 | accepted | `claude/docs/plans/coordination-graph3.md` | A8 | — |
+| A7 Note: drop stale-holder retry, unknown→unresolvable | `graph-dba` | ad66c46cd139b3542 | accepted | `claude/docs/plans/coordination-graph-graph.md` v3 | A8 | — |
+| A8 Scoped confirmation | `analyst` | a5ce726ff5b1723b7 | accepted | `claude/docs/reviews/coordination-graph.md` Pass 7 | analyst → **approve-with-suggestions** (0 blocker, 0 major, 2 minor); both requirements stay Ready for design | — |
+
+- 2026-11-10 — `coordination-graph2.md` (scheme-ID heading regex) was delivered without a ledger row; recorded here: extends the base plan, superseded in part by `coordination-graph3.md`.
+- 2026-11-20 — A8 Pass 7: approve-with-suggestions; addendum closed. Next (implementation, plan3 S1d onward) goes to `teco`, which resumes from this ledger. Loose ends for `teco`: prune `.work-items/baseline.txt` lines for the two requirements files after a repo-wide `wi check`; flip `docs/plans/cross-initiative-coordination-ids.md` to `superseded` when `docs/plans/cross-initiative-coordination.md` (GAL-F0003) is written.

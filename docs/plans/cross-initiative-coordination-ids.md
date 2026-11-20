@@ -1,6 +1,6 @@
 # Cross-initiative coordination — `needs` and scheme IDs
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** —
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Item:** `GAL-F0003`
 
 Answers the question left open by `docs/plans/work-item-numbering.md` §3.9 (consumer contract) and its step 13.
 

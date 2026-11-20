@@ -1,6 +1,6 @@
 # Review — cross-initiative-coordination requirements
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/requirements/cross-initiative-coordination.md`
+> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/requirements/cross-initiative-coordination.md` · **Item:** `GAL-F0003`
 
 ## Pass 1
 

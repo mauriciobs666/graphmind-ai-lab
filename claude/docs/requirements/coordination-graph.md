@@ -1,6 +1,6 @@
 # In-flight work, backlogs and reference lookup in the graph — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Extended by:** `docs/requirements/cross-initiative-coordination.md` · **Last updated:** 2026-10-21
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Extended by:** `docs/requirements/cross-initiative-coordination.md` · **Last updated:** 2026-11-20 · **Item:** `GAL-F0002`
 
 ## Intent
 
@@ -142,6 +142,13 @@ manifest at all (filed as `claude/cobb/kaizen/plan.md` K-058).
   request a proposal. A proposal **never takes effect** — never changes milestones or order in
   any backlog — without the stakeholder's explicit approval.
 
+- **FR-16 (work-item identity).** A coordination, a backlog item and a document that carries a
+  work-item ID (`Item:`) or aliases (`Aliases:`) in its header is recorded with them, and any
+  lookup (FR-8, the view, the item queries) accepts the scheme ID, a legacy alias or the ledger
+  slug and finds the same thing. One item cited two ways is one item, including after the
+  registry renames or moves it. A backlog item that has no ID at the one-time reformat gets a
+  scheme ID from the work-item registry; no new `K-NNN`/`C-NNN` is minted (FR-14).
+
 ## Out of scope
 
 - History logs in the graph (FR-1).
@@ -210,6 +217,12 @@ manifest at all (filed as `claude/cobb/kaizen/plan.md` K-058).
 - **AC-14 (approval gate, FR-15).** Given a proposal requested by the stakeholder or by `teco`,
   when nobody approves it, then no backlog file's milestones or order change; after the
   stakeholder's explicit approval, they do.
+
+- **AC-15 (identity, FR-16).** Given a ledger whose header carries `Item: GAL-F0002` and a backlog
+  item cited once as `falkor-chat:K-065` and once by its scheme alias, when either form is
+  looked up, then both return the same single result; and given the registry moves that item,
+  the old citation still finds it. A backlog item with no ID after the reformat has a scheme ID,
+  never a freshly minted `K-NNN`/`C-NNN`.
 
 ## Open questions
 
@@ -304,3 +317,6 @@ None — all settled at the 2026-10-20 readback (see Decision log).
   open rows into `Milestone` fields on their items (falkor-chat: M2.5 → K-016, K-017, K-018), so
   the planner treats them as already placed; the table may remain as the human-readable milestone
   map.
+- 2026-11-20 — Should graph lookups understand work-item IDs and aliases, and should id-less backlog items get scheme IDs at the reformat? → Yes to both; no new `K-NNN`/`C-NNN` minted. FR-14, FR-16, AC-15 (revises the reformat wording of the 2026-10-21 Q1 entry).
+- 2026-11-20 — Register this feature in the work-item registry? → Yes; `GAL-F0002`. Header `Item:`.
+- 2026-11-20 — Consult: `analyst` on consistency with the work-item standard → Pass 5 (needs changes; 1 blocker, 5 major); fixes in plan `claude/docs/plans/coordination-graph3.md`. FR-14, FR-16, AC-15.

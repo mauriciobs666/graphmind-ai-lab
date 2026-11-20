@@ -4,3 +4,6 @@
 {"evid":"64815b8ab4864886","ts":1794310112007449594,"ev":"new","id":"GAL-I02-K0001","type":"K","parent":"GAL-I02","home":"claude","slug":"pwq-kb-capture-promotion","title":"Promote python-web-quirks capture 38cd49cd (S7 Q1)"}
 {"evid":"061aa51bc94f4cec","ts":1795184903379648402,"ev":"new","id":"GAL-I01-D0001","type":"D","parent":"GAL-I01","home":"falkor-chat","slug":"test-suites-wipe-live-reference-graph","title":"Default pytest and test_queries.sh wipe the live reference graph"}
 {"evid":"c5ca7ad5d227420c","ts":1795191018797746237,"ev":"new","id":"GAL-I02-K0002","type":"K","parent":"GAL-I02","home":"falkor-chat","slug":"k102-live-timeout-retry-verification","title":"Live-verify the K-102 embed-timeout retry on the MCP ingest path"}
+{"evid":"287e61b6e8914c05","ts":1795195669138773531,"ev":"new","id":"GAL-F0002","type":"F","parent":null,"home":"claude","slug":"coordination-graph","title":"Coordination graph"}
+{"evid":"601fd88f659c43ce","ts":1795195669197289644,"ev":"new","id":"GAL-F0003","type":"F","parent":null,"home":"repo","slug":"cross-initiative-coordination","title":"Cross-initiative coordination"}
+{"evid":"34b5fcc0e0b5453a","ts":1795195669254738159,"ev":"link","rel":"relates","from":"GAL-F0003","to":"GAL-F0002","op":"add"}

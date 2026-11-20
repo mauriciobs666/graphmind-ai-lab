@@ -960,6 +960,19 @@ to the general fact here.
   query (`docs/plans/embedding-migration-graph.md` item 1) — the chosen query shape only ever uses
   `>`, so it was unaffected, but the bug would have silently broken a descending-cursor variant.
 
+- **`prop IN $listParam` seeks a range index; `IN` against a list *property* of another row does
+  not, and an index declared on label `A` is not used by a query that names only a sibling label
+  `B` of the same node** (verified 2026-11-20, module `41811`, throwaway container, ~1,900 nodes;
+  `GRAPH.PROFILE`). With `CREATE INDEX FOR (n:Item) ON (n.ref)`: `MATCH (d:Item) WHERE d.ref IN
+  $c` → `Node By Index Scan | (d:Item)`, `Records produced` = number of matches (also with an
+  extra `AND` filter and with `$c = []`); same for `Source.itemId`/`Unit.itemId`. But `UNWIND $m AS
+  x OPTIONAL MATCH (d:Item) WHERE d.ref IN x.cs` → `Node By Label Scan | (d:Item)` under a
+  per-row `Filter`; the equality form `UNWIND $m AS x UNWIND x.cs AS cand OPTIONAL MATCH (d:Item
+  {ref: cand})` seeks. `slug = $s OR itemId IN $c` → label scan. A node `:Source:Ledger` with an
+  index on `Source.itemId`: `MATCH (l:Ledger) WHERE l.itemId IN $c` → `Node By Label Scan |
+  (l:Ledger)` (index ignored); `MATCH (s:Source) WHERE s.itemId IN $c AND s.kind = 'ledger'`
+  → `Node By Index Scan | (s:Source)`. Anchor on the label the index was declared on.
+
 ## Ops, config & tooling
 
 - **`GRAPH.RO_QUERY`** routes to read replicas — use it for all read-only traffic.
