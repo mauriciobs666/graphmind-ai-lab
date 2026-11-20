@@ -134,3 +134,47 @@ Target: root `REVIEW.md`, heading "Always check" (source: B1, B2; both found onl
 All under the session scratchpad `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/dd493cce-be51-46f4-9ad3-5b22c2dd9c32/scratchpad/` (not committed): `rv` (wrapperSite + `urlLike` on `py-request`, variant A), `rvB` (`wrapperSite` only, variant B), `rvC` (B + typed verb seeds, 51a), `r53/exp.py` (builds the host units of a scratch copy of the fixture repositories at a scratch commit, then `run_packs` + `Binder` + `link`; control = unmodified fixtures), `r53/ts-mcp-client/pack.yaml` (P1-52 prototype), `ac5.py`, `ten.py`, `chains.py`, `fxcons.py`. Python is `cpg/.venv/bin/python`. The three stored units for the AC-5 count are the report's (`falkor-chat/scripts`, `salesperson`, `falkor-chat/server`); the ten-unit runs take every Python bundle with callsites under `cpg/.ccg-work/bundles/graphmind-ai-lab/`. Fixture bundles: the 31 current-head bundles under the scratchpad `work/bundles/fixture-system1/` (the QA throwaway build at `NORMALIZER_VERSION` 0.7); Python and TS bundles were carried, host bundles rebuilt.
 
 Not run: the full `cpg` suite, `-m live` tests, the 51b/53 implementations (none exist); the AC-5 store method (needs the live store; the bundle method reproduced the report's 6/8). My scratch `wrapperSite` is a faithful reading of the plan's text, not the future implementation, so B1's figures bound what a literal reading yields; the 8/8 and the added/removed sets under B are what the plan's rule yields once the `urlLike` flip is removed.
+
+## Pass 2
+
+Re-gate of the commit `4ec71dba` revision (`docs/plans/connected-code-graph-p1-linking.md` P1-51..53 and "Open stakeholder questions"; `-p1.md` §7 and the freeze paragraph).
+
+CPG: considered, not relevant: pack runtime and fixture build over stored bundles, no Joern `cpg_<component>` graph.
+
+**Verdict: approve with suggestions for P1-51 (51a and 51b dispatchable now); needs changes for P1-52 and P1-53 (one new fix-induced major, N1; both also wait on the stakeholder answers).**
+
+### Dispositions of Pass 1
+
+- **B1** fixed: 51b no longer touches `urlLike`, reads the leaf before the filter, pins `:172`/`:244` as unchanged. Re-run against the *revised* text (scratch variant D: scan `chain_of(L)[1:]` before the `urlLike` filter, seven liftings with `wrapperSite`, `py-request` without `urlLike`): AC-5 bundle method **8 of 8**; ten-unit diff identical to Pass 1 variant B (removed `GET /0`; added `:289`, `:366`, `:424`, `load_demo.py:284`; providers 91, mounts 3, confirmed consumers equal; lifted 73 to 66, 7 items / 5 sites; consumer set and keyless-leaf set equal to B). The pre-filter read changes nothing extra on the verb and `urlopen` liftings.
+- **B2** fixed in the pack (`scope: unit`, the other-literal-`new URL` limit pinned, LNK-02/06/12 `binding-confirmed`, manifest edits to 53a). Re-ran the prototype: still one `svc` provider. But see N1.
+- **M1** the architect is right and my option (a) was wrong. Verified: `extract.sc:148` `formatString` maps each argument through `ex`, and a `<operator>.formattedValue` call falls to `case c: Call => unk, l: c.name`; the raw fact for `fx-job/job/run_report.py:24` is `{"o":"fmt","p":[{"o":"unk","l":"<operator>.formattedValue"},{"o":"lit","c":"/health"}]}` (3 such nodes in that unit's facts). The name is gone before the normalizer, so the fix is an `extract.sc` edit plus re-extraction, hashed, with possible provider/mount key changes. Ruling (b) is sound: executed over the fixture bundles with typed seeds, `health_probe` and `fetch_item` produce no link and nothing is wrongly confirmed (only `GET /api/health` exists as a provider; `preflight` links `possible`/`partial-key`). Cost, not a defect: real f-strings that interpolate a module constant stay `possible` with a dropped-origin key, so held-out recall (P1-37) sees it; the P2 item should cite that measure. Fixed.
+- **M2** fixed in design (two tiers, per-Dockerfile `launchUnit` multiset, `aux`-locator resolution, P1T-09 text, gate on the answers; `tests/linker_bind_helpers.py` exists). The "red on exactly" claim is false: see N1.
+- **M3** fixed: Q-NC5 stated once with options A/B/C and an owner for the P1-36 line.
+- **M4** fixed: freeze paragraph now lists 50, 51b, 52, 53b; P1-41/P1-42 Needs list 50-53; P1-50 has a row; the spec-close list names `wrapperSite`, typed seeds and the TS pack; the census sweep is in 53a(3).
+- **M5** fixed: leaf excluded, first-discovered chain (pinned), verbs and query-only status stated, reference model over the axes, (i) relabelled a regression check. Implemented as stated in variant D; the tree/BFS limit does not change the ten-unit result.
+- **m1-m4** fixed (grounding facts corrected or removed, `httpx` shape "assumed", CMD "inert", Q-TSMCP text in the plan). Pass 1 premise counts re-checked: 2,178 / 816 / 358 / 176 / 3 reproduce; fixture `svc` and `job` each hold `requests.py` targets `get` 4, `post` 1 (plus `json` 2, not verbs). R1-R3 offline outcome unchanged (the plan text for them is substantively the same; Pass 1 runs stand).
+
+### New findings
+
+**N1 (major, fix-induced, verified by execution): P1-52's live Done-when and 53a's "red on exactly" are unreachable in the stated order.** LNK-02/06/12 are `binding-confirmed` only when loopback port 8200 matches unit `svc`, and that fact exists only after `fx-svc/scripts/Dockerfile` (R2), which is a 53b edit, after 52. Executed with the `scope: unit` pack: fixtures without R2 (and with R3+R5 only) give LNK-02, 06 and both LNK-12 links `confirmed`/`key-match`, unbound, to both `reindex` providers; `Binder._port_match(8200)` is empty. So (a) 52's "each links to exactly the `svc` provider, `binding-confirmed`" and its `scope: file` mutant cannot be run at 52; (b) 53a's pin, authored against unmodified fixtures with the live tier containing LNK-02/06/12, is red for those three rows as well, not on "exactly `launchUnit`, `BOUND_BY`, `port-shared`". Fix: split by what each unit can see. 52's done-when is the consumers (keys, statuses before binding) plus an offline `Binder` test with a synthetic `:8200` port fact for the `scope` mutant; the Link-level `binding-confirmed` rows (LNK-02/06/12) move to the 53a live tier and go green at 53b; 53a's stated red set adds them. Alternatively move `scripts/Dockerfile` ahead of 52. Which one is the architect's call.
+
+**N2 (minor, growth-stops):** the revised sections restate the reviewer's evidence as history: 51b ("observed by the analyst ... 8 of 8 ... 6 of 8 ... 9 real keyless callers lost"), 52 ("the analyst's prototype"), 51a ("the analyst's run: 10 consumers"). Per the growth-stops bullet a plan states current design; these facts have a home (this review, B1/B2/M1) and should be cited by ID instead. Other checks: no finding-to-resolution table, no stacked `Update:`; net diff is -17 lines (rework replaced in place, 379 lines changed); each of Q-TSMCP, Q-CENSUS, Q-NC5 is stated once with options (A/B, A/B, A/B/C), elsewhere only cited; Q-CENSUS figures (89 to 87; 84 with Q-TSMCP B) and Q-TSMCP B ("floors fall to 2", census loses 3) check out arithmetically.
+
+### Same-revision interaction check (ask 2)
+
+B1 x M5 x M1(b) x B2 x M2: the revised 51b rule reaches 8/8 and the same diff (variant D); M1(b) leaves LNK-08/TW-2 outside every chain the wrapper rule touches (they are direct own-site consumers; unchanged with and without `wrapperSite` on the fixtures); B2's `scope: unit` limit is inert on the proving repository (0 TS importers) and on the fixtures (one `new URL`). The only cross-finding defect is N1 (B2's binding ruling against R2's placement in 53b).
+
+### Stopping condition
+
+Not fully converged: one finding (N1) and one minor (N2) remain, both **fix-induced** by Pass 1 rulings, none a new class. Converged when: N1 is resolved by an ordering or done-condition change that lets 52's done-when run before 53b, and 53a's red list names exactly what the unmodified fixtures fail. A Pass 3 limited to those two lines is enough; it need not re-execute the 51b figures.
+
+### Dispatchability
+
+- **51a:** dispatchable now. **51b:** dispatchable now (serial after 51a; Done-when (a) needs the store method too, which I did not run).
+- **52:** conditioned on Q-TSMCP = A and N1.
+- **53a/53b:** conditioned on Q-TSMCP, Q-CENSUS, Q-NC5 (the plan says so) and N1.
+- The three stakeholder questions are not decided here; each is in the plan once with its options.
+
+### Ran vs read
+
+Ran: the extract.sc raw-fact check (grep and parse of the stored Joern facts); AC-5 count and ten-unit diff against the revised 51b rule (scratch variant D, built from the committed `cpg/ccg`); typed-seed fixture facts and link check for `health_probe`/`fetch_item`; the P1-52 prototype with `scope: unit` on fixtures without R2 and with R3+R5. Read: the revised plan sections, `-p1.md` §7 and freeze paragraph, `extract.sc`. Not run: the store-method AC-5 count, any suite, any implementation (none exists).
