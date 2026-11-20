@@ -16,7 +16,7 @@ from collections import defaultdict
 
 from ccg.packrt.extract import Corpus
 from ccg.keynorm import CONSUMER
-from ccg.packrt.httpkey import VERBS, is_url_like, is_wholly_unresolved, normalize_key_parts
+from ccg.packrt.httpkey import VERBS, is_url_like, is_wholly_unresolved, normalize_key_parts, split_url
 from ccg.packrt.match import clause_hit, scope_ok
 
 _PARAM_PATH = re.compile(r"^p(\d+)(.*)$")
@@ -199,9 +199,12 @@ def _url_like_alternatives(alts: list[str]) -> list[str] | None:
 
 
 def _informative(alt: str) -> bool:
-    """``alt`` is a template that names a resource (P1-51b): URL-like, and its consumer-form path has a segment other than ``{?}``
-    (``/documents/\\x01``, ``\\x01/shop/api/messages?...``; not ``\\x01\\x01``, ``/api\\x01``, ``\\x01?q``)."""
-    if not is_url_like(alt):
+    """``alt`` is a template that names a resource (P1-51b): URL-like, and after the authority (a known host or an unknown-origin
+    run) with the query and fragment cut, the remainder is the root ``/`` or has a segment other than ``{?}``. A bare origin
+    (``http://localhost:1234``) names none: it is a base the caller completes. Counts: ``/documents/\\x01``,
+    ``\\x01/shop/api/messages?...``, ``/``, ``\\x01/``, ``http://h/``; not ``\\x01\\x01``, ``/api\\x01``, ``\\x01/\\x01``, ``https://\\x01``.
+    Decided on the remainder's text: normalization maps an empty path to ``/``."""
+    if not is_url_like(alt) or not split_url(alt)[0]:
         return False
     path = normalize_key_parts("GET " + alt, "consumer").key.partition(" ")[2]
     return any(seg != CONSUMER for seg in path.split("/")[1:])

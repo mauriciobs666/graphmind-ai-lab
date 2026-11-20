@@ -48,11 +48,23 @@ SHAPES = {
     "twomark": (X + X, False, False, "/{?}", True),
     "plain": ("plain", False, False, "/plain", False),
     "bare": (X, False, False, None, None),
+    # P1-51b ruling (plan, "informative"): after the authority and with the query and fragment cut, the remainder is the root `/`
+    # or has a segment other than `{?}`; a bare origin names no resource. Expectations are written from that text.
+    "root": ("/", True, True, "/", False),
+    "root_unk": (X + "/", True, True, "/", True),
+    "rootorigin": ("http://h/", True, True, "/", False),
+    "origin_only": ("http://localhost:1234", True, False, "/", False),
+    "origin_unk": ("https://" + X, True, False, "/", True),
+    "slash_mark": (X + "/" + X, True, False, "/{?}", True),
+    "origin_query": ("http://h?q=1", True, False, "/", False),                  # the query is cut before the remainder is read
+    "root_query": ("/?q=1", True, True, "/", False),
 }
 # a slot is a tuple of shape names (its alternatives)
 SLOTS = [("lit",), ("tmpl",), ("origin",), ("known",), ("scheme_unk",), ("zprefix",), ("partseg",), ("partseg2",), ("query",),
          ("queryonly",), ("twomark",), ("plain",), ("bare",),
-         ("lit", "bare"), ("tmpl", "bare"), ("partseg", "bare"), ("lit", "plain")]
+         ("lit", "bare"), ("tmpl", "bare"), ("partseg", "bare"), ("lit", "plain"),
+         ("root",), ("root_unk",), ("rootorigin",), ("origin_only",), ("origin_unk",), ("slash_mark",), ("origin_query",), ("root_query",),
+         ("origin_only", "bare"), ("root", "bare"), ("origin_only", "lit")]
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -336,3 +348,31 @@ def test_a_parameter_that_feeds_two_seed_slots_belongs_to_the_first_one_reached_
     out = run_packs([recs], [the_pack(wrapper_site=True, url_like=False)])
     assert [(c["siteId"], c["key"]) for c in out.consumers] == [("g1", "GET /a/{?}"), ("g2", "GET /{?}")]
     assert sorted(i["siteId"] for i in out.lifted) == ["g1", "g2"]
+
+
+@pytest.mark.parametrize("shape,counts", [("root", True), ("root_unk", True), ("rootorigin", True), ("origin_only", False),
+                                           ("origin_unk", False), ("slash_mark", False), ("origin_query", False), ("root_query", True)])
+def test_the_plan_s_counts_and_does_not_count_examples_decide_the_wrapper_site(shape, counts):
+    """Plan 51b: counts `/`, `\\x01/`, `http://h/`; does not count `http://localhost:1234`, `https://\\x01`, `\\x01/\\x01`. A bare
+    origin is a base the caller completes, so the caller stays the consumer."""
+    chain = (("lit",), (shape,), ("bare",))
+    got_c, _, _ = observed(records(chain), the_pack(wrapper_site=True, url_like=True))
+    assert {i for i, _, _ in got_c} == ({1} if counts else {0})
+
+
+def test_a_parameter_that_feeds_two_arguments_of_one_call_belongs_to_the_first_one_reached_by_data_id_pinned_limit():
+    """`def f(x, y): get(x + y)`, `def g(u): f("/documents/" + u, u)`, caller `h(): g("/other")`: `g`'s parameter is reached from
+    `c.a0` or `c.a1` depending on the order the flows into the seed are visited (sorted data-record ids), so the wrapper site
+    is `c`'s informative `a0` and `h1` is dropped. With the reverse order the chain would go through the bare `a1` and `h1`
+    would stay the consumer."""
+    recs = [file_("f1", "svc/client.py"), imp("f1", "requests"),
+            sym("F", "f", fid="f1", path="svc/client.py", start=10), param("PX", "F", 0, "x"), param("PY", "F", 1, "y"),
+            call("sg", "F", "get", line=11), vs("sg", "a0", X + X), data("sg", "PX", "a0", "p0"), data("sg", "PY", "a0", "p1"),
+            sym("G", "g", fid="f1", path="svc/client.py", start=30), param("PU", "G", 0, "u"),
+            call("c", "G", "f", line=31, resolution="resolved", targets=("F",)), vs("c", "a0", "/documents/" + X), vs("c", "a1", X),
+            data("c", "PU", "a0", "p0"), data("c", "PU", "a1", "p0"),
+            sym("H", "h", fid="f1", path="svc/client.py", start=50),
+            call("h1", "H", "g", line=51, resolution="resolved", targets=("G",)), vs("h1", "a0", "/other")]
+    out = run_packs([recs], [the_pack(wrapper_site=True, url_like=True)])
+    assert [(c["siteId"], c["key"]) for c in out.consumers] == [("c", "GET /documents/{?}")]
+    assert "h1" not in {i["siteId"] for i in out.lifted}
