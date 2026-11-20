@@ -190,3 +190,15 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   implements that. `status is None` alone does not mark a connection failure: `chat()` raises it
   on a malformed 200 body too, though re-probing that case is harmless. **Unruled, for
   `architect`:** the decisions/handoff kept failures and the multi-turn `tool-caller` turn.
+
+### Defects the live spec recorded
+
+Found while writing `docs/DESIGN.md` (`docs/reviews/model-bench-live-spec-impl.md`); each is
+documented there as current behavior until fixed.
+
+- `run --reference` is accepted and ignored; nothing stores it.
+- The exit-5 message names `results/transcripts/<runId>.jsonl`, which no run writes.
+- A plain `compare` (no `--models`) pairs the first two arms by file-name order, not the newest.
+- `validate --strict` raises `NotImplementedError` (exit 1 with a traceback) instead of refusing.
+
+- **Done when:** each is fixed or removed, with the spec section updated in the same change.

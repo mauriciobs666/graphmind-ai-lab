@@ -16,12 +16,16 @@ Nearest misses, read from the reports: join-in hand-off f3 per-class 0.93/0.92 b
 
 **Decisions (user, 2026-11-19/20):** FR-10's 0.90 floor stands; the `question`-with-grievance
 boundary stays; fine-tuning (§Q7) skipped; screening of further hand-off models stopped; U6a
-(per-label `minConfidence`) skipped; the feature closes as no-ship, with no live spec in either
-component, so close steps (2)–(3) were skipped by decision. U8 and U9–U12 are not applicable.
+(per-label `minConfidence`) skipped; the feature closes as no-ship. U8 and U9–U12 are not
+applicable.
 
-**Close:** eleven proposed `REVIEW.md` lines applied verbatim (nine root, two `model-bench/`),
-source `docs/reviews/typed-decision-models-close-sweep.md`; the plan, review, requirements,
-coordination and test-report documents flipped to `archived`; follow-ons in `BACKLOG.md`.
+**Close:** `model-bench`'s live spec was written inside this close (`model-bench/docs/DESIGN.md`
+§1–§11, `FORMATS.md` §1–§8) and checked by `analyst` against the shipped code
+(`model-bench/docs/reviews/model-bench-live-spec-impl.md`, Pass 2 approve); `decision-models/` has no
+live spec of its own. Twelve proposed `REVIEW.md` lines applied verbatim (ten root, two
+`model-bench/`; sources `docs/reviews/typed-decision-models-close-sweep.md` and that review); the plan,
+review, requirements, coordination and test-report documents flipped to `archived`; follow-ons in
+`BACKLOG.md`.
 
 ## 2026-11-19 — typed-decision-models U6f.9b — fit emission
 

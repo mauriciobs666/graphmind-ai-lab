@@ -55,6 +55,7 @@
 - In a plan for unattended operation, every refusal or halt the plan adds is checked against what an ordinary user action on the same machine changes (config edits, logins, other sessions). Each refusal must also show up in a status command, not only in a run's exit line.
 - A fail-closed path is traced to its consumer. The guard's own failure must reach a class that halts and is distinguishable from a policy decision. A fail-closed default that the consumer counts as the actor's fault turns a broken guard into silent attrition.
 - A row that keys on a missing record (no hook entry, no result, no field) is checked against every producer of that absence: a kill, batched or parallel writes, and validation before the recorder runs. Checking only the producer that motivated the row is not enough.
+- In a live-spec check, each absolute word in the spec (*only*, *never*, *always*, *every*, *exactly one*, *the one*) is verified by an unfiltered grep or enumeration over the whole component, including modules added after the sentence was first written. A claim checked only against the module it was written about is a bound, not proof.
 
 ## Do not report
 

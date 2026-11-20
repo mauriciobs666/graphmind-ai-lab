@@ -58,9 +58,8 @@ engineering** (Claude Code and OpenCode artifacts).
   LM Studio: one model × one versioned task pack per run, stored with a full environment
   fingerprint, compared only within a role. Python 3.12, **zero runtime dependencies**; no CI hook,
   no pass/fail gate, no leaderboard, no runtime read outside `model-bench/` (golden data copied in
-  and versioned here). **Delivered and closed (S0–S8)**: five packs across all five FR-21 roles
-  (`embedder`, `guard-judge`, `nlq-generator`, `tool-caller`, `chat-responder`) shipped, gated, and
-  live-verified. Requirements/plan live at the **repo root**, not `model-bench/docs/`; working
+  and versioned here). **Delivered and closed (S0–S8)**, plus the three typed-decision-point packs
+  (guard, join-in, message type). Live spec: `model-bench/docs/DESIGN.md`, `FORMATS.md`. Requirements/plan live at the **repo root**, not `model-bench/docs/`; working
   state is in `model-bench/AGENTS.md`, delivery record in `model-bench/docs/HISTORY.md`.
 - `decision-models/` — Synthetic, labelled datasets and fitted candidates for `model-bench/` (`docs/requirements/typed-decision-models.md`).
 - `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard) for
@@ -84,7 +83,7 @@ engineering** (Claude Code and OpenCode artifacts).
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` |
 | `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` |
 | `mcp-monitor/` | `mcp-monitor/README.md` · `mcp-monitor/AGENTS.md` |
-| `model-bench/` | `model-bench/README.md` · `model-bench/AGENTS.md` · `docs/requirements/small-model-benchmarking.md` · `docs/plans/small-model-benchmarking.md` |
+| `model-bench/` | `model-bench/README.md` · `model-bench/AGENTS.md` · live spec: `model-bench/docs/DESIGN.md` (design), `model-bench/docs/FORMATS.md` (formats) · `docs/requirements/small-model-benchmarking.md` · `docs/plans/small-model-benchmarking.md` |
 | `decision-models/` | `decision-models/README.md` · `decision-models/AGENTS.md` · `docs/requirements/typed-decision-models.md` · `docs/plans/typed-decision-models4.md` |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
 

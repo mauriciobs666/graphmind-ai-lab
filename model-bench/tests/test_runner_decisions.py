@@ -196,6 +196,7 @@ def test_answer_space_refuses_a_missing_or_malformed_decision_point_block():
 
 import hashlib  # noqa: E402
 import json  # noqa: E402
+import re  # noqa: E402
 import shutil  # noqa: E402
 from dataclasses import replace  # noqa: E402
 from types import MappingProxyType  # noqa: E402
@@ -1315,7 +1316,8 @@ def test_the_legacy_record_scan_rejects_a_legacy_record_carrying_the_field(tmp_p
     body = json.loads(src.read_text())
     body["requestTimeoutSeconds"] = 120.0
     (tmp_path / src.name).write_text(json.dumps(body))
-    with pytest.raises(AssertionError, match="requestTimeoutSeconds|assert"):
+    refusal = f"{src.name}\nassert 'requestTimeoutSeconds' not in"
+    with pytest.raises(AssertionError, match=re.escape(refusal)):
         _assert_legacy_records_load_timeout_as_none(tmp_path)
 
 

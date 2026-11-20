@@ -2,6 +2,21 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-20 — model-bench live spec (live-specs L6), inside the typed-decision-models close
+
+**What:** `docs/plans/live-specs.md` §5 L6. New whole-component live spec `docs/DESIGN.md` (§1–§11:
+purpose, CLI, run lifecycle, LM Studio contract, pack loading, scoring, typed decision points,
+statistics, reports, honesty rules, surface index) and `docs/FORMATS.md` (§1–§8: pack, run record,
+fingerprint profiles, schema versioning and `index.csv`, candidate and fit manifest, `host.json`,
+contract vectors, footprints and file names). The contract text in `README.md` and `AGENTS.md`
+shrank to pointers; the `AGENTS.md` rule "never store a decisions record before U7" was dropped as
+expired (35 post-field run records are committed). The root Component-docs row names the spec.
+
+**Checked:** `analyst` AC-1 against the shipped code, `docs/reviews/model-bench-live-spec-impl.md`
+(Pass 1 approve with suggestions, 3 major and 7 minor findings fixed; Pass 2 approve). Suite 3655
+passed, 5 deselected, 2 xfailed. `tests/test_runner_decisions.py`'s legacy-record scan now covers
+only records ended before 2026-10-31, the day `requestTimeoutSeconds` landed (`546bb914`).
+
 ## 2026-11-01 — typed-decision-models U6.8 — the dataset vector's incomplete run
 
 **What:** `docs/plans/typed-decision-models6.md` v1.8 §3.7 and §4's U6.8 row (impl review
