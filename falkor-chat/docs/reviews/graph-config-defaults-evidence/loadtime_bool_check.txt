@@ -1,0 +1,19 @@
+load-time ASYNC_DELETE yes -> 1 ping=PONG
+1:C 20 Nov 2026 17:16:42.365 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+load-time ASYNC_DELETE 1 -> Could not connect to Redis at 127.0.0.1:16481: Connection refused ping=Could not connect to Redis at 127.0.0.1:16481: Connection refused
+Error response from daemon: No such container: k098-gdba-argcheck
+== FALKORDB_ARGS='ASYNC_DELETE 1' state=exited exit=1
+1:M 20 Nov 2026 17:17:13.567 * <graph> Enabled role change notification
+1:M 20 Nov 2026 17:17:13.567 * <graph> Starting up FalkorDB version 4.18.11.
+1:M 20 Nov 2026 17:17:13.568 # Module /var/lib/falkordb/bin/falkordb.so initialization failed. Module not loaded
+1:M 20 Nov 2026 17:17:13.568 # Can't load module from /var/lib/falkordb/bin/falkordb.so: server aborting
+== FALKORDB_ARGS='CMD_INFO 1' state=exited exit=1
+1:M 20 Nov 2026 17:17:17.229 * <graph> Enabled role change notification
+1:M 20 Nov 2026 17:17:17.229 * <graph> Starting up FalkorDB version 4.18.11.
+1:M 20 Nov 2026 17:17:17.229 # Module /var/lib/falkordb/bin/falkordb.so initialization failed. Module not loaded
+1:M 20 Nov 2026 17:17:17.229 # Can't load module from /var/lib/falkordb/bin/falkordb.so: server aborting
+== FALKORDB_ARGS='ASYNC_DELETE no' state=running exit=0
+1:M 20 Nov 2026 17:17:21.753 * Module 'graph' loaded from /var/lib/falkordb/bin/falkordb.so
+1:M 20 Nov 2026 17:17:21.757 * Server initialized
+1:M 20 Nov 2026 17:17:21.758 * Ready to accept connections tcp
+1:M 20 Nov 2026 17:17:21.758 # WARNING: Redis does not require authentication and is not protected by network restrictions. Redis will accept connections from any IP address on any network interface.

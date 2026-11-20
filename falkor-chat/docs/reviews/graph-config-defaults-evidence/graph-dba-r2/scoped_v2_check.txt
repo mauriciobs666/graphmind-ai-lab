@@ -1,0 +1,40 @@
+scoped, Channel->Thread ms x5: [26.7, 25.4, 23.5, 24.5, 24.4]
+    Results
+    Limit
+    Sort
+    Project
+    Apply
+    Filter
+    Conditional Traverse
+    Node By Index Scan
+    ProcedureCall
+    Aggregate
+    Distinct
+    Optional Conditional Traverse
+    Argument
+scoped, Thread<-Channel ms x5: [29.6, 30.8, 25.4, 24.7, 22.6]
+    Results
+    Limit
+    Sort
+    Project
+    Apply
+    Filter
+    Conditional Traverse
+    Node By Index Scan
+    ProcedureCall
+    Aggregate
+    Distinct
+    Optional Conditional Traverse
+    Argument
+unscoped ms x5: [17.0, 16.8, 16.4, 16.3, 17.2]
+    Results
+    Limit
+    Sort
+    Project
+    Apply
+    Node By Index Scan
+    ProcedureCall
+    Aggregate
+    Distinct
+    Optional Conditional Traverse
+    Argument

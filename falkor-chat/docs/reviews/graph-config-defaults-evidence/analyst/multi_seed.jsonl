@@ -1,0 +1,12 @@
+ws:r1 seeds: ['d-99992', 'd-99994', 'd-99998', 'd-99996', 'd-99995', 'd-99991', 'd-99999', 'd-99997', 'd-99993', 'd-99990']
+{"graph": "ws:r1", "variant": "ann only", "uncapped_ms": 1.8, "min_cap_MiB": 0.36, "passes_at_64MiB": true}
+{"graph": "ws:r1", "variant": "ann+walk", "uncapped_ms": 12411.3, "min_cap_MiB": 14.88, "passes_at_64MiB": true}
+{"graph": "ws:r1", "variant": "ann+expansion", "uncapped_ms": 178.7, "min_cap_MiB": 34.54, "passes_at_64MiB": true}
+{"graph": "ws:r1", "variant": "full (verbatim repository.hybrid_search, ws-wide)", "uncapped_ms": 12426.5, "min_cap_MiB": 49.08, "passes_at_64MiB": true}
+ws:r2 seeds: ['s2-0', 's5-0', 's4-0', 's3-0', 's8-0', 's7-0', 's6-0', 's1-0', 's9-0', 's0-0']
+{"graph": "ws:r2", "variant": "ann only", "uncapped_ms": 1.6, "min_cap_MiB": 0.36, "passes_at_64MiB": true}
+{"graph": "ws:r2", "variant": "ann+walk", "uncapped_ms": 1.5, "min_cap_MiB": 0.38, "passes_at_64MiB": true}
+{"graph": "ws:r2", "variant": "ann+expansion", "uncapped_ms": 361.9, "min_cap_MiB": 68.62, "passes_at_64MiB": false}
+{"graph": "ws:r2", "variant": "full (verbatim repository.hybrid_search, ws-wide)", "uncapped_ms": 367.0, "min_cap_MiB": 68.66, "passes_at_64MiB": false}
+
+[exited with code 0]

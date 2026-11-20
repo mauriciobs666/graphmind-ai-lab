@@ -1,0 +1,3 @@
+{"variant": "read_thread tlong (10k msgs, ~200-char text)", "rows": 10000, "uncapped_ms": 267.1, "min_cap_kib": 469}
+{"variant": "create_document under 1 MiB cap: partial-state check", "ok": false, "err": "Query's mem consumption exceeded capacity", "docs_chunks_before": [0, 5000], "after": [0, 5000]}
+{"variant": "create_document MAX_DOCUMENT_CHARS=500000, 618 chunks", "uncapped_ms": 9.7, "min_cap_kib": 4609}

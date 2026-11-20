@@ -1,0 +1,12 @@
+{"seed": "tail of long thread (hub)", "variant": "ann only", "min_cap_kib_x3": [373, 373, 373]}
+{"seed": "tail of long thread (hub)", "variant": "ann + walk", "min_cap_kib_x3": [2060, 2060, 2060]}
+{"seed": "tail of long thread (hub)", "variant": "ann + expansion", "min_cap_kib_x3": [1659, 1659, 1659]}
+{"seed": "tail of long thread (hub)", "variant": "full", "min_cap_kib_x3": [3376, 3376, 3376]}
+{"seed": "short thread t5-10", "variant": "ann only", "min_cap_kib_x3": [374, 374, 374]}
+{"seed": "short thread t5-10", "variant": "ann + walk", "min_cap_kib_x3": [897, 897, 897]}
+{"seed": "short thread t5-10", "variant": "ann + expansion", "min_cap_kib_x3": [502, 502, 502]}
+{"seed": "short thread t5-10", "variant": "full", "min_cap_kib_x3": [1055, 1055, 1055]}
+{"seed": "tlong-100", "variant": "ann only", "min_cap_kib_x3": [373, 373, 373]}
+{"seed": "tlong-100", "variant": "ann + walk", "min_cap_kib_x3": [1439, 1439, 1439]}
+{"seed": "tlong-100", "variant": "ann + expansion", "min_cap_kib_x3": [1275, 1275, 1275]}
+{"seed": "tlong-100", "variant": "full", "min_cap_kib_x3": [2370, 2370, 2370]}

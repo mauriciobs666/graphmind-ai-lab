@@ -1,0 +1,4 @@
+{"seed": "depth 100k + hub 50k", "variant": "ann only", "min_cap_kib": 373, "uncapped_ms": 2.8}
+{"seed": "depth 100k + hub 50k", "variant": "ann + walk", "min_cap_kib": 15235, "uncapped_ms": 1294.7}
+{"seed": "depth 100k + hub 50k", "variant": "ann + expansion", "min_cap_kib": 3967, "uncapped_ms": 23.0}
+{"seed": "depth 100k + hub 50k", "variant": "full", "min_cap_kib": 18860, "uncapped_ms": 1311.8}

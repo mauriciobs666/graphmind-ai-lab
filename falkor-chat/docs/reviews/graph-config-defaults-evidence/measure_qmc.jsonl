@@ -1,0 +1,6 @@
+{"variant": "hybrid_msg ws-wide k=10 random seed", "rows": 10, "uncapped_ms": 26.8, "min_cap_bytes": 2961408, "min_cap_kib": 2892.0, "fail_error": "Query's mem consumption exceeded capacity"}
+{"variant": "hybrid_msg ws-wide k=10 seed=tail of 10k thread + hub", "rows": 10, "uncapped_ms": 38.3, "min_cap_bytes": 3457024, "min_cap_kib": 3376.0, "fail_error": "Query's mem consumption exceeded capacity"}
+{"variant": "hybrid_msg channel-scoped k=10 seed=tail of 10k thread + hub", "rows": 10, "uncapped_ms": 36.7, "min_cap_bytes": 3473408, "min_cap_kib": 3392.0, "fail_error": "Query's mem consumption exceeded capacity"}
+{"variant": "hybrid_msg ws-wide k=10 seed=mid of 10k thread + hub", "rows": 10, "uncapped_ms": 9.2, "min_cap_bytes": 1813504, "min_cap_kib": 1771.0, "fail_error": "Query's mem consumption exceeded capacity"}
+{"variant": "search_chunks k=30 limit=10 (hybrid_search chunk half)", "rows": 10, "uncapped_ms": 2.1, "min_cap_bytes": 428032, "min_cap_kib": 418.0, "fail_error": "Query's mem consumption exceeded capacity"}
+{"variant": "search_chunks k=600 limit=200 (search_documents max)", "rows": 200, "uncapped_ms": 7.4, "min_cap_bytes": 460800, "min_cap_kib": 450.0, "fail_error": "Query's mem consumption exceeded capacity"}

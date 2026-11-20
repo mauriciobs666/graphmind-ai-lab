@@ -1,0 +1,9 @@
+Labels added: 200000
+Nodes created: 200000
+used=used_memory:25765152
+OK
+OK
+GRAPH.QUERY read:   OOM command not allowed when used memory > 'maxmemory'.  
+GRAPH.RO_QUERY read: count(n) 200000 
+GRAPH.QUERY write:  OOM command not allowed when used memory > 'maxmemory'.
+GRAPH.DELETE:  OK

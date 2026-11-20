@@ -1,0 +1,108 @@
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 2.4, "min_cap_kib": 576, "same_as_current": null}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": null}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 2.2, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": null}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 2.2, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.3, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "fan-in 100, spread short", "scoped": false, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 1.8, "min_cap_kib": 576, "same_as_current": null}
+{"scenario": "fan-in 100, spread short", "scoped": false, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 1.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100, spread short", "scoped": false, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 1.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100, spread short", "scoped": false, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": null}
+{"scenario": "fan-in 100, spread short", "scoped": false, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 2.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100, spread short", "scoped": false, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 2.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100, spread short", "scoped": false, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 2.5, "min_cap_kib": 640, "same_as_current": null}
+{"scenario": "fan-in 100, spread short", "scoped": false, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 3.2, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "fan-in 100, spread short", "scoped": false, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 3.2, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 3.0, "min_cap_kib": 640, "same_as_current": null}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 2.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 1.9, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 3.8, "min_cap_kib": 832, "same_as_current": null}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 2.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 2.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 6.6, "min_cap_kib": 1152, "same_as_current": null}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 3.3, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.4, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 7.2, "min_cap_kib": 1344, "same_as_current": null}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 4.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 2.9, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 28.3, "min_cap_kib": 4416, "same_as_current": null}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 6.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 5.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 37.3, "min_cap_kib": 8320, "same_as_current": null}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 7.5, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 7.1, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 40.0, "min_cap_kib": 7552, "same_as_current": null}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 3.9, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 6.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 186.6, "min_cap_kib": 35456, "same_as_current": null}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 10.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 10.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 423.9, "min_cap_kib": 70336, "same_as_current": null}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 16.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 16.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 37.4, "min_cap_kib": 7552, "same_as_current": null}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 4.3, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 147.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 197.7, "min_cap_kib": 35456, "same_as_current": null}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 12.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 15.9, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 420.4, "min_cap_kib": 70336, "same_as_current": null}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 21.3, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 27.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 48.5, "min_cap_kib": 7552, "same_as_current": null}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 4.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 5.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 222.7, "min_cap_kib": 35456, "same_as_current": null}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 13.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 13.3, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 382.7, "min_cap_kib": 70336, "same_as_current": null}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 25.7, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 23.5, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 18.3, "min_cap_kib": 2240, "same_as_current": null}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 19.8, "min_cap_kib": 2240, "same_as_current": true}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 3.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 79.9, "min_cap_kib": 2240, "same_as_current": null}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 77.3, "min_cap_kib": 2240, "same_as_current": true}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 2.3, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 173.5, "min_cap_kib": 2240, "same_as_current": null}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 166.8, "min_cap_kib": 2240, "same_as_current": true}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 1291.7, "min_cap_kib": 15424, "same_as_current": null}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 1259.2, "min_cap_kib": 15424, "same_as_current": true}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 2.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 6972.6, "min_cap_kib": 15424, "same_as_current": null}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 6559.4, "min_cap_kib": 15424, "same_as_current": true}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 3.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 12314.0, "min_cap_kib": 15424, "same_as_current": null}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 12523.0, "min_cap_kib": 15424, "same_as_current": false}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.6, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 6.5, "min_cap_kib": 1408, "same_as_current": null}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 6.6, "min_cap_kib": 1408, "same_as_current": true}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 3.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 23.2, "min_cap_kib": 1408, "same_as_current": null}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 22.3, "min_cap_kib": 1408, "same_as_current": true}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 3.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 42.4, "min_cap_kib": 1408, "same_as_current": null}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 42.6, "min_cap_kib": 1408, "same_as_current": false}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 3.3, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 1369.3, "min_cap_kib": 22400, "same_as_current": null}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 1325.9, "min_cap_kib": 15424, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 7.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 6931.9, "min_cap_kib": 50304, "same_as_current": null}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 5909.5, "min_cap_kib": 15424, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 9.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 13406.7, "min_cap_kib": 85184, "same_as_current": null}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 12687.2, "min_cap_kib": 15424, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 17.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "k": 1, "form": "current", "rows": 1, "uncapped_ms": 1316.0, "min_cap_kib": 22400, "same_as_current": null}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "k": 1, "form": "v2b_bound_only", "rows": 1, "uncapped_ms": 1260.8, "min_cap_kib": 15424, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 409.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "k": 5, "form": "current", "rows": 5, "uncapped_ms": 6504.2, "min_cap_kib": 50304, "same_as_current": null}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "k": 5, "form": "v2b_bound_only", "rows": 5, "uncapped_ms": 6179.7, "min_cap_kib": 15424, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 15.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "k": 10, "form": "current", "rows": 10, "uncapped_ms": 12608.3, "min_cap_kib": 85184, "same_as_current": null}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "k": 10, "form": "v2b_bound_only", "rows": 10, "uncapped_ms": 12525.8, "min_cap_kib": 15424, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 156.6, "min_cap_kib": 576, "same_as_current": true}

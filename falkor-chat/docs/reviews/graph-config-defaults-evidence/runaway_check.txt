@@ -1,0 +1,11 @@
+cap=0 | UNWIND range(1,30000000) AS x WITH collect(x) AS xs RETURN size(xs) | 3.143302477 s | size(xs)
+cap=0 | MATCH (a:Message), (b:Chunk) WITH a, b LIMIT 20000000 RETURN count(*) | 2.659368984 s | count(*)
+cap=0 | MATCH (m:Message) WITH collect(m.text) AS t, collect(m.msgId) AS i RETURN size(t) | .117028619 s | size(t)
+cap=0 baseline_used=420958464 peak_used=2166254712 delta_MB=1664
+cap=67108864 | UNWIND range(1,30000000) AS x WITH collect(x) AS xs RETURN size(xs) | .349917364 s | Query's mem consumption exceeded capacity
+cap=67108864 | MATCH (a:Message), (b:Chunk) WITH a, b LIMIT 20000000 RETURN count(*) | 2.625597235 s | count(*)
+cap=67108864 | MATCH (m:Message) WITH collect(m.text) AS t, collect(m.msgId) AS i RETURN size(t) | .034787298 s | size(t)
+cap=67108864 baseline_used=958083472 peak_used=1494991680 delta_MB=512
+OK
+used_memory:958071848
+used_memory_human:913.69M

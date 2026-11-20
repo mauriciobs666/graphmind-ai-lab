@@ -973,6 +973,16 @@ to the general fact here.
   (l:Ledger)` (index ignored); `MATCH (s:Source) WHERE s.itemId IN $c AND s.kind = 'ledger'`
   → `Node By Index Scan | (s:Source)`. Anchor on the label the index was declared on.
 
+- **A per-row capped expansion: `CALL { WITH x OPTIONAL MATCH … WITH DISTINCT y LIMIT n RETURN
+  collect(y) AS ys }` stops the traversal after n, unlike `collect(DISTINCT y)[..n]`, which
+  materializes every match first** (verified 2026-11-20, `falkordb/falkordb:v4.18.11`, module `41811`,
+  throwaway `ws:cov`; `falkor-chat/docs/reviews/graph-config-defaults-evidence/graph-dba-r2/profile_v2_redis.txt`, `coverage.jsonl`, `equivalence.jsonl`). `GRAPH.PROFILE`:
+  `Apply` → `Aggregate` ← `Limit` (50 records) ← `Distinct` ← `Optional Conditional Traverse` (50
+  records) for 10 seeds on a 100k-fan-in entity. The query needed 576 KiB and 17 ms against 68.7 MiB
+  and 424 ms for the slice form. Same rows, same order of the first n: a seed with no match yields
+  `[]` (the subquery still returns one row), and the seed itself counts among its own co-mentioners
+  in both forms. Verify: `GRAPH.PROFILE` both forms over a high-fan-in node.
+
 ## Ops, config & tooling
 
 - **`GRAPH.RO_QUERY`** routes to read replicas — use it for all read-only traffic.
@@ -1201,6 +1211,72 @@ to the general fact here.
   RO_QUERY is to be executed only on read-only queries"), which proves the Cypher parses with
   zero side effects. `GRAPH.PROFILE` isn't a substitute either — see the entry below (it
   silently *executes* writes rather than explaining them).
+- **Module args: booleans must be `yes`/`no`; a `1` aborts the server start, and the log does not name
+  the key** (verified 2026-11-20, `falkordb/falkordb:v4.18.11`, module `41811`, throwaway containers;
+  `falkor-chat/docs/reviews/graph-config-defaults-evidence/``loadtime_bool_check.txt`). `FALKORDB_ARGS="ASYNC_DELETE 1"` (likewise `CMD_INFO 1`) → exit 1
+  with only `Module /var/lib/falkordb/bin/falkordb.so initialization failed … server aborting`;
+  `ASYNC_DELETE yes`/`no` load. At runtime `GRAPH.CONFIG SET ASYNC_DELETE 0`/`false` → `Failed to set
+  config value`, `no` → `OK`. `GRAPH.CONFIG GET` *prints* booleans as `1`/`0`, so pasting `GET`
+  output into an arg string bricks the start. Setting `FALKORDB_ARGS` also **replaces** the image's
+  default string (`MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000`, appended by
+  `/var/lib/falkordb/bin/run.sh` to `--loadmodule`), so repeat those keys; Redis flags go through
+  `REDIS_ARGS`. Verify: `docker run -e FALKORDB_ARGS="ASYNC_DELETE 1" …; docker logs`.
+- **Runtime vs load-time `GRAPH.CONFIG` keys; `THREAD_COUNT` ignores container CPU limits** (verified
+  2026-11-20, same build, throwaway; `runtime_settability.txt`, `graph-dba-r2/cpu_limit_probe.txt`).
+  `GRAPH.CONFIG SET` → `This configuration parameter cannot be set at run-time` for `THREAD_COUNT`,
+  `OMP_THREAD_COUNT`, `CACHE_SIZE`, `NODE_CREATION_BUFFER`, `BOLT_PORT`; `OK` for
+  `MAX_QUEUED_QUERIES`, `QUERY_MEM_CAPACITY`, `TIMEOUT`, `TIMEOUT_DEFAULT`, `TIMEOUT_MAX`,
+  `RESULTSET_SIZE`, `VKEY_MAX_ENTITY_COUNT`, `DELTA_MAX_PENDING_CHANGES`, `EFFECTS_THRESHOLD`,
+  `MAX_INFO_QUERIES`, `JS_HEAP_SIZE`, and (with `yes`/`no`) `ASYNC_DELETE`, `CMD_INFO`,
+  `DELAY_INDEXING`. With no `THREAD_COUNT` arg the pool is sized to the host's CPUs: on an 8-CPU
+  host it is 8 with no limit, with `--cpus 2`, **and with `--cpuset-cpus 0-1`** (log: `Thread pool
+  created, using 8 threads`), while under that cpuset `nproc` and the `OMP_THREAD_COUNT` default
+  read 2. Pin `THREAD_COUNT` explicitly to the container's allotment. Verify: `docker run --cpuset-cpus
+  0-1 …` then `GRAPH.CONFIG GET THREAD_COUNT` / `OMP_THREAD_COUNT`.
+- **`QUERY_MEM_CAPACITY` (bytes, per query) caps reads AND writes; a capped write commits nothing;
+  result rows are not counted; the check runs after an allocation** (verified 2026-11-20, same build,
+  throwaway, synthetic graphs; `measure_*.jsonl`, `runaway_check.txt`, `graph-dba-r2/coverage.jsonl`;
+  `falkor-chat/docs/plans/graph-config-defaults-graph.md` §3.1). Breach → `Query's mem consumption
+  exceeded capacity`. The tracked amount is deterministic (bisected 3× to the same KiB): an ANN
+  `queryNodes` k=10 ≈ 370 KiB; a `[:NEXT*0..]` walk ≈ 150 B/hop, **not** additive across the
+  seeds that share it; `collect(DISTINCT x)` ≈ 70 B/element **per group**, so an `OPTIONAL MATCH`
+  expansion aggregated per ANN seed costs k × fan-in (10 seeds × a 100k-fan-in entity = 68.7 MiB);
+  a 10k-row `RETURN` only ~470 KiB in total. A 500k-char, 618-chunk document write under a 1 MiB cap
+  failed with Document/Chunk counts unchanged, so unlike `TIMEOUT` with `TIMEOUT_MAX 0` it *does*
+  bound a runaway write. One allocation can overshoot it: `UNWIND range(1,30000000) … collect` under
+  64 MiB was killed in 0.35 s but `used_memory` still peaked +512 MB (the list is built, then
+  checked); uncapped it hit +1.66 GB. Streaming shapes (cartesian → `count(*)`) allocate nothing and
+  are never stopped by it. Verify: `GRAPH.CONFIG SET QUERY_MEM_CAPACITY <b>` and bisect pass/fail.
+- **The plan cache keeps folded literal constants alive: each distinct query text with a big literal pins
+  its value in memory** (verified 2026-11-20, same build, throwaway; `plan_cache_folding.txt`). Each
+  new text of `UNWIND range(1,5000000) AS x RETURN count(x)` (5000001, 5000002, …) left `used_memory`
+  +80 MB after the query finished; `MEMORY PURGE` did not release it; re-running the same text added
+  0; the parameterized `CYPHER n=5000003 … range(1,$n)` added 0. Plan-cache memory is bounded by
+  `CACHE_SIZE` × literal size, not by query count. A plan-cache miss for an ordinary parameterized
+  query costs only ~0.06 ms (`cache_probe.txt`). Verify: `INFO memory` around distinct-literal
+  `range` queries.
+- **Under a burst, queued reads complete long after their `timeout`; overflow past `THREAD_COUNT` +
+  `MAX_QUEUED_QUERIES` fails instantly** (verified 2026-11-20, same build, throwaway, `THREAD_COUNT 8`;
+  `queue_probe.txt`, `threads_tc4_omp*.txt`). 64 simultaneous ~1.25 s reads (a 100k-hop walk that
+  emits its one record at the end) with `timeout 5000`: 59 **succeeded** at wall times up to 28 s,
+  5 got `Query timed out` at 5.1–5.4 s, so neither the queue nor `TIMEOUT` bounds a caller's
+  wall-clock wait for that shape; the client socket timeout does, and it abandons rather than
+  cancels. With `THREAD_COUNT 4` + `MAX_QUEUED_QUERIES 25`, 32 clients got about half their queries
+  refused with `Max pending queries exceeded` at ~0 ms. Verify: an N-thread burst; `GRAPH.INFO`
+  `# Waiting queries`.
+- **Redis 8.6.3 (this image) AOF: a first start with `--appendonly yes` over an RDB-only data dir
+  comes up EMPTY, and "rewrite done" flags read done before the rewrite runs** (verified 2026-11-20,
+  throwaway; `aof_enable_probe.txt`, `aof_safe_path_probe.txt`,
+  `graph-dba-r2/aof_scheduled_rewrite_reverify.txt`). A 1,000-node graph `SAVE`d to `dump.rdb`,
+  restarted with `REDIS_ARGS="--appendonly yes"` → `Creating AOF base file … on server start`, then
+  `GRAPH.RO_QUERY` → `Invalid graph operation on empty key` (the review found one clean stop then
+  overwrites `dump.rdb` with the empty set too, `analyst/aof_trap_probe.txt`). Safe path:
+  `CONFIG SET appendonly yes` on the running instance, wait until the rewrite has **run**, then
+  restart with the flag → 1,000/1,000 back. **Behind an in-progress BGSAVE the rewrite is only
+  scheduled**: `aof_rewrite_scheduled:1`, `aof_rewrites:0`, `aof_last_rewrite_time_sec:-1` while
+  `aof_rewrite_in_progress:0` and `aof_last_bgrewrite_status:ok` already look finished (here for
+  ~3 s on a 198 MB dataset). Gate on `aof_rewrite_scheduled:0` **and** `aof_rewrites` ≥ 1. Verify:
+  `BGSAVE; CONFIG SET appendonly yes; INFO persistence` on a scratch instance.
 - **Bolt port is `65535`** per `GRAPH.CONFIG` (not the Bolt default).
 - **Default `TIMEOUT` is 1000ms — and writes ignore it entirely while `TIMEOUT_MAX=0` (this lab's
   default)**; a write then runs to completion regardless of clause or default. Setting

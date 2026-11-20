@@ -1,0 +1,9 @@
+Results | Records produced: 10, Execution time: 0.001392 ms
+    Limit | Records produced: 10, Execution time: 0.001428 ms
+        Sort | Records produced: 10, Execution time: 0.002246 ms
+            Project | Records produced: 10, Execution time: 0.008183 ms
+                Aggregate | Records produced: 10, Execution time: 4.559874 ms
+                    Optional Conditional Traverse | (seed)->(related:Message) | Records produced: 15278, Execution time: 1.350805 ms
+                        Conditional Variable Length Traverse | (seed)-[@anon_0:HEAD|:NEXT*0..INF]->(t) | Records produced: 10, Execution time: 29.185247 ms
+                            ProcedureCall | Records produced: 10, Execution time: 0.302226 ms
+                                Node By Index Scan | (x:Message) | Records produced: 1, Execution time: 0.021700 ms

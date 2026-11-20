@@ -1,0 +1,9 @@
+## THREAD_COUNT=8 OMP=8
+c=1 {"clients": 1, "secs": 15.0, "ops": 1876, "ops_per_s": 125.1, "hybrid": {"p50": 26.6, "p99": 69.4}, "chunks": {"p50": 2.2, "p99": 3.1}, "thread": {"p50": 1.1, "p99": 1.7}, "fulltext": {"p50": 0.8, "p99": 1.3}, "errors": 0, "err_sample": []}
+c=8 {"clients": 8, "secs": 15.0, "ops": 9504, "ops_per_s": 633.6, "hybrid": {"p50": 33.6, "p99": 80.9}, "chunks": {"p50": 5.7, "p99": 20.5}, "thread": {"p50": 3.0, "p99": 17.8}, "fulltext": {"p50": 2.6, "p99": 16.6}, "errors": 0, "err_sample": []}
+c=16 {"clients": 16, "secs": 15.0, "ops": 9916, "ops_per_s": 661.1, "hybrid": {"p50": 46.3, "p99": 113.6}, "chunks": {"p50": 17.2, "p99": 65.8}, "thread": {"p50": 11.6, "p99": 50.7}, "fulltext": {"p50": 10.6, "p99": 53.0}, "errors": 0, "err_sample": []}
+c=32 {"clients": 32, "secs": 15.0, "ops": 9604, "ops_per_s": 640.3, "hybrid": {"p50": 75.2, "p99": 218.6}, "chunks": {"p50": 40.4, "p99": 168.0}, "thread": {"p50": 26.0, "p99": 129.8}, "fulltext": {"p50": 25.9, "p99": 133.9}, "errors": 0, "err_sample": []}
+Query internal execution time: 1322.273249 milliseconds
+Query internal execution time: 1295.831338 milliseconds
+Query internal execution time: 1289.933515 milliseconds
+os_threads=21

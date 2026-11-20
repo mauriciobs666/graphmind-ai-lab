@@ -1,0 +1,9 @@
+== 'ASYNC_DELETE 1' state=exited exit=1 ad=Could not connect to Redis at 127.0.0.1:16592: Connection refused
+1:M 20 Nov 2026 17:40:56.336 # Module /var/lib/falkordb/bin/falkordb.so initialization failed. Module not loaded
+1:M 20 Nov 2026 17:40:56.336 # Can't load module from /var/lib/falkordb/bin/falkordb.so: server aborting
+== 'ASYNC_DELETE yes' state=running exit=0 ad=1
+1:M 20 Nov 2026 17:41:00.292 * Ready to accept connections tcp
+== 'QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE no' state=running exit=0 ad=0
+1:M 20 Nov 2026 17:41:05.246 * Ready to accept connections tcp
+== --cpus 2 THREAD_COUNT=8 OMP=8 nproc_in=8
+== --cpuset-cpus 0-1 THREAD_COUNT=8 OMP=2 nproc_in=2

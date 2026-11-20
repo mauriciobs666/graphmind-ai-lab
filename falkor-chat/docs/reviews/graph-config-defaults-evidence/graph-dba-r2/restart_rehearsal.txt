@@ -1,0 +1,42 @@
+## 0. 'live' instance on the old image args, seeded with three graphs
+db.indexes() columns: label status N OPERATIONAL
+## 1. dry run of the edited script on a scratch dir (not the 'live' one), spare port
+Module args:             THREAD_COUNT 8 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000
+
+MAX_QUEUED_QUERIES 320
+## 3. inventory before
+cpg_x nodes=40000 edges=20000 indexes=1
+ws:a nodes=40000 edges=20000 indexes=1
+ws:b nodes=40000 edges=20000 indexes=1
+## 4. save
+OK
+SAVE took .080799779 s
+LASTSAVE 1795201521 -> 1795201527 advanced=yes
+## 5. stop with shutdown log captured despite --rm
+1:M 20 Nov 2026 19:05:27.269 * DB saved on disk
+1:M 20 Nov 2026 19:05:27.471 * Saving the final RDB snapshot before exiting.
+1:M 20 Nov 2026 19:05:27.514 * DB saved on disk
+1:M 20 Nov 2026 19:05:27.514 # Redis is now ready to exit, bye bye...
+## 6. start with the edited script (env-file args)
+Module args:             THREAD_COUNT 8 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000
+## 7. inventory after + diff + positive control
+diff exit=0 (want 0)
+control diff exit=1 (want 1)
+TIMEOUT	1000
+CACHE_SIZE	25
+ASYNC_DELETE	1
+OMP_THREAD_COUNT	1
+THREAD_COUNT	8
+RESULTSET_SIZE	10000
+MAX_QUEUED_QUERIES	320
+QUERY_MEM_CAPACITY	67108864
+## 8. rollback drill: bad args abort the start; rollback command restores the old args on the same data
+bad start running? 0
+after rollback: 
+rollback inventory diff exit=0 (want 0)
+rehearsal containers removed
+Module args:             MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000
+graph module args: falkordb.so args MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000
+MAX_QUEUED_QUERIES 25
+ERR Invalid graph operation on empty key 
+count(status) 0

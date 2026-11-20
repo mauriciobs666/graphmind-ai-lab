@@ -1,0 +1,9 @@
+## THREAD_COUNT=4 OMP=4
+c=1 {"clients": 1, "secs": 15.0, "ops": 2028, "ops_per_s": 135.2, "hybrid": {"p50": 23.6, "p99": 63.2}, "chunks": {"p50": 2.2, "p99": 3.0}, "thread": {"p50": 1.0, "p99": 1.5}, "fulltext": {"p50": 0.8, "p99": 1.3}, "errors": 0, "err_sample": []}
+c=8 {"clients": 8, "secs": 15.0, "ops": 8304, "ops_per_s": 553.6, "hybrid": {"p50": 32.3, "p99": 72.2}, "chunks": {"p50": 8.5, "p99": 32.0}, "thread": {"p50": 4.9, "p99": 29.4}, "fulltext": {"p50": 4.8, "p99": 28.9}, "errors": 0, "err_sample": []}
+c=16 {"clients": 16, "secs": 15.0, "ops": 8576, "ops_per_s": 571.7, "hybrid": {"p50": 45.2, "p99": 106.1}, "chunks": {"p50": 25.3, "p99": 65.4}, "thread": {"p50": 16.9, "p99": 52.2}, "fulltext": {"p50": 15.2, "p99": 55.3}, "errors": 0, "err_sample": []}
+c=32 {"clients": 32, "secs": 15.0, "ops": 14524, "ops_per_s": 968.3, "hybrid": {"p50": 52.1, "p99": 136.4}, "chunks": {"p50": 30.8, "p99": 105.3}, "thread": {"p50": 22.8, "p99": 91.8}, "fulltext": {"p50": 24.0, "p99": 90.0}, "errors": 6208, "err_sample": ["Max pending queries exceeded", "Max pending queries exceeded"]}
+Query internal execution time: 1285.415815 milliseconds
+Query internal execution time: 1259.559905 milliseconds
+Query internal execution time: 1263.192089 milliseconds
+os_threads=17

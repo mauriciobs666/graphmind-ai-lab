@@ -1,0 +1,25 @@
+THREAD_COUNT before=8 set(4)=> This configuration parameter cannot be set at run-time after=8
+OMP_THREAD_COUNT before=8 set(4)=> This configuration parameter cannot be set at run-time after=8
+CACHE_SIZE before=25 set(50)=> This configuration parameter cannot be set at run-time after=25
+MAX_QUEUED_QUERIES before=25 set(100)=> OK after=100
+QUERY_MEM_CAPACITY before=0 set(104857600)=> OK after=104857600
+ASYNC_DELETE before=1 set(0)=> Failed to set config value ASYNC_DELETE to 0 after=1
+TIMEOUT before=1000 set(2000)=> OK after=2000
+TIMEOUT_DEFAULT before=0 set(2000)=> OK after=2000
+TIMEOUT_MAX before=0 set(30000)=> OK after=30000
+RESULTSET_SIZE before=10000 set(5000)=> OK after=5000
+VKEY_MAX_ENTITY_COUNT before=100000 set(50000)=> OK after=50000
+DELTA_MAX_PENDING_CHANGES before=10000 set(5000)=> OK after=5000
+NODE_CREATION_BUFFER before=16384 set(8192)=> This configuration parameter cannot be set at run-time after=16384
+EFFECTS_THRESHOLD before=300 set(500)=> OK after=500
+CMD_INFO before=1 set(0)=> Failed to set config value CMD_INFO to 0 after=1
+MAX_INFO_QUERIES before=1000 set(500)=> OK after=500
+DELAY_INDEXING before=0 set(1)=> Failed to set config value DELAY_INDEXING to 1 after=0
+JS_HEAP_SIZE before=268435456 set(134217728)=> OK after=134217728
+BOLT_PORT before=140737291485183 set(7687)=> This configuration parameter cannot be set at run-time after=140737291485183
+ASYNC_DELETE set(no) => OK after=0
+ASYNC_DELETE set(false) => Failed to set config value ASYNC_DELETE to false after=0
+CMD_INFO set(no) => OK after=0
+CMD_INFO set(false) => Failed to set config value CMD_INFO to false after=0
+DELAY_INDEXING set(no) => OK after=0
+DELAY_INDEXING set(false) => Failed to set config value DELAY_INDEXING to false after=0

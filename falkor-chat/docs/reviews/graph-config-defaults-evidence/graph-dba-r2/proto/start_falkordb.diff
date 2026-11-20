@@ -1,0 +1,47 @@
+--- /home/mauricio/prg/graphmind-ai-lab/falkor-chat/scripts/start_falkordb.sh	2026-07-09 22:20:02.398077880 -0300
++++ scripts/start_falkordb.sh	2026-11-20 15:35:29.572595826 -0300
+@@ -39,18 +39,33 @@
+ FALKORDB_PORT="${FALKORDB_PORT:-6379}"
+ FALKORDB_WEB_PORT="${FALKORDB_WEB_PORT:-3000}"
+ FALKORDB_CONTAINER_NAME="${FALKORDB_CONTAINER_NAME:-falkordb-dev}"
++FALKORDB_VOLUME="${FALKORDB_VOLUME:-falkordb-data}"
++FALKORDB_ENV_FILE="${FALKORDB_ENV_FILE:-$(cd "$(dirname "$0")/.." && pwd)/config/falkordb.env}"
++
++# Module args: a full FALKORDB_ARGS in the environment wins as-is (the rollback path). Otherwise
++# compose it from the env file, where an already-set FALKORDB_THREAD_COUNT/FALKORDB_MODULE_ARGS wins.
++# The file is parsed, not sourced: its values contain spaces.
++if [ -z "${FALKORDB_ARGS:-}" ]; then
++  while IFS='=' read -r key value; do
++    case "$key" in ''|'#'*) continue ;; esac
++    if [ -z "${!key+x}" ]; then printf -v "$key" '%s' "$value"; fi
++  done < "$FALKORDB_ENV_FILE"
++  FALKORDB_ARGS="THREAD_COUNT ${FALKORDB_THREAD_COUNT:?set in $FALKORDB_ENV_FILE} ${FALKORDB_MODULE_ARGS:?set in $FALKORDB_ENV_FILE}"
++fi
+ 
+ echo "Starting FalkorDB container '${FALKORDB_CONTAINER_NAME}' (${FALKORDB_IMAGE})..."
+ echo "Redis/FalkorDB endpoint: localhost:${FALKORDB_PORT}"
+ echo "Web console:             http://localhost:${FALKORDB_WEB_PORT}"
+-echo "Data volume:             falkordb-data (persists across restarts)"
++echo "Data volume:             ${FALKORDB_VOLUME}"
++echo "Module args:             ${FALKORDB_ARGS}"
+ 
+ if [ "$DETACH" -eq 1 ]; then
+   docker run \
+     --name "${FALKORDB_CONTAINER_NAME}" \
+     -p "${FALKORDB_PORT}:6379" \
+     -p "${FALKORDB_WEB_PORT}:3000" \
+-    -v falkordb-data:/var/lib/falkordb/data \
++    -e FALKORDB_ARGS="${FALKORDB_ARGS}" \
++    -v "${FALKORDB_VOLUME}":/var/lib/falkordb/data \
+     --rm -d "${FALKORDB_IMAGE}"
+   echo "Started in the background. Stop with: docker stop ${FALKORDB_CONTAINER_NAME}"
+ else
+@@ -58,6 +73,7 @@
+     --name "${FALKORDB_CONTAINER_NAME}" \
+     -p "${FALKORDB_PORT}:6379" \
+     -p "${FALKORDB_WEB_PORT}:3000" \
+-    -v falkordb-data:/var/lib/falkordb/data \
++    -e FALKORDB_ARGS="${FALKORDB_ARGS}" \
++    -v "${FALKORDB_VOLUME}":/var/lib/falkordb/data \
+     --rm -it "${FALKORDB_IMAGE}"
+ fi

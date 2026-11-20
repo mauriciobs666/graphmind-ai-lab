@@ -1,0 +1,337 @@
+## ws:demo
+count(m)
+0
+Cached execution: 0
+Query internal execution time: 2.534392 milliseconds
+count(c)
+0
+Cached execution: 0
+Query internal execution time: 0.192443 milliseconds
+label
+properties
+types
+options
+SUPERSEDES
+[matchId, status]
+{matchId: [RANGE], status: [RANGE]}
+{matchId: {}, status: {}}
+SAME_AS
+[matchId, status]
+{matchId: [RANGE], status: [RANGE]}
+{matchId: {}, status: {}}
+Order
+[orderId]
+{orderId: [RANGE]}
+{orderId: {}}
+CartItem
+[customerId, productId]
+{customerId: [RANGE], productId: [RANGE]}
+{customerId: {}, productId: {}}
+Cart
+[customerId]
+{customerId: [RANGE]}
+{customerId: {}}
+Customer
+[customerId]
+{customerId: [RANGE]}
+{customerId: {}}
+WorkspaceConfig
+[workspaceConfigId]
+{workspaceConfigId: [RANGE]}
+{workspaceConfigId: {}}
+ReadCursor
+[cursorId]
+{cursorId: [RANGE]}
+{cursorId: {}}
+TraceEvent
+[traceId]
+{traceId: [RANGE]}
+{traceId: {}}
+StepRun
+[stepRunId, status]
+{stepRunId: [RANGE], status: [RANGE]}
+{stepRunId: {}, status: {}}
+WorkflowRun
+[runId, status, startedAt]
+{runId: [RANGE], status: [RANGE], startedAt: [RANGE]}
+{runId: {}, status: {}, startedAt: {}}
+WorkflowDefSnapshot
+[key, version]
+{key: [RANGE], version: [RANGE]}
+{key: {}, version: {}}
+Step
+[key, stepUid]
+{key: [RANGE], stepUid: [RANGE]}
+{key: {}, stepUid: {}}
+Entity
+[entityId, nameNormalized, name]
+{entityId: [RANGE], nameNormalized: [RANGE], name: [FULLTEXT]}
+{entityId: {}, nameNormalized: {}, name: {}}
+DocumentDeletion
+[documentId]
+{documentId: [RANGE]}
+{documentId: {}}
+Chunk
+[chunkId, embedding]
+{chunkId: [RANGE], embedding: [VECTOR]}
+{chunkId: {}, embedding: {dimension: 1024, similarityFunction: cosine, M: 16, efConstruction: 200, efRuntime: 10}}
+Document
+[documentId, currentVersion, textNormalizedHash, lshBand0, lshBand1, lshBand2, lshBand3, lshBand4, lshBand5, lshBand6, lshBand7, title]
+{documentId: [RANGE], currentVersion: [RANGE], textNormalizedHash: [RANGE], lshBand0: [RANGE], lshBand1: [RANGE], lshBand2: [RANGE], lshBand3: [RANGE], lshBand4: [RANGE], lshBand5: [RANGE], lshBand6: [RANGE], lshBand7: [RANGE], title: [FULLTEXT]}
+{documentId: {}, currentVersion: {}, textNormalizedHash: {}, lshBand0: {}, lshBand1: {}, lshBand2: {}, lshBand3: {}, lshBand4: {}, lshBand5: {}, lshBand6: {}, lshBand7: {}, title: {}}
+Message
+[msgId, createdAt, text, embedding]
+{msgId: [RANGE], createdAt: [RANGE], text: [FULLTEXT], embedding: [VECTOR]}
+{msgId: {}, createdAt: {}, text: {}, embedding: {dimension: 1024, similarityFunction: cosine, M: 16, efConstruction: 200, efRuntime: 10}}
+Thread
+[threadId, updatedAt]
+{threadId: [RANGE], updatedAt: [RANGE]}
+{threadId: {}, updatedAt: {}}
+Channel
+[channelId]
+{channelId: [RANGE]}
+{channelId: {}}
+Agent
+[agentId]
+{agentId: [RANGE]}
+{agentId: {}}
+User
+[userId]
+{userId: [RANGE]}
+{userId: {}}
+Cached execution: 0
+Query internal execution time: 1.164124 milliseconds
+## ws:acme
+count(m)
+30
+Cached execution: 0
+Query internal execution time: 0.344355 milliseconds
+count(c)
+41
+Cached execution: 0
+Query internal execution time: 0.241572 milliseconds
+label
+properties
+types
+options
+SUPERSEDES
+[matchId, status]
+{matchId: [RANGE], status: [RANGE]}
+{matchId: {}, status: {}}
+SAME_AS
+[matchId, status]
+{matchId: [RANGE], status: [RANGE]}
+{matchId: {}, status: {}}
+DocumentDeletion
+[documentId]
+{documentId: [RANGE]}
+{documentId: {}}
+Order
+[orderId]
+{orderId: [RANGE]}
+{orderId: {}}
+CartItem
+[customerId, productId]
+{customerId: [RANGE], productId: [RANGE]}
+{customerId: {}, productId: {}}
+Cart
+[customerId]
+{customerId: [RANGE]}
+{customerId: {}}
+Customer
+[customerId]
+{customerId: [RANGE]}
+{customerId: {}}
+WorkspaceConfig
+[workspaceConfigId]
+{workspaceConfigId: [RANGE]}
+{workspaceConfigId: {}}
+TraceEvent
+[traceId]
+{traceId: [RANGE]}
+{traceId: {}}
+Step
+[key, stepUid]
+{key: [RANGE], stepUid: [RANGE]}
+{key: {}, stepUid: {}}
+ReadCursor
+[cursorId]
+{cursorId: [RANGE]}
+{cursorId: {}}
+StepRun
+[stepRunId, status]
+{stepRunId: [RANGE], status: [RANGE]}
+{stepRunId: {}, status: {}}
+WorkflowRun
+[runId, status, startedAt]
+{runId: [RANGE], status: [RANGE], startedAt: [RANGE]}
+{runId: {}, status: {}, startedAt: {}}
+WorkflowDefSnapshot
+[key, version]
+{key: [RANGE], version: [RANGE]}
+{key: {}, version: {}}
+Entity
+[entityId, nameNormalized, name]
+{entityId: [RANGE], nameNormalized: [RANGE], name: [FULLTEXT]}
+{entityId: {}, nameNormalized: {}, name: {}}
+Chunk
+[chunkId, embedding, text]
+{chunkId: [RANGE], embedding: [VECTOR], text: [FULLTEXT]}
+{chunkId: {}, embedding: {dimension: 1024, similarityFunction: cosine, M: 16, efConstruction: 200, efRuntime: 10}, text: {}}
+Document
+[documentId, currentVersion, textNormalizedHash, lshBand0, lshBand1, lshBand2, lshBand3, lshBand4, lshBand5, lshBand6, lshBand7, title]
+{documentId: [RANGE], currentVersion: [RANGE], textNormalizedHash: [RANGE], lshBand0: [RANGE], lshBand1: [RANGE], lshBand2: [RANGE], lshBand3: [RANGE], lshBand4: [RANGE], lshBand5: [RANGE], lshBand6: [RANGE], lshBand7: [RANGE], title: [FULLTEXT]}
+{documentId: {}, currentVersion: {}, textNormalizedHash: {}, lshBand0: {}, lshBand1: {}, lshBand2: {}, lshBand3: {}, lshBand4: {}, lshBand5: {}, lshBand6: {}, lshBand7: {}, title: {}}
+Message
+[msgId, createdAt, text, embedding]
+{msgId: [RANGE], createdAt: [RANGE], text: [FULLTEXT], embedding: [VECTOR]}
+{msgId: {}, createdAt: {}, text: {}, embedding: {dimension: 1024, similarityFunction: cosine, M: 16, efConstruction: 200, efRuntime: 10}}
+Thread
+[threadId, updatedAt]
+{threadId: [RANGE], updatedAt: [RANGE]}
+{threadId: {}, updatedAt: {}}
+Channel
+[channelId]
+{channelId: [RANGE]}
+{channelId: {}}
+Agent
+[agentId]
+{agentId: [RANGE]}
+{agentId: {}}
+User
+[userId]
+{userId: [RANGE]}
+{userId: {}}
+Cached execution: 0
+Query internal execution time: 2.010089 milliseconds
+## ws:agent-team
+count(m)
+0
+Cached execution: 0
+Query internal execution time: 0.268974 milliseconds
+count(c)
+898
+Cached execution: 0
+Query internal execution time: 0.760658 milliseconds
+label
+properties
+types
+options
+SUPERSEDES
+[matchId, status]
+{matchId: [RANGE], status: [RANGE]}
+{matchId: {}, status: {}}
+SAME_AS
+[matchId, status]
+{matchId: [RANGE], status: [RANGE]}
+{matchId: {}, status: {}}
+Order
+[orderId]
+{orderId: [RANGE]}
+{orderId: {}}
+CartItem
+[customerId, productId]
+{customerId: [RANGE], productId: [RANGE]}
+{customerId: {}, productId: {}}
+Cart
+[customerId]
+{customerId: [RANGE]}
+{customerId: {}}
+Customer
+[customerId]
+{customerId: [RANGE]}
+{customerId: {}}
+WorkspaceConfig
+[workspaceConfigId]
+{workspaceConfigId: [RANGE]}
+{workspaceConfigId: {}}
+ReadCursor
+[cursorId]
+{cursorId: [RANGE]}
+{cursorId: {}}
+TraceEvent
+[traceId]
+{traceId: [RANGE]}
+{traceId: {}}
+StepRun
+[stepRunId, status]
+{stepRunId: [RANGE], status: [RANGE]}
+{stepRunId: {}, status: {}}
+WorkflowRun
+[runId, status, startedAt]
+{runId: [RANGE], status: [RANGE], startedAt: [RANGE]}
+{runId: {}, status: {}, startedAt: {}}
+WorkflowDefSnapshot
+[key, version]
+{key: [RANGE], version: [RANGE]}
+{key: {}, version: {}}
+Step
+[key, stepUid]
+{key: [RANGE], stepUid: [RANGE]}
+{key: {}, stepUid: {}}
+Entity
+[entityId, nameNormalized, name]
+{entityId: [RANGE], nameNormalized: [RANGE], name: [FULLTEXT]}
+{entityId: {}, nameNormalized: {}, name: {}}
+DocumentDeletion
+[documentId]
+{documentId: [RANGE]}
+{documentId: {}}
+Chunk
+[chunkId, embedding]
+{chunkId: [RANGE], embedding: [VECTOR]}
+{chunkId: {}, embedding: {dimension: 1024, similarityFunction: cosine, M: 16, efConstruction: 200, efRuntime: 10}}
+Document
+[documentId, currentVersion, textNormalizedHash, lshBand0, lshBand1, lshBand2, lshBand3, lshBand4, lshBand5, lshBand6, lshBand7, title]
+{documentId: [RANGE], currentVersion: [RANGE], textNormalizedHash: [RANGE], lshBand0: [RANGE], lshBand1: [RANGE], lshBand2: [RANGE], lshBand3: [RANGE], lshBand4: [RANGE], lshBand5: [RANGE], lshBand6: [RANGE], lshBand7: [RANGE], title: [FULLTEXT]}
+{documentId: {}, currentVersion: {}, textNormalizedHash: {}, lshBand0: {}, lshBand1: {}, lshBand2: {}, lshBand3: {}, lshBand4: {}, lshBand5: {}, lshBand6: {}, lshBand7: {}, title: {}}
+Message
+[msgId, createdAt, text, embedding]
+{msgId: [RANGE], createdAt: [RANGE], text: [FULLTEXT], embedding: [VECTOR]}
+{msgId: {}, createdAt: {}, text: {}, embedding: {dimension: 1024, similarityFunction: cosine, M: 16, efConstruction: 200, efRuntime: 10}}
+Thread
+[threadId, updatedAt]
+{threadId: [RANGE], updatedAt: [RANGE]}
+{threadId: {}, updatedAt: {}}
+Channel
+[channelId]
+{channelId: [RANGE]}
+{channelId: {}}
+Agent
+[agentId]
+{agentId: [RANGE]}
+{agentId: {}}
+User
+[userId]
+{userId: [RANGE]}
+{userId: {}}
+Cached execution: 0
+Query internal execution time: 1.357291 milliseconds
+## demo max thread len
+t
+c
+th-p-e0f5ee54dbff47ebbf79bfa08f75164e
+15
+th-p-9f09b78ce8214989b6a9cacf29fec779
+14
+th-c8032b1d0cde43c792ba76f78c84ce47
+14
+Cached execution: 0
+Query internal execution time: 5.872426 milliseconds
+## agent-team chunks per doc / entity fan-in
+e.name
+c
+falkor-chat
+96
+knowledge base
+52
+model-bench
+41
+Cached execution: 0
+Query internal execution time: 9.727461 milliseconds
+avg(size(c.text))
+max(size(c.text))
+705.305122494432
+1142
+Cached execution: 0
+Query internal execution time: 2.037585 milliseconds

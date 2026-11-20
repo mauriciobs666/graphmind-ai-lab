@@ -1,0 +1,4 @@
+## THREAD_COUNT vs container CPU limits (host nproc=8)
+limit='none': THREAD_COUNT=8 OMP_THREAD_COUNT=8 nproc=8 log: Thread pool created, using 8 threads
+limit='--cpus 2': THREAD_COUNT=8 OMP_THREAD_COUNT=8 nproc=8 log: Thread pool created, using 8 threads
+limit='--cpuset-cpus 0-1': THREAD_COUNT=8 OMP_THREAD_COUNT=2 nproc=2 log: Thread pool created, using 8 threads

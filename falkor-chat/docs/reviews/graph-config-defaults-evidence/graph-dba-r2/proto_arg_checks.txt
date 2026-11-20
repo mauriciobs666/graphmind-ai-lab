@@ -1,0 +1,15 @@
+== default:
+Module args:             THREAD_COUNT 8 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000
+== FALKORDB_THREAD_COUNT=4 override:
+Module args:             THREAD_COUNT 4 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES 320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE 10000
+== full FALKORDB_ARGS rollback override:
+Module args:             MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000
+== missing env file, no override (must fail):
+scripts/args_only.sh: line 54: /nonexistent: No such file or directory
+exit=1
+== compose render with --env-file:
+      FALKORDB_ARGS: THREAD_COUNT 8 OMP_THREAD_COUNT 1 CACHE_SIZE 25 MAX_QUEUED_QUERIES
+        320 QUERY_MEM_CAPACITY 67108864 ASYNC_DELETE yes TIMEOUT 1000 RESULTSET_SIZE
+        10000
+== compose render without --env-file (must fail):
+error while interpolating services.falkordb.environment.FALKORDB_ARGS: required variable FALKORDB_THREAD_COUNT is missing a value: run docker compose --env-file config/falkordb.env

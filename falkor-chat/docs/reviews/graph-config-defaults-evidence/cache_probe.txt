@@ -1,0 +1,2 @@
+{"get_message": {"miss_ms_median": 1.11, "hit_ms_median": 1.05, "first_cached_flag": false, "second_cached_flag": true}, "read_thread(50)": {"miss_ms_median": 2.21, "hit_ms_median": 2.14, "first_cached_flag": false, "second_cached_flag": true}, "hybrid_msg": {"miss_ms_median": 49.61, "hit_ms_median": 51.06, "first_cached_flag": false, "second_cached_flag": true}}
+{"distinct_texts": 100, "used_memory_delta_bytes": -2473944, "per_text_bytes": -24740, "per_text_per_thread_upper_bytes_if_8_thread_caches": -3093}

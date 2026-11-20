@@ -1,0 +1,4 @@
+Labels added: 1000
+files: dump.rdb
+after naive enable: ERR Invalid graph operation on empty key  
+restart WITHOUT appendonly (dump.rdb after one shutdown under AOF): ERR Invalid graph operation on empty key   keys=0

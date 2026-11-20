@@ -1,0 +1,8 @@
+## scheduled AOF rewrite behind a BGSAVE (r2 throwaway, used_memory_human:198.03M)
+Background saving started
+OK
+rdb_bgsave_in_progress:1 aof_enabled:1 aof_rewrite_in_progress:0 aof_rewrite_scheduled:1 aof_last_rewrite_time_sec:-1 aof_last_bgrewrite_status:ok aof_rewrites:0
+t+1s rdb_bgsave_in_progress:1 aof_rewrite_in_progress:0 aof_rewrite_scheduled:1 aof_last_rewrite_time_sec:-1 aof_rewrites:0
+t+2s rdb_bgsave_in_progress:1 aof_rewrite_in_progress:0 aof_rewrite_scheduled:1 aof_last_rewrite_time_sec:-1 aof_rewrites:0
+t+3s rdb_bgsave_in_progress:0 aof_rewrite_in_progress:0 aof_rewrite_scheduled:0 aof_last_rewrite_time_sec:0 aof_rewrites:1
+OK

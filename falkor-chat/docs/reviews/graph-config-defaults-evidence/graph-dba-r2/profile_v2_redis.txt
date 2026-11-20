@@ -1,0 +1,15 @@
+Results | Records produced: 10, Execution time: 0.001016 ms
+    Limit | Records produced: 10, Execution time: 0.000947 ms
+        Sort | Records produced: 10, Execution time: 0.005717 ms
+            Project | Records produced: 10, Execution time: 0.012473 ms
+                Apply | Records produced: 10, Execution time: 0.027493 ms
+                    Node By Index Scan | (t:Thread) | Records produced: 10, Execution time: 0.105550 ms
+                        ProcedureCall | Records produced: 10, Execution time: 0.185964 ms
+                            Node By Index Scan | (x:Message) | Records produced: 1, Execution time: 0.782127 ms
+                    Aggregate | Records produced: 10, Execution time: 0.038962 ms
+                        Limit | Records produced: 50, Execution time: 0.004626 ms
+                            Distinct | Records produced: 50, Execution time: 0.014982 ms
+                                Project | Records produced: 50, Execution time: 0.011094 ms
+                                    Optional Conditional Traverse | (seed)->(related:Message) | Records produced: 50, Execution time: 14.846964 ms
+                                        Project | Records produced: 10, Execution time: 0.002423 ms
+                                            Argument | Records produced: 10, Execution time: 0.000829 ms

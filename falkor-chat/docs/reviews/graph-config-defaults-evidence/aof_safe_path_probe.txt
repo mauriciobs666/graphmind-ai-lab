@@ -1,0 +1,6 @@
+Labels added: 1000
+OK
+runtime: CONFIG SET appendonly yes -> OK
+aof_enabled:1 aof_rewrite_in_progress:0 aof_last_bgrewrite_status:ok
+restart with --appendonly yes after runtime enable:
+count(n) 1000

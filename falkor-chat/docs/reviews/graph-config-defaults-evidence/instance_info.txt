@@ -1,0 +1,65 @@
+## MODULE LIST
+name
+vectorset
+ver
+1
+path
+
+args
+
+name
+graph
+ver
+41811
+path
+/var/lib/falkordb/bin/falkordb.so
+args
+MAX_QUEUED_QUERIES
+25
+TIMEOUT
+1000
+RESULTSET_SIZE
+10000
+## INFO server
+redis_version:8.6.3
+arch_bits:64
+multiplexing_api:epoll
+process_id:1
+uptime_in_days:1
+io_threads_active:0
+## INFO memory
+used_memory:508583176
+used_memory_human:485.02M
+used_memory_peak_human:499.85M
+total_system_memory_human:5.79G
+maxmemory:0
+maxmemory_human:0B
+maxmemory_policy:noeviction
+mem_fragmentation_ratio:0.08
+## CONFIG GET
+maxmemory
+0
+maxmemory-policy
+noeviction
+appendonly
+no
+appendfsync
+everysec
+save
+3600 1 300 100 60 10000
+io-threads
+1
+## GRAPH.LIST
+cpg_falkorchat
+ws:eval
+ws:k069probe
+ws:acme
+ws:nlq-eval
+ws:demo
+ws:agent-team
+ws:pwq-test
+reference
+ws:test
+reference-test
+## cgroup
+0 0 [redis-server --loadmodule /var/lib/falkordb/bin/falkordb.so] [/var/lib/falkordb/bin/run.sh] ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin","REDIS_VERSION=8.6.3","FALKORDB_HOME=/var/lib/falkordb","FALKORDB_DATA_PATH=/var/lib/falkordb/data","FALKORDB_BIN_PATH=/var/lib/falkordb/bin","FALKORDB_IMPORT_PATH=/var/lib/falkordb/import","FALKORDB_TLS_PATH=/var/lib/falkordb/tls","FALKORDB_BROWSER_PATH=/var/lib/falkordb/browser","ARCH=","TLS=0","BROWSER=1","FALKORDB_ARGS=MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000"]

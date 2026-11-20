@@ -1,0 +1,254 @@
+## ws:acme
+l
+c
+Entity
+544
+Chunk
+87
+StepRun
+78
+Message
+52
+Step
+31
+Document
+29
+WorkflowRun
+21
+TraceEvent
+13
+WorkflowDefSnapshot
+12
+Channel
+2
+Thread
+2
+Agent
+1
+Cached execution: 0
+Query internal execution time: 6.097057 milliseconds
+t
+c
+ABOUT
+544
+RELATES_TO
+381
+NEXT
+107
+HAS_CHUNK
+87
+HAS_STEP_RUN
+78
+RAN
+59
+POSTED_BY
+52
+HAS_STEP
+31
+INGESTED_BY
+29
+EMITTED
+25
+LAST_STEP_RUN
+21
+TRANSITION
+20
+Cached execution: 0
+Query internal execution time: 13.780817 milliseconds
+## ws:demo
+l
+c
+Message
+12106
+StepRun
+5553
+WorkflowRun
+2195
+Thread
+1584
+Channel
+1584
+User
+1584
+Customer
+1583
+CartItem
+919
+Cart
+805
+OrderLine
+31
+Order
+30
+Step
+19
+Cached execution: 0
+Query internal execution time: 27.969612 milliseconds
+t
+c
+NEXT
+14440
+POSTED_BY
+12106
+MENTIONS_MEMBER
+6373
+PRODUCED
+5652
+RAN
+5553
+HAS_STEP_RUN
+5553
+MEMBER_OF
+3168
+OF_DEF
+2195
+TRIGGERED_BY
+2195
+LAST_STEP_RUN
+1636
+HAS_THREAD
+1584
+HEAD
+1583
+Cached execution: 0
+Query internal execution time: 275.009213 milliseconds
+## ws:agent-team
+l
+c
+Entity
+12519
+Chunk
+898
+Document
+519
+DocumentDeletion
+129
+Agent
+13
+WorkspaceConfig
+1
+User
+1
+Cached execution: 0
+Query internal execution time: 12.342783 milliseconds
+t
+c
+ABOUT
+11324
+RELATES_TO
+8090
+SAME_AS
+5138
+HAS_CHUNK
+898
+INGESTED_BY
+519
+Cached execution: 0
+Query internal execution time: 44.132282 milliseconds
+## ws:eval
+l
+c
+Message
+121
+Thread
+12
+Channel
+7
+Agent
+1
+User
+1
+Cached execution: 0
+Query internal execution time: 3.389604 milliseconds
+t
+c
+POSTED_BY
+121
+NEXT
+109
+HEAD
+12
+HAS_THREAD
+12
+TAIL
+12
+Cached execution: 0
+Query internal execution time: 3.422189 milliseconds
+## ws:nlq-eval
+l
+c
+Entity
+62
+Step
+15
+Message
+15
+Chunk
+12
+Document
+12
+Thread
+8
+StepRun
+7
+WorkflowRun
+7
+WorkflowDefSnapshot
+4
+Agent
+2
+User
+2
+Channel
+1
+Cached execution: 0
+Query internal execution time: 0.688441 milliseconds
+t
+c
+ABOUT
+62
+RELATES_TO
+44
+SAME_AS
+22
+HAS_STEP
+15
+POSTED_BY
+15
+HAS_CHUNK
+12
+TRANSITION
+12
+INGESTED_BY
+12
+PRODUCED
+8
+HAS_THREAD
+8
+NEXT
+8
+TRIGGERED_BY
+7
+Cached execution: 0
+Query internal execution time: 1.829972 milliseconds
+## reference
+l
+c
+Step
+15
+Product
+15
+WorkflowDef
+4
+Cached execution: 0
+Query internal execution time: 0.637810 milliseconds
+t
+c
+HAS_STEP
+15
+TRANSITION
+12
+START
+4
+Cached execution: 0
+Query internal execution time: 1.021030 milliseconds

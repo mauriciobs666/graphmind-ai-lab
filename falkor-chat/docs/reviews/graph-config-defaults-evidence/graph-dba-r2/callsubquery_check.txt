@@ -1,0 +1,15 @@
+Labels added: 7
+-- CALL {} bounded, seed with matches and seed without:
+seed.id
+expanded
+1
+[1, 2]
+9
+[]
+-- current form:
+seed.id
+[m IN ex | m.id]
+1
+[1, 2]
+9
+[]

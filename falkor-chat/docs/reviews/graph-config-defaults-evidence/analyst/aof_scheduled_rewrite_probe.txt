@@ -1,0 +1,7 @@
+analyst probe, container analyst-k098-d (port 16594, image falkordb/falkordb:v4.18.11, default args), 2026-11-20
+3,000,000 nodes created (used_memory_human:935.26M); BGSAVE; immediately CONFIG SET appendonly yes -> OK
+INFO persistence right after:
+rdb_bgsave_in_progress:1  aof_enabled:1  aof_rewrite_in_progress:0  aof_rewrite_scheduled:1  aof_last_rewrite_time_sec:-1  aof_last_bgrewrite_status:ok  aof_rewrites:0
+INFO persistence 8 s later:
+rdb_bgsave_in_progress:0  aof_rewrite_in_progress:0  aof_rewrite_scheduled:0  aof_last_rewrite_time_sec:1  aof_last_bgrewrite_status:ok  aof_rewrites:1
+=> the note's wait condition (aof_rewrite_in_progress:0 AND aof_last_bgrewrite_status:ok) already holds while no rewrite has run.

@@ -1,0 +1,6 @@
+elastic_kare	cypher-mcp:fd5d52111ad0		Up 17 minutes
+quizzical_yalow	cypher-mcp:fd5d52111ad0		Up 5 hours
+serene_zhukovsky	cypher-mcp:fd5d52111ad0		Up 5 hours
+ccg-falkordb	falkordb/falkordb:v4.18.11	127.0.0.1:6390->6379/tcp	Up 17 hours
+ccg-falkordb-tw-16390	falkordb/falkordb:v4.18.11	127.0.0.1:16390->6379/tcp	Up 38 hours
+falkordb-dev	falkordb/falkordb:v4.18.11	0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp, 0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp	Up 39 hours

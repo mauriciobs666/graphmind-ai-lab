@@ -1,0 +1,12 @@
+--- /home/mauricio/prg/graphmind-ai-lab/falkor-chat/compose.yaml	2026-08-19 19:10:58.882174098 -0300
++++ proto/compose.yaml	2026-11-20 15:35:03.942606192 -0300
+@@ -12,6 +12,9 @@
+ services:
+   falkordb:
+     image: falkordb/falkordb:v4.18.11
++    environment:
++      # Per-deployment values live in config/falkordb.env: run `docker compose --env-file config/falkordb.env up`.
++      FALKORDB_ARGS: "THREAD_COUNT ${FALKORDB_THREAD_COUNT:?run docker compose --env-file config/falkordb.env} ${FALKORDB_MODULE_ARGS:?run docker compose --env-file config/falkordb.env}"
+     ports:
+       - "${FALKORDB_PORT:-6379}:6379"
+       - "${FALKORDB_WEB_PORT:-3000}:3000"
