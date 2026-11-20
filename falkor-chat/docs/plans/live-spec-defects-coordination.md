@@ -28,7 +28,7 @@ Sequencing: implementer units run one at a time — they share `repository.py`/`
 | C1 K-091 close: spec update | `tdd-engineer` | `a1093354e3d6b012f` | accepted | QUERIES §14.9, DESIGN §5.1/§7.1, BACKLOG K-064 | `analyst` `a20ec9d1e5163523e` (`docs/reviews/document-lsh-bands-impl.md` § Close check) → approve w/ suggestions | 136k / 31 |
 | C2 K-096 close: SERVER.md §1.4/§1.7 | `tdd-engineer` | `ade689ec2f7ffb5cc` | accepted | `docs/SERVER.md` | `analyst` `a5cf8134b051914e0` (close check) → approve | — |
 | C3 K-097 close: DESIGN §6.2, QUERIES §12 | `tdd-engineer` | `a35b78e4b204f8e10` | accepted (`89306a90`; close `79aeadd8`) | `docs/DESIGN.md`, `docs/QUERIES.md` | `analyst` `a0052887e4da8f4a4` (close check) → approve w/ suggestions | — |
-| C4 K-098 close: DESIGN §9/§10/§13, QUERIES §18.7, SERVER §1.5 | `graph-dba` | `a4c4436f264289eb8` | delivered (fixes applied; close-check Pass 2 in flight) | live spec + backlog item | `analyst` `a41507a63d6beefa4` (close check) → needs changes, narrowly (C1 blocker, C2 minor; `docs/reviews/graph-config-defaults-impl.md` `## Close check`) | check 218k / 41 |
+| C4 K-098 close: DESIGN §9/§10/§13, QUERIES §18.7, SERVER §1.5 | `graph-dba` | `a4c4436f264289eb8` | accepted (closed `e2f42594`) | live spec + backlog item | `analyst` `a41507a63d6beefa4` (close check) → Pass 1 needs changes, Pass 2 approve (`docs/reviews/graph-config-defaults-impl.md` `## Close check`) | check 218k / 41 |
 | C4m K-098 manual `docs/manuals/operations.md` | `tico` | `a77e91699aa4e5616` | accepted | manual | skipped (trivial; `teco` ran `ps`/`logs` without `--env-file`: rc 1 each) | 58k / 5 |
 
 Documentation impact (for each item's close, not its build unit): the DESIGN/SERVER/QUERIES

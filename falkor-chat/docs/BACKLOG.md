@@ -134,6 +134,24 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `docker inspect` reporting the container missing and, separately, not running; a good start under `-d` is unchanged; the
   three callers surface the failure instead of the 30 s timeout.
 
+### GAL-I01-D0002 — Shell harness: `| grep -q` under `pipefail` can false-fail, and `test_queries.sh` masks a bootstrap failure (🔵 proposed, low — surfaced by the SIGPIPE helper fix `8d629cad`, 2026-11-20)
+
+> Under `set -o pipefail`, `printf … | grep -q` can fail even when the pattern matches, because
+> `grep -q` exits on the first match and `printf` takes SIGPIPE on a large enough input. The
+> assertion helpers in `scripts/test_queries.sh` were fixed for this (here-string grep), but three
+> sites of the same shape remain: `scripts/verify_catalog.sh:77` and `:82`, and
+> `scripts/start_demo.sh:289`. Separately, `test_queries.sh:114` runs `bootstrap_schema.sh … |
+> grep -E "done:|ERROR" || true`, so a failed bootstrap does not stop the run. The failures surface
+> later, as unrelated assertion failures.
+- **Owner:** `tdd-engineer`.
+- **Scope:** rewrite the three sites as here-string greps (the `8d629cad` pattern), and let a
+  bootstrap failure in `test_queries.sh` exit non-zero, using its own exit status rather than the
+  filter's.
+- **Done when:** each site is reproduced first, with an input large enough to SIGPIPE `printf` and
+  a bootstrap stub that fails, and each reproduction goes green after the fix. Run the
+  `test_queries.sh` change through `docs/reviews/test-queries-sigpipe-evidence/probe.sh` per
+  `falkor-chat/REVIEW.md`.
+
 ### K-082 — Storefront demo: optional long-conversation KV stress rerun (🔵 proposed — carried from K-066, closed 2026-10-22)
 
 > The demo runs on `ministral-3-3b` (`-c 8192 --gpu max`) plus the 0.6B embedder, and

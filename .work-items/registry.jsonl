@@ -121,3 +121,4 @@
 {"evid":"562d769bd3714bf1","ts":1795217087838413029,"ev":"new","id":"GAL-F0026","type":"F","parent":null,"home":"model-bench","title":"The `nlq-structured-query` pack no longer mirrors falkor-chat's production parse"}
 {"evid":"12590fd635be4681","ts":1795217087875798244,"ev":"new","id":"GAL-F0027","type":"F","parent":null,"home":"model-bench","title":"An LM Studio outage met by an item's own call is not re-probed"}
 {"evid":"6fbf2588048c47ab","ts":1795217087916972141,"ev":"new","id":"GAL-F0028","type":"F","parent":null,"home":"model-bench","title":"Defects the live spec recorded"}
+{"evid":"347a96236a7b4ae9","ts":1795217518181038103,"ev":"new","id":"GAL-I01-D0002","type":"D","parent":"GAL-I01","home":"falkor-chat","title":"Shell harness: pipefail grep -q SIGPIPE sites and a masked bootstrap failure in test_queries.sh"}
