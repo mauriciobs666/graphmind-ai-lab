@@ -2382,7 +2382,9 @@ class Services:
         `WorkflowRunNotFoundError` when the snapshot (or trigger message) anchor
         misses — nothing is started in either case. A fault *during the drive* is
         caught per D-G: the run is already correctly terminal in the graph, so the
-        caller gets `{"status": "failed", "error": …}`, not a traceback.
+        caller gets `{"status": "failed", "error": …}`, not a traceback. Budget
+        exhaustion raises nothing but reports the same way: `error` is the graph's
+        own `ctx.error` note (`"step budget exceeded"`, K-096).
         """
         executor = self._require_executor()
 
@@ -2440,7 +2442,7 @@ class Services:
                 f"cannot start run: snapshot {def_key!r}@{version!r} has no START "
                 f"or trigger message {trigger_msg_id!r} is missing in this workspace"
             )
-        status, error, _fault_ctx = self._drive_or_fault(
+        status, error, _read_ctx = self._drive_and_report(
             ctx, run_id=run_id, drive=lambda: executor.run(ctx, run_id=run_id)
         )
         out = {
@@ -2516,7 +2518,7 @@ class Services:
                 f"{MAX_CONFIG_LEN}-character bound"
             )
 
-        status, error, fault_ctx = self._drive_or_fault(
+        status, error, read_ctx = self._drive_and_report(
             ctx, run_id=run_id,
             drive=lambda: executor.resume(
                 ctx, run_id=run_id, run_ctx_json=merged_json
@@ -2529,13 +2531,14 @@ class Services:
                 f"workflow run {run_id!r} was resumed concurrently — the input was "
                 f"not applied; re-read the run and retry"
             )
-        # On the clean path the merged ctx IS the graph's ctx (the CAS wrote exactly
-        # it). On the fault path the engine's net has since rewritten `ctx` with its
-        # diagnostic note, so the envelope reports **that** — status and ctx from one
-        # post-fault observation, never a re-read status beside a hoped-for ctx.
+        # On a `done`/`waiting` drive the merged ctx IS the graph's ctx (the CAS
+        # wrote exactly it). On any `failed` drive — a caught fault or budget
+        # exhaustion (K-096) — the engine has since rewritten `ctx` with its
+        # diagnostic note, so the envelope reports **that**, read back from the
+        # graph, never the caller's hoped-for merge.
         out = {
             "runId": run_id, "status": status,
-            "ctx": merged if fault_ctx is None else fault_ctx,
+            "ctx": merged if read_ctx is None else read_ctx,
         }
         if error is not None:
             out["error"] = error
@@ -2638,6 +2641,43 @@ class Services:
                         f"{allowed} declared by step {step_key!r}"
                     )
 
+    def _drive_and_report(
+        self, ctx: CallContext, *, run_id: str, drive: Callable[[], str | None],
+    ) -> tuple[str | None, str | None, dict[str, Any] | None]:
+        """`_drive_or_fault`, plus K-096's read-back of a clean `failed` drive.
+
+        Returns `(status, error, read_ctx)` for the two REST routes
+        (`start_workflow_run`, `submit_workflow_input`). Budget exhaustion is not a
+        fault (plan m-11): `executor._fail_budget` stamps the run `failed` with a
+        `ctx.error` note and *returns* `"failed"`, so `_drive_or_fault` hands back
+        no `error` and no ctx. It is still reported: whenever the drive returns
+        `failed` without a caught fault, the run is read back once and `error` and
+        `read_ctx` both come from that one observation — the engine's own note and
+        the graph's ctx — the same rule the fault path follows.
+
+        **Only `failed` is read back, and that is a concurrency rule, not a saving.**
+        `failed` is terminal: the only writers of an existing run's ctx are
+        `resume_run_with_ctx` (needs `waiting`) and `fail_run` (inside a drive), so
+        nothing can change it between the drive's return and this read. A `waiting`
+        run is open to the next resume the moment the drive returns, so a read-back
+        there could report another actor's ctx as this caller's result; `done`/
+        `waiting` (and a CAS miss, `None`) therefore pass through unchanged, their
+        ctx being the merge this caller's own CAS wrote.
+
+        The timer sweep deliberately calls `_drive_or_fault` directly: its
+        partition is by drive outcome, a budget-failed release stays `resumed`
+        with status `failed`, and its result carries no ctx to correct.
+        """
+        status, error, read_ctx = self._drive_or_fault(
+            ctx, run_id=run_id, drive=drive
+        )
+        if status == "failed" and error is None:
+            run = self._repo.get_run(ctx.ws, run_id=run_id)
+            if run is not None:
+                read_ctx = _load_json_dict(run.get("ctx"))
+                error = read_ctx.get("error")
+        return status, error, read_ctx
+
     def _drive_or_fault(
         self, ctx: CallContext, *, run_id: str, drive: Callable[[], str | None],
     ) -> tuple[str | None, str | None, dict[str, Any] | None]:
@@ -2671,7 +2711,8 @@ class Services:
             "never resolves" half; D-2). Faults raised *before* anything is written
             keep their own status codes. **Budget exhaustion is not here and must
             never be** — `_fail_budget` *returns* `"failed"` through the normal path
-            and raises nothing (plan m-11). `ModelConfigError` (a malformed config
+            and raises nothing (plan m-11); the two REST routes report it through
+            `_drive_and_report`'s read-back instead (K-096). `ModelConfigError` (a malformed config
             file — bad overlay JSON, a bad `baseURL`) is deliberately **not** here:
             config is parsed once at `ModelGateway.from_env()` construction, before
             any run starts, so it has no drive-time occurrence to catch.

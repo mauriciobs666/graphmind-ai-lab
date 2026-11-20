@@ -794,3 +794,40 @@ def test_sweep_bucket_raced_on_a_stale_scanned_step_key_not_just_status(wf_repo)
     assert run["status"] == "waiting"
     assert run["atStepKey"] == "park2"  # moved on, untouched by the sweep
     assert "timerFired" not in json.loads(run["ctx"])  # no stale marker written
+
+
+def test_sweep_buckets_a_release_that_exhausts_the_budget_as_resumed_not_faulted(
+    wf_repo,
+):
+    # K-096: budget exhaustion is reported on the two REST routes, but it stays
+    # "not a fault" (plan m-11). The sweep's partition is by drive OUTCOME — a run
+    # its release drove to `failed` through the normal path is `resumed` with that
+    # status, exactly like `done`/`waiting`; `faulted` is reserved for the named
+    # drive-time faults, escaped exceptions and the oversized-merge rejection. So
+    # the K-096 read-back must not be folded into `_drive_or_fault`, where its
+    # `error` would re-bucket this run as `faulted`.
+    clock = _SharedClock(1_000_000)
+    services = _make_services(wf_repo, clock)
+    steps = [
+        {"key": "park", "type": "wait", "start": True,
+         "config": {"waitsForHuman": True, "waitForSeconds": 60}},
+        {"key": "spin", "type": "decision", "config": {}},
+    ]
+    transitions = [
+        {"from": "park", "to": "spin", "on": "timeout", "order": 0,
+         "guard": _escalation_guard("park")},
+        {"from": "spin", "to": "spin", "on": "again", "order": 0, "guard": ""},
+    ]
+    started = _publish_and_start(
+        services, key="timers-budget", steps=steps, transitions=transitions,
+        max_steps=3,
+    )
+    run_id = started["runId"]
+    assert started["status"] == "waiting"
+    clock.advance(120_000)
+
+    out = services.sweep_due_workflow_runs(CTX, limit=10)
+
+    assert out["resumed"] == [{"runId": run_id, "status": "failed"}]
+    assert out["faulted"] == []
+    assert _ctx_of(services, run_id)["error"] == "step budget exceeded"

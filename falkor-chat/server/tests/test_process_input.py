@@ -588,6 +588,27 @@ def test_the_failed_envelope_ctx_is_the_graphs_post_fault_ctx_not_the_submission
     assert "error" in out["ctx"]                   # the engine's diagnostic note
 
 
+def test_a_caught_fault_keeps_its_exception_as_the_error_not_the_ctx_note(
+    svc, wf_repo
+):
+    # K-096 adds a read-back for a `failed` drive with NO caught fault (budget). A
+    # caught fault keeps its own present envelope: `error` is `"<Type>: <message>"`
+    # from the exception, and the ctx is the post-fault read — whose `error` note is
+    # the engine's different `"unexpected: …"` string. The read-back must not replace
+    # the one with the other.
+    _materialize(wf_repo, steps=TOOL_STEPS, transitions=TOOL_TRANSITIONS,
+                 start_key="approval")
+    started = svc.start_workflow_run(CTX, def_key="access-request", version="1")
+
+    out = svc.submit_workflow_input(
+        CTX, run_id=started["runId"], input={"decision": "approve"},
+    )
+
+    assert out["status"] == "failed"
+    assert out["error"].startswith("NotImplementedError: ")
+    assert out["ctx"]["error"].startswith("unexpected: ")
+
+
 def test_a_swallowed_drive_fault_still_logs_its_stack(svc, wf_repo, caplog):
     # U4b M-A — D-G's catch also covers the CHAT start path (`trigger.py` step 3 calls
     # `start_workflow_run`), and `background._safe_run_workflow`'s isolation only ever logs
@@ -623,6 +644,50 @@ def test_the_clean_path_envelope_ctx_still_equals_the_persisted_merge(svc, wf_re
     assert out["ctx"] == json.loads(
         wf_repo.get_run("test", run_id=started["runId"])["ctx"]
     )
+    assert "error" not in out   # K-096's read-back is for `failed` drives only
+
+
+class _IntrudeAfterDriveRepo:
+    """Wraps the service's `Repository`. Every `get_run` after the FIRST one (the
+    pre-merge read `submit_workflow_input` makes before driving) first lets a
+    concurrent actor resume the run with its own ctx and re-park it — the window
+    a `waiting` run is open to the moment the drive returns. The executor holds
+    the unwrapped repo, so only the service's own reads are affected."""
+
+    def __init__(self, repo, *, intruder_ctx):
+        self._repo = repo
+        self._intruder_ctx = intruder_ctx
+        self.get_run_calls = 0
+
+    def __getattr__(self, name):
+        return getattr(self._repo, name)
+
+    def get_run(self, ws, *, run_id):
+        self.get_run_calls += 1
+        if self.get_run_calls > 1:
+            self._repo.resume_run_with_ctx(ws, run_id=run_id, ctx=self._intruder_ctx)
+            self._repo.suspend_run(ws, run_id=run_id, thread_id="")
+        return self._repo.get_run(ws, run_id=run_id)
+
+
+def test_a_waiting_envelope_is_never_read_back_so_a_concurrent_writer_cannot_leak_in(
+    svc, wf_repo
+):
+    # K-096 review F1: the read-back is limited to `failed` because `failed` is
+    # terminal — no writer can touch its ctx after the drive, so reading it back
+    # cannot race. A re-parked `waiting` run is already open to the next resume; a
+    # read-back there could report ANOTHER actor's ctx as this caller's result.
+    started = _parked_run(svc, wf_repo)
+    proxy = _IntrudeAfterDriveRepo(wf_repo, intruder_ctx='{"intruder":true}')
+    svc._repo = proxy
+
+    out = svc.submit_workflow_input(
+        CTX, run_id=started["runId"], input={"decision": "reject"},  # re-parks
+    )
+
+    assert out["status"] == "waiting"
+    assert out["ctx"] == {"decision": "reject"}   # the merge THIS caller's CAS wrote
+    assert "error" not in out
 
 
 def test_drive_fault_on_start_returns_201_with_a_failed_envelope(client, wf_repo):
@@ -683,29 +748,136 @@ def test_a_zombie_running_run_after_a_fault_re_raises_instead_of_reporting_succe
         svc.start_workflow_run(CTX, def_key="access-request", version="1")
 
 
+# K-096 — budget exhaustion is NOT a fault (plan m-11: nothing raises, the locked
+# `_drive_loop` is untouched), but it IS reported: whenever the drive returns
+# `failed`, the service reads the run back and fills `error` and `ctx` from that one
+# observation, the way the fault path does. The spin def self-loops past its budget.
+SPIN_STEPS = [
+    {"key": "spin", "type": "decision", "config": "{}"},
+    {"key": "other", "type": "decision", "config": "{}"},
+]
+SPIN_TRANSITIONS = [
+    # a self-loop with an unconditional guard: OUTCOME C forever, until the budget
+    {"from": "spin", "to": "spin", "on": "again", "guard": "", "order": 0},
+    {"from": "other", "to": "spin", "on": "x", "guard": "", "order": 1},
+]
+# A parked `human` step whose approval leads into the spin loop — the resume is what
+# exhausts the budget, so `/input`'s submitted merge and the graph's ctx diverge.
+APPROVAL_INTO_SPIN_STEPS = [
+    {"key": "approval", "type": "human", "config": APPROVAL_CONFIG},
+    {"key": "spin", "type": "decision", "config": "{}"},
+]
+APPROVAL_INTO_SPIN_TRANSITIONS = [
+    {"from": "approval", "to": "spin", "on": "approved", "guard": GUARD_APPROVED,
+     "order": 0},
+    {"from": "spin", "to": "spin", "on": "again", "guard": "", "order": 0},
+]
+BUDGET_ERROR = "step budget exceeded"   # `executor._fail_budget`'s own note
+
+
 def test_budget_exhaustion_reaches_the_same_envelope_without_raising(svc, wf_repo):
     # m-11 — `StepBudgetExceededError` does NOT exist and must not be invented:
-    # `_fail_budget` RETURNS "failed" through the normal path. Pin that a run that
-    # self-loops past its budget comes back as a plain failed status, no exception
-    # and no `error` key (nothing was caught).
-    _materialize(
-        wf_repo,
-        steps=[{"key": "spin", "type": "decision", "config": "{}"},
-               {"key": "other", "type": "decision", "config": "{}"}],
-        # a self-loop with an unconditional guard: OUTCOME C forever, until the budget
-        transitions=[{"from": "spin", "to": "spin", "on": "again", "guard": "",
-                      "order": 0},
-                     {"from": "other", "to": "spin", "on": "x", "guard": "",
-                      "order": 1}],
-        start_key="spin",
-    )
+    # `_fail_budget` RETURNS "failed" through the normal path. Rewritten for K-096:
+    # still no exception, but the envelope now carries the reason — the graph's own
+    # `ctx.error` note — instead of a bare `failed` the caller can only explain via
+    # `GET /workflow-runs/{runId}`.
+    _materialize(wf_repo, steps=SPIN_STEPS, transitions=SPIN_TRANSITIONS,
+                 start_key="spin")
 
     out = svc.start_workflow_run(CTX, def_key="access-request", version="1",
                                  max_steps=3)
 
     assert out["status"] == "failed"
-    assert "error" not in out
-    assert wf_repo.get_run("test", run_id=out["runId"])["status"] == "failed"
+    assert out["error"] == BUDGET_ERROR
+    run = wf_repo.get_run("test", run_id=out["runId"])
+    assert run["status"] == "failed"
+    assert json.loads(run["ctx"])["error"] == out["error"]
+
+
+def test_budget_error_is_the_graphs_own_note_not_a_service_literal(
+    svc, wf_repo, monkeypatch
+):
+    # K-096 review F2: the contract is "`error` is the graph's `ctx.error` note",
+    # not a copy of today's `_fail_budget` literal. Stamp a probe note through the
+    # same `_fail_with_note` seam; a service that hardcodes the string cannot pass.
+    def probe_fail_budget(self, ctx, run_id, run_ctx):
+        self._fail_with_note(ctx, run_id, run_ctx, "probe-note-k096")
+        return "failed"
+
+    monkeypatch.setattr(WorkflowExecutor, "_fail_budget", probe_fail_budget)
+    _materialize(wf_repo, steps=SPIN_STEPS, transitions=SPIN_TRANSITIONS,
+                 start_key="spin")
+
+    out = svc.start_workflow_run(CTX, def_key="access-request", version="1",
+                                 max_steps=3)
+
+    assert out["status"] == "failed"
+    assert out["error"] == "probe-note-k096"
+
+
+def test_rest_start_reports_budget_exhaustion_with_its_reason(client, wf_repo):
+    _materialize(wf_repo, steps=SPIN_STEPS, transitions=SPIN_TRANSITIONS,
+                 start_key="spin")
+
+    r = client.post("/workflow-runs", json={
+        "defKey": "access-request", "version": "1", "maxSteps": 3,
+    })
+
+    assert r.status_code == 201
+    assert r.json()["status"] == "failed"
+    assert r.json()["error"] == BUDGET_ERROR
+
+
+def _decoy_and_budget_parked_run(svc, repo):
+    """Two parked runs on the approval-into-spin def: a decoy with a ctx of its own,
+    then the run under test. A read-back of the WRONG run id hands back the decoy's
+    ctx (or nothing), never the run under test's — so a mis-aimed read is visible."""
+    _materialize(repo, steps=APPROVAL_INTO_SPIN_STEPS,
+                 transitions=APPROVAL_INTO_SPIN_TRANSITIONS, start_key="approval")
+    decoy = svc.start_workflow_run(CTX, def_key="access-request", version="1",
+                                   run_ctx={"decoy": True}, max_steps=3)
+    started = svc.start_workflow_run(CTX, def_key="access-request", version="1",
+                                     run_ctx={"requester": "alice"}, max_steps=3)
+    assert decoy["status"] == started["status"] == "waiting"
+    return decoy, started
+
+
+def test_input_that_exhausts_the_budget_reports_the_graphs_ctx_and_reason(
+    svc, wf_repo
+):
+    _decoy, started = _decoy_and_budget_parked_run(svc, wf_repo)
+
+    out = svc.submit_workflow_input(
+        CTX, run_id=started["runId"], input={"decision": "approve"},
+    )
+
+    assert out["status"] == "failed"
+    assert out["error"] == BUDGET_ERROR
+    graph_ctx = json.loads(wf_repo.get_run("test", run_id=started["runId"])["ctx"])
+    assert out["ctx"] == graph_ctx
+    # …which is the merge PLUS the engine's note, never the bare submitted merge
+    assert out["ctx"] == {"requester": "alice", "decision": "approve",
+                          "error": BUDGET_ERROR}
+
+
+def test_rest_input_that_exhausts_the_budget_reports_the_graphs_ctx(
+    client, wf_repo
+):
+    _materialize(wf_repo, steps=APPROVAL_INTO_SPIN_STEPS,
+                 transitions=APPROVAL_INTO_SPIN_TRANSITIONS, start_key="approval")
+    run_id = client.post("/workflow-runs", json={
+        "defKey": "access-request", "version": "1", "maxSteps": 3,
+    }).json()["runId"]
+
+    r = client.post(f"/workflow-runs/{run_id}/input",
+                    json={"input": {"decision": "approve"}})
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "failed"
+    assert r.json()["error"] == BUDGET_ERROR
+    assert r.json()["ctx"] == json.loads(
+        wf_repo.get_run("test", run_id=run_id)["ctx"]
+    )
 
 
 # ── D-2 — the two other drive-time LLM fault classes must ALSO reach the envelope ──
