@@ -11,7 +11,8 @@ Code units, in two kinds:
   nearest enclosing unit of its language.
 - **fallback units**: a ``.py``/``.pyi`` or JS/TS file under no manifest unit of its language is rooted at its
   highest ancestor directory that holds no manifest unit of that language below it (see ``_fallback_root``; ``.`` for
-  a file at the repo root), one unit per (root, language).
+  a file at the repo root), one unit per (root, language). A javascript file the skip classifier calls a test
+  (``is_test_path``, shared with ``extractors/joern/skipped.py``) makes no fallback unit: the frontend ignores it, so it alone fails the content check.
 
 Only python and javascript have code units in P1; other languages (Java, Go, ...) are P2's. With ``per_file`` (the
 default) each shell, config and Markdown file is also a unit of its own, ``rootPath`` being the file, for the non-Joern
@@ -35,6 +36,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Mapping, NamedTuple
 
 from ccg import gitsafe, ids
+from ccg.bundle import JS_TEST_EXTENSIONS
 from ccg.manifest import Manifest, Repo
 
 #: ``export_kit.py``'s SKIP_DIRS plus caches and virtualenvs; applied to every directory segment.
@@ -246,6 +248,27 @@ def _fallback_root(path: str, lang: str, manifest_roots: set[tuple[str, str]]) -
     return "/".join(segs) or "."
 
 
+#: directory segments that make every JS/TS file below them a test (the frontend's closed ``test`` pattern, bundle spec4 §1).
+TEST_DIRS = ("e2e", "__tests__")
+
+
+def is_test_path(dirs: list[str], base: str) -> bool:
+    """The closed ``test`` pattern of a javascript unit: a file below a ``TEST_DIRS`` segment, or ``*.test.<ext>`` / ``*.spec.<ext>``
+    over the javascript extensions. ``extractors/joern/skipped.py`` classifies with this too (``ccg`` never imports ``extractors``)."""
+    if any(d in TEST_DIRS for d in dirs):
+        return True
+    return any(base.endswith(f".{kind}.{ext}") for kind in ("test", "spec") for ext in JS_TEST_EXTENSIONS)
+
+
+def _is_skipped_test(path: str, lang: str) -> bool:
+    """A javascript file the skip classifier calls a test: the frontend ignores it, so it alone is no unit (a fallback unit of
+    only such files fails its content check). Python has no test files in v1 (``skipped_files``), so it is never skipped here."""
+    if lang != "javascript":
+        return False
+    *dirs, base = path.split("/")
+    return is_test_path(dirs, base)
+
+
 def _repo_units(root: Path, repo: Repo, per_file: bool, commit: str | None = None, report: Counter | None = None) -> list[Unit]:
     repo_root = root / repo.path
     excluded = _excluder(repo)
@@ -260,7 +283,7 @@ def _repo_units(root: Path, repo: Repo, per_file: bool, commit: str | None = Non
     # Coverage is judged against manifest roots only, so the result never depends on file order.
     for f in files:
         lang = _SOURCE_EXT.get(posixpath.splitext(f)[1].lower())
-        if lang and not any(l == lang and _under(d, f) for d, l in manifest_roots):
+        if lang and not any(l == lang and _under(d, f) for d, l in manifest_roots) and not _is_skipped_test(f, lang):
             roots.add((_fallback_root(f, lang, manifest_roots), lang))
     found = {(d, lang) for d, lang in roots}
     if per_file:

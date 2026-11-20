@@ -35,6 +35,7 @@ class Corpus:
         self.decorators: list[dict] = []
         self.launch_facts: list[dict] = []
         self.config_entries: list[dict] = []
+        self.field_reads: set[tuple[str, str]] = set()      # (pointId, argument path) of every ``fieldAccess`` read (spec §5.13)
         self.imports_of_file: dict[str, list[dict]] = defaultdict(list)
         self.controlled_by: dict[str, list[str]] = defaultdict(list)
         self.rets_of: dict[str, list[str]] = defaultdict(list)
@@ -72,6 +73,8 @@ class Corpus:
                     self.launch_facts.append(r)
                 elif t == "configEntry":
                     self.config_entries.append(r)
+                elif t == "fieldAccess" and r["mode"] == "read":
+                    self.field_reads.add((r["pointId"], r["path"]))
         for cid in sorted(self.callsites):
             c = self.callsites[cid]
             self.callsites_of[c["symbolId"]].append(c)
@@ -169,6 +172,14 @@ def slot_mode(expr: dict, default: str) -> str:
     """The slot's one ``onUnknown`` (mixed nested modes are a pack error, N-29), else ``default``."""
     found = _modes(expr)
     return next(iter(found)) if found else default
+
+
+def arg_paths(expr: dict) -> set[str]:
+    """Every argument path an ``extract`` expression reads (through ``firstOf``)."""
+    out = {expr["arg"]} if "arg" in expr else set()
+    for e in expr.get("firstOf", ()):
+        out |= arg_paths(e)
+    return out
 
 
 def _modes(expr: dict) -> set[str]:

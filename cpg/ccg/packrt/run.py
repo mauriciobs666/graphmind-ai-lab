@@ -12,7 +12,7 @@ import json
 import re
 from typing import NamedTuple
 
-from ccg.packrt.extract import Corpus, Ctx, eval_expr, slot_mode
+from ccg.packrt.extract import Corpus, Ctx, arg_paths, eval_expr, slot_mode
 from ccg.packrt.httpkey import UNKNOWN, normalize_key
 from ccg.packrt.launch import launch_facts
 from ccg.packrt.lift import run_lifting
@@ -151,13 +151,11 @@ class _Run:
             self.diagnostics.append({k: base[k] for k in ("packId", "ruleId", "anchorId", "siteId", "line")}
                                     | {"reason": "unresolved-part"})
             return
-        if "config-derived" in used_modes:
-            raise UnsupportedSubject("onUnknown config-derived is not produced by the P1-16 runtime")
         raw = _PLACEHOLDER.sub(lambda m: values[m.group(1)], body["key"])
         status, reason = "confirmed", ("lifted-role" if item else "key-match")
         key = raw
         if unresolved and (kind != "http" or "runtime-built" in used_modes):
-            key, status, reason = None, "possible", "runtime-built"
+            key, status, reason = None, "possible", self._keyless_reason(rule, rec, unresolved, modes)
         elif kind == "http":
             key = normalize_key(raw, "provider" if edge == "PROVIDES" else "consumer")
             if "{?}" in key and unresolved:
@@ -180,6 +178,15 @@ class _Run:
         if edge == "PROVIDES" and rec["type"] == "decorator":
             fact["decorator"] = rec["name"]
         self._collapse(fact)
+
+    def _keyless_reason(self, rule, rec, unresolved, modes) -> str:
+        """``config-derived`` when a ``config-derived`` slot's unresolved argument has a ``fieldAccess`` read on this site
+        (spec §1.4), else ``runtime-built``."""
+        for n in unresolved:
+            if modes[n] == "config-derived" and any((rec["id"], p) in self.corpus.field_reads
+                                                    for p in arg_paths(rule["extract"][n])):
+                return "config-derived"
+        return "runtime-built"
 
     @staticmethod
     def _weaker(a: tuple[str, str], b: tuple[str, str]) -> tuple[str, str]:

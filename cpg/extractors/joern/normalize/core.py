@@ -297,10 +297,7 @@ class Resolver:
             return r if r is not None else {"unknown": "runtime-built"}
         if o == "name":
             n = e["n"]
-            path = self.B.P(file)
-            if f"{path}::{n}" in self.constants.get(path, set()):
-                return {"ref": f"{path}::{n}"}
-            al = self.alias.get(file, {}).get(n)
+            al = self.alias.get(file, {}).get(n)    # an imported name first: Joern lists it among this file's own constants too
             if al:
                 module, orig, sub, resolved = al
                 if sub:   # `from pkg import submodule` -> the module file; a bare name is the module
@@ -308,6 +305,9 @@ class Resolver:
                 if resolved:
                     return {"ref": f"{resolved}::{orig}"}
                 return {"importRef": {"module": module, "name": orig}}
+            path = self.B.P(file)
+            if f"{path}::{n}" in self.constants.get(path, set()):
+                return {"ref": f"{path}::{n}"}
             if n in ("undefined", "None", "null", "NaN"):
                 return {"unknown": "runtime-built"}
             return {"unknown": "point-derived"}

@@ -137,6 +137,7 @@ SLICE_SCRIPT = CPG / "spikes" / "vertical-slice" / "extract.sc"
 SP_ROOT = "salesperson"
 SP_BUNDLE = S14A / "c2341bca0404a6a3eadab1d72ba5f4db.bundle.jsonl"
 SP_BUNDLE_SHA = "f2ef6f5add18691d94cecfcb05a742e03d3e06f00cf3fedea462d79886e13e65"
+UNIT_TAG_OF_ROOT = {FCS_ROOT: "fcs", SP_ROOT: "sp"}
 UNITS = {"fcs": (FCS_ROOT, "python", FCS_BUNDLE, FCS_BUNDLE_SHA), "sp": (SP_ROOT, "javascript", SP_BUNDLE, SP_BUNDLE_SHA)}
 #: header fields that are an input or a stamp, not content: spec3 §8.5 (`builtAt`, `sandboxAuditIds`). The hash of the script file is
 #: exempt in definition 2 only: the shipped `extract.sc` is no longer the slice's but for its header comment (P1-09 changed the projection).
@@ -165,7 +166,7 @@ def stored_lines(tag: str) -> list[bytes]:
 #: ``tools.normalizerVersion`` to the entry's literal (a delta PINS its version; the step that adds it bumps
 #: ``assemble_bundle.NORMALIZER_VERSION`` to the same value, and the last entry must equal that constant), and fails if the
 #: ``counts`` no longer equal a recount of the records (a delta that forgets its counts). Landing order: 5c ("0.2"), P1-06
-#: ("0.3"), P1-08 ("0.4"). A stored record that no delta explains makes the byte comparison below fail.
+#: ("0.3"), P1-08 ("0.4"), P1-41 ("0.5"). A stored record that no delta explains makes the byte comparison below fail.
 DELTAS: list = []
 
 
@@ -308,6 +309,28 @@ def _skipped_files(header, records):
     assert not {e["path"] for e in P1_08_SKIPPED_SP} & {r["path"] for r in records if r["type"] == "file"}
     header["skippedFiles"] = [dict(e) for e in P1_08_SKIPPED_SP]
     return len(P1_08_SKIPPED_SP)
+
+
+# P1-41 (c2): an imported name resolves through its import, not to a same-named "constant of this file" (Joern lists the import-bound
+# name among the importing file's module-level assignments, so the stored `ref` named the importing file, a constant with no
+# record). The valueSets that change, id -> expected `values`, are listed BY HAND in `tests/data/p1_41_import_precedence.json`
+# (derived once from a real run, each checked by eye: only an element naming the importing file changes, to the import's target
+# `ref` or to an `importRef`; no record is added or removed, so no count moves). A valueSet that changes and is not listed fails.
+P1_41_IMPORT_PRECEDENCE = json.loads((CPG / "tests" / "data" / "p1_41_import_precedence.json").read_text(encoding="utf-8"))
+P1_41_COUNTS = {"fcs": 76, "sp": 3}
+
+
+@delta("p1-41-import-before-constant", "0.5")
+def _import_before_constant(header, records):
+    want = P1_41_IMPORT_PRECEDENCE[UNIT_TAG_OF_ROOT[header["unit"]["rootPath"]]]
+    touched = 0
+    for r in records:
+        if r["type"] == "valueSet" and r["id"] in want:
+            assert r["values"] != want[r["id"]]
+            r["values"] = want[r["id"]]
+            touched += 1
+    assert touched == len(want) == P1_41_COUNTS[UNIT_TAG_OF_ROOT[header["unit"]["rootPath"]]]
+    return touched
 
 
 def apply_deltas(lines: list[bytes], deltas=None) -> tuple[list[bytes], dict[str, int]]:

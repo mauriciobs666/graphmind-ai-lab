@@ -30,7 +30,7 @@ from .mask import mask_cond_code
 
 #: The slice profile's header identity. A later step that changes output renames or re-versions it (the stamp reads it).
 NORMALIZER = "ccg-slice-normalize"
-NORMALIZER_VERSION = "0.4"     # bumped with each registered delta of tests/slice/test_normalize_equivalence.py (the last delta pins the same literal)
+NORMALIZER_VERSION = "0.5"     # bumped with each registered delta of tests/slice/test_normalize_equivalence.py (the last delta pins the same literal)
 JOERN_VERSION = "v4.0.579"
 DEFAULT_VENDORED = ["_vendor", "node_modules", "third-party", "third_party", "vendor", "vendored"]
 

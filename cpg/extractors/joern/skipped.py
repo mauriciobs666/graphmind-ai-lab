@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Iterable, Mapping
 
 from ccg.bundle import JS_TEST_EXTENSIONS
-from ccg.units import Unit
+from ccg.units import Unit, is_test_path
 from extractors.joern.run import is_staged_source
 
 #: the writer's default ``vendoredDirs`` (``normalize/assemble_bundle.py``; ``test_skipped_files`` keeps the two equal).
@@ -27,7 +27,6 @@ DEFAULT_VENDORED = ("_vendor", "node_modules", "third-party", "third_party", "ve
 JS_EXTENSIONS = tuple("." + e for e in JS_TEST_EXTENSIONS)
 PY_EXTENSIONS = (".py", ".pyi")
 DECLARATION_SUFFIXES = (".d.ts", ".d.mts", ".d.cts", ".pyi")
-TEST_DIRS = ("e2e", "__tests__")
 
 
 def _below_root(path: str, root: str) -> str | None:
@@ -48,9 +47,7 @@ def _is_source(base: str, language: str) -> bool:
 
 
 def _is_test(dirs: list[str], base: str) -> bool:
-    if any(d in TEST_DIRS for d in dirs):
-        return True
-    return any(base.endswith(f".{kind}.{ext}") for kind in ("test", "spec") for ext in JS_TEST_EXTENSIONS)
+    return is_test_path(dirs, base)       # one classifier, in `ccg.units` (it also decides which files make a fallback unit)
 
 
 def skipped_files(unit: Unit, parsed: Mapping[str, bool], override: bool) -> list[dict]:

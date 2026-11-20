@@ -1,0 +1,504 @@
+{
+ "fcs": {
+  "00507dd18d87b70e5cd192fc8d344ba2": [
+   {
+    "importRef": {
+     "module": "concurrent.futures",
+     "name": "Future"
+    }
+   }
+  ],
+  "0532d7dd8a425b7b150340acdf6e97f8": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::EmbeddingDimensionError"
+   }
+  ],
+  "05870fbecdfc1d3808f93f022ca2d181": [
+   {
+    "importRef": {
+     "module": "conftest",
+     "name": "TEST_EMBEDDING_DIM"
+    }
+   }
+  ],
+  "064435f901bc1fa0271113f332a84798": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "0725939f12c37e6ce9320fca4c1aebe0": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "084f8b7294626e2abd107d71bf76fc77": [
+   {
+    "importRef": {
+     "module": "collections.abc",
+     "name": "Mapping"
+    }
+   }
+  ],
+  "088e89de587035bc63fa3c1d51bd60cf": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "0a8491455eed33779509e8b853b2c88b": [
+   {
+    "importRef": {
+     "module": "conftest",
+     "name": "TEST_EMBEDDING_DIM"
+    }
+   }
+  ],
+  "0b09a3b9966199c6ae68850ceddac928": [
+   {
+    "importRef": {
+     "module": "redis.exceptions",
+     "name": "ResponseError"
+    }
+   }
+  ],
+  "120586d48dda491180253d7aebf09c72": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "1340e94d36d1ccde6fd2a14723fc43a0": [
+   {
+    "importRef": {
+     "module": "collections.abc",
+     "name": "Mapping"
+    }
+   }
+  ],
+  "1612d8b1725127d7947f225fca9e2d70": [
+   {
+    "importRef": {
+     "module": "collections.abc",
+     "name": "Mapping"
+    }
+   }
+  ],
+  "18864bf2f209276939185e864b74e3ac": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "1a1ffedec77d352bc290cb20ceb11a76": [
+   {
+    "importRef": {
+     "module": "conftest",
+     "name": "TEST_EMBEDDING_DIM"
+    }
+   }
+  ],
+  "2212532b7dcc53d430c82e3bab484cde": [
+   {
+    "importRef": {
+     "module": "collections.abc",
+     "name": "Mapping"
+    }
+   }
+  ],
+  "29c4f1e6eb277c69cef0846edcaa065c": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "2ae3d39406c5d1d40ecf3e0a9d0f75d9": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "2c754360d5809fb95d2bafc1d2f41d2c": [
+   {
+    "importRef": {
+     "module": "collections.abc",
+     "name": "Mapping"
+    }
+   }
+  ],
+  "2d8fe6283d884a26cea9fe67bae96e76": [
+   {
+    "importRef": {
+     "module": "pydantic",
+     "name": "ValidationError"
+    }
+   }
+  ],
+  "2e545745a8730764ce6ecba528b32d9e": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "2fe40385daa96e78d13a6a9c7afb85cc": [
+   {
+    "ref": "falkor-chat/server/falkorchat/querygen.py::DATASET_REGISTRY"
+   }
+  ],
+  "3754037303073dae43265f7d4a70df91": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::EmbeddingDimensionError"
+   }
+  ],
+  "40fd71c7f639548ecb81dd13c7720a3b": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "439ec6269c89eb0315432f89ae2e7e53": [
+   {
+    "concat": [
+     {
+      "importRef": {
+       "module": "conftest",
+       "name": "TEST_EMBEDDING_DIM"
+      }
+     },
+     {
+      "const": 1
+     }
+    ]
+   }
+  ],
+  "47d14caff6bfa0917e9d0719f72e92e9": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "4c3d549ee8fa723ad3eaf4c5ae6cecd1": [
+   {
+    "ref": "falkor-chat/server/falkorchat/modelconfig.py::ModelResolutionError"
+   }
+  ],
+  "5ebaba09a4d86471a0b61a495c86e570": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "648bfc1515c3710e68fefe544092fdc6": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::WorkflowRunNotFoundError"
+   }
+  ],
+  "6514b4b2bd6a53f3cf668e0e7f25b276": [
+   {
+    "importRef": {
+     "module": "collections.abc",
+     "name": "Mapping"
+    }
+   }
+  ],
+  "6613b442fcffbd49a2bcf2be828da817": [
+   {
+    "importRef": {
+     "module": "pydantic",
+     "name": "ValidationError"
+    }
+   }
+  ],
+  "6753b515f1c53b525f1f2af3eb88ce4d": [
+   {
+    "importRef": {
+     "module": "conftest",
+     "name": "TEST_EMBEDDING_DIM"
+    }
+   }
+  ],
+  "67e9c1ac183748a160ac50cb44427dee": [
+   {
+    "importRef": {
+     "module": "collections.abc",
+     "name": "Mapping"
+    }
+   }
+  ],
+  "6a038522b739a9106d47dcb2441c4ce7": [
+   {
+    "importRef": {
+     "module": "conftest",
+     "name": "TEST_EMBEDDING_DIM"
+    }
+   }
+  ],
+  "708f3dd95cc34604c8b147ee63625194": [
+   {
+    "importRef": {
+     "module": "falkorchat",
+     "name": "services"
+    }
+   }
+  ],
+  "718e640a72660d4d79b3df928e3330b0": [
+   {
+    "importRef": {
+     "module": "pydantic",
+     "name": "ValidationError"
+    }
+   }
+  ],
+  "7711bc5e852d43988c63695e3be2f979": [
+   {
+    "ref": "falkor-chat/server/falkorchat/modelconfig.py::ModelResolutionError"
+   }
+  ],
+  "79a907000e8fff1d1b4177e5f25dc673": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "7e34ce8cbe4e673308bfa6f8b7db5bad": [
+   {
+    "ref": "falkor-chat/server/falkorchat/llm.py::FallbackClient"
+   }
+  ],
+  "819788cd35533486558ead27d5f6a6c1": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "831bfdca7863fd50b0681e3849f34324": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "846e18d2ca7e0d68402dc96a96b22114": [
+   {
+    "ref": "falkor-chat/server/falkorchat/guards.py::WorkflowConfigError"
+   }
+  ],
+  "85e2fcb4f7b0e0f61c3036ad8c29a96b": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "8a19a6e4eaeeced9eacfb0da6418d7b0": [
+   {
+    "importRef": {
+     "module": "pydantic",
+     "name": "ValidationError"
+    }
+   }
+  ],
+  "8d4486f0eab30acee4e794fb1bc86a6e": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::EmbeddingDimensionError"
+   }
+  ],
+  "8f1e58f463009a60ac3bd8a2f60a51f5": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::EmbeddingDimensionError"
+   }
+  ],
+  "9783ea62a459bbbfddd9116fa3ddbad7": [
+   {
+    "importRef": {
+     "module": "collections.abc",
+     "name": "Mapping"
+    }
+   }
+  ],
+  "98c569cd6d0fae3714ae90124dd001fd": [
+   {
+    "importRef": {
+     "module": "conftest",
+     "name": "TEST_EMBEDDING_DIM"
+    }
+   }
+  ],
+  "9a75e20897cb98ac5d358db12a234ef1": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "9a8ddfe817b15115ca1e9c6e305a8d4f": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::EmbeddingDimensionError"
+   }
+  ],
+  "9fa10d920d5761b944a3861cb681f015": [
+   {
+    "ref": "falkor-chat/server/falkorchat/guards.py::WorkflowConfigError"
+   }
+  ],
+  "9fcbfe1739fc8c90261e99d33cf82247": [
+   {
+    "ref": "falkor-chat/server/falkorchat/llm.py::FallbackClient"
+   }
+  ],
+  "a78fe26a450a7a2c053c79ccdb70ac1a": [
+   {
+    "importRef": {
+     "module": "collections.abc",
+     "name": "Mapping"
+    }
+   }
+  ],
+  "a88f473946863435b7d8c4606e1875d5": [
+   {
+    "importRef": {
+     "module": "falkorchat",
+     "name": "api"
+    }
+   }
+  ],
+  "a90ade0aad5bef3aafd2570a6b6a2a68": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "b41dde030c8426d53086a51408ced213": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "b735508ce6e7923e6676f0f6c2514215": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "b896d9f3b22a32beb7134d5e32488762": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::EmbeddingDimensionError"
+   }
+  ],
+  "bd91a27c665a2cd30cea7d1498705ac8": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "be7de2e5b6a0b9c2e2b8da94a60f8872": [
+   {
+    "importRef": {
+     "module": "conftest",
+     "name": "TEST_EMBEDDING_DIM"
+    }
+   }
+  ],
+  "c0f0cbcc5569b95c26d74fe947646de6": [
+   {
+    "importRef": {
+     "module": "pydantic",
+     "name": "ValidationError"
+    }
+   }
+  ],
+  "c35824dc7b4e2c83aa5950f3df24d852": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "c9b058880a1049d9fde7c761b9848f74": [
+   {
+    "importRef": {
+     "module": "redis.exceptions",
+     "name": "ResponseError"
+    }
+   }
+  ],
+  "cf48d4f0f6a2134eff4dfdd7938a6328": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::EmbeddingDimensionError"
+   }
+  ],
+  "d69a511e53ee91903de0f964dfe966d2": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::EmbeddingDimensionError"
+   }
+  ],
+  "db097137656d640e7a23188d98372906": [
+   {
+    "ref": "falkor-chat/server/falkorchat/db.py::FalkorDBUnreachableError"
+   }
+  ],
+  "db6f1aaa1fb2bd30e3779de84f9c41f7": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::EmbeddingDimensionError"
+   }
+  ],
+  "de469aed6836c168bf148f02ac43f58a": [
+   {
+    "importRef": {
+     "module": "pydantic",
+     "name": "ValidationError"
+    }
+   }
+  ],
+  "de7f2e2279bfd9e38f9a0493ff5031f0": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "e73a64495a317ccd92e842be21dc24ce": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "e7d9900bb9fe74901bbf30d86db77319": [
+   {
+    "importRef": {
+     "module": "pydantic",
+     "name": "ValidationError"
+    }
+   }
+  ],
+  "f19649efb708188b9017d1b98b9a8557": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::EmbeddingDimensionError"
+   }
+  ],
+  "f314b6865b915eaed5c7fe2ac53aaeff": [
+   {
+    "importRef": {
+     "module": "redis.exceptions",
+     "name": "ResponseError"
+    }
+   }
+  ],
+  "f75d9199a3e979735f49320501d963f4": [
+   {
+    "ref": "falkor-chat/server/falkorchat/transport.py::ProviderCallError"
+   }
+  ],
+  "fb3f018c62c9ec6346c4174a853023a6": [
+   {
+    "importRef": {
+     "module": "conftest",
+     "name": "TEST_EMBEDDING_DIM"
+    }
+   }
+  ],
+  "fe41a6523b99cbfa564259e886f9916e": [
+   {
+    "ref": "falkor-chat/server/falkorchat/repository.py::EmbeddingDimensionError"
+   }
+  ],
+  "ff78d0e34bd2230d5e635a61e40da29b": [
+   {
+    "importRef": {
+     "module": "conftest",
+     "name": "TEST_EMBEDDING_DIM"
+    }
+   }
+  ]
+ },
+ "sp": {
+  "66c6c698e3fc19ab7c35ca6412025793": [
+   {
+    "ref": "salesperson/src/api/polling.ts::POLL_INTERVAL_MS"
+   }
+  ],
+  "7a0dd9e82a94dfac93d39ab48a42d1f9": [
+   {
+    "ref": "salesperson/src/api/polling.ts::POLL_INTERVAL_MS"
+   }
+  ],
+  "d1e951181ae9db738fbc1c9fa7df3be1": [
+   {
+    "ref": "salesperson/src/api/polling.ts::POLL_INTERVAL_MS"
+   }
+  ]
+ }
+}

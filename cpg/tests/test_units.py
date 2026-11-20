@@ -433,8 +433,8 @@ def test_the_fixture_system_yields_its_units():
            un.discover_units(CPG / "fixtures" / "system1", system, per_file=False)}
     assert got == {
         ("fx-svc", ".", "python"), ("fx-svc", "common", "python"), ("fx-svc", "legacy", "python"),
-        ("fx-svc", "tools", "python"), ("fx-web", "app", "javascript"), ("fx-web", "scripts", "javascript"),
-        ("fx-job", ".", "python"),  # fx-web/scripts holds JS outside `app`: a fallback unit
+        ("fx-svc", "tools", "python"), ("fx-web", "app", "javascript"),
+        ("fx-job", ".", "python"),  # fx-web/scripts/build.test.ts (SK-8) is a test outside `app`: no fallback unit
     }
 
 
@@ -603,3 +603,46 @@ def test_discover_units_excludes_and_counts_a_non_utf8_commit_path_without_raisi
     units = un.discover_units(tmp_path, manifest_of(("r", "r")), commit=run("rev-parse", "HEAD"), report=rep)
     assert [(u.rootPath, u.language) for u in units] == [("ok.sh", "shell")] and rep["undecodable_paths"] == 2
     assert un.discover_units(tmp_path, manifest_of(("r", "r")), commit=run("rev-parse", "HEAD")) == units       # no report is fine too
+
+
+# --- a test-classified file makes no fallback unit (RCA p1-41 (b1); `ccg.units.is_test_path`, shared with `extractors/joern/skipped.py`) ----------------
+
+TEST_FILES = ["scripts/build.test.ts", "scripts/build.spec.tsx", "scripts/x.test.mjs", "e2e/login.ts", "tools/__tests__/a.js", "tools/__tests__/deep/b.js"]
+
+
+@pytest.mark.parametrize("orphan", TEST_FILES)
+def test_an_orphan_test_file_beside_a_manifest_unit_makes_no_fallback_unit(tmp_path, orphan):
+    got = code(tmp_path, {"app/package.json": "{}", "app/main.ts": "", orphan: ""})
+    assert got == [("app", "javascript")]
+
+
+def test_an_orphan_non_test_source_still_makes_a_fallback_unit(tmp_path):
+    got = code(tmp_path, {"app/package.json": "{}", "scripts/build.ts": ""})
+    assert got == [("app", "javascript"), ("scripts", "javascript")]
+
+
+def test_a_test_file_does_not_hide_a_non_test_sibling_from_the_fallback(tmp_path):
+    got = code(tmp_path, {"scripts/build.test.ts": "", "scripts/build.ts": ""})
+    assert got == [("scripts", "javascript")]
+
+
+def test_a_manifest_unit_with_no_source_at_all_is_still_a_unit(tmp_path):
+    # unit-level floor behaviour of a source-less unit (TP-006) is unchanged: the manifest alone makes it
+    assert code(tmp_path, {"app/package.json": "{}"}) == [("app", "javascript")]
+
+
+def test_a_repo_of_only_orphan_test_files_has_no_code_unit(tmp_path):
+    assert code(tmp_path, {"scripts/build.test.ts": ""}) == []
+
+
+def test_a_file_under_a_test_directory_is_a_test_whatever_its_name(tmp_path):
+    assert code(tmp_path, {"app/package.json": "{}", "__tests__/helper.js": ""}) == [("app", "javascript")]
+
+
+def test_a_dot_test_python_file_is_no_javascript_test(tmp_path):
+    assert code(tmp_path, {"tools/job.test.py": ""}) == [("tools", "python")]
+
+
+def test_a_test_directory_of_python_files_is_unchanged(tmp_path):
+    # only javascript units have test files in v1 (`skipped_files`); python behaviour is not touched
+    assert code(tmp_path, {"e2e/run.py": ""}) == [("e2e", "python")]
