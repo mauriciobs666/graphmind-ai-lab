@@ -762,3 +762,51 @@ Yes. Both were re-read in full for their edits in Passes 5–7 (terminology, FR-
 ### Needs a stakeholder decision
 
 None.
+
+## Pass 8 (2026-11-20) — scoped re-gate of the S1a spec-revision round
+
+**Scope.** Uncommitted edits against HEAD: base §3.1 (wrapper), §3.4a(d) (slug), S1 row; plan3 §3.1 token forms, §3.4 `Unit label`, G3, §4 S1 row; note v4 §2.2 (`slug`, `warnings`, `unitKey`/`unitLabel`, `statusText`, minimal units), §2.3, §2.5, §3.2 write rules, §5.2/§5.5 step 1, §7.3, §7.6. Checked against `coordination-graph/coordgraph/{discover.py,parse/ledger.py}` at the working tree. **Verdict: approve with suggestions** (0 blocker, 0 major, 5 minor, 2 nit).
+**CPG:** considered, not relevant — documents plus a small new Python component; no graph for it.
+**Verification.** Ran `discover.discover` + `parse_ledger` over every real ledger (98; 88 archived, 10 not) and `wilib.rebuild.stem_slug`; replayed the frozen `status_cells_2026-10-21.json` through `status_token`; `git ls-tree 9b129b18` for the ledger count. The §7.3 Cypher was read, not run (one `OR` predicate; both columns are in `RETURN`), so the note's live-plan claims are inherited, not rechecked.
+
+### Recomputed figures (two definitions each)
+
+| Claim | Stated | Units / by-unit | Distinct (ledger, key) | Verdict |
+|---|---|---|---|---|
+| units | 1,296 | 1,296 | 1,263 | holds (repeats collapse 33) |
+| spaced keys | 400 | 400 (`' '` = `\s` = label≠key) | 398 | holds |
+| no bare sibling | 371 | 371 | 369 | holds |
+| labels with >1 key / ledgers / exact / label-only | 40 / 10 / 25 / 15 | 40 / 10 / 25 / 15 (also case-insensitive) | — | holds |
+| labels repeating in a ledger | 68 | 68 (12 ledgers) | — | holds |
+| no-digit labels; empty; punctuation-ended | 105; 0; 0 | 105; 0; 0 | — | holds |
+| tally | 986 / unknown 104 (43 empty + 61 other), 72 ledgers | frozen file 986/104/43/61 exact; 72 ledgers at `9b129b18` | — | holds for the frozen definition |
+| tally, current tree | not stated | all 1,296: unknown 108; archived only 1,154: 106; **non-archived 142 units: unknown 2** | — | spread 104 to 108 |
+| `slug_of` vs `stem_slug` | 8 files | 8 (6 requirement/review of the three named topics + `connected-code-graph-p1-graph.md`, `salesperson-ui-graph.md`) | — | holds; rule text equals `discover.slug_of` |
+
+### Findings (all minor unless marked)
+
+- **P8-m1. §2.5's "live ledger" claims are already false, and are an as-of narrative.** Note §2.5 says `coordination-graph-coordination.md` "now parses with no `unknown`" and that H1 is "the only `unknown` in a non-archived ledger". Parsed now: two, H1 and row `S1e` of `coordination-graph-coordination.md` (`gated-pending (…)`, ledger line 79). Verified by running the parser. A dated census of mutable files decays within the round that wrote it. Replace the "Applied to the two tokens … as of 2026-11-20" paragraph by the rule alone (`dispatched`/`executed` stay `unknown`, the cell is fixed); the S8a lint is the live count. Consistent with S8a's text ("no `unknown` in a non-archived ledger") as far as it goes, see P8-m2.
+- **P8-m2. Nobody owns the lint rule the S8a precondition and §2.5 lean on.** Note §2.5 says "the S8a lint reports every such row"; base S8a (graph-dba) lists it as a plan addition. `coordgraph/lint.py` has no `unknown`-status check (grep: only the `Depends on` message), and graph-dba does not write parser/lint code. Add it to the S1/S3 `coder` row's `lint` scope (or an S1-fix item) and cite it from S8a. Verified by reading `lint.py`.
+- **P8-m3. Reachability gap: `U32~2` cannot come out of the single query.** Plan3 §3.4 now says `U32~2` "addresses one by `key`"; the note's §7.3 query filters `unitKey = $u OR unitLabel = $u`, and neither property carries `~n`, so `$u='U32~2'` returns zero rows. No document says the client strips a trailing `~\d+$`, queries the rest and keeps the row whose `key` ends `#U32~2` (the pattern must anchor at the end: a real key contains `~80 tool calls)`). Pre-existing wording, newly restated; state the strip-and-select step in the note §7.3 precedence paragraph. Verified statically.
+- **P8-m4. The precedence has two implementers and one prose rule.** Plan3 puts the need resolver in `identity.py` (S1d, "pure over fetched rows"); the note makes "the CLI" (`unit`, S3/S7) apply it. Without one named pure helper (e.g. `identity.pick_unit_rows(rows, u)`) the two will drift. Plan3 §6 test 9 lists "repeated label" and `U32~2` but no red-first case for the precedence itself: a mutant dropping the exact-key preference passes every listed case. Add `S6`/`S6 gate` (exact wins; `S6 gate` still reachable by its full key), `U1` vs `U1 K-091 …` (falls through), a label-only ambiguity (`Pass`), and a local label. Name the helper in both documents.
+- **P8-m5. Plan3's local-token routing contradicts the note.** Plan3 §3.4 resolves `<slug>:<unit>` **/ local** through `Ledger.slug`; note §7.6 anchors a local label on the referring ledger's `Source.path`. A local token must not go through the slug (two ledgers sharing a slug in two components would turn every local `U3` ambiguous). Fix plan3's bullet; give the path-anchored form of the §7.3 query once (the note shows only the slug-anchored one).
+- **P8-n1. The label rule's edge cases are stated as invariants and are false.** Note §2.2 ("never empty for a non-empty `unitKey`; equals `unitKey` when that has no space") and the §5.5 step-1 invariants repeat them; plan3 states only the rule. `unit_label_of('(x) y')` is `''`; `'U3:'`, `'U1(a)'`, `'U1;'` give `U3`, `U1`, `U1` (no space, label≠key). Zero hits in the corpus, so today the assertions pass; the first such cell reddens a correct parser and a rebuild. Drop "equals when no space", and either reject an empty label at parse (warning + fall back to the whole key) or weaken the invariant to "non-empty unless the key starts with `(`". Verified by running the function.
+- **P8-n2. "Live" now means two things.** Plan3 and the note write "1,296 live units", "98 live ledgers", while elsewhere "live ledger" means non-archived (`Unit.needs` "live ledgers only"). 88 of the 98 are archived. Say "all 98 ledgers (88 archived)". Also note §2.2 `key` row still says "8 ledgers repeat one [live]"; parsed: 4 ledgers repeat an identical `unitKey`, 12 repeat a label. And §7.2(c) still says "~74 ledgers" (98 now; sizing conclusion unaffected).
+
+### Cross-owner consistency (plan3 §3.4 vs note §2.2/§2.3/§7.3/§7.6)
+
+Agree: the label rule's text (up to first whitespace or `(`, trim `:,;`), case-sensitivity, exact-key precedence decided client-side from one query's rows, label-only ambiguity stays ambiguous, the archived minimal set carries `unitLabel` (G3 and note §2.2 both), `~n` not a label feature, "plan3 controls". Cross-references checked and existing: base §3.4a(d), plan3 §3.4 `Unit label`, note §2.2, §2.3, §3.2, §5.2, §5.5, §7.3, §7.6(d), §7.2(d). The §7.3 query returns `unitKey` and `unitLabel` with every row, so a single query suffices for the precedence; the only missing link is P8-m3/m4. Examples in the text exist in the corpus (`S6`/`S6 gate`, `Pass` ×11 in `salesperson-ui-coordination.md`; `U10`/`U10 (a695…)`; `U10b Note:`, `A7 Note:`, `U2.3 between…`, `C-graph-dba (data half)`).
+
+### Contradictions left unedited
+
+- Base §5 (parser tests) still says "today's 911 status cells … `unknown` 41, all in archived ledgers", which the note now retires ("74 / 911 / 41 … do not reproduce"). Point it at the note's §2.5 tally (986 / 104) or drop the figures; the corpus test then asserts the frozen file's tally. **Minor, P8-m6.** Verified by grep.
+- The `slug`, `unitKey`, wrapper and `§7.3` mentions elsewhere agree. Bare `coordgraph <sub>` in the base §3.2 hook steps and note §4.3/§5 is covered by the base abbreviation sentence, but that sentence binds a skill that does not exist yet and S5's row does not carry "define the abbreviation once"; add it to S5. (Folded into P8-m6.) `coordgraph.sh` exists at HEAD.
+- §2.5's "`dispatched`/`executed` stay `unknown`" agrees with S8a's precondition text; it is the S8a lint ownership (P8-m2) that is open.
+
+### Growth-stops check
+
+Word counts HEAD to tree: base 12,997 to 13,205 (+208); plan3 3,409 to 3,828 (+419); note 12,905 to 14,136 (+1,231). New scope: `unitLabel` rule and precedence, wrapper, per-kind slug, store write rules, §7.3 plan. Rework / restated, to cut: (a) the note's `unitLabel` row restates the rule and plan3's figures (400/1,296/371/40/10) while plan3 says "the rule is here, once": keep the property and a pointer; (b) note §2.5 "Applied to the two tokens … at the S1a gate", "re-stamped", "the earlier 74 / 911 / 41 figures … are retired", §7.3 "Earlier probe … v2": changelog prose, belongs in `HISTORY.md`/the ledger, not the note; (c) the `slug` row's "Needed: …" rationale and the dangling closing sentence ("The join key for 'picked up'"). Base §3.4a(d) and plan3 §3.4 carry no changelog; plan3's 419 words are mostly one subsection of new scope. Growth-stops: **passed for the base plan and plan3; note has the (b)/(a) items above (minor)**.
+
+### Open questions
+
+None blocking. The architect/graph-dba decision on P8-n1 (reject empty label vs weaken invariant) is theirs; either is sound.

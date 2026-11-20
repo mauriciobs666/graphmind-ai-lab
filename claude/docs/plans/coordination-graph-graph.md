@@ -1,8 +1,8 @@
 # Coordination graph — graph model, write path and operations
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — · **Version:** 3 · **Extended by:** `docs/plans/cross-initiative-coordination.md` · **Item:** `GAL-F0002`
+> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — · **Version:** 4 · **Extended by:** `docs/plans/cross-initiative-coordination.md` · **Item:** `GAL-F0002`
 
-Revised 2026-11-20 (v3) for `claude/docs/plans/coordination-graph3.md` §4 (G1–G6), which controls where it disagrees with this note.
+Revised 2026-11-20 (v4) for `claude/docs/plans/coordination-graph3.md` §4 (G1–G6); plan3 controls where it disagrees with this note.
 
 Graph-side design note for `claude/docs/plans/coordination-graph.md` (architect), implementing
 `claude/docs/requirements/coordination-graph.md`. Canonical for every Cypher/DDL detail the
@@ -72,7 +72,7 @@ in the graph points into it (§2.3). Labels `PascalCase`, relationships `UPPER_S
 | `path` | string | repo-root-relative, `/`-separated; **UNIQUE** (§4). Always ≪ 4096 bytes. |
 | `kind` | string | `ledger` · `review` · `requirement` · `backlog` |
 | `component` | string | first path segment (`claude` for agent plans). Repo-root `docs/`: `cpg` for `docs/BACKLOG.md` only (its header says it is `cpg`'s); `root` for everything under `docs/{plans,reviews,requirements}/`, which mixes cross-cutting and model-bench/salesperson work (root `AGENTS.md`) — never a guessed owner. Views print the path beside it. |
-| `slug` | string | topic slug: basename minus `.md` minus a closed-set role suffix (`-coordination`, `-ml`, `-graph`, `-rca`, `-impl`, `-report`) — the join key for "picked up" (§2.3) |
+| `slug` | string | topic slug: basename minus `.md` minus **one role suffix this source kind can carry** — ledger `-coordination`; review `-ml`/`-rca`/`-impl`; requirement and backlog none; a path outside the coverage globs the full closed set (`-coordination`, `-ml`, `-graph`, `-rca`, `-impl`, `-report`). Deliberately **not** `wilib.rebuild.stem_slug`, which strips any role from any kind. Needed: stripping `-graph` from the requirement `coordination-graph.md` gives `coordination`, while its ledger `coordination-graph-coordination.md` gives `coordination-graph`, so the "picked up" join (§2.3) would miss the pair (8 files differ today: `coordination-graph`, `connected-code-graph`, `cross-initiative-coordination` as requirement/review). `coordgraph/discover.py:slug_of` is the implementation; the `wi` slug is never assumed equal. Residual: a review named `…-graph.md` and an ordinal-suffixed successor ledger (`…strategy2`) join their family by `itemId` only. The join key for "picked up" (§2.3) |
 | `docStatus` | string | the canonical `Status:` token from the header block; **absent** when the file has none (`kaizen/plan.md`, `BACKLOG.md`) |
 | `owner`, `tracks` | string | header block fields, raw, when present |
 | `itemId` | string | first `Item:` token **as written** (header read by the stdlib `coordgraph/parse/header.py` on the already-read text — `wilib` is never imported on the sync path, plan3 §3.2); **absent** without `Item:`. Indexed, **non-unique** (a feature's requirement, plan, ledger and reviews share one) — `norm_value()` applies (§4.1); a token empty after `strip()` or > 512 bytes is not stored and adds a source warning. |
@@ -81,7 +81,7 @@ in the graph points into it (§2.3). Labels `PascalCase`, relationships `UPPER_S
 | `bytes`, `mtimeNs` | int | for the hook's mtime prefilter and diagnostics only; never a correctness input |
 | `syncedAt` | int | epoch ms of the committing write (client clock) |
 | `parserVersion` | int | bump forces a re-sync of every source (`sync --all` compares it) |
-| `warnings` | list<string> | parse warnings, `[]` when clean — e.g. `table 3: no Status column`, `duplicate unit U32 → U32~2`, `item without id`. Stored list, never absent, so "clean" ≠ "not parsed". |
+| `warnings` | list<string> | parse warnings, `[]` when clean — e.g. `table 3: no Status column`, `duplicate unit U32 → U32~2`, `item without id`. Stored list, **present on every kind** (requirements and reviews included), never absent, so "clean" ≠ "not parsed". The **parse side guarantees it** (the base `SourceDoc.source_props()` emits it); the store writes `$meta` as given and must not default or patch it — a missing key is a parser bug the parity test (§5.2) must catch. |
 | `rowCount` | int | children written (an archived ledger's minimal units included) — parity input (§5) |
 
 **`:Ledger`** adds two lists, written on **every** ledger, archived or not, always as a list
@@ -106,15 +106,16 @@ spellings the plan §2.1 lists). **`:Backlog`** adds `scope` (`falkor-chat`, `cp
 
 | Property | Notes |
 |---|---|
-| `key` | `<ledgerPath>#<unitKey>` — **UNIQUE**. `unitKey` is the Unit cell with Markdown emphasis/backticks stripped and cut at the first ` — `; the **n-th repeat in the same file gets `~n`** (`U32~2`). Unit labels are *not* unique per file today **[live]** — 8 ledgers repeat one (`U32`, `U3b`, `U4`, `U11`, `U1`, `Close-out`, …). The CLI caps `key` at 512 bytes (longer → `h:<sha256>`), because a >4096-byte value in a UNIQUE property crashes the instance **[quirks]**. |
+| `key` | `<ledgerPath>#<unitKey>` — **UNIQUE**. `unitKey` is the Unit cell with Markdown emphasis/backticks stripped and cut at the first ` — `; the **n-th repeat in the same file gets `~n`** (`U32~2`). A `unitKey` is *not* unique per file **[parsed, 2026-11-20]** — 4 ledgers repeat one (`U32`, …), 12 repeat a `unitLabel`. The CLI caps `key` at 512 bytes (longer → `h:<sha256>`), because a >4096-byte value in a UNIQUE property crashes the instance **[quirks]**. |
 | `unit` | the Unit cell as displayed |
-| `unitKey` | `unitKey` as defined above, **without** the `~n` suffix — the FR-8 lookup value (§7.3), so a lookup of `U32` returns every repeat. Not indexed (filtered after the indexed ledger anchor). |
+| `unitKey` | `unitKey` as defined above, **without** the `~n` suffix — the exact-match lookup value (§7.3), so a lookup of `U32` returns every repeat. Not indexed (filtered after the indexed ledger anchor). |
+| `unitLabel` | the bare unit label, **derived** from `unitKey` by the rule in `claude/docs/plans/coordination-graph3.md` §3.4 (`Unit label`) — the rule, its edge cases (including an empty result) and the corpus figures live there, once. Present on every unit **including the minimal archived set**, non-empty exactly when `unitKey` is (an empty derivation falls back to the whole key, plan3 §3.4); identity stays on `key`/`unitKey`. A lookup convenience, **not indexed** (the lookup is anchored on the ledger first, §7.3); not unique within a ledger. |
 | `ledgerPath`, `slug`, `component` | denormalized from the parent — lets FR-8 anchor on an index without a hop |
 | `itemId` | the unit's task ID — the first token of an optional `Item` column, **as written**; absent without the column/cell. Indexed non-unique (§4.2), `norm_value()` as for `Source.itemId`. |
 | `needs` | list<string>, the raw tokens of an optional `Needs` column (comma-split, trimmed, never shape-validated); `none` → `[]`, no column/cell → **absent** (the `dependsOn` rule, §2.2 `:Item`). Not indexed; resolved against candidates outside the graph (§2.3). |
 | `needsError` | string, present only when the cell is malformed (empty token between commas): `needs` is then absent and a source warning is added |
 | `tableIdx`, `rowIdx` | position (one file holds 30 tables) — display order only, **not** identity |
-| `statusText` | the raw `Status` cell, verbatim — what the views display |
+| `statusText` | the raw `Status` cell, verbatim — what the views display. **Absent (never `''`)** for a row of a table with a `Unit` column but no `Status` column (42 rows in 7 ledgers today), whose `statusToken` is still `'unknown'` with a warning (§3.2 write rules). |
 | `statusToken` | the normalized status (§2.5): one of teco's 7 values or `unknown`; **always present**, indexed |
 | `owner`, `agentId`, `deliverable`, `gateVerdict`, `cost` | cells mapped **by header name** (header variants: `Owner`/`Agent`/`Agent (scope)`, `Unit`/`Unit(s)`, with/without `Cost`); a column the table lacks is **absent**, not `''` |
 | `question`, `askedOn` | `statusToken = 'paused'` rows only: the open question and relay date parsed out of `Deliverable` (`askedOn` as `YYYY-MM-DD` string; absent + a warning if unparseable) |
@@ -125,7 +126,7 @@ Cell text runs up to 5,291 bytes **[live]**; that is fine on unconstrained prope
 ≥1 MB **[quirks]**) — **never put a cell on an indexed-UNIQUE property**.
 
 **Minimal units (archived ledger).** Every row of an archived ledger is still written, as a
-`:Unit` with exactly `key`, `unitKey`, `statusToken`, `itemId` (when present), `ledgerPath`, `slug`,
+`:Unit` with exactly `key`, `unitKey`, `unitLabel`, `statusToken`, `itemId` (when present), `ledgerPath`, `slug`,
 `component`, `tableIdx`, `rowIdx` — **no cell text, no `needs`/`needsError`, no `rowHash`**. Decisions:
 `tableIdx`/`rowIdx` stay (two ints; they keep §7.3's table-order display of repeated labels and cost
 nothing); `rowHash` goes (there is no cell list to hash). The parity canonicaliser (§5.2) hashes the
@@ -134,7 +135,7 @@ archived ledger therefore sees only the written fields (`key`, `statusToken`, `i
 while any other edit still shows at file level (`sha256` ≠ disk), which re-syncs the ledger — nothing
 that matters is lost, because nothing else of an archived row is mirrored. The parser still **parses**
 the full row to derive these fields and the two review lists. `statusToken = 'unknown'` units
-(§2.5: 41 today, all archived) are written like any other; the tally rule of §2.5 is unchanged.
+(§2.5: 104 in the frozen corpus, all in archived ledgers) are written like any other; the tally rule of §2.5 is unchanged.
 `needs` of an archived ledger is not mirrored (plan3 §4 G3).
 
 **`:Item`** (backlog item; FR-14 fields modelled as *may be absent*):
@@ -163,10 +164,10 @@ the token as written) from the work-item registry through `wilib`, then joins wi
 |---|---|---|
 | item → item (same or other backlog) | `Item.dependsOn` raw tokens (`'K-065'`, `'falkor-chat:K-065'`, `'GAL-F0042'`) | `Item.ref IN $candidates` (UNIQUE index) |
 | document → its feature | `Source.itemId` (as written; `Source.aliases` diagnostic) | `Source.itemId IN $candidates` (§4.2 index) |
-| ledger unit → task/feature need | `Unit.needs` raw tokens (live ledgers only) | `Unit.itemId IN $candidates` (task) · `Source.itemId IN $candidates` + units' `statusToken` (feature) · `Source.slug`/`Unit.unitKey` (`<slug>:<unit>`) |
+| ledger unit → task/feature need | `Unit.needs` raw tokens (non-archived ledgers only) | `Unit.itemId IN $candidates` (task) · `Source.itemId IN $candidates` + units' `statusToken` (feature) · `Source.slug` + `Unit.unitKey`/`Unit.unitLabel` (`<slug>:<unit>`, exact `unitKey` wins, §7.3) |
 | ledger unit → review doc | `Unit.cites` (paths, display) | `Source.path` (UNIQUE index) |
 | ledger → review it closed | `Ledger.citedReviews` / `resolvedReviews` (§2.2) | `Review.path` by list membership (§7.2(c)) |
-| requirement → "picked up" | nothing stored — derived | `Ledger.slug = Requirement.slug` (index on `slug`) **or** `Source.itemId IN $candidates` (separate reads, §7.6(d); an `OR` would scan) |
+| requirement → "picked up" | nothing stored — derived | `Ledger.slug = Requirement.slug` (index on `slug`; both slugs derived by the per-kind role rule of §2.2 — ledger strips `-coordination`, requirement nothing — so `coordination-graph.md` ↔ `coordination-graph-coordination.md` meet on `coordination-graph`) **or** `Source.itemId IN $candidates` (separate reads, §7.6(d); an `OR` would scan) |
 
 **The registry is a second input that parity does not cover.** The raw strings above are a pure
 function of the files (rebuild and parity, §5, prove exactly that); the candidate sets are a
@@ -230,33 +231,47 @@ by the replace-from-parse statement, and the mirror rebuild never touches `:KbFi
 
 ### 2.5 Status normalization (`Unit.statusToken`)
 
-Ledger `Status` cells are free text — 362 distinct values over 74 ledgers (review Appendix B):
+Ledger `Status` cells are free text — 362 distinct values in the review's corpus (review Appendix B):
 `**in-flight** — dispatched …`, `**accepted — APPROVE WITH SUGGESTIONS**`, `✅ done 2026-07-29 — …`,
 `**relayed**`, `—`. Every view filters on `statusToken`, never on the raw cell. The parser maps a
-cell in this order, as one pure function with its own fixture table:
+cell in this order, as one pure function (`coordgraph/parse/ledger.py:status_token`) with its own fixture table:
 
 1. Drop backticks, `*`, `_`, and emoji/pictographs (`✅` …); `strip()`; casefold.
 2. Take the leading word, letters and hyphens only (`in-flight`); also try the two-word form
    (`in flight` → `in-flight`).
 3. **Exact match** to teco's vocabulary (`claude/teco/teco.md`, ledger convention): `queued` ·
    `in-flight` · `delivered` · `gated` · `accepted` · `abandoned` · `paused`.
-4. Else a **closed alias table**, a code constant, each entry justified by a real cell:
-   `relayed` → `paused` (teco's "question relayed to the stakeholder"),
+4. Else a **closed alias table**, a code constant, each entry justified by a real cell *in a frozen
+   (archived) ledger*: `relayed` → `paused` (teco's "question relayed to the stakeholder"),
    `done` → `delivered`, `superseded` → `abandoned`.
 5. Else **`unknown`**, plus a source warning naming the row and the raw text.
 
+**Rule for new tokens.** An alias is added only for a word that already sits in cells nobody can
+edit any more (archived ledgers) and has an unambiguous teco meaning. A word found in a **live**
+ledger is a cell to fix, not a token to alias — the vocabulary stays teco's seven plus the three
+historical aliases, and `unknown` keeps meaning "a human must look". Consequently **`dispatched`** (the verb for entering `in-flight`, which is the state) and
+**`executed …`** (a stakeholder-action row that must read `delivered` or `accepted`, prose after the
+token) stay `unknown`, and the cell is fixed. The S8a precondition ("no `unknown` in a non-archived
+ledger") is checked by the lint, which is the live count of any such row.
+
 Deliberately **not** aliased: `blocked` (the one real cell is blocked on an architect fix, not on
 the stakeholder, so `paused` would put it in the wrong view), `teco-verified`,
-`accepted-checkpoint`, verdict-shaped cells (`needs changes …`, `approve with suggestions …`,
-`pass with defects …`) — those read `unknown` with a warning, and a human fixes the cell or
-extends the alias table with a fixture. Offline dry run (2026-10-21, no database) over today's
-74 ledgers / 911 status cells with exactly this function: `accepted` 425 · `delivered` 357 ·
-`in-flight` 37 · `gated` 26 · `queued` 17 · `paused` 5 · `abandoned` 3 · **`unknown` 41**. All 5
-`paused` are `**relayed**` — no ledger holds a bare `paused` cell today, so the v1 exact-match
-query would have found **none** of them. All 41 `unknown` are the forms listed above and all sit
-in archived ledgers, which the views do not show. The parser
-fixtures (plan §5) must include every raw variant quoted in this section, including the
-`**paused** — …`, `**relayed**`, `✅ done …`, `—` and `blocked (…)` forms.
+`accepted-checkpoint`, `gated-pending (…)`, verdict-shaped cells (`needs changes …`,
+`approve with suggestions …`, `pass with defects …`) — those read `unknown` with a warning, and a
+human fixes the cell or extends the alias table with a fixture.
+
+**Tally.** Definition: every row, in every table with a `Unit` column, of every
+coverage-glob ledger **as frozen** in `coordination-graph/tests/data/status_cells_2026-10-21.json`
+(captured at git `9b129b18`, 72 ledgers, all archived), counted by `status_token` as parsed; a table
+that has a `Unit` column but no `Status` column contributes its rows as `unknown` ("no status"; 42
+rows in 7 ledgers). 986 rows: `accepted` 429 · `delivered` 364 (359 + 5 `done`) · `in-flight` 38 ·
+`gated` 25 · `queued` 18 · `paused` 5 · `abandoned` 3 · **`unknown` 104** (43 empty cells — 42 no-Status-column
+rows plus one empty cell — and 61 `—`/verdict-/narrative-shaped or column-shifted cells), **all in
+archived ledgers**. An independent regex-only recount agrees per class (review S1a ruling 3: 944 rows in
+tables *with* a Status column). All 5 `paused` are `**relayed**` — no ledger holds a bare `paused` cell, so an
+exact-match query would have found none. The parser fixtures (plan §5) must include every raw
+variant quoted in this section, including the `**paused** — …`, `**relayed**`, `✅ done …`, `—`,
+`blocked (…)` and `dispatched`/`executed …` forms (the last two asserting `unknown`).
 
 ## 3. Write path & atomicity
 
@@ -303,6 +318,15 @@ RETURN count(u) AS written
   only for "recorded: none" (§2.2).
 - Both `OPTIONAL MATCH` anchors plan as `Node By Index Scan | (old:Source)` **[live, EXPLAIN]**,
   for `$path` and for `$meta.path` alike.
+- **Write rules (the store adds nothing the parser did not decide).** (1) **Absent, not empty**: a
+  `null`/`None` from the parser is omitted from the map, so `Unit.statusText` is absent for a
+  row of a table with no `Status` column while `statusToken` is `'unknown'` — never `''`. (2) `norm_value()`
+  (§4.1) is applied **at the write boundary** to every value on an indexed non-unique property —
+  `Source.itemId`, `Unit.itemId`, `Ledger.slug`, `Backlog.scope`, `Unit.statusToken` — so the stored string and the parity
+  canonicaliser's expectation are normalised the same way, whatever a parser forgot. (3) `warnings`
+  (every kind) and `rowCount` (every kind, `0` for a childless review/requirement) are always in `$meta`,
+  supplied by the parser; the store neither defaults nor patches them, so the parity property set is
+  the same for every kind and a missing key fails the check instead of being hidden.
 - **Zero rows is safe**: the `:Source` is created *before* the `UNWIND`, so a ledger with no rows or
   an empty backlog still gets its node — the empty-`UNWIND` collapse **[quirks]** only drops the
   `RETURN` row (`written` reads 0) **[live]**: replacing with `$rows = []` left the `:Source` with
@@ -500,9 +524,11 @@ between). The check must be able to fail: a mutation test edits one property in 
 and asserts the parity check reports exactly that key. Planted mutants for the identity
 properties, each of which must turn it red: `aliases: []` → absent, `needs: []` → absent,
 `Source.itemId` altered, `Item.ref` scheme form → `<scope>:<id>`, `dependsOn` token qualified,
-an archived ledger's unit dropped (`rowCount` and key set differ).
+an archived ledger's unit dropped (`rowCount` and key set differ), `unitLabel` omitted or set to
+`unitKey` on one spaced-key unit, `warnings` dropped from one requirement, `statusText: ''` written for
+a no-Status-column row, `slug` of a requirement stripped of `-graph`.
 
-**Version gate.** The change that adds these properties bumps `parserVersion`, so `sync --all`
+**Version gate.** The change that adds these properties (and `Unit.unitLabel`, the per-kind slug rule, `warnings` on every kind) bumps `parserVersion`, so `sync --all`
 (§5.3) re-syncs every source on first run; `rebuild` is unaffected.
 
 ### 5.3 `sync --all` vs `rebuild`
@@ -534,6 +560,7 @@ below must pass before the next one starts; any failure stops the procedure.
      end, ≤ 512 UTF-8 bytes — and every indexed value (`Source.itemId` and `Unit.itemId`
      included) passes `norm_value()`'s; archived ledgers' `Unit.key`s are checked too — they were
      never written before, so this is the first time they reach a UNIQUE constraint;
+   - **property-set invariants** (each a failing assertion naming the path/key): every `:Source` map carries `warnings` (list) and `rowCount` (int, `0` for a review/requirement) — any kind lacking either is a parser bug; every `:Unit` map (minimal archived ones included) carries `unitLabel` equal to plan3 §3.4 `Unit label`'s rule applied to its `unitKey` (recomputed independently of the parser); `unitLabel` is non-empty exactly when `unitKey` is — a key starting with `(` falls back to the whole `unitKey` with the warning `unit <key>: unit label fell back to the key` (plan3 §3.4); there is no "equals `unitKey` when no space" assertion (`U3:` → `U3`); a unit with no `Status` column has **no** `statusText` key (never `''`) and `statusToken == 'unknown'`; every `slug` equals the per-kind derivation of §2.2 (a requirement `…-graph.md` keeps its `-graph`); and over every ledger, every unit is returned by its `unitLabel` under the §7.3 predicate and a label shared within a ledger returns all its holders (the coverage probe, run offline over the parsed rows);
    - **no duplicates across the whole load** for each UNIQUE property (`Source.path`, `Unit.key`,
      `Item.ref`, `KbFile.path`, `KbSection.key`) — a cross-file duplicate would not crash, but it
      fails that file's statement atomically and leaves it unmirrored. A **scheme `Item.ref` in
@@ -900,7 +927,7 @@ RETURN q.component AS component, q.path AS path, q.docStatus AS status, q.synced
 - Plans **[live]**: (a) `Node By Label Scan | (l:Ledger)` (72) → `Filter` (2) → traverse (8 units);
   (b) `Node By Index Scan | (u:Unit)` on `statusToken` + `Value Hash Join` with the ledger scan
   (re-checked for v2 on a throwaway container); (c) label scan of 168 reviews → `Filter` (~10 needs-changes)
-  × `Apply`/`Optional` label scan of ~74 ledgers with a list-membership `Filter` — ~750 records,
+  × `Apply`/`Optional` label scan of ~98 ledgers (measured at ~74; sizing unaffected) with a list-membership `Filter` — ~750 records,
   no index applies to list membership and none is needed at this size; v2 form verified on a
   throwaway container against a six-review fixture covering every branch (resolved by an
   accepted row, cited only by an archived ledger, cited by an in-flight row, uncited, review
@@ -914,22 +941,60 @@ RETURN q.component AS component, q.path AS path, q.docStatus AS status, q.synced
 
 ```cypher
 MATCH (l:Ledger {slug: $slug})-[:HAS_UNIT]->(u:Unit)
-WHERE u.unitKey = $unit
+WHERE u.unitKey = $unit OR u.unitLabel = $unit
 RETURN l.path AS path, l.docStatus AS docStatus, l.sha256 AS fileSha, l.syncedAt AS syncedAt, u.key AS key,
-       u.statusToken AS status, u.statusText AS statusText, u.agentId AS agentId,
+       u.unitKey AS unitKey, u.unitLabel AS unitLabel, u.statusToken AS status, u.statusText AS statusText, u.agentId AS agentId,
        u.deliverable AS deliverable, u.question AS question, u.askedOn AS askedOn,
        u.rowHash AS rowHash
 ORDER BY path, u.tableIdx, u.rowIdx
 ```
 `$slug` and `$unit` go through `norm_value()` (§4.1), and the CLI derives `$unit` with the same
 cleaning as the stored `unitKey` (emphasis/backticks stripped, cut at the first ` — `). `unitKey`
-is a stored property (§2.2) and carries no `~n` suffix, so a repeated label returns **every**
-repeat, each with its own `key` — the CLI shows them all, in table order, rather than guessing.
-Plan: `Node By Index Scan | (l:Ledger)` → `Conditional Traverse` → `Filter` **[live, v2 form on a
-throwaway container: `U32` returned both `#U32` and `#U32~2`; `U1` returned one row]**. Two ledgers
-in different components could share a slug — the CLI shows both, with their paths. The CLI hashes
+and `unitLabel` are stored properties (§2.2); neither carries a `~n` suffix, so a repeated key or label
+returns **every** repeat, each with its own `key`.
+
+**Path-anchored form (local tokens).** A bare label inside a `needs` cell, and any lookup that
+already holds the ledger's path, anchors on the path and never on the slug — two ledgers can share a
+slug in two components, which would turn every local `U3` ambiguous:
+
+```cypher
+MATCH (l:Source {path: $path})-[:HAS_UNIT]->(u:Unit)
+WHERE u.unitKey = $unit OR u.unitLabel = $unit
+RETURN u.key AS key, u.unitKey AS unitKey, u.unitLabel AS unitLabel, u.statusToken AS status,
+       u.itemId AS itemId, u.tableIdx AS tableIdx, u.rowIdx AS rowIdx
+ORDER BY u.tableIdx, u.rowIdx
+```
+`<slug>:<unit>` anchors on `Source.slug` (the query above), then the helper; the referring ledger's own units anchor here on `Unit.ledgerPath`'s ledger, `Source.path`.
+Everything below applies to both forms.
+
+**Client-side selection, from one query's rows.**
+1. **`~n` addressing.** If `$unit` ends in an end-anchored `~\d+$` (`U32~2`), the client strips it,
+   queries the rest (`U32`), and keeps the row whose `key` ends `#U32~2`. The pattern must anchor at
+   the end: a real key can contain `~` mid-string (`~80 tool calls)`). Neither stored property carries `~n`,
+   so `$unit = 'U32~2'` sent as-is returns zero rows.
+2. **Exact-key precedence.** The `OR` returns exact-key and label matches together; the client keeps the
+   rows whose `unitKey` equals `$unit` **if there are any**, and only otherwise the label matches
+   (plan3 §3.4 `Unit label`). `S6` returns the `S6` row(s), not `S6 gate`; `U1` against
+   `U1 K-091 band write` (no exact sibling) falls through to the label. Label-only matches that stay
+   ambiguous are shown in table order, never guessed. The one pure helper `identity.pick_unit_rows(rows, token)` (plan3 §3.4) owns this selection
+   and the `~n` step for the `unit` view and the need resolver alike, so they cannot drift.
+
+Coverage probe (offline, over the parsed rows of every ledger — 98, of which 88 archived): each unit is
+returned by its `unitLabel` under the predicate, and a label shared within a ledger returns all
+its holders.
+
+**Plan [live, throwaway container `falkordb/falkordb:v4.18.11`, 98 ledgers / ~1,300 minimal units
+loaded from the real parse]:** neither `unitKey` nor `unitLabel` is indexed, and the `OR` need not be —
+it is a `Filter` *after* the indexed anchor, never the scan anchor (§7.6(d)'s hazard is `OR` **as**
+anchor). Slug form: `Node By Index Scan | (l:Ledger)` (1 record) → `Conditional Traverse | (l)->(u:Unit)`
+(132 records, the largest ledger) → `Filter` (3 for `S4`), 0.24 ms. Path form: the same shape with
+`Node By Index Scan | (l:Source)` (1 record), 3 for `S4`, `Conditional Traverse` 132 records. Without
+any anchor the predicate is `Node By Label Scan | (u:Unit)` over all units, 0.2 ms — also fine, but the
+CLI always anchors. Sizing: one short string on ~1,300 units, order of 0.1 MB against §8 **[inferred]**,
+so no index is created. Two ledgers
+in different components could share a slug — the slug form shows both, with their paths. The CLI hashes
 just the matched file(s) for the drift flag. An archived ledger's units are found too (that is the
-point of §2.2's minimal units): such a row carries only `unitKey`/`statusToken`/`itemId`, so the
+point of §2.2's minimal units): such a row carries only `unitKey`/`unitLabel`/`statusToken`/`itemId`, so the
 cell columns read `null` and the CLI prints the ledger's `docStatus: archived` beside it.
 
 **By ID (`unit <slug|ID> [<unit-id>]`).** The CLI first expands the argument through
@@ -1068,7 +1133,8 @@ RETURN s.path AS path, s.slug AS slug, s.itemId AS itemId
   once with the union of the candidate sets of the requirements it returned (those with an
   `itemId`), and drops a requirement whose candidates meet a returned `itemId`.
 - `unit <slug|ID>` (§7.3) and `inflight` by ID use (b)/(c); a `<slug>:<unit>` need uses §7.3's
-  anchor (`Source.slug` through `Ledger.slug`) and a local label the referring ledger's own units.
+  anchor (`Source.slug` through `Ledger.slug`, `unitKey = $u OR unitLabel = $u`, exact-key precedence) and a local label
+  the referring ledger's own units (anchored on `Source.path`, same predicate).
 - A candidate list is bounded in practice (`id`, uid, aliases, legacy name, token; < 20). If one ever
   exceeds ~1,000 elements the CLI batches it; no measurement is claimed past the fixture.
 
