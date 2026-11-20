@@ -1060,5 +1060,5 @@
    ]
   }
  },
- "source": "real extractor output (Joern, ccg.build over the fixture system at a scratch commit) with fx-svc clients/peer.py rewritten to shapes a-j (os.environ.get, f-string, local, os.getenv, dict.get, non-empty default, .rstrip chain, .setdefault, from-import environ.get and getenv); jobs = fx-svc/clients/jobs.py as committed"
+ "source": "real extractor output (Joern, ccg.build over the fixture system at a scratch commit) with fx-svc clients/peer.py rewritten to shapes a-j (os.environ.get, f-string, local, os.getenv, dict.get, non-empty default, .rstrip chain, .setdefault, from-import environ.get and getenv); jobs = fx-svc/clients/jobs.py as committed; regenerate with tests/data/p1_54_environ_reads_regen.py"
 }

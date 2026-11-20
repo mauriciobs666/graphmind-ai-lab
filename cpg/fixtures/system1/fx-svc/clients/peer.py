@@ -5,4 +5,4 @@ import requests
 
 
 def peer_health():
-    return requests.get(os.environ["FX_PEER_BASE"] + "/api/health", timeout=5)
+    return requests.get(os.environ.get("FX_PEER_BASE", "") + "/api/health", timeout=5)

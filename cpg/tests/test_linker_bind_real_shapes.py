@@ -1,9 +1,11 @@
 """P1-54: the Binder's environment-read recognition on **real** records (``docs/plans/connected-code-graph-p1-linking.md`` P1-54; P1-17 behaviour (5)).
 
 The inputs are callsite, ``valueSet`` and ``data`` records extracted from a real Joern build (``tests/data/p1_54_environ_reads.json``: the fixture
-system's ``fx-svc`` with ``clients/peer.py`` rewritten to ten shapes, plus ``clients/jobs.py`` as committed), never hand-built: the hand-built
-records of ``test_linker_bind.py`` once passed a predicate that no real record satisfied. Only the owning symbol id is rewritten (to the
-readable ``C``) so the records sit in the ``compose_world`` units.
+system's ``fx-svc`` with ``clients/peer.py`` rewritten to ten shapes, plus ``clients/jobs.py`` as committed; regenerate with
+``tests/data/p1_54_environ_reads_regen.py``, whose docstring has the command). The callsite, ``valueSet`` and ``data`` records are never
+hand-built: the hand-built records of ``test_linker_bind.py`` once passed a predicate that no real record satisfied. Two things in ``world()``
+are synthetic: the owning symbol id (rewritten to the readable ``C`` so the records sit in the ``compose_world`` units) and the lifted URL
+fact (``url_lifted(...)``, hand-built; the lifting has its own real-fact tests).
 """
 import copy
 import json

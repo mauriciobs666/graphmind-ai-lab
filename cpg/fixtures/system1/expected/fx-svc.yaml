@@ -1184,7 +1184,7 @@ rows:
     qname: api/reports.py::build_router.report_view
 - id: AC6-EX-4
   kind: http
-  item: FX_PEER_BASE set only in deploy/compose.example.yaml (service svc); consumer of GET /api/health in a Python function of fx-svc
+  item: FX_PEER_BASE set only in deploy/compose.example.yaml (service svc, value http://api:8000, a service the primary deploy/compose.yaml declares); clients/peer.py reads it with os.environ.get and consumes GET /api/health in a Python function of fx-svc
   provider:
   - repoId: fx-svc
     path: api/health.py
@@ -1201,13 +1201,10 @@ rows:
   status: possible
   reason: example-config
   gate: P1
-  p1Form:
-    status: possible
-    reason: partial-key
   serves:
   - AC-6
   stratum: fixture-dev
-  whyUnprovable: 'the only binding of os.environ["FX_PEER_BASE"] is an example config. True: svc:api/health.py::build_router.health'
+  whyUnprovable: 'the only binding of os.environ.get("FX_PEER_BASE") is an example config. True: svc:api/health.py::build_router.health'
   trueTarget:
   - repoId: fx-svc
     path: api/health.py

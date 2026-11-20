@@ -90,3 +90,14 @@ def test_the_fixture_build_links_the_binding_rows_as_the_manifests_say(fixture_b
     """LNK-45 (`possible`/`prompt-mention` with its two-entry chain), LNK-16 (`port-shared`), LNK-19 (unbound, both `reindex` providers), and
     LNK-12, 02, 06 (`binding-confirmed`, each to exactly its `svc` provider)."""
     assert link_violations(fixture_build, manifests) == []
+
+
+@pytest.mark.live
+def test_a_real_extraction_of_jobs_py_yields_the_environ_read_shape_the_binder_table_expects(fixture_build):
+    """P1-54 M1: the census over the static golden proves the table matches stored records; this pairs it with a live extraction of the committed
+    ``fx-svc/clients/jobs.py``, so a change in the extractor's naming (not in the golden) reddens here instead of silently killing behaviour (5)."""
+    from ccg.linker.bind import _ENV_READ_TARGETS
+    reads = [r for r, _ in fixture_build.records.values()
+             if r.get("type") == "callsite" and "clients/jobs.py" in fixture_build.loc_of.get(r["symbolId"], "") and "environ" in (r.get("externalTarget") or "")]
+    assert reads, "no environ callsite extracted from fx-svc/clients/jobs.py"
+    assert all(r["externalTarget"] in _ENV_READ_TARGETS for r in reads), [r["externalTarget"] for r in reads]

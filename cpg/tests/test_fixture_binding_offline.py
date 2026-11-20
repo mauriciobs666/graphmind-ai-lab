@@ -43,7 +43,7 @@ from ccg.packrt import run_packs
 from ccg.rulepack import load_pack
 from ccg.staleness import local_head
 from linker_helpers import cons, mention, prov
-from packrt_helpers import call, sym, vs
+from packrt_helpers import call, data, sym, vs
 
 CPG = Path(__file__).resolve().parents[1]
 SYSTEM_YAML = CPG / "fixtures" / "system1" / "system.yaml"
@@ -89,7 +89,7 @@ MUTANTS = {
     "delete fx-job/deploy/compose.dev.yaml": ({"fx-job/deploy/compose.dev.yaml": None}, "LNK-16: no link from the loopback :8000 consumer", None),
 }
 
-REPO_ROWS = ("LNK-45", "LNK-16", "LNK-19", "LNK-12", "LNK-02", "LNK-06")
+REPO_ROWS = ("LNK-45", "LNK-16", "LNK-19", "LNK-12", "LNK-02", "LNK-06", "AC6-EX-4")
 
 
 # ---- worlds: a root of the four repositories, edited and committed when a mutant needs it ------------------------------------------------
@@ -114,9 +114,10 @@ def _git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True, env={**os.environ, **_GIT_ENV}).stdout
 
 
-def edited_root(base: Path, dest: Path, edits: dict) -> Path:
+def edited_root(base: Path, dest: Path, edits: dict, *, idempotent: bool = False) -> Path:
     """A copy of ``base`` with ``edits`` committed on each repository's current branch: ``path -> text``, ``None`` (delete), or
-    ``("sub", old, new)`` (replace ``old`` once; ``old`` or ``new`` must occur)."""
+    ``("sub", old, new)`` (replace ``old`` once; ``old`` must occur, or, only with ``idempotent=True`` (``CONFORMING_EDITS``, which a
+    committed fixture may already carry), ``new``)."""
     shutil.copytree(base, dest, symlinks=True)
     touched = set()
     for rel, new in edits.items():
@@ -126,8 +127,8 @@ def edited_root(base: Path, dest: Path, edits: dict) -> Path:
             f.unlink(missing_ok=True)
         elif isinstance(new, tuple):
             text = f.read_text()
-            # idempotent: once P1-53b has edited the committed fixtures, the conforming edit is already in the tree
-            assert new[1] in text or new[2] in text, f"{rel}: {new[1]!r} not found"
+            # idempotent: once P1-53b has edited the committed fixtures, the conforming edit is already in the tree; a mutant's `old` must occur
+            assert new[1] in text or (idempotent and new[2] in text), f"{rel}: {new[1]!r} not found"
             f.write_text(text.replace(new[1], new[2], 1))
         else:
             f.parent.mkdir(parents=True, exist_ok=True)
@@ -211,7 +212,7 @@ def build_world(root: Path, work: Path, manifests) -> World:
     texts = {}
     for repo in ("fx-svc", "fx-job"):
         for rel in tracked[repo]:
-            if rel.endswith("Dockerfile") or rel.endswith(".sh"):
+            if rel.endswith("Dockerfile") or rel.endswith(".sh") or rel in ("clients/peer.py", "deploy/compose.yaml", "deploy/compose.example.yaml"):
                 texts[(repo, rel)] = _git(repos[repo], "show", f"{heads[repo]}:{rel}")
 
     # code units: header + the file records of their tracked files; the symbols the rows name are added below
@@ -252,7 +253,7 @@ def build_world(root: Path, work: Path, manifests) -> World:
 
     providers, consumers, lifted, extra = [], [], [], []
     for rid, kind, key_ in (("LNK-12", "mcp_tool", "reindex"), ("LNK-02", "mcp_tool", "get_item"), ("LNK-06", "mcp_tool", "list_orders"),
-                            ("LNK-16", "http", "GET /job/status")):
+                            ("LNK-16", "http", "GET /job/status"), ("AC6-EX-4", "http", "GET /api/health")):
         for loc in row_locators(manifests, rid, "provider"):
             providers.append(prov(at(loc), kind, key_))
     for loc in row_locators(manifests, "LNK-20", "provider"):              # every mcp_tool provider of the system, the second `reindex` among them (NC-5)
@@ -266,6 +267,16 @@ def build_world(root: Path, work: Path, manifests) -> World:
     lifted.append({"packId": "fetch", "lifting": "fetch-url", "siteId": "site-lnk16", "symbolId": cs16, "path": c16["path"], "line": 1,
                    "urlPath": "a0", "alternatives": ["http://localhost:8000/job/status"], "resolved": True, "leaf": True, "hops": [], "verbs": None,
                    "partialAlternatives": False, "weakenedBy": None, "status": "confirmed", "reason": "lifted-role"})
+    # AC6-EX-4 (P1-53c): the peer consumer reads its base from `os.environ.get("FX_PEER_BASE", "")`; only the example Compose file sets it
+    c_ex4 = row_locators(manifests, "AC6-EX-4", "consumer")[0]
+    s_ex4 = at(c_ex4)
+    consumers.append(cons(s_ex4, "http", "GET /api/health", "site-ex4"))
+    lifted.append({"packId": "requests", "lifting": "fetch-url", "siteId": "site-ex4", "symbolId": s_ex4, "path": c_ex4["path"], "line": 1,
+                   "urlPath": "a0", "alternatives": ["\x00/api/health"], "resolved": True, "leaf": True, "hops": [], "verbs": None,
+                   "partialAlternatives": False, "weakenedBy": None, "status": "confirmed", "reason": "lifted-role"})
+    # the real extractor's shape of `os.environ.get(...)`: bare member as calleeName, the table's externalTarget (tests/data/p1_54_environ_reads.json)
+    code[unit_id["svc"]] += [call("env-ex4", s_ex4, "get", resolution="external", external="os.py:<module>.<member>(environ).get"), vs("env-ex4", "a0", "FX_PEER_BASE"), vs("env-ex4", "a1", ""),
+                             data("site-ex4", "env-ex4", "a0", "r")]
     # the `:8200/mcp` mcp_tool consumers of LNK-02, 06, 12 (stand-in for the TS pack: a `streamablehttp_client` callsite in the consumer's file)
     for rid, key_ in (("LNK-02", "get_item"), ("LNK-06", "list_orders"), ("LNK-12", "reindex")):
         loc = row_locators(manifests, rid, "consumer")[0]
@@ -409,8 +420,46 @@ def chain_violations(w: World) -> list[str]:
     return bad
 
 
+def _head_text(w: World, repo: str, path: str) -> str:
+    """A tracked file's text: from ``w.texts`` (offline tier), else read from the materialized checkout (the live tier carries no ``texts``)."""
+    return w.texts[(repo, path)] if (repo, path) in w.texts else (w.root / repo / path).read_text()
+
+
+def ex4_chain_violations(w: World, manifests, link_) -> list[str]:
+    """AC6-EX-4's chain from the Compose structure, not from the Binder: the example file's `FX_PEER_BASE` entry (the manifest aux locator), then
+    the facts of the primary service its URL host names: that service's published port (the URL's port) and its `build.context` mount."""
+    import yaml
+    from urllib.parse import urlparse
+    aux = next(a for a in row_locators(manifests, "AC6-EX-4", "aux") if a.get("keyPath"))
+    example = yaml.safe_load(_head_text(w, "fx-svc", aux["path"]))
+    url = urlparse(example["services"]["svc"]["environment"]["FX_PEER_BASE"])
+    primary = yaml.safe_load(_head_text(w, "fx-svc", "deploy/compose.yaml"))["services"]
+    if url.hostname not in primary:
+        return [f"AC6-EX-4: {aux['path']} FX_PEER_BASE host {url.hostname!r} is not a service of the primary deploy/compose.yaml {sorted(primary)} (it would bind nothing)"]
+    svc_ = primary[url.hostname]
+    ports = [int(str(p).split(":")[0]) for p in svc_.get("ports", [])]
+    if url.port not in ports:
+        return [f"AC6-EX-4: service {url.hostname} publishes {ports}, not the example URL's port {url.port}"]
+    want = [(aux["repo"], aux["path"], aux["keyPath"], None), ("fx-svc", "deploy/compose.yaml", None, ("port", url.hostname, url.port)),
+            ("fx-svc", "deploy/compose.yaml", None, ("mount", url.hostname, svc_["build"]["context"]))]
+    got = chain_of(w, link_)
+    if [o for o, _, _ in got] != list(range(len(want))):
+        return [f"AC6-EX-4 link: BOUND_BY ords {[o for o, _, _ in got]}, expected {list(range(len(want)))}"]
+    bad = []
+    for (o, r, rp), (repo, path, kp, fact) in zip(got, want):
+        if fact is None:
+            ok = entry_matches(r, repo, path, kp, rp)
+        else:
+            kind, service, val = fact
+            ok = (rp, r.get("path"), r.get("type"), r.get("kind"), r.get("service")) == (repo, path, "launchFact", kind, service) and \
+                r.get("port" if kind == "port" else "mountPath") == val
+        if not ok:
+            bad.append(f"AC6-EX-4 link: BOUND_BY ord {o} is {rp}:{r.get('path')} {r.get('keyPath') or (r.get('kind'), r.get('service'))}, expected {want[o][:3]} {fact}")
+    return bad
+
+
 def link_violations(w: World, manifests) -> list[str]:
-    """(3) the Link-level rows LNK-45, 16, 19, 12, 02, 06: the live tier asserts exactly these over the fixture build."""
+    """(3) the Link-level rows LNK-45, 16, 19, 12, 02, 06 and AC6-EX-4: the live tier asserts exactly these over the fixture build."""
     bad: list[str] = []
     form = {rid: merged_row(manifests, rid) for rid in REPO_ROWS}
     # LNK-45: possible / prompt-mention (AC-6: a prompt that names a tool is never confirmed), the chain on the link
@@ -454,6 +503,19 @@ def link_violations(w: World, manifests) -> list[str]:
             if (l.status, l.reason) != (form[rid]["status"], form[rid]["reason"]):
                 bad.append(f"{rid}: link to {w.loc_of.get(l.provider)} is {l.status}/{l.reason}, manifest row says "
                            f"{form[rid]['status']}/{form[rid]['reason']}")
+    # AC6-EX-4 (P1-53c): bound only through the example Compose file's environment entry: possible / example-config, the chain on the link
+    peer = _head_text(w, "fx-svc", "clients/peer.py")
+    if not re.search(r"""(?:environ\.get|getenv)\(\s*["']FX_PEER_BASE["']""", peer):
+        bad.append("AC6-EX-4: clients/peer.py does not read FX_PEER_BASE through environ.get/getenv (the Binder reads no `environ[...]`)")
+    ls = links_from(w, loc_of_row(manifests, "AC6-EX-4", "consumer")[0])
+    want_p = loc_of_row(manifests, "AC6-EX-4", "provider")
+    if provider_locs(w, ls) != sorted(want_p):
+        bad.append(f"AC6-EX-4: consumer links to {provider_locs(w, ls)}, expected exactly {sorted(want_p)}")
+    for l in ls:
+        if (l.status, l.reason) != (form["AC6-EX-4"]["status"], form["AC6-EX-4"]["reason"]):
+            bad.append(f"AC6-EX-4: link to {w.loc_of.get(l.provider)} is {l.status}/{l.reason}, manifest row says "
+                       f"{form['AC6-EX-4']['status']}/{form['AC6-EX-4']['reason']}")
+        bad += ex4_chain_violations(w, manifests, l)
     return bad
 
 
@@ -470,7 +532,7 @@ def test_the_fixtures_as_committed_meet_the_binding_contract(base_root, manifest
 
 @pytest.fixture(scope="module")
 def conforming_root(base_root, tmp_path_factory):
-    return edited_root(base_root, tmp_path_factory.mktemp("fx-pin-conforming") / "root", CONFORMING_EDITS)
+    return edited_root(base_root, tmp_path_factory.mktemp("fx-pin-conforming") / "root", CONFORMING_EDITS, idempotent=True)
 
 
 def test_the_pin_accepts_the_conforming_tree_the_plan_prescribes(conforming_root, manifests, tmp_path):
@@ -496,3 +558,18 @@ def test_flipping_lnk_45_to_confirmed_in_the_manifest_turns_the_pin_red(conformi
             r["status"], r["reason"] = "confirmed", "binding-confirmed"
     got = violations(build_world(conforming_root, tmp_path, bad), bad)
     assert any(v.startswith("LNK-45: link is possible/prompt-mention, manifest row says confirmed/binding-confirmed") for v in got), got
+
+
+
+def test_edited_root_sub_is_idempotent_only_for_conforming_edits(tmp_path):
+    """M3: a `sub` whose `old` is absent but whose `new` is present is a no-op that only a conforming edit may be; a mutant's mistyped `old` fails loudly."""
+    base = tmp_path / "base"
+    (base / "r").mkdir(parents=True)
+    (base / "r" / "f.txt").write_text("already-new\n")
+    _git(base / "r", "init", "-q")
+    _git(base / "r", "add", "-A")
+    _git(base / "r", "commit", "-q", "-m", "x")
+    edits = {"r/f.txt": ("sub", "old", "already-new")}
+    with pytest.raises(AssertionError, match="not found"):
+        edited_root(base, tmp_path / "strict", edits)
+    assert (edited_root(base, tmp_path / "lenient", edits, idempotent=True) / "r" / "f.txt").read_text() == "already-new\n"

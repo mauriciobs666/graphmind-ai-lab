@@ -149,8 +149,8 @@ PINNED_SHAS = {
         "branches": {},
     },
     'fx-svc': {
-        "commits": {'H0': 'e449f3e126a5d040daa0e4d638d1a098e0f4e310', 'H1': '9d4f60ef6b6c9ec3cde5c610c49bd4be3594325d', 'H2': 'd0b128cad5f213d3532023ad331f28ace500621b', 'H3': 'b7694015a9f3548ca79dcb6fa06ca8cfb7530e61', 'H4': '5f796928b38c2d8e2f921e14ca8887b470f0b2d0'},
-        "branches": {'ov-svc': '7a9af135ff2975c81b007edaa67edc1e48c07e49', 'tf-mid': '70ee07a375d7ce53625971f0cf995b5b29eebf60', 'tf-sink': '638a417611761a6dfbe007b5ad689b3bbeed86a8', 'tf-src': 'f100ed9db50033d3d549c7d384c14545459a5af1'},
+        "commits": {'H0': '1053d8d330a51f3b6d083be87bacf5e42be1a9dd', 'H1': 'c35ce89de94ff8c690219b1860f75ae0413379e9', 'H2': 'e46349215ff15b22cf881b0ecf045962cb68a8df', 'H3': '8579bfd8a74ad7d665977883dfec47414547799c', 'H4': '6c012f5584b7abd0099c8804495613b7e253013c'},
+        "branches": {'ov-svc': '1ddc67348f3b85b1e341d900d6962477ceada47e', 'tf-mid': 'cda257b31129f735374dee4d26a07eaf45f81742', 'tf-sink': '7c15a3d8adc01d101e38baf7caa81f1e19a17bfa', 'tf-src': '1b9ef0420b17398d74f326ecbca2bdf32bcff76c'},
     },
     'fx-web': {
         "commits": {'H0': '83926b1ce6a603de66e276a666bccdf5714d53ad', 'H1': '26ecd3c6e93ab35ad0744f905a89115688850b3e'},

@@ -8,4 +8,4 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     environment:
-      FX_PEER_BASE: http://peer.example.internal:8000
+      FX_PEER_BASE: http://api:8000
