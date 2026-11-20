@@ -72,3 +72,53 @@ Not run: the Docker `slice and live` tier and any Joern/extract regeneration. No
 ## Open question for the caller
 
 Is a test-double subclass override counted as a "miss" under the 30/30 bar? I counted it (the plan's wording: "including subclass ... cases"; the design says it must stay `possible`; the same shape in production code would be a wrong `confirmed`). If the stakeholder rules it out of scope, the draw reads 30/30 and the verdict becomes approve with suggestions (floor 0.886, with the in-unit-override limit then stated as a limit); I recommend fixing it instead: it is one extract field.
+
+## Re-audit after P1-50
+
+**Verdict: approve (stop condition met: 30/30 correct, 0 rule-(ii) violations in the independent census, `a118e830a3fd791d5a6b2c9e6f2cf705` absent).** Scope: the `self` rule at normalizer 0.7 (`31e4021f`, `_self_rule` counting definers over the unit), source read at the pinned commit `8377c3268e7857e7a71a55d5cfdd030b8df5fa8d` (`git show`; scratch scripts only, nothing in the tree edited). Dispositions of Pass 1: B1 fixed (site 6 / `a118e830…` not in the new population), M1 done (new draw, old kept under `previous`), m1/m2 done below; M2 (plan text) not re-read here.
+
+### Instrument and population (re-derived, not adopted)
+
+- Own `ast` + raw-facts script, not `tests/fstring_reference.py`, `overlay_5d.ast_self_sites` or `assemble`: raw Joern facts `cpg/.ccg-work/joern/<unit>/cpg/*.facts.jsonl` (the extract carries `rt`) plus the staged trees. All 342 staged `.py` files are byte-identical to `git show 8377c32:<path>` (checked). Only `ccg.ids` (a hash) is shared, to name sites with the bundle's `callSiteId`s.
+- Membership replicated from the rule's text, with the definer count taken from `ast` (class-body `def`/`async def`, nested classes included): a `self.m(...)` call whose receiver is the name `self`, enclosing function a non-static method with first parameter `self`, Joern `rt` present and not type-backing the target (so the type rule demotes it), the enclosing class's own `m` among Joern's `in`, and exactly one class member named `m` in the whole unit.
+- **Result: 379 sites, and the 379 `callSiteId`s equal `populationIds` exactly (0 mine-only, 0 theirs-only; my first attempt differed because I keyed ordinals by Joern id, which repeats across units: re-keyed by unit, then equal).** `random.Random(20261119).sample(sorted ids, 30)` equals the stored `drawn`, in order. This is a replication of the delegate's population, so the check is agreement of two implementations of one rule text, not an external oracle; the oracle is the hand audit and the census below.
+- All 379 have `rt == "ANY"` (Joern typed `self` as unresolved); 378 have one Joern candidate, 1 has two (`executor.py:1486 self._uid`, a test-module function `_uid` in another module is the second; the class method is the only member-definer: correct). Per unit: decision-models 166, falkor-chat/server 147, model-bench 22, salesperson 17, skills 11, claude 9, mcp-monitor 7 (sums to 379; matches the plan's per-unit figures). 38 sites are in test files; 176 distinct (class, method) targets. Draw: falkor-chat/server 16, decision-models 13, skills 1; the 30 cover 25 distinct targets.
+- "Joern-narrowed" cannot be separated from facts alone once definers==1 holds unit-wide; the relevant exposure is the one that produced the miss: **181 of 379 sites (19 of the 30 drawn) have an enclosing class with a subclass in the repo** (name-based, transitive). That is the group where an override could hide.
+
+### Hand adjudication (30 of 30 drawn)
+
+For each site I read, from the pinned source: the call line is a direct `self.<callee>(` in the method's own body (no nested def/lambda/class contains it, 30/30); the enclosing method's first parameter is `self` and it is not a staticmethod; the enclosing class has exactly one `def` of the callee in its body (30/30), at the line the confirmed target names; its decorators (none, or `@staticmethod` for 6 of 30, which `self.f()` dispatches to correctly; none is a property); no `self.<callee> =` in the enclosing class or any subclass, no class-level assignment of the name there; no class in the repo defining or assigning the name that has the enclosing class (by base name, transitively) as an ancestor; the enclosing class has no base class in 30/30, so no inherited or mixin binding competes. Where subclasses exist in tests (sites 0, 2, 3, 4, 6, 7, 9, 10-13, 15, 18, 21-23, 25, 26, 29: `_DeadServices`, `_BoomExecutor`, `_HandoffExecutor`, `Counting`, `_RankedChunkRepo`) none redefines the callee. The site that failed before: `WorkflowExecutor._drive_loop` calling `self._execute_step` is not in the population; the formerly-drawn `executor.py` sites that remain (719 `_select_transition`, 956 `_read_thread_context`, 946 `_required_params`) are not overridden by `_BoomExecutor`/`_HandoffExecutor` (they define `_execute_step` only).
+
+Result: **30 of 30 correct** at the unit's static class hierarchy. One residual I did not count as a miss, stated so it is not hidden: sites 10 and 21 (`Campaign._append`) are patched at test time by `monkeypatch.setattr(Campaign, "_append", ...)` / `(bench.camp, "_append", ...)` (`decision-models/tests/test_votes.py:428`, `test_finalize.py:675`). A test-time rebinding is not a class override and is true of any static edge; if the stakeholder wants it counted, the same reading puts 33 population sites at "patched in some test" (`_append` 23, `_queue_runs` 3, `queue_batch` 2, `begin_round` 2, `_move_to_store` 2, `queue_topup` 1) and the draw at 28/30.
+
+### Independent census (all 379, not a sample)
+
+- **Rule (ii) violations: 0.** Every population site's enclosing class is the only class in its unit with a member named the callee; no subclass (name-based, transitive, over all staged units) defines or assigns the callee. The 448 Python files at the pin outside the staged units (all under `cpg/`) hold no subclass of any enclosing class name.
+- `a118e830a3fd791d5a6b2c9e6f2cf705`: absent from the 379.
+- The definition spread (definers counted by `ast`; population size under each):
+
+| Definition of "definers" / extra condition | Sites |
+|---|---|
+| D1: all class `def`s of the unit, nested classes included, a property accessor or redefinition counted again (the rule's) | **379** |
+| D2: property getter/setter/deleter pairs collapsed to one | 379 (no population method is a property pair) |
+| D3: top-level classes only, nested classes ignored | 375 (drops the 5 `_send_json` sites of `make_handler.Handler`, `salesperson/scripts/stub_llm_server.py`, in a nested class; adds 1 site a nested-class definer had excluded) |
+| D4: tests excluded from the definer count (not a valid definition, it restores the override case) | 462 (+83 sites a test double could override) |
+| D1 + no class-level assignment of the name in any class of the unit | 344 (35 `state`/`seeds`/`answer` sites: other classes assign the name; not the enclosing class, 0 of 379) |
+| D1 + no `self.<name> =` anywhere in the unit | 375 (4 `_clock` sites: `GraphTracer` sets `self._clock`, not `WorkflowExecutor`) |
+| D1 + no same-named module-level function in the unit | 372 (a module function is not a `self.` dispatch candidate) |
+
+Spread 344 to 379 over the conservative definitions; the lower variants only remove sites on a same-name coincidence in an unrelated class, none of which touches a bound `self` in the enclosing class. D3 is a count of sites the rule keeps correctly (nested classes are counted in its definers, which is the safe side).
+
+### What 30/30 supports
+
+- Wilson 95% lower bound **0.886** (two-sided; the lab's convention), 0.917 at one-sided 95%; exact (Clopper-Pearson) one-sided 95% **0.905**; sampling without replacement (30 of 379, hypergeometric) allows at most 34 incorrect sites of 379 at the 5% level, i.e. precision >= **0.910**. Clustering lowers the effective n (25 distinct targets in the draw of 176): treat 0.886 as the headline and not higher.
+- The sample alone does not support "precision >= 0.95". The claim the evidence supports is two-part: the sample bound (>= 0.886) for anything the census cannot see, and the census (379/379 free of an in-repo definer, Wilson lower 0.990, an `ast` reading and not dispatch semantics) for the structural failure modes that caused the earlier miss. Not covered, as stated in the plan: subclasses outside the repo, dynamic rebinding (`setattr`, monkeypatch: 33 sites above), instance-attribute shadowing outside the enclosing class.
+- Pooled gate: even at the 0.886 floor the loss is at most 379 x 0.114 = 43 edges, against the cited 27,804 formerly confirmed Python call edges (cited, not recomputed): 0.16%; the rule cannot by itself move pooled confirmed precision below 0.95.
+
+### New findings
+
+- **m1 (minor).** The test report should say the population and draw come from the draw file, were reproduced here from raw facts by an independent instrument (379/379 ids, same 30), and that the bundles were rebuilt at normalizer 0.7 over stage trees identical to `8377c32`.
+- **m2 (minor).** Report the monkeypatch exposure (33 sites; 2 drawn) as a stated limit beside "a subclass in another unit", with the census (0 in-repo definers) next to the hand audit.
+- **nit.** `astCensus` in the draw file counts 168 for decision-models while the population has 166: `onlyInAst` lists 2 sites (`test_runner.py:135,182`) the rule does not confirm because Joern lists no candidate (conservative; not a precision issue); say so in the file's `method` text.
+
+Not run: Joern/extract regeneration (facts as stored, extract script unchanged per the plan), the live slice tier.
