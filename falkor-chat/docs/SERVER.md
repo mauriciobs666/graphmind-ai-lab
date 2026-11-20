@@ -1021,7 +1021,9 @@ Any failure before the post posts nothing.
 
 **On every ingest** (REST `POST /documents[/batch]`, MCP `ingest_document(s)`), per successfully
 ingested document: when either is wired, one embed job and one entity-extraction job per chunk,
-independent of each other; the document's `status` is `processing` until every job reports, then
+independent of each other, scheduled all embeds first, then all extracts (one model at a time on LM Studio
+means fewer swaps; the MCP path's per-job threads give no ordering guarantee); a timeout on an embed job is
+retried like other transient errors, an extract job's is not; the document's `status` is `processing` until every job reports, then
 `ready`, or `failed` if any failed. With either wired, and unless the ingest was
 auto-superseded synchronously, a separate update-detection job looks for a `SUPERSEDES`
 suggestion. With neither wired (`FALKORCHAT_ENABLE_AGENT` off, the default), nothing is

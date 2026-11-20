@@ -140,12 +140,12 @@ def test_u5b_fallback_exhausted_of_timeouts_follows_the_switch():
     assert is_transient(exc, retry_timeouts=True) is True
 
 
-def test_u5b_both_shipped_policies_leave_timeout_retry_off():
-    # A plan §3.2.1 flip edits this row deliberately (EMBED_CHUNK_RETRY → True),
-    # hard-coded; it also turns test_embedding.py's U-17 shipped-policy row red by
-    # design (see the comment there).
+def test_u5b_embed_policy_retries_timeouts_and_default_policy_does_not():
+    # K-102: a timeout on the embed job is an LM Studio model-swap eviction, so
+    # the embed policy alone retries it (hard-coded; never derived from the
+    # constant). The extract/default policy still treats a timeout as permanent.
     assert DEFAULT_PROVIDER_RETRY.retry_timeouts is False
-    assert EMBED_CHUNK_RETRY.retry_timeouts is False
+    assert EMBED_CHUNK_RETRY.retry_timeouts is True
 
 
 # ── call_with_retry helpers ──

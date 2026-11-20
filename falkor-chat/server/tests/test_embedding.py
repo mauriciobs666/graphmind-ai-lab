@@ -704,18 +704,17 @@ def test_u16_embed_message_is_not_retried():
 # Never derive the expectation from `EMBED_CHUNK_RETRY.retry_timeouts`: a test
 # whose expected value follows the constant passes whatever the constant is,
 # so it can never fail.
-def test_u17_shipped_embed_policy_does_not_retry_a_timeout():
+def test_u17_shipped_embed_policy_retries_a_timeout():
+    # K-102: hard-coded expectation (never derived from the constant).
     repo, sleep = SpyRepo(expected_dim=4), _FakeSleep()
-    err = _timeout()
-    embedder = _ScriptedEmbedder(err, _VEC)
+    embedder = _ScriptedEmbedder(_timeout(), _VEC)
 
-    with pytest.raises(ProviderCallError) as excinfo:
-        _embed_chunk(_worker(repo, embedder, sleep))  # default: EMBED_CHUNK_RETRY
+    vector = _embed_chunk(_worker(repo, embedder, sleep))  # default: EMBED_CHUNK_RETRY
 
-    assert excinfo.value is err
-    assert embedder.calls == 1
-    assert sleep.delays == []
-    assert repo.chunk_calls == []
+    assert vector == _VEC
+    assert embedder.calls == 2
+    assert len(sleep.delays) == 1
+    assert repo.chunk_calls == [("acme", "chunk-7", tuple(_VEC), 4)]
 
 
 # §3.2.1's done-condition 1: the switch plumbing through the worker. This row

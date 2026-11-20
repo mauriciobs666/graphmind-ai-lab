@@ -353,6 +353,26 @@ def test_schedule_chunk_processing_initializes_progress_with_total_jobs():
     assert progress_repo.start_calls == [("test", "d1", 4)]
 
 
+def test_schedule_chunk_processing_schedules_all_embeds_before_any_extract():
+    """K-070: one model at a time on LM Studio — all of a document's embeds, then
+    all of its extracts, so a document costs ~2 model swaps rather than ~2N."""
+    scheduled: list[tuple[str, str]] = []
+
+    def record(fn, *args):
+        scheduled.append((fn.__name__, args[3] if fn is _safe_embed_chunk else args[2]))
+
+    chunks = [{"chunkId": f"c{i}", "text": "t"} for i in (1, 2, 3)]
+    _schedule_chunk_processing(
+        record, "test", "d1", chunks,
+        embed_worker=_RecordingChunkWorker(), ingestion_pipeline=_RecordingIngestionPipeline(),
+    )
+
+    assert scheduled == [
+        ("_safe_embed_chunk", "c1"), ("_safe_embed_chunk", "c2"), ("_safe_embed_chunk", "c3"),
+        ("_safe_extract", "c1"), ("_safe_extract", "c2"), ("_safe_extract", "c3"),
+    ]
+
+
 def test_schedule_chunk_processing_with_zero_chunks_still_initializes_progress_to_zero():
     """K-051 review MINOR 2: a document with an empty chunk list must not be
     silently skipped — `start_document_progress` is what flips it straight

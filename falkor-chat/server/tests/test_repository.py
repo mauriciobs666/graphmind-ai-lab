@@ -16,7 +16,7 @@ import json
 import pytest
 from redis.exceptions import ResponseError
 
-from falkorchat import db
+from falkorchat import config, db
 from falkorchat.repository import MemberIdCollisionError, Repository
 
 
@@ -5765,3 +5765,53 @@ def test_order_belongs_to_customer_gates_the_lifecycle_action(repo, conn):
         assert repo.order_belongs_to_customer(
             "test", customer_id=customer_id, order_id=order_id
         ) == {"owned": False, "status": None}
+
+
+# ── K-102: list_unembedded_chunks (feeds scripts/reembed_unembedded_chunks.py) ──
+
+
+def test_list_unembedded_chunks_returns_only_chunks_without_embedding_with_document_status(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    for doc_id, texts in (("d1", ["a", "b"]), ("d2", ["c"])):
+        repo.create_document(
+            "test", document_id=doc_id, title=f"T-{doc_id}", text="x",
+            source_format="text", ingested_by="u1", created_at=100,
+            chunks=[{"chunkId": f"{doc_id}-c{i}", "text": t, "seq": i}
+                    for i, t in enumerate(texts)],
+        )
+    repo.start_document_progress("test", document_id="d1", total_jobs=1)
+    repo.report_document_job_done("test", document_id="d1", success=False)
+    repo.set_chunk_embedding(
+        "test", chunk_id="d1-c0", embedding=[0.1] * config.EMBEDDING_DIM,
+        expected_dim=config.EMBEDDING_DIM,
+    )
+
+    rows = repo.list_unembedded_chunks("test")
+
+    d2_status = repo.get_document("test", document_id="d2")["status"]
+    assert sorted(
+        (r["chunkId"], r["documentId"], r["documentStatus"], r["text"]) for r in rows
+    ) == [("d1-c1", "d1", "failed", "b"), ("d2-c0", "d2", d2_status, "c")]
+
+
+def test_list_failed_documents_reports_unembedded_chunk_count(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    for doc_id in ("d1", "d2", "d3"):
+        repo.create_document(
+            "test", document_id=doc_id, title=f"T-{doc_id}", text="x",
+            source_format="text", ingested_by="u1", created_at=100,
+            chunks=[{"chunkId": f"{doc_id}-c0", "text": "t", "seq": 0}],
+        )
+    for doc_id in ("d1", "d2"):
+        repo.start_document_progress("test", document_id=doc_id, total_jobs=1)
+        repo.report_document_job_done("test", document_id=doc_id, success=False)
+    repo.set_chunk_embedding(
+        "test", chunk_id="d2-c0", embedding=[0.1] * config.EMBEDDING_DIM,
+        expected_dim=config.EMBEDDING_DIM,
+    )
+
+    rows = repo.list_failed_documents("test")
+
+    assert sorted((r["documentId"], r["unembeddedChunks"]) for r in rows) == [
+        ("d1", 1), ("d2", 0),
+    ]

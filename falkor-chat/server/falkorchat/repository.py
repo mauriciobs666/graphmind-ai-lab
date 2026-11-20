@@ -1233,6 +1233,37 @@ class Repository:
         )
         return [{"chunkId": row[0], "text": row[1]} for row in res.result_set]
 
+    def list_unembedded_chunks(self, ws: str) -> list[dict[str, Any]]:
+        """Every `Chunk` with no `embedding`, with its owning document's id/title/status
+        (K-102 repair listing — read-only, never changes `Document.status`).
+
+        Such a chunk is invisible to `search_chunks`. A full scan of `Chunk` by design:
+        a one-off operator read, not a hot path.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (d:Document)-[:HAS_CHUNK]->(c:Chunk) WHERE c.embedding IS NULL "
+            "RETURN c.chunkId, c.text, d.documentId, d.title, d.status "
+            "ORDER BY d.documentId, c.seq"
+        )
+        return [
+            {"chunkId": r[0], "text": r[1], "documentId": r[2],
+             "documentTitle": r[3], "documentStatus": r[4]}
+            for r in res.result_set
+        ]
+
+    def list_failed_documents(self, ws: str) -> list[dict[str, Any]]:
+        """Every `Document` with `status = 'failed'` and how many of its chunks still
+        lack an embedding (K-102 repair report — read-only)."""
+        res = self._graph(ws).ro_query(
+            "MATCH (d:Document {status: 'failed'}) "
+            "OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk) WHERE c.embedding IS NULL "
+            "RETURN d.documentId, d.title, count(c) ORDER BY d.documentId"
+        )
+        return [
+            {"documentId": r[0], "documentTitle": r[1], "unembeddedChunks": r[2]}
+            for r in res.result_set
+        ]
+
     def set_chunk_embedding(
         self, ws: str, *, chunk_id: str, embedding: list[float],
         expected_dim: int | None = None,

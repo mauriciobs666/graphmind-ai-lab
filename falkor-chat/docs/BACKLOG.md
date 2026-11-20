@@ -81,18 +81,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > chunker already used for documents is reused.
 - **Owner:** `architect` (design), then an implementer.
 
-### K-102 — 11 `ws:agent-team` documents sit in `failed` with unembedded chunks, invisible to semantic search (🔵 proposed — found during K-099, 2026-10-31)
-
-> A read-only query on `ws:agent-team` (`MATCH (d:Document)--(c:Chunk) WHERE c.embedding IS NULL`)
-> returns 11 documents, each `status: failed` with one unembedded chunk, created 2026-10-24 →
-> 2026-10-31 21:38 — agents' raw learnings captures, so `search_documents` never returns them
-> (full-text/`get_document` still do). None falls in K-099's ~21 s embedder gap (2026-10-31
-> 22:04:18–39); the cause is undiagnosed — candidates are LM Studio model swaps evicting the
-> embedder mid-ingest (a one-model-at-a-time GPU; cf. K-070/K-073) or the extract job failing the
-> document after its embed. Two asks: root-cause why they failed, and decide whether a failed
-> document's chunks are re-embedded (a retry/repair path) or left as-is.
-- **Owner:** `analyst` (RCA), then an implementer.
-
 ### K-103 — `extraction.normalize_name` keeps zero-width characters (U+200B), so names differing only by one don't fuse (🔵 proposed — `docs/reviews/salesperson-cart-product-id2-impl.md` Learnings, `docs/reviews/team-learnings-distillation4-sweep.md` row 13, 2026-11-07)
 
 > `normalize_name` is `_WHITESPACE_RE.sub(" ", name.strip()).casefold()` with `\s+`, and neither
@@ -731,29 +719,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** a live manual run is the test; if it surfaces a defect, file a fix as its own
   follow-up rather than folding it into this item.
 
-### K-070 — Schedule a document's embeds before its extracts to cut model swaps on a one-model-at-a-time LM Studio (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-1, 2026-10-15)
-
-> **Why it exists.** `_schedule_chunk_processing` interleaves `embed(c1), extract(c1), embed(c2), …`.
-> On the sequential REST path, with LM Studio holding one model at a time (plan §2.5), that forces
-> a model swap on **every** job — and the eviction/reload is what triggers the K-067 faults in the
-> first place. Scheduling all of a document's embeds, then all its extracts, would cut swaps per
-> document from ~2N to ~2 (plan F-1). It is a behaviour change to scheduling order, so it needs its
-> own small design and a live measurement. The MCP-side analogue, per-document job serialisation
-> (plan §6 F-4), is not filed: both K-067 leg (g) runs ended `ready` (n = 1 each), so its filing
-> rule did not fire (report B.4).
->
-> **Live data point** (2026-10-17 K-071 re-drive, `HISTORY.md`): 13 documents re-ingested at once
-> through `:8200` drove LM Studio into JIT chat/embed model swapping, whose unload bodies failed
-> 11 of them fast (D-3). The sequential re-drive that followed, with both models pre-loaded
-> (`lms load`), brought every document to `ready` with no `ProviderCallError` or retry line at
-> all. Avoiding swaps removed the failures entirely; that shows the lever matters, but it is not a
-> measurement of this item's reordering, which still needs its own.
-- **Owner:** `architect` (small design) → `coder`/`tdd-engineer`.
-- **Scope:** `_schedule_chunk_processing`'s job order on the REST chain.
-- **Risks/RAM:** none in graph terms; changes when each chunk becomes searchable within a document.
-- **Test strategy:** an offline test pinning the new order, plus a live measurement of swaps per
-  document before and after.
-
 ### K-072 — Per-request "provider down" short-circuit for REST batch ingestion (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-3 / review Pass 1 m-2, 2026-10-15)
 
 > **Why it exists.** `api.ingest_documents` puts every document's jobs on one sequential
@@ -782,7 +747,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > The review's candidate is one gate read before attempt 1. The finding is **inferred** from the
 > code; the log cannot show how many of those calls began after the document had failed.
 - **Owner:** `architect` (decide whether the pre-attempt read is worth it) → `tdd-engineer`.
-- **Related:** K-070 (fewer swaps per document) — the natural companion; design them together.
 - **Risks/RAM:** a pre-attempt read moves the gate onto the success path — one more indexed read
   per job, where today it costs nothing until a job fails (plan §6 R-7).
 - **Test strategy:** an offline test where a sibling has already failed the document: the job

@@ -214,15 +214,16 @@ def _schedule_chunk_processing(
         repo.start_document_progress(
             ws, document_id=document_id, total_jobs=total_jobs
         )
-    for chunk in chunks:
-        if embed_worker is not None:
+    # K-070: all embeds, then all extracts — LM Studio holds one model at a time, so
+    # interleaving embed/extract per chunk would swap models on every job.
+    if embed_worker is not None:
+        for chunk in chunks:
             schedule(
                 _safe_embed_chunk, embed_worker, ws, document_id,
                 chunk["chunkId"], chunk["text"],
             )
-        # K-050 M5 Stage 3: extraction is scheduled independently of embedding
-        # for the same chunk — neither blocks the other.
-        if ingestion_pipeline is not None:
+    if ingestion_pipeline is not None:
+        for chunk in chunks:
             schedule(
                 _safe_extract, ingestion_pipeline, ws,
                 chunk["chunkId"], document_id, chunk["text"],

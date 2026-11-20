@@ -118,9 +118,14 @@ class RetryPolicy:
             raise ValueError(f"jitter must be >= 0, got {self.jitter}")
 
 
-# Equal today; separate so plan §3.2.1 can flip the embed one alone.
+# Separate so the embed one alone retries a timeout (K-102): on a one-model-at-a-time
+# LM Studio a concurrent extract evicts the embedder, and the embed call then times out
+# while the model reloads. Safe to retry: the embed attempt makes no graph writes before
+# `set_chunk_embedding`, and the liveness gate stops retries once the document has failed.
 DEFAULT_PROVIDER_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)
-EMBED_CHUNK_RETRY = RetryPolicy(max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5)
+EMBED_CHUNK_RETRY = RetryPolicy(
+    max_attempts=4, delays_s=(2.0, 8.0, 30.0), jitter=0.5, retry_timeouts=True
+)
 
 
 def _gate_open(

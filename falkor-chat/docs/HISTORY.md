@@ -5,6 +5,32 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-20 — K-102 and K-070 closed: embed timeouts retried, embeds scheduled before extracts, repair script
+
+- **Cause (K-102).** LM Studio holds one model at a time: a document's extract call (qwen3-4b) evicts
+  the 0.6B embedder, and the concurrent embed job's `/v1/embeddings` call then timed out. A timeout
+  was not transient (`RetryPolicy.retry_timeouts` False), so `EMBED_CHUNK_RETRY` gave up after one
+  attempt, the first failed job flipped the whole document to `failed`, and its chunks stayed
+  without an embedding (invisible to `search_documents`). 16 `ws:agent-team` documents (15 chunks)
+  were in that state.
+- **What.** (1) `retry.EMBED_CHUNK_RETRY` now has `retry_timeouts=True` (the extract/default policy
+  does not): safe because the embed attempt makes no graph write before `set_chunk_embedding`, and
+  the liveness gate stops retrying once the document is no longer `processing`; the worst case is
+  4 attempts plus 2 s / 8 s / 30 s back-off. (2) K-070: `background._schedule_chunk_processing`
+  schedules all of a document's embeds, then all its extracts (was interleaved per chunk), cutting
+  model swaps per document from about 2N to about 2 on the sequential REST chain; the MCP path's
+  per-job threads give no ordering guarantee. Status semantics unchanged: any failed embed or extract
+  still fails the document. (3) New `scripts/reembed_unembedded_chunks.{py,sh}`: dry-run by default,
+  `--apply` re-embeds each `embedding IS NULL` chunk through `EmbeddingWorker.embed_chunk`, never
+  touches `Document.status`, and reports which documents stay `failed`. New
+  `Repository.list_unembedded_chunks` / `list_failed_documents` (read-only).
+- **Verified.** Reproduction tests failed first (`test_retry` U-5b, `test_embedding` U-17,
+  `test_background` embeds-before-extracts). Server suite 3655 passed, 14 deselected, 1 xfailed;
+  `test_queries.sh` 461/461. Live run on `ws:agent-team`: dry run listed 15 chunks; `--apply`
+  embedded 15/15; no chunk lacks an embedding afterwards. The 16 documents remain `failed` (status
+  deliberately untouched). The live swap reduction of K-070 is not measured.
+- **Live spec.** `docs/SERVER.md` §1.12 (job order, timeout retry), `docs/DESIGN.md` "Document background jobs" row.
+
 ## 2026-11-09 — K-092 closed: `test_queries.sh` is green again (461/461)
 
 - **What.** The §14.8 `SUPERSEDES.matchId` probe was asserted with `assert_index_scan`, which needs
