@@ -429,7 +429,7 @@ holding an f-string stays unresolved, the mount `unresolved-part` rule and the p
 4. One version: the delta's `apply` composes the two edit sets over disjoint fields;
    `test_each_delta_pins_its_version_and_the_last_one_is_the_normalizers_current_version` holds with `"0.7"`.
 
-### Done when (on the ten Python units rebuilt at the pinned oracle commit; the figures are the analyst's scratch rebuild, the implementer re-derives them independently, a mismatch is investigated and never tuned)
+### Done when (on the ten Python units rebuilt at the pinned oracle commit; the figures are the scratch rebuild of `docs/reviews/connected-code-graph-p1-5d-49.md`, the implementer re-derives them independently, a mismatch is investigated and never tuned)
 1. `selfResolvedSites` = **379**, per unit as stated above, equal to the `ast` single-definer set over the oracle stage trees computed
    without importing `assemble`, every disagreement listed by id; `a118e830a3fd791d5a6b2c9e6f2cf705` absent.
 2. `nameLinkCounts` = (3,694 demoted, 379 self); against the rt-stripped baseline 3,686 `confirmed`->`possible` and 8 narrowed.
@@ -588,8 +588,8 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
   Binder: the `launchUnit` multiset **per Dockerfile** from an independent parse of each CMD and the path-suffix rule; `BOUND_BY`
   entries resolved through the bundles' records at the manifest `aux` locators (path + keyPath), never by id. *Live tier* (the
   fixture build, `-m live`): the Link-level rows LNK-45, 16, 19, 12, 02, 06. Run against the unmodified fixtures it fails on exactly
-  `launchUnit` for `svc` absent, no `BOUND_BY` on LNK-45, no `port-shared` link, and LNK-02, 06 and 12 unbound (`key-match` to both
-  `reindex` providers, no 8200 fact), and nothing else. Mutants, each named with its file:
+  `launchUnit` for `svc` absent, no `BOUND_BY` on LNK-45, no `port-shared` link, and LNK-02, 06 and 12 unbound (`key-match`, no 8200 fact; LNK-12 links to both
+  `reindex` providers), and nothing else. Mutants, each named with its file:
   delete `fx-svc/scripts/Dockerfile`; change the CMD module of `fx-svc/deploy/Dockerfile` to `fx_svc.api.app` (red only through the
   per-Dockerfile `launchUnit` multiset); flip LNK-45 to `confirmed` in the manifest; delete `fx-job/deploy/compose.dev.yaml`.
   (2) Text, in the manifests, `docs/test-plans/connected-code-graph-fixtures.md` and `docs/test-plans/connected-code-graph-p1.md`:
@@ -598,13 +598,14 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
   LNK-21/45 narrative; no fixture tree edit. (3) The census sweep (87 P1 rows; the families recomputed without LNK-18 and AC6-EX-2): an unfiltered grep for `89` (and `P1 93`/`P1 92`
   history lines left alone as dated notes) in `docs/test-plans/connected-code-graph-fixtures.md` (§6 totals, §7 matrix), `docs/test-plans/connected-code-graph-p1.md`
   (the family table, P1T-05, §6, the totals lines), `cpg/tests/test_fixtures.py` and the manifests' `gate` fields, which `qa-engineer`
-  fixes; the hits in `docs/plans/connected-code-graph-p1-gates.md` (lines about 125, 131, 144) are listed for `teco`
-  (`docs/plans/connected-code-graph-p1.md` is already 87). Every hit is mapped to an owner and fixed or listed. Done: the pin red as stated, `tests/test_fixtures.py`
+  fixes; the `docs/plans/connected-code-graph-p1-gates.md` hits are already fixed (commit `313c59e9`), as are those of
+  `docs/plans/connected-code-graph-p1.md` (87). Every hit is mapped to an owner and fixed or listed. Done: the pin red as stated, `tests/test_fixtures.py`
   consistency green, the sweep list attached.
 - **53b (`tdd-engineer`):** `fx-svc/scripts/Dockerfile`, `fx-svc/deploy/Dockerfile`, `fx-job/deploy/compose.dev.yaml`, the pinned
   materialized SHAs and family counts. Done: the pin green with each mutant recorded red with its failure message; the link multiset
-  of the fixture build differs from the pre-edit one by exactly two rows (LNK-16 `port-shared`; LNK-45 gains its two `BOUND_BY`
-  entries), any other changed row stops the unit. Must not regress: LNK-13/14/15/22, AC6-EX-1/4, `UNIT_FLOORS` (68, 67), the walk rows.
+  of the fixture build (with the P1-52 pack present) differs from the pre-edit one by exactly five rows: LNK-16 `port-shared` appears; LNK-45
+  gains `BOUND_BY` ord 0 and 1; LNK-02 and LNK-06 go `key-match` to `binding-confirmed`; LNK-12 loses its `job` provider link and its `svc`
+  link becomes `binding-confirmed`. Any other changed row stops the unit. Must not regress: LNK-13/14/15/22, AC6-EX-1/4, `UNIT_FLOORS` (68, 67), the walk rows.
 
 ## P1-17 · linker — `tdd-engineer`
 
