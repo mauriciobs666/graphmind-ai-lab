@@ -394,15 +394,18 @@ _T = TypeVar("_T")
 
 
 def _start_of_run_read(read: Callable[[], _T], what: str) -> _T:
-    """Step 3/3a's read of LM Studio's state, after step 2's probe passed. A timeout or dropped
-    connection there is `LMStudioUnreachable` (`lmstudio._raw_get` folds both to it); a refusal
-    like the probe's own, exit 3, never a traceback."""
+    """A read of LM Studio's state between step 2's probe and the first item (steps 3, 3a, 7, 8).
+    No response or a timeout is `LMStudioUnreachable` (`lmstudio._raw_get` folds both to it); a
+    non-200 or malformed body is `LMStudioCallFailed`; a socket `TimeoutError` is the third way
+    (the grouping every probe in this module uses). Each is a refusal like the probe's own, exit
+    3, never a traceback. Not for reads that carry their own handling: `_between_item_residency`,
+    `_within_load_basis`, step 10's retries, `_decision_instance_config`."""
     try:
         return read()
-    except LMStudioUnreachable as exc:
+    except (LMStudioUnreachable, LMStudioCallFailed, TimeoutError) as exc:
         raise RunRefused(
-            f"LM Studio stopped answering while the run read its {what} at the start ({exc}); "
-            "nothing was run or stored.",
+            f"LM Studio failed while the run read its {what} before the first item "
+            f"({type(exc).__name__}: {exc}); nothing was run or stored.",
             exitCode=3,
         ) from exc
 
@@ -2009,10 +2012,14 @@ def run_pack(
     if check.updated_host is not None:
         hostinfo.write_host_info(root, check.updated_host)
 
-    baseline_residency = lmstudio.residency()  # step 7 — item-1's baseline, never resident_at_start
+    baseline_residency = _start_of_run_read(  # step 7 — item-1's baseline, never resident_at_start
+        lmstudio.residency, "residency"
+    )
     if decision_arm is not None:
         _refuse_unless_resident(arm_models, baseline_residency)  # plan3 §3.7, before any item
-    catalog_after_load = lmstudio.catalog()  # step 8 — loadedContextLength
+    catalog_after_load = _start_of_run_read(  # step 8 — loadedContextLength
+        lmstudio.catalog, "catalog"
+    )
     instance_config = (
         _decision_instance_config(lmstudio, decision_arm.model_info.id)
         if decision_arm is not None

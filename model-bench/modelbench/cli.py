@@ -59,9 +59,10 @@ class UnknownModelKey(ValueError):
 
 
 class CompareArmCountError(ValueError):
-    """A plain `compare` (no `--models`) over more than two arms: which two to pair is the
-    caller's call, so it is a usage error (§3.6a's exit 2), never the first two by file name.
-    Fewer than two is still a report (the "fewer than two arms" verdict), not a refusal."""
+    """A plain `compare` (no `--models`) over more than two distinct arms (keys, not runs): which
+    two to pair is the caller's call, so it is a usage error (§3.6a's exit 2), never the first two
+    by file name. Fewer than two is still a report (the "fewer than two arms" verdict), not a
+    refusal."""
 
 
 class DecisionPointUsageError(ValueError):
@@ -245,12 +246,15 @@ def _select_arms(
                 "`model-bench models --tested --pack <id>` lists what is stored"
             )
         candidates = [by_key[m] for m in wanted]
-    elif not negative_control and len(candidates) > 2:
-        keys = ", ".join(r.armKey for r in candidates) or "none"
-        raise CompareArmCountError(
-            f"compare without --models needs exactly two arms and found {len(candidates)} "
-            f"({keys}); --models a,b selects which arms to compare"
-        )
+    elif not negative_control:
+        # Distinct keys, not runs: `--models` resolves one arm per key, so counting runs would
+        # refuse a comparison its own advice cannot narrow.
+        keys = list(dict.fromkeys(r.armKey for r in candidates))
+        if len(keys) > 2:
+            raise CompareArmCountError(
+                f"compare without --models needs exactly two arms and found {len(keys)} "
+                f"({', '.join(keys)}); --models a,b selects which arms to compare"
+            )
     if negative_control and candidates:
         # Two copies of ONE record, deliberately. The mode's own `--help` text and the report's
         # first banner both say why this cannot fail (`-ml` §9) — the report said nothing at all

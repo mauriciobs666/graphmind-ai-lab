@@ -12,7 +12,13 @@ from conftest import classification_aggregates, item, model_fields, run
 
 from modelbench import cli, hostinfo
 from modelbench.cli import main
-from modelbench.lmstudio import LMStudioCallTimeout, LMStudioUnreachable, LoadResult, ModelInfo
+from modelbench.lmstudio import (
+    LMStudioCallFailed,
+    LMStudioCallTimeout,
+    LMStudioUnreachable,
+    LoadResult,
+    ModelInfo,
+)
 from modelbench.results import ItemResult, ItemTiming, store
 from modelbench.runner import DispatchFailureDisclosure
 
@@ -196,6 +202,59 @@ def test_plain_compare_over_more_than_two_arms_refuses_instead_of_pairing_the_fi
     assert "--models" in captured.err and "3" in captured.err
     assert captured.out == ""
     assert not list((workspace / "reports").glob("*.md"))
+
+
+def _store_rerun(root, run_id: str, model_key: str, correct: int, total: int = 40) -> None:
+    """A second stored run of an existing model key, under its own run id."""
+    items = [
+        item(f"g{i:02d}", correct=i < correct, metric="falseAdvanceRate") for i in range(total)
+    ]
+    store(
+        run(
+            run_id,
+            items=items,
+            aggregates=classification_aggregates(correct, total),
+            fingerprint_fields=model_fields(modelKey=model_key, packId=PACK),
+            session_id="s1",
+        ),
+        root,
+    )
+
+
+def test_plain_compare_counts_distinct_arms_not_runs_so_its_advice_is_actionable(
+    workspace, capsys
+) -> None:
+    """`--models` resolves one arm per key (the newest run), so the refusal's advice only works if
+    the threshold counts keys. Three distinct keys over four runs: refused, and the message names
+    three arms (each key once). Two keys over three runs: not refused, since `--models a,b` would
+    be no narrower than what the user already has."""
+    _store_arm(workspace, "aaa", 40)
+    _store_rerun(workspace, "aaa-rerun", "aaa", 38)
+    _store_arm(workspace, "bbb", 34)
+    assert main(["compare", "--pack", PACK, "--root", str(workspace)]) == 0
+    capsys.readouterr()
+
+    _store_arm(workspace, "ccc", 20)
+    code = main(["compare", "--pack", PACK, "--root", str(workspace)])
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "found 3 " in err and err.count("aaa") == 1
+
+
+def test_plain_compare_with_a_negative_control_is_exempt_from_the_arm_count_refusal(
+    workspace, capsys
+) -> None:
+    """The exemption is exercised: three arms plus `--negative-control` is a wiring check on one
+    duplicated record, not a pairing of arms, so it is not refused."""
+    _store_arm(workspace, "aaa", 40)
+    _store_arm(workspace, "bbb", 34)
+    _store_arm(workspace, "ccc", 20)
+    code = main(
+        ["compare", "--pack", PACK, "--negative-control", "--root", str(workspace)]
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "NEGATIVE CONTROL" in out
 
 
 def test_plain_compare_over_exactly_two_arms_still_compares_them(workspace, capsys) -> None:
@@ -1043,27 +1102,32 @@ class _StubLMStudioForRun:
         probe_result: str = "api-v0",
         catalog_result: list[ModelInfo] | None = None,
         warm_up_error: Exception | None = None,
-        residency_error: Exception | None = None,
-        catalog_error: Exception | None = None,
+        residency_failures: dict[int, Exception] | None = None,
+        catalog_failures: dict[int, Exception] | None = None,
     ) -> None:
         self.base_url = base_url
         self._probe_result = probe_result
         self._catalog_result = list(catalog_result or [])
         self._warm_up_error = warm_up_error
-        self._residency_error = residency_error
-        self._catalog_error = catalog_error
+        # {n: exception}: the n-th (1-based) call of that read raises; every other call answers.
+        self._residency_failures = dict(residency_failures or {})
+        self._catalog_failures = dict(catalog_failures or {})
+        self._residency_calls = 0
+        self._catalog_calls = 0
 
     def probe(self) -> str:
         return self._probe_result
 
     def catalog(self) -> list[ModelInfo]:
-        if self._catalog_error is not None:
-            raise self._catalog_error
+        self._catalog_calls += 1
+        if self._catalog_calls in self._catalog_failures:
+            raise self._catalog_failures[self._catalog_calls]
         return list(self._catalog_result)
 
     def residency(self):
-        if self._residency_error is not None:
-            raise self._residency_error
+        self._residency_calls += 1
+        if self._residency_calls in self._residency_failures:
+            raise self._residency_failures[self._residency_calls]
         return []
 
     def warm_up(self, model_key, *, call_surface, system_prompt, was_resident_before, timeout_s):
@@ -1203,19 +1267,33 @@ def test_run_exits_four_on_the_tool_calling_eligibility_gate(
     assert "not eligible" in err
 
 
-@pytest.mark.parametrize("failing_read", ["residency", "catalog"])
-def test_run_exits_three_when_a_start_of_run_read_times_out_after_the_probe_passed(
-    run_workspace, capsys, monkeypatch, failing_read
+# `run_pack`'s reads between the probe and the first item, by (read, 1-based call number): step 3
+# `residency()`, step 3a `catalog()`, step 7 `residency()` (item 1's baseline), step 8 `catalog()`
+# (`loadedContextLength`).
+_WRAPPED_READS = [("residency", 1), ("catalog", 1), ("residency", 2), ("catalog", 2)]
+_READ_FAILURES = [
+    pytest.param(lambda: LMStudioUnreachable("GET /api/v0/models: no response"), id="unreachable"),
+    pytest.param(
+        lambda: LMStudioCallFailed("GET /api/v0/models: HTTP 500", status=500, body=None),
+        id="callfailed",
+    ),
+]
+
+
+@pytest.mark.parametrize("make_failure", _READ_FAILURES)
+@pytest.mark.parametrize(("read", "nth"), _WRAPPED_READS)
+def test_run_exits_three_when_a_read_between_the_probe_and_item_one_fails(
+    run_workspace, capsys, monkeypatch, read, nth, make_failure
 ) -> None:
-    """Defect (read from code, reproduced here): `probe()` answers `api-v0`, then step 3's
-    `residency()` (or step 3a's `catalog()`) gets no response. `LMStudio` folds a timeout to
-    `LMStudioUnreachable`, which `cli` did not catch: a traceback, exit 1. It is a refusal like
-    the probes' own: exit 3, one `model-bench:` line, nothing stored."""
+    """Defect (read from code, reproduced here): `probe()` answers `api-v0`, then a later
+    `residency()`/`catalog()` read gets no response (`LMStudioUnreachable`) or a non-200
+    (`LMStudioCallFailed`). `cli` caught neither: a traceback, exit 1. Each is a refusal like the
+    probes' own: exit 3, one `model-bench:` line, nothing stored."""
     _write_host_json(run_workspace)
     _patch_run_lmstudio(
         monkeypatch,
         catalog_result=[_model_info()],
-        **{f"{failing_read}_error": LMStudioUnreachable("GET /api/v0/models: no response")},
+        **{f"{read}_failures": {nth: make_failure()}},
     )
     code = main(
         ["run", "--root", str(run_workspace), "--pack", ITEM_PACK,
