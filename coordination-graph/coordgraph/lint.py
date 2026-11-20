@@ -18,7 +18,7 @@ from .discover import discover
 from .history import HistoryIndex, find_id_tokens
 from .parse.backlog import BacklogDoc, BacklogParseError, Item, parse_backlog
 from .scope import load_legacy_paths
-from .shapes import Candidates, classify, offline_candidates
+from .shapes import Candidates, Reason, classify, offline_candidates
 
 MAP_OPEN = "<!-- coordgraph:milestone-map -->"
 MAP_CLOSE = "<!-- /coordgraph:milestone-map -->"
@@ -69,6 +69,7 @@ def lint_repo(
     paths: Iterable[str] | None = None,
     candidates: Candidates = offline_candidates,
     rules=None,
+    reason: Reason | None = None,
 ) -> list[Finding]:
     """Lint every covered backlog (or `paths`); `rules` defaults to the real `wilib.rules`."""
     root = Path(root)
@@ -99,14 +100,15 @@ def lint_repo(
             if not any(c in w for c in _COVERED):
                 findings.append(Finding(path, None, "warn", "parse", w))
         for item in doc.items:
-            findings.extend(_item_findings(item, rules, history, known_refs, candidates, owners))
+            findings.extend(_item_findings(item, rules, history, known_refs, candidates, owners, reason))
         findings.extend(_milestone_findings(doc))
         findings.extend(_map_findings(doc, text))
     return findings
 
 
 def _item_findings(item: Item, rules, history: HistoryIndex, known_refs: set[str],
-                   candidates: Candidates, owners: dict[str, str]) -> list[Finding]:
+                   candidates: Candidates, owners: dict[str, str],
+                   reason: Reason | None = None) -> list[Finding]:
     p, ln = item.backlog_path, item.line
     out: list[Finding] = []
     label = item.item_id or item.ref
@@ -137,9 +139,11 @@ def _item_findings(item: Item, rules, history: HistoryIndex, known_refs: set[str
             continue
         if history.delivered(token, scope, candidates) is not None:
             continue
+        why = reason(token, scope) if reason is not None else None
         out.append(Finding(
             p, ln, "error", "unresolvable-dependency",
-            f"{label}: unknown dependency {token} - if it was delivered, drop the ref or add a "
+            f"{label}: unknown dependency {token}" + (f" ({why})" if why else "")
+            + " - if it was delivered, drop the ref or add a "
             "`<ID> delivered` history heading; otherwise fix the id"))
     return out
 

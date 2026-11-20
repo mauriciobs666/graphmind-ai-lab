@@ -16,6 +16,9 @@ SCHEME = re.compile(r"[A-Z]{2,6}(?:-[A-Z]\d+|-FR\d+[a-z]?|-AC\d+[a-z]?)+")
 # Resolves a token to the set of strings under which its identity may be stored (plan3 3.1,
 # `candidates`). S1d's registry-backed one plugs in here; `offline_candidates` is the default.
 Candidates = Callable[[str, str], set[str]]
+# Optional companion of `Candidates` (`identity.Identity.reason`): why a token is not a resolved
+# identity (unminted, unknown, ambiguous, registry unavailable), or None when it is.
+Reason = Callable[[str, str], str | None]
 
 
 def classify(token: str) -> str | None:
