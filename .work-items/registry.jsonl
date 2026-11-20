@@ -105,3 +105,19 @@
 {"evid":"ef25e9c687dd425a","ts":1795217079837093570,"ev":"new","id":"GAL-F0010","type":"F","parent":null,"home":"mcp-monitor","title":"Optional Docker packaging"}
 {"evid":"2151340330d147c1","ts":1795217079870589651,"ev":"new","id":"GAL-F0011","type":"F","parent":null,"home":"mcp-monitor","title":"Config hot-reload"}
 {"evid":"a4888aa92452418c","ts":1795217079907612035,"ev":"new","id":"GAL-F0012","type":"F","parent":null,"home":"mcp-monitor","title":"Authentication / production hardening"}
+{"evid":"c8e5a66133bb493f","ts":1795217087324874187,"ev":"new","id":"GAL-F0013","type":"F","parent":null,"home":"model-bench","title":"Judged reply quality for the `chat-responder` pack (deferred, not cancelled)"}
+{"evid":"0d8d5faa84b34249","ts":1795217087374180744,"ev":"new","id":"GAL-F0014","type":"F","parent":null,"home":"model-bench","title":"+22 harder retrieval queries for the `embedder` pack"}
+{"evid":"e785cbd57a3f4123","ts":1795217087411613692,"ev":"new","id":"GAL-F0015","type":"F","parent":null,"home":"model-bench","title":"`tools/exec.py`'s `order_by` sort raises an uncaught `TypeError` on a `None`-valued sort key"}
+{"evid":"b054204fa1cc467e","ts":1795217087450761217,"ev":"new","id":"GAL-F0016","type":"F","parent":null,"home":"model-bench","title":"`report.py`'s lucky-pass labelling (†/‡) covers the descriptive k/n cells only"}
+{"evid":"f9e61f0dccfa4286","ts":1795217087487644964,"ev":"new","id":"GAL-F0017","type":"F","parent":null,"home":"model-bench","title":"`results.Outcome` (`results.py:38`) omits `\"unrunnable\"`"}
+{"evid":"c7ae33abb40b4bcb","ts":1795217087528374116,"ev":"new","id":"GAL-F0018","type":"F","parent":null,"home":"model-bench","title":"`checklist_pass` substring matching fails ordinary morphological paraphrase"}
+{"evid":"6e2f22023636453b","ts":1795217087570315982,"ev":"new","id":"GAL-F0019","type":"F","parent":null,"home":"model-bench","title":"`report.py` prints no per-script breakdown for `tool-caller`"}
+{"evid":"7897aa3fdfba4125","ts":1795217087611231485,"ev":"new","id":"GAL-F0020","type":"F","parent":null,"home":"model-bench","title":"`ministral-3-3b`'s rung-2 tool-call censoring under `plaintext` replay is not root-caused"}
+{"evid":"6b41e2ab673143b8","ts":1795217087649994075,"ev":"new","id":"GAL-F0021","type":"F","parent":null,"home":"model-bench","title":"No paired significance test exists for a turn-pooled exploratory metric"}
+{"evid":"ed48edee70484556","ts":1795217087687707444,"ev":"new","id":"GAL-F0022","type":"F","parent":null,"home":"model-bench","title":"`validate_pack` raises instead of reporting when a declared data file is not yet authored"}
+{"evid":"7d2927fecf01416c","ts":1795217087726442127,"ev":"new","id":"GAL-F0023","type":"F","parent":null,"home":"model-bench","title":"`stats.verdict()`'s \"is better than\" wording is wrong for `falseAdvanceRate`/`falseSuspendRate`"}
+{"evid":"2e70008ecf544566","ts":1795217087763373807,"ev":"new","id":"GAL-F0024","type":"F","parent":null,"home":"model-bench","title":"`report.rank_report()`'s reference-not-found `ValueError` appends `\" and session\"` whenever any other run is stored"}
+{"evid":"071d3ffa0ca64990","ts":1795217087800891873,"ev":"new","id":"GAL-F0025","type":"F","parent":null,"home":"model-bench","title":"`rank_report()`'s zero-`n` exclusion banner double-counts items for shared-run metrics"}
+{"evid":"562d769bd3714bf1","ts":1795217087838413029,"ev":"new","id":"GAL-F0026","type":"F","parent":null,"home":"model-bench","title":"The `nlq-structured-query` pack no longer mirrors falkor-chat's production parse"}
+{"evid":"12590fd635be4681","ts":1795217087875798244,"ev":"new","id":"GAL-F0027","type":"F","parent":null,"home":"model-bench","title":"An LM Studio outage met by an item's own call is not re-probed"}
+{"evid":"6fbf2588048c47ab","ts":1795217087916972141,"ev":"new","id":"GAL-F0028","type":"F","parent":null,"home":"model-bench","title":"Defects the live spec recorded"}
