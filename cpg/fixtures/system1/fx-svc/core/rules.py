@@ -1,6 +1,6 @@
 """Eligibility and tier rules."""
-from fx_svc.db.orders import connect, load_rate
-from fx_svc.state.cache import OrderCache
+from db.orders import connect, load_rate
+from state.cache import OrderCache
 
 LIMIT = 1000
 _CACHE = OrderCache()

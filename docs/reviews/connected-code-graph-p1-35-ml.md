@@ -40,3 +40,27 @@ Scope: `cpg/eval/tools/ac24_smoke.py` (read in full; I did not run the held-out 
 2. M2: recompute and compare `coreTreeHash`/`packSetHash` before the marker.
 3. Pre-flight everything that does not need items before the marker (m2); sampler record per (6).
 4. EP §10.4 wording owed to its owner (item 2).
+
+## Pass 2
+
+> 2026-11-19. Scope: commit `04c0a3a4` (the only commit touching `ac24_smoke.py`; working tree clean under `cpg/`). I read the harness and `cpg/tests/test_ac24_smoke.py`, ran the suite (127 passed), recomputed both hashes independently, and read no held-out item.
+
+Verdict: **approve with suggestions.** The dev entry run may proceed now. One item (N1) must close before `ccg-prereg-ac24-v1` is appended, and one (N2) is owed to the record.
+
+**Dispositions.**
+- **M1: fixed.** `recording_interpreter` subclasses `Interpreter` and logs `draftNone` per call; `run_items` scores `unusable` from that event only; a valid empty ask scores by EP §10.4 (tests at `test_a_valid_empty_ask_is_not_unusable...` and the end-to-end non-JSON vs empty-draft test). `interpret.py` yields `draft=None` only for no-reply, non-JSON or schema-invalid replies.
+- **M2: fixed, and confirmed as the EP §12.3 definition.** An independent recompute (my own script over `git ls-files`, sha256 of the file bytes, canonical JSON with sorted keys, `,`/`:` separators, non-ASCII literal, array of `[relpath, sha256]` sorted) equals the harness's `coreTreeHash` (761 files, relpaths relative to `cpg/`, excluding top-level `eval`/`packs`/`tests` and any `.md`) and `packSetHash` (10 files, relpaths relative to `cpg/packs/`) byte for byte. This matches EP §12.3's text. Prompts are `.txt`, so the `.md` exclusion does not hide a prompt change. Held-out refusal is on any hash or `harnessHash` difference, a dirty tree under `cpg/{ccg,clients,eval/tools,packs}`, or a `coreCommit` that is not an ancestor of HEAD; `--after-adaptation` stamps instead. All run before the marker.
+- **m1: fixed** (`_anchor_key` applies `eligible()`, E1).
+- **m2: fixed in substance.** Hash, canary, sampler and cache checks precede the marker. The count re-check stays after it, which is inherent (it needs the items) and acceptable: the list's sha256 is bound to the record, so a count mismatch means a split defect, not a run-time variable.
+- **m3: not fixed, now N1.**
+- **(2) repeat protocol: fixed** (repeat 1 uncached and scored, repeats 2-5 `cacheBypass`, C5 on a repeat-1 hit, endpoint-count check). **The EP §10.4 wording is applied** (EP v1.9: heading and the `cacheHit`, repeat-1, and planted-input sentences rewritten in place). The behaviour and the EP now agree: "each item 5 times with `cacheBypass`" is gone; repeat 1 is uncached by the asserted-empty cache, repeats 2-5 by the bypass.
+- **(3) guards, (4) parser-resolved items: unchanged, as in Pass 1.**
+- **(6) sampler: partly.** The canary digest and pinned request are in; `effective: null`/`not-observable` is recorded. The honoured-`repeat_penalty` differential probe is not in the harness or the record schema (see N2).
+- **(7) record fields: fixed** except the probe reference. The EP §12.3 AC-24 record paragraph now lists them (EP v1.9).
+
+**New findings.**
+- **N1 (major, before the record is appended): the dev run is not bound to the tree the record hashes.** `run_dev` stamps no tree state, and `prereg-record` takes `--core-tree-hash`, `--pack-set-hash` and `--harness-hash` as overrides, or else hashes the current tree. A resolver or front edit between the passing dev run and the record leaves a record whose hashes describe code the dev run never ran, and the held-out run then equals the record. Fix: `run_dev` writes `observe_tree()` (the three hashes, HEAD, `clean`) into its result; `prereg-record` refuses unless the dev result's stamp equals the current tree and the tree is clean; drop the hash flags (or require them to equal the stamp). Test: edit a core file after a dev result; the record verb refuses.
+- **N2 (minor, owed to the record):** add `sampler.honouredProbe` (the two-request differential on `repeat_penalty`, outputs differing, run once at dev time and referenced in the record), as `-p1-ml.md` §4.3 requires. A manual probe recorded by `teco` is enough; it need not be in the harness.
+- **N3 (nit):** the dirty check uses `git status --porcelain`, which hides gitignored files; an ignored `.py` under `cpg/ccg` would be imported but not hashed. Add `--ignored` for `cpg/ccg` and `cpg/clients`, or assert no ignored `.py` there. EP says "no uncommitted changes under `cpg/`"; the narrower `CLEAN_PATHS` is justified because the excluded areas cannot change behaviour, state that in the report.
+
+**Before the live dev entry run:** nothing. **Before `ccg-prereg-ac24-v1` is appended:** N1 closed, then the record built from a clean tree and the final passing dev run; N2's probe recorded. Expected counts (24/12/12/6) and the 23/24 and 11/12 thresholds stand.

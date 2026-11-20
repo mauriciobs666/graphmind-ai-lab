@@ -1,7 +1,7 @@
 """Plugin loading and dispatch."""
 import importlib
 
-from fx_svc.plugins.audit import AuditPlugin
+from plugins.audit import AuditPlugin
 
 REGISTRY: dict = {}
 REGISTRY["audit"] = AuditPlugin

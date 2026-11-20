@@ -3,7 +3,7 @@ import argparse
 
 from fastmcp import FastMCP
 
-from fx_svc.mcp.names import LIST_ORDERS
+from mcp.names import LIST_ORDERS
 
 mcp = FastMCP("fx-svc")
 

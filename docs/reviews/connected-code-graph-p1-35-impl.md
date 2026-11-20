@@ -8,7 +8,7 @@ Reviewed, uncommitted and new files only: `cpg/eval/tools/ac24_smoke.py` (702 li
 
 CPG: considered, not relevant — a pre-registered measuring instrument checked by reading and by running the real Client/Front with a fake broker; call-graph impact is not the question.
 
-**Verdict: needs changes.** One blocker (B1) must be fixed before the held-out run; it does not block the dev entry run. Three majors.
+**Verdict (Pass 1): needs changes; superseded by `## Pass 2` below.** One blocker (B1) must be fixed before the held-out run; it does not block the dev entry run. Three majors.
 
 Checks run: the 90 tests in `cpg/tests/test_ac24_smoke.py` pass in the real tree. Mutants and probes ran only against copies in the session scratchpad (`CCG_TOOLS_DIR` points the tests at a copy). `cpg/eval/preregistration.jsonl` and the tool were sha256-identical before and after.
 
@@ -90,3 +90,37 @@ A held-out question the parsers fully read has no provenance and no model call y
 Target: root `REVIEW.md`, heading "Always check". Source: B1, M2 of this review.
 - A measuring instrument that infers an engine event from output ("unusable reply", "cache hit") is probed with a valid output that yields the same observable, and the planted pair must score differently; a collision is a finding.
 - A pre-registered value is checked through the call that hands it to the guard: mutate the argument to `None` at that call site, and a test must go red. A guard tested only with its argument supplied directly is a bound.
+
+## Pass 2 (re-gate of the fix round, commit `04c0a3a4`)
+
+CPG: considered, not relevant — a measuring instrument checked by running its tests and mutating a copy.
+
+**Verdict: approve with suggestions.** No blocker or major. B1, M1, M2, M3, m1, m2 closed; three minors and a nit below. Scope: `cpg/eval/tools/ac24_smoke.py` (954 lines, sha256 `89cdcd62...97f`, unchanged by this pass) and its tests, against the Pass 1 findings; no held-out content read, no live model, no FalkorDB.
+
+Checks run: `cd cpg && .venv/bin/python -m pytest tests/test_ac24_smoke.py tests/test_eval_tools_verbs.py` gives 211 passed. Mutants ran on a copy of `cpg/eval/` in the session scratchpad (`CCG_TOOLS_DIR`; the real-tree test deselected there, baseline 126 passed); the tool was sha256-identical before and after. Independent recompute (a separate script over `git ls-files`, relpaths relative to `cpg/` and `cpg/packs/`) gives the same `coreTreeHash` (761 files) and `packSetHash` (10 files) as `tree-hashes`. `build_live_rig("graphmind-ai-lab")` constructs: `Front` with the `Recording` subclass of `Interpreter` and a `CountingBroker` under the run factory (no model call made).
+
+Dispositions:
+- **B1 fixed.** `recording_interpreter` records `result.draft is None` per `interpret` call; `run_items` takes `unusable` from it. Mutant `draftNone: False` is killed (the planted pair: not-JSON reply unusable, valid `other`-only draft on a `goldOptions == []` item understood).
+- **M1 fixed.** `_anchor_key` applies `match_keys.E`; mutant `eligible(q)` to `q` is killed.
+- **M2 closed by a documented limit, plus the plumbing.** Live `effective` stays `null` / `not-observable` (`-p1-ml.md:523` states it; the canary digest stands in), which is the "state it" option of Pass 1. A record with a non-null `effective` and no observer is refused before the marker (mutant removing it killed). Mutants a4 (request params to `None`) and b1 (effective to `None`) are now killed through `run_heldout`; `cap_floor` stays equivalent.
+- **M3 fixed.** Construction matches the independent recompute above; mismatch refuses, or stamps `afterAdaptation` with `--after-adaptation`; ancestry mutant killed. See N1 for what the tests do not pin.
+- **m1 fixed.** Mutants dropping the derived-root refusal, using a different EVAL_COMMIT source, or changing the marker's file name are killed; the rig, cache, sampler and canary pre-flights precede the marker (tests assert no marker and no marker dir after each refusal).
+- **m2 fixed.** Mutant dropping the `exists()` refusal is killed.
+- **m3 partly.** The pooled composition and interpreter-only rate are reported; a not-built outcome after a model call now takes the event's provenance, tested. Nits: bad-outcome echo gone, malformed dev result is a Refusal; stdout sentence corrected.
+- **Judgment calls.** HEAD ancestry instead of equality: accepted (the record's own commit follows `coreCommit`; equality of the two hashes plus a clean tree is the binding check, so ancestry only rules out a foreign branch). Cleanliness over `cpg/packs`: accepted, a superset of what `packSetHash` needs.
+
+### N1 (minor, verified by mutants): the hash construction's relpath base is pinned by no expected value
+Mutants `[(f, ...)]` to `[(f.upper(), ...)]` in `core_tree_hash`, and `f[len("packs/"):]` to `f` in `pack_set_hash`, both leave every test green (the test compares the function with itself under edits). In practice record and run use the same function, so a change moves both in lockstep and is not exploitable; but EP §12.3 names no base for `relpath`, and the next reader of the record cannot recompute it. Fix: one test with two or three planted files and a literal hex computed independently of the module (for example `json.dumps` of the expected pair list in the test body), and one sentence in the record's note naming the bases (`cpg/` and `cpg/packs/`). Verified: the independent recompute above matches.
+
+### N2 (minor, verified by mutants): two hand-offs into the tree check are untested
+`tree_state(rec["coreCommit"])` to `tree_state(None)` (fails closed: every run refuses) and `CLEAN_PATHS` shrunk to `("cpg/ccg",)` (fails open for `cpg/clients`, `cpg/eval/tools`, `cpg/packs`) both survive: the held-out tests inject `lambda core: ...`, and `test_the_real_tree_is_observed_read_only...` asserts only key names. Fix: a stub `tree_state` that asserts its argument equals the record's `coreCommit`; and a test that plants an untracked file in a throwaway `git init` repo for each of the four paths and asserts `observe_tree`'s `dirty` (the function reads `_CPG.parent`, so give it a `repo` argument).
+
+### N3 (nit): the cleanliness set is narrower than EP §12.3's "no uncommitted changes under `cpg/`"
+A new untracked file under `cpg/{extractors,infra,sandbox,fixtures,spikes}` is neither dirty-checked nor hashed (the hash covers tracked files only); a modified tracked one is caught by the hash. The behaviour of `ccg.front` does not depend on them, so low stakes. Either widen to `git status --porcelain -- cpg` with an exclusion for `cpg/eval/results`, or name the narrowing in the record's note.
+
+Not exercised, by anyone: the live broker, a real LM Studio reply, canary stability across two runs (the digest is of raw reply text; any non-deterministic reply text, such as an echoed timestamp, makes the pre-flight canary fail after the dev run). **Run `canary` twice live and compare before pre-registering.**
+
+**Stopping condition.** No further analyst pass is needed if `harnessHash` of `ac24_smoke.py` is still `89cdcd62...97f` or changes only by the N1/N2 test additions in `tests/` plus an `observe_tree` repo argument; a pass is owed if the scoring (`score_item`, `request_key`), `run_items`, `run_heldout` or the hash functions change, or if two live `canary` runs give different digests (then the canary must be redefined before the record). Note: any edit to `ac24_smoke.py` changes `harnessHash`, so the record must be built after the last edit.
+
+### Proposed REVIEW.md lines
+Pass 1's two proposals (B1, M2) stand; nothing added. Source of a possible third, N1: a hash or digest construction is pinned by a literal expected value computed outside the module, because a self-comparing test lets the construction drift unseen.

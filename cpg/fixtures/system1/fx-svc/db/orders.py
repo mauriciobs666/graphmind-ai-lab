@@ -2,7 +2,7 @@
 import os
 import sqlite3
 
-from fx_svc.db.settings import settings
+from db.settings import settings
 
 MEMBER_RATE = 0.4
 _RATES = {1: 0.4, 2: 0.8}

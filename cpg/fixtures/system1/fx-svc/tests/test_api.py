@@ -1,5 +1,6 @@
-from fx_svc.api.health import health
+from api.health import build_router
 
 
 def test_health_reports_ok():
-    assert health()["status"] == "ok"
+    route = build_router().routes[0]
+    assert route.endpoint()["status"] == "ok"

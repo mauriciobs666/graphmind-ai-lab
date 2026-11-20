@@ -128,7 +128,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/health.py
-    qname: api/health.py::health
+    qname: api/health.py::build_router.health
   consumer:
   - repoId: fx-web
     path: app/src/ui/Health.tsx
@@ -185,11 +185,11 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/orders.py
-    qname: api/orders.py::create_order
+    qname: api/orders.py::build_router.create_order
   consumer:
   - repoId: fx-web
     path: app/src/ui/OrderTotal.tsx
-    qname: app/src/ui/OrderTotal.tsx::OrderTotal
+    qname: app/src/ui/OrderTotal.tsx::OrderTotal.place
   keyNorm: POST /api/v1/orders
   status: confirmed
   reason: key-match
@@ -201,11 +201,11 @@ rows:
   stratum: fixture-dev
 - id: LNK-04
   kind: http
-  item: 'GET /api/v1/orders/{}: path from constants ORDER_PATH and SAMPLE_ORDER; provider is a router prefix=/v1/orders mounted at /api (mount composition)'
+  item: 'GET /api/v1/orders/{}: path from constants ORDER_PATH and SAMPLE_ORDER; provider is a factory-built router (routes /v1/orders/{order_id}, no constructor prefix) mounted at /api (mount composition)'
   provider:
   - repoId: fx-svc
     path: api/orders.py
-    qname: api/orders.py::read_order
+    qname: api/orders.py::build_router.read_order
   consumer:
   - repoId: fx-web
     path: app/src/api/orders.ts
@@ -276,7 +276,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/search.py
-    qname: api/search.py::search
+    qname: api/search.py::build_router.search
   consumer:
   - repoId: fx-job
     path: job/run_report.py
@@ -295,7 +295,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/files.py
-    qname: api/files.py::read_file
+    qname: api/files.py::build_router.read_file
   consumer:
   - repoId: fx-web
     path: app/src/api/files.ts
@@ -315,7 +315,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/items.py
-    qname: api/items.py::read_item
+    qname: api/items.py::build_router.read_item
   consumer:
   - repoId: fx-job
     path: job/run_report.py
@@ -331,15 +331,18 @@ rows:
   stratum: fixture-dev
 - id: LNK-38
   kind: http
-  item: GET /api/items/{}, TS template ${API_PREFIX}/items/${RELATED_ID} with RELATED_ID = 7
+  item: GET /api/items/{}, TS template ${API_PREFIX}/items/${RELATED_ID} with RELATED_ID = 7; provider mounted at API_PREFIX + "/items" (mount composition, api/app.py)
   provider:
   - repoId: fx-svc
     path: api/items.py
-    qname: api/items.py::read_item
+    qname: api/items.py::build_router.read_item
   consumer:
   - repoId: fx-web
     path: app/src/ui/Related.tsx
     qname: app/src/ui/Related.tsx::Related
+  aux:
+  - repoId: fx-svc
+    path: api/app.py
   keyNorm: GET /api/items/7
   providerKeyNorm: GET /api/items/{}
   status: confirmed
@@ -374,7 +377,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/search.py
-    qname: api/search.py::search
+    qname: api/search.py::build_router.search
   consumer:
   - repoId: fx-web
     path: app/src/api/index.ts
@@ -397,7 +400,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/orders.py
-    qname: api/orders.py::create_order
+    qname: api/orders.py::build_router.create_order
   consumer:
   - repoId: fx-job
     path: job/run_report.py
@@ -443,7 +446,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/items.py
-    qname: api/items.py::read_item
+    qname: api/items.py::build_router.read_item
   consumer:
   - repoId: fx-web
     path: app/src/api/items.ts
@@ -464,7 +467,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/health.py
-    qname: api/health.py::health
+    qname: api/health.py::build_router.health
   consumer:
   - repoId: fx-job
     path: job/run_report.py
@@ -503,7 +506,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/items.py
-    qname: api/items.py::read_item
+    qname: api/items.py::build_router.read_item
   consumer:
   - repoId: fx-web
     path: app/src/ui/Item.tsx
@@ -519,7 +522,7 @@ rows:
   trueTarget:
   - repoId: fx-svc
     path: api/items.py
-    qname: api/items.py::read_item
+    qname: api/items.py::build_router.read_item
 - id: LNK-18
   kind: http
   item: 'URL binding: http://localhost:8200/mcp (consumer); ports 8000 and 8200 are launch configs of one unit (svc: .mcp.json and Compose)'
@@ -738,7 +741,7 @@ rows:
   consumer:
   - repoId: fx-svc
     path: api/orders.py
-    qname: api/orders.py::create_order
+    qname: api/orders.py::build_router.create_order
   status: possible
   reason: name-match
   gate: P1
@@ -788,7 +791,7 @@ rows:
   consumer:
   - repoId: fx-svc
     path: api/items.py
-    qname: api/items.py::read_item
+    qname: api/items.py::build_router.read_item
   status: possible
   reason: name-match
   gate: P1
@@ -949,7 +952,7 @@ rows:
   consumer:
   - repoId: fx-svc
     path: api/reports.py
-    qname: api/reports.py::report_view
+    qname: api/reports.py::build_router.report_view
   keyNorm: sql:table:order_report
   status: confirmed
   reason: key-match
@@ -964,7 +967,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/health.py
-    qname: api/health.py::health
+    qname: api/health.py::build_router.health
   consumer:
   - repoId: fx-web
     path: app/src/ui/Probe.tsx
@@ -985,7 +988,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/health.py
-    qname: api/health.py::health
+    qname: api/health.py::build_router.health
   consumer:
   - repoId: fx-web
     path: app/src/ui/Probe.tsx
@@ -1006,7 +1009,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/health.py
-    qname: api/health.py::health
+    qname: api/health.py::build_router.health
   consumer:
   - repoId: fx-web
     path: app/src/ui/Probe.tsx
@@ -1027,7 +1030,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/files.py
-    qname: api/files.py::read_file
+    qname: api/files.py::build_router.read_file
   consumer:
   - repoId: fx-web
     path: app/src/ui/Probe.tsx
@@ -1048,7 +1051,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/hooks.py
-    qname: api/hooks.py::receive_hook
+    qname: api/hooks.py::build_router.receive_hook
   consumer:
   - repoId: fx-web
     path: app/src/ui/Probe.tsx
@@ -1138,7 +1141,7 @@ rows:
   provider:
   - repoId: fx-svc
     path: api/reports.py
-    qname: api/reports.py::report_view
+    qname: api/reports.py::build_router.report_view
   consumer:
   - repoId: fx-web
     path: app/src/ui/Reports.tsx
@@ -1154,18 +1157,18 @@ rows:
   serves:
   - AC-6
   stratum: fixture-dev
-  whyUnprovable: 'the only binding is an example config. True: svc:api/reports.py::report_view'
+  whyUnprovable: 'the only binding is an example config. True: svc:api/reports.py::build_router.report_view'
   trueTarget:
   - repoId: fx-svc
     path: api/reports.py
-    qname: api/reports.py::report_view
+    qname: api/reports.py::build_router.report_view
 - id: AC6-EX-4
   kind: http
   item: FX_PEER_BASE set only in deploy/compose.example.yaml (service svc); consumer of GET /api/health in a Python function of fx-svc
   provider:
   - repoId: fx-svc
     path: api/health.py
-    qname: api/health.py::health
+    qname: api/health.py::build_router.health
   consumer:
   - repoId: fx-svc
     path: clients/peer.py
@@ -1181,11 +1184,11 @@ rows:
   serves:
   - AC-6
   stratum: fixture-dev
-  whyUnprovable: 'the only binding of os.environ["FX_PEER_BASE"] is an example config. True: svc:api/health.py::health'
+  whyUnprovable: 'the only binding of os.environ["FX_PEER_BASE"] is an example config. True: svc:api/health.py::build_router.health'
   trueTarget:
   - repoId: fx-svc
     path: api/health.py
-    qname: api/health.py::health
+    qname: api/health.py::build_router.health
 - id: AC6-EX-3
   kind: env_var
   item: FX_DB_URL set only in svc:.env.example, read in db/orders.py::connect
@@ -1339,7 +1342,7 @@ rows:
   item: self.entries[k] = v
   status: confirmed
   reason: resolved-receiver
-  gate: P1
+  gate: P3
   serves:
   - B1-1
   - B1-3
@@ -1358,7 +1361,7 @@ rows:
   item: reader
   status: confirmed
   reason: resolved-receiver
-  gate: P1
+  gate: P3
   serves:
   - B1-1
   - B1-2
@@ -1377,7 +1380,7 @@ rows:
   item: del self.entries[k]
   status: confirmed
   reason: resolved-receiver
-  gate: P1
+  gate: P3
   serves:
   - B1-2
   - B1-3
@@ -1396,7 +1399,7 @@ rows:
   item: cache.entries[key] with cache an untyped parameter
   status: possible
   reason: field-name-match
-  gate: P1
+  gate: P3
   serves:
   - B1-1 (listed after the confirmed reader)
   - B1-3
@@ -1509,7 +1512,7 @@ rows:
     locator:
       repoId: fx-svc
       path: api/orders.py
-      qname: api/orders.py::create_order
+      qname: api/orders.py::build_router.create_order
     distance: 2
     notices:
     - code: flow-not-enumerated
@@ -1528,7 +1531,7 @@ rows:
   locator:
     repoId: fx-svc
     path: api/orders.py
-    qname: api/orders.py::create_order
+    qname: api/orders.py::build_router.create_order
 - id: DF-4
   kind: impact-forward
   item: 'accept_quote passes the discount through an untyped parameter: discount.apply_discount(...) (name-match)'
@@ -1824,25 +1827,66 @@ rows:
   item: reverse question for the subject; the list is known and complete, no other dependency may be confirmed
   gate: P1
   p1Form:
-    listed: none
-    dependencies: []
+    dependencies:
+    - locator:
+        repoId: fx-svc
+        path: api/orders.py
+        qname: api/orders.py::build_router.create_order
+      distance: 1
+      group: fx-svc / api / 1
+      status: confirmed
+      reason: resolved-call
+    - locator:
+        repoId: fx-svc
+        path: core/flow.py
+        qname: core/flow.py::apply_discount
+      distance: 2
+      group: fx-svc / core / 2
+      status: confirmed
+      reason: resolved-call
+    extras:
+    - locator:
+        repoId: fx-svc
+        path: db/repo.py
+        qname: db/repo.py::MemRepo.save
+      distance: 2
+      group: fx-svc / db / 2
+      status: possible
+      reason: name-match
+    - locator:
+        repoId: fx-svc
+        path: db/repo.py
+        qname: db/repo.py::Repo.save
+      distance: 2
+      group: fx-svc / db / 2
+      status: possible
+      reason: name-match
+    - locator:
+        repoId: fx-svc
+        path: db/repo.py
+        qname: db/repo.py::SqlRepo.save
+      distance: 2
+      group: fx-svc / db / 2
+      status: possible
+      reason: name-match
     notices:
     - code: flow-not-enumerated
       langs:
       - javascript
+      - python
   serves:
   - A25-4
-  - A25-1..3 on each of the 3
+  - A25-1..3 on each of the 2
   stratum: fixture-dev
   subject:
     repoId: fx-web
     path: app/src/ui/OrderTotal.tsx
-    qname: app/src/ui/OrderTotal.tsx::OrderTotal
+    qname: app/src/ui/OrderTotal.tsx::OrderTotal.place
   dependencies:
   - locator:
       repoId: fx-svc
       path: api/orders.py
-      qname: api/orders.py::create_order
+      qname: api/orders.py::build_router.create_order
     distance: 1
     group: fx-svc / api / 1
     status: confirmed
@@ -1853,14 +1897,7 @@ rows:
     distance: 2
     group: fx-svc / core / 2
     status: confirmed
-  - locator:
-      repoId: fx-svc
-      path: core/flow.py
-      qname: core/flow.py::base_price
-    distance: 3
-    group: fx-svc / core / 3
-    status: confirmed
-  note: cross-repository; subject in fx-web, the three dependencies in fx-svc
+  note: cross-repository; subject in fx-web, the dependencies in fx-svc
 - id: MR-PY
   kind: call
   item: rules = cast(Rules, PremiumRules()); rules.fee(x) resolves to Rules.fee
@@ -1917,7 +1954,7 @@ rows:
   consumer:
   - repoId: fx-svc
     path: api/reports.py
-    qname: api/reports.py::report_view
+    qname: api/reports.py::build_router.report_view
   status: confirmed
   reason: key-match
   gate: P3
@@ -1933,7 +1970,7 @@ rows:
   consumer:
   - repoId: fx-svc
     path: api/health.py
-    qname: api/health.py::health
+    qname: api/health.py::build_router.health
   - repoId: fx-web
     path: app/src/ui/Health.tsx
     qname: app/src/ui/Health.tsx::Health
@@ -2090,7 +2127,7 @@ rows:
   consumer:
   - repoId: fx-svc
     path: api/items.py
-    qname: api/items.py::read_item
+    qname: api/items.py::build_router.read_item
   gate: P1
   serves:
   - LNK

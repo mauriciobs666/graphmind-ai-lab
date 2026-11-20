@@ -149,8 +149,8 @@ PINNED_SHAS = {
         "branches": {},
     },
     'fx-svc': {
-        "commits": {'H0': '571fa94250209450f7812c3a091cd1bb547b5d0b', 'H1': '746bbf83929a689cf55ee064022d1003a975747a', 'H2': '734b3025a87ea6e0320d55c2ad30189ad2d0b2e0', 'H3': '998df3e89909261876fe8dcf168b7a109e980990', 'H4': '58b340135ca9c25fbd7120fa1c1ab5a051a09e5c'},
-        "branches": {'ov-svc': '35bf304b210123b1a98cc0a5e79e03b6dc26e6d9', 'tf-mid': 'd22486d4e675e4544966953e3320b8e98a77a405', 'tf-sink': 'ec8c4d8ed599a2f2fe3598570e2bbffb1c782736', 'tf-src': '87d5f5bdd548bfe0d702bcb49aa2f9c4b59bbd31'},
+        "commits": {'H0': '800d4989f80b190627f5054e14138b90b3df529e', 'H1': 'a0d013542e9a441386683c8456ca494b4ba6c31a', 'H2': '86623ce31e542a5009eae97de27e828849a7d053', 'H3': 'd92a9b5cf21e2367b054444920124566d17c009d', 'H4': '0f6946d91444fcefdef471e8319465a037663306'},
+        "branches": {'ov-svc': '1629f8de093b12d662d92b03893f69feec5031f1', 'tf-mid': '2e3c2f5384ae4a1e9297b6c256faae0ea42f7f2b', 'tf-sink': '6c4e202ddc84b48bc5661e155f5beaeb937a20f2', 'tf-src': '015d468222daf220a247293c0f7e470608712945'},
     },
     'fx-web': {
         "commits": {'H0': '83926b1ce6a603de66e276a666bccdf5714d53ad', 'H1': '26ecd3c6e93ab35ad0744f905a89115688850b3e'},
@@ -835,7 +835,7 @@ def test_tp002_contract_points_hash(manifests):
 
 
 def test_tp002_planted_failing_inputs(manifests, built, trees):
-    """(1) svc:api/health.py::health rewritten to api/healthz.py::health; (2) a Java locator with no signature."""
+    """(1) svc:api/health.py::build_router.health rewritten to api/healthz.py::health; (2) a Java locator with no signature."""
     docs = all_docs(manifests)
     shas = built[1]
     bad = copy.deepcopy(docs)
@@ -1381,8 +1381,8 @@ def ac25_items(manifests):
                 if (d["locator"]["path"], d["name"]) not in [(x["locator"]["path"], x["name"]) for x in seen]:
                     seen.append(d)
             rev[rid] = {"id": rid, "subject": subject, "deps": seen}
-    for pre in ("DF", "CD"):                  # CF-DF / CF-CD (plan s5.5): fx-web's DF-3 does not repeat the changed function
-        cf = next(v["changed"] for k, v in fwd.items() if k.startswith(pre) and v["changed"])
+    for pre in ("DF", "CD"):                  # CF-DF / CF-CD (plan s5.5); DF-3 names its own anchor CF-DF3 and keeps it
+        cf = fwd[f"{pre}-1"]["changed"]
         for k, v in fwd.items():
             if k.startswith(pre) and not v["changed"]:
                 v["changed"] = cf
@@ -1480,12 +1480,12 @@ def run_ac25(manifests, builder):
     return results
 
 
-def test_ac25_the_assertion_column_is_60_distinct_assertions(manifests):
+def test_ac25_the_assertion_column_is_57_distinct_assertions(manifests):
     fwd, rev = ac25_items(manifests)
     assert len(fwd) == 8 and len(rev) == 3
-    assert sum(len(r["deps"]) for r in rev.values()) == 11
+    assert sum(len(r["deps"]) for r in rev.values()) == 10
     res = run_ac25(manifests, CORRECT)
-    assert len(res) == 8 * 3 + 11 * 3 + 3 == 60
+    assert len(res) == 8 * 3 + 10 * 3 + 3 == 57
     assert {a for a, _, _ in res} == {"A25-1", "A25-2", "A25-3", "A25-4"}
     failed = [r for r in res if not r[2]]
     assert failed == []
@@ -1506,7 +1506,7 @@ def test_ac25_expected_answer_order_matches_the_plan(manifests):
     """The plan's 'Expected answer order' lines and RV tables, parsed from the plan text, equal the manifests'."""
     fwd, rev = ac25_items(manifests)
     text = PLAN_TEXT
-    for chg, line in re.findall(r"- forward `CF-(DF|CD)`: ([^\n]*)", text):
+    for chg, line in re.findall(r"- forward `CF-(DF|CD)3?`: ([^\n]*)", text):
         planned = [(g[0], g[1], g[2], [x.strip() for x in g[3].split(",")])
                    for g in re.findall(r"\((fx-[a-z]+), (\w+), (\d)\) \[([^\]]+)\]", line)]
         ids = [i for g in planned for i in g[3]]
@@ -1530,7 +1530,7 @@ def test_ac25_expected_answer_order_matches_the_plan(manifests):
 
 def test_ac25_the_a25_3_pairs_really_sort_possible_first_under_name_path_and_line_order(manifests, built, trees):
     """A25-3 is only non-vacuous if the possible item sorts BEFORE the confirmed one under every key (plan s5.5)."""
-    pairs = [("accept_quote", "create_order"), ("publish_alert", "publish_created"), ("find_hook", "is_member"), ("find_hook", "tier_of")]
+    pairs = [("accept_quote", "build_router.create_order"), ("publish_alert", "publish_created"), ("find_hook", "is_member"), ("find_hook", "tier_of")]
     fwd, rev = ac25_items(manifests)
     every = [*fwd.values(), *[d for r in rev.values() for d in r["deps"]]]
     by_name = {}
@@ -1575,7 +1575,7 @@ def test_ac25_planted_failing_answer_builders_turn_the_column_red(manifests, nam
     else:                                                                         # g: every distance is wrong, directness is not
         assert kinds <= {"A25-1", "A25-2"}, failed                                # a wrong distance also puts the item in the wrong group
         assert {i for a, i in failed if a == "A25-1"} == set(every), failed       # ... but A25-1 must itself fail on every item
-        assert len(every) == 19
+        assert len(every) == 18
 
 
 def test_ac25_a_manifest_with_the_wrong_group_or_direct_flag_is_caught(manifests):
@@ -2314,7 +2314,7 @@ def p1_form_violations(manifests):
         bad.append(f"{rid}: in the plan's P1-form table, no p1Form in any manifest")
     notices = p1_notice_plan_langs()
     for rid, forms in seen.items():
-        ask = "CF-DF" if rid.startswith("DF") else "CF-CD" if rid.startswith("CD") else rid
+        ask = "CF-DF3" if rid == "DF-3" else "CF-DF" if rid.startswith("DF") else "CF-CD" if rid.startswith("CD") else rid
         want = notices.get(ask)
         for f in forms:
             got = [(n["code"], sorted(n["langs"])) for n in f.get("notices", [])]
@@ -2331,14 +2331,14 @@ def p1_notice_plan_langs():
         cells = [c.strip() for c in ln.strip().strip("|").split("|")]
         if ln.startswith("|") and len(cells) == 2:
             langs = sorted(re.findall(r"`([a-z]+)`", cells[1]))
-            for ask in re.findall(r"`(CF-DF|CF-CD)`", cells[0]) + re.findall(r"\b(RV-\d)\b", cells[0]):
+            for ask in re.findall(r"`(CF-DF3|CF-DF|CF-CD)`", cells[0]) + re.findall(r"\b(RV-\d)\b", cells[0]):
                 out[ask] = langs
     return out
 
 
 def test_p1_form_equals_the_plan_table_and_covers_every_flow_dependent_row(manifests):
     assert set(p1_form_plan_rows()) >= {"DF-1", "DF-2", "DF-3", "DF-4", "CD-1", "CD-2", "CD-3", "CD-4", "RV-1", "RV-2", "RV-3"}
-    assert p1_notice_plan_langs() == {"CF-DF": ["python"], "CF-CD": ["python"], "RV-1": ["python"], "RV-2": ["python"], "RV-3": ["javascript"]}
+    assert p1_notice_plan_langs() == {"CF-DF": ["python"], "CF-DF3": ["javascript", "python"], "CF-CD": ["python"], "RV-1": ["python"], "RV-2": ["python"], "RV-3": ["javascript", "python"]}
     assert p1_form_violations(manifests) == []
     held = M.holders(manifests)
     for rid in ("DF-1", "DF-2", "CD-1", "CD-2", "CD-3"):             # the flag-true form stays in place for the re-run
@@ -2351,16 +2351,16 @@ def test_p1_form_planted_failing_inputs(manifests):
     row_by_id(bad["fx-svc"], "DF-2")["p1Form"]["status"] = "confirmed"            # the form index 5 forbids under a false flag
     assert any(x.startswith("DF-2") for x in p1_form_violations(bad))
     bad = copy.deepcopy(manifests)
-    row_by_id(bad["fx-web"], "RV-3")["p1Form"]["deps"].append({"loc": "svc:api/orders.py::create_order", "dist": 1, "st": "confirmed", "reason": "resolved-call"})   # one holder of RV-3 only
+    row_by_id(bad["fx-web"], "RV-3")["p1Form"]["deps"].append({"loc": "svc:api/orders.py::build_router.create_order", "dist": 1, "st": "confirmed", "reason": "resolved-call"})   # one holder of RV-3 only
     v = p1_form_violations(bad)
     assert any("RV-3" in x and "disagree" in x for x in v), v
     bad = copy.deepcopy(manifests)
     del row_by_id(bad["fx-svc"], "RV-1")["p1Form"]
     assert any(x.startswith("RV-1") for x in p1_form_violations(bad))
-    # DF-3 is not listed at the P1 bound (d3 > 2): a manifest that lists it again is red
+    # DF-3 is asked of CF-DF3 and sits at d2, inside the bound; a manifest that moves it to d3 (beyond the bound 2) is red
     bad = copy.deepcopy(manifests)
-    row_by_id(bad["fx-web"], "DF-3")["p1Form"].update({"st": "possible", "reason": "flow-unavailable:python", "loc": "web:app/src/ui/OrderTotal.tsx::OrderTotal", "dist": 3})
-    assert any(x.startswith("DF-3") and "locator" in x for x in p1_form_violations(bad))
+    row_by_id(bad["fx-web"], "DF-3")["p1Form"]["dist"] = 3
+    assert any(x.startswith("DF-3") and "distance" in x for x in p1_form_violations(bad))
     bad = copy.deepcopy(manifests)
     del row_by_id(bad["fx-web"], "DF-3")["p1Form"]
     assert any(x.startswith("DF-3") and "no p1Form" in x for x in p1_form_violations(bad))

@@ -3,7 +3,7 @@ import os
 
 from kafka import KafkaProducer
 
-from fx_svc.bus.constants import PREFIX, TOPIC_ORDERS
+from bus.constants import PREFIX, TOPIC_ORDERS
 
 producer = KafkaProducer()
 

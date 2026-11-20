@@ -2,9 +2,9 @@
 """Price computation and order finalization."""
 from typing import cast
 
-from fx_svc.bus.producer import publish_created
-from fx_svc.core.rules import PremiumRules, Rules, eligible, is_member
-from fx_svc.db.orders import load_rate
+from bus.producer import publish_created
+from core.rules import PremiumRules, Rules, eligible, is_member
+from db.orders import load_rate
 
 
 def base_price(item_id, qty, hooks=None):

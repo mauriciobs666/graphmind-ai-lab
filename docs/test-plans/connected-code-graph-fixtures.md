@@ -1,8 +1,8 @@
 # Connected code graph — fixture system test plan (S35)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.8 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.9 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
 
-*2026-11-19 (v1.8): the P1 form (§5.5) re-derived for the shipped V-both walk at depth bound 2 and a symbol anchor (DF-3 and RV-3 changed, DF-4 and CD-2 to CD-4 stated, extras and callee-run items added, `notices` per ask); counts unchanged (134 rows, P1 93).*
+*2026-11-19 (v1.9): `fx-svc` routers re-planted in factory form and its imports made unit-relative (§4; P1-41 RCA b2, c1), so every handler locator gains the `build_router.` segment; the O-3 router shapes are P1-16 conformance, not fixture rows (§12); the P1 form (§5.5) is re-derived for the V-both walk at depth bound 2 (v1.8); DF-3 is re-planted under the second anchor `CF-DF3`, RV-3's subject is `OrderTotal.place`, and B1F-W/R/W2/RU gate P3 (READS/WRITES are neither stored nor walked at P1): 134 rows, P1 89.*
 
 *2026-11-11 (v1.7): Q-ENV deferred to P2, so LNK-13 and LNK-15 expect `key-match` at P1 (their Compose bindings are P2 notes) and AB-4 waits for P2 on LNK-15; LNK-45 (P1-11b `bash -c exec` server `fx-svc-exec`, prompt mention `.claude/agents/exec.md`) added; census 134 rows, positives 122, P1 93; fx-svc SHAs repinned.*
 
@@ -51,8 +51,8 @@ which the row may be asserted) · `shape` (eval-protocol §12.2 difficulty tag, 
 after the `qname`: `fx-lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String,Currency)`.
 A configuration entry is `repoId:path @keyPath` (§1.9); a unit is `unit repoId:rootPath lang` (§4's table); a
 contract point is `{kind, keyNorm}`. Repository shorthands are `svc` = `fx-svc`, `web` = `fx-web`, `lib` =
-`fx-lib`, `job` = `fx-job`; a bare path in a row is under the named repository, so `svc:api/health.py::health` is
-`{repoId fx-svc, path api/health.py, qname api/health.py::health}`, and `web:app/src/ui/Health.tsx::Health` carries
+`fx-lib`, `job` = `fx-job`; a bare path in a row is under the named repository, so `svc:api/health.py::build_router.health` is
+`{repoId fx-svc, path api/health.py, qname api/health.py::build_router.health}`, and `web:app/src/ui/Health.tsx::Health` carries
 its `app/` directory in the path. A `.proto` or `.sql` file has no `lang` token (§3.3), so its row is anchored on
 the code that implements or reads it, and the definition itself is a `schemaEntry` (`objectKey` = the `keyNorm`).
 
@@ -118,6 +118,8 @@ contains it; config, shell and Markdown files are records of that unit (their so
 **unbuildable** (its forced `buildFailure` marker stays from H2 to HEAD) and has no earlier refresh, so it is also
 not mapped; every other unit builds (`lib-*` from P2). The links into the two units are LNK-42 and LNK-43.
 
+**`fx-svc` layout.** Every `api/*.py` module exposes `def build_router()` (an `APIRouter()` with no `prefix=`, handlers decorated inside, `return router`), so a handler's qname is `api/<mod>.py::build_router.<handler>`; `api/app.py` mounts each with `app.include_router(<mod>.build_router(), prefix=API_PREFIX)` (`items`: `prefix=API_PREFIX + "/items"`, route `"/{item_id}"`), and no route string is empty. The P1 pack composes only `include_router(factory(), prefix=…)`. Imports are unit-relative (`from core.rules import …`) because the repository root is the unit root; `python -m fx_svc.mcp.server` (LNK-21) stays a string.
+
 `fx-job` is the 4th repository (ledger 2026-11-01), built by step **S35b**, parallel to S36-S38: an HTTP call into an
 `fx-svc` endpoint, a read of an `fx-svc` table and env var, HTTP providers (`/job/*`) that `fx-web` consumes, a table
 it writes that `fx-svc` reads, the cross-repository version-skew calls into `svc-common`, and the AC-19 un-merged
@@ -138,26 +140,26 @@ answer must contain.
 
 | ID | kind | planted item | locators | st | reason | gate | shape | serves |
 |---|---|---|---|---|---|---|---|---|
-| LNK-01 | http | `GET /api/health`, literal in the consumer | P `svc:api/health.py::health` · C `web:app/src/ui/Health.tsx::Health` | c | key-match | P1 | exact literal | LNK |
+| LNK-01 | http | `GET /api/health`, literal in the consumer | P `svc:api/health.py::build_router.health` · C `web:app/src/ui/Health.tsx::Health` | c | key-match | P1 | exact literal | LNK |
 | LNK-02 | mcp_tool | `get_item`, literal `callTool("get_item")`; server picked by URL binding | P `svc:mcp/server.py::get_item` · C `web:app/src/mcp/client.ts::loadItem` | c | key-match | P1 | exact literal | LNK |
 | LNK-03 | env_var | `FX_SVC_URL`, literal `os.environ["FX_SVC_URL"]`; Compose sets it for service `job` | P `svc:deploy/compose.yaml @services.job.environment.FX_SVC_URL` · C `job:job/api_client.py::ApiClient.__init__` | c | key-match | P3 | exact literal | LNK |
-| LNK-36 | http | `POST /api/v1/orders`, literal `fetch("/api/v1/orders", {method: "POST"})` (also the AC-25 link of DF-3) | P `svc:api/orders.py::create_order` · C `web:app/src/ui/OrderTotal.tsx::OrderTotal` | c | key-match | P1 | exact literal | LNK, DF-3 |
-| LNK-04 | http | `GET /api/v1/orders/{}`: path from constants `ORDER_PATH` and `SAMPLE_ORDER` (key `GET /api/v1/orders/1001`); provider is a router `prefix="/v1/orders"` mounted at `/api` (mount composition) | P `svc:api/orders.py::read_order` · C `web:app/src/api/orders.ts::getOrder` (constants in `web:app/src/api/endpoints.ts`; the `/api` mount in `svc:api/app.py`) | c | key-match | P1 | constant across files | LNK |
+| LNK-36 | http | `POST /api/v1/orders`, literal `fetch("/api/v1/orders", {method: "POST"})` (also the AC-25 link of DF-3) | P `svc:api/orders.py::build_router.create_order` · C `web:app/src/ui/OrderTotal.tsx::OrderTotal.place` | c | key-match | P1 | exact literal | LNK, DF-3 |
+| LNK-04 | http | `GET /api/v1/orders/{}`: path from constants `ORDER_PATH` and `SAMPLE_ORDER` (key `GET /api/v1/orders/1001`); provider is a factory-built router (routes `/v1/orders/{order_id}`, no constructor prefix) mounted at `/api` (mount composition) | P `svc:api/orders.py::build_router.read_order` · C `web:app/src/api/orders.ts::getOrder` (constants in `web:app/src/api/endpoints.ts`; the `/api` mount in `svc:api/app.py`) | c | key-match | P1 | constant across files | LNK |
 | LNK-05 | topic | `kafka:orders.created`, name in `TOPIC_ORDERS` imported from `bus/constants.py` | P `svc:bus/producer.py::publish_created` · C `web:app/src/bus/consumer.ts::onOrderCreated` | c | key-match | P2 | constant across files | LNK |
 | LNK-06 | mcp_tool | `list_orders`, name held in a constant module on each side | P `svc:mcp/server.py::list_orders` (const `svc:mcp/names.py`) · C `web:app/src/mcp/client.ts::loadOrders` (const `web:app/src/mcp/names.ts`) | c | key-match | P1 | constant across files | LNK |
-| LNK-37 | http | `GET /api/search`, Python path in `job/paths.py::SEARCH_PATH` | P `svc:api/search.py::search` · C `job:job/run_report.py::search_reports` | c | key-match | P1 | constant across files | LNK |
-| LNK-07 | http | `GET /api/files/{}`, TS template `` `${API_PREFIX}/files/${README}` ``, `README = "readme.txt"` constant (key `GET /api/files/readme.txt`) | P `svc:api/files.py::read_file` · C `web:app/src/api/files.ts::fetchFile` | c | key-match | P1 | template literal | LNK |
-| LNK-08 | http | `GET /api/items/{}`, Python f-string `f"{BASE}/items/{ITEM_ID}"`; `BASE` (ends `/api`) and `ITEM_ID = 42` are module constants | P `svc:api/items.py::read_item` (router `prefix="/items"` at `/api`) · C `job:job/run_report.py::fetch_item` | c | key-match | P1 | template literal | LNK |
-| LNK-38 | http | `GET /api/items/{}`, TS template `` `${API_PREFIX}/items/${RELATED_ID}` `` with `RELATED_ID = 7` constant | P `svc:api/items.py::read_item` · C `web:app/src/ui/Related.tsx::Related` | c | key-match | P1 | template literal | LNK |
+| LNK-37 | http | `GET /api/search`, Python path in `job/paths.py::SEARCH_PATH` | P `svc:api/search.py::build_router.search` · C `job:job/run_report.py::search_reports` | c | key-match | P1 | constant across files | LNK |
+| LNK-07 | http | `GET /api/files/{}`, TS template `` `${API_PREFIX}/files/${README}` ``, `README = "readme.txt"` constant (key `GET /api/files/readme.txt`) | P `svc:api/files.py::build_router.read_file` · C `web:app/src/api/files.ts::fetchFile` | c | key-match | P1 | template literal | LNK |
+| LNK-08 | http | `GET /api/items/{}`, Python f-string `f"{BASE}/items/{ITEM_ID}"`; `BASE` (ends `/api`) and `ITEM_ID = 42` are module constants | P `svc:api/items.py::build_router.read_item` (factory-built router, route `/{item_id}`, mounted at `/api/items` by `API_PREFIX + "/items"`: mount composition) · C `job:job/run_report.py::fetch_item` | c | key-match | P1 | template literal | LNK |
+| LNK-38 | http | `GET /api/items/{}`, TS template `` `${API_PREFIX}/items/${RELATED_ID}` `` with `RELATED_ID = 7` constant | P `svc:api/items.py::build_router.read_item` · C `web:app/src/ui/Related.tsx::Related` | c | key-match | P1 | template literal | LNK |
 | LNK-09 | topic | `kafka:orders.shipped`, name `f"{PREFIX}.shipped"` with a constant prefix | P `svc:bus/producer.py::publish_shipped` · C `web:app/src/bus/consumer.ts::onOrderShipped` | c | key-match | P2 | template literal | LNK |
-| LNK-10 | http | `GET /api/search`, TS wrapper `request()` reached by a two-level field path `api.search.query` (AC-1 lifting chain) | P `svc:api/search.py::search` · C `web:app/src/api/index.ts::api.search.query` (wrapper `web:app/src/api/client.ts::request`) | c | key-match | P1 | client wrapper | LNK |
-| LNK-11 | http | `POST /api/v1/orders`, Python wrapper `ApiClient.post` | P `svc:api/orders.py::create_order` · C `job:job/run_report.py::requeue` (wrapper `job:job/api_client.py::ApiClient.post`) | c | key-match | P1 | client wrapper | LNK |
+| LNK-10 | http | `GET /api/search`, TS wrapper `request()` reached by a two-level field path `api.search.query` (AC-1 lifting chain) | P `svc:api/search.py::build_router.search` · C `web:app/src/api/index.ts::api.search.query` (wrapper `web:app/src/api/client.ts::request`) | c | key-match | P1 | client wrapper | LNK |
+| LNK-11 | http | `POST /api/v1/orders`, Python wrapper `ApiClient.post` | P `svc:api/orders.py::build_router.create_order` · C `job:job/run_report.py::requeue` (wrapper `job:job/api_client.py::ApiClient.post`) | c | key-match | P1 | client wrapper | LNK |
 | LNK-12 | mcp_tool | `reindex`, TS `callTool(name)` wrapper | P `svc:mcp/server.py::reindex` · C `web:app/src/ui/Admin.tsx::onReindex` (wrapper `web:app/src/mcp/client.ts::callTool`) | c | binding-confirmed | P1 | client wrapper | LNK |
-| LNK-13 | http | `GET /api/items/{}` (constant `DEFAULT_ITEM = 1`); base URL is `VITE_API_BASE`, set by Compose service `web` to service `api` (Env/Compose binding, **P2**: the consumer's variable name is in no bundle record at P1, Q-ENV) | P `svc:api/items.py::read_item` · C `web:app/src/api/items.ts::getDefaultItem` | c | key-match (P2: binding-confirmed) | P1 | config-bound base URL | LNK |
-| LNK-14 | http | `GET /api/health`; base URL `base_url` in `config/job.yaml` (origin `http://api:8000`, the Compose service `api` of LNK-22, so it binds to unit `svc` alone), read by `job/settings.py` | P `svc:api/health.py::health` · C `job:job/run_report.py::preflight` | c | binding-confirmed | P1 | config-bound base URL | LNK |
+| LNK-13 | http | `GET /api/items/{}` (constant `DEFAULT_ITEM = 1`); base URL is `VITE_API_BASE`, set by Compose service `web` to service `api` (Env/Compose binding, **P2**: the consumer's variable name is in no bundle record at P1, Q-ENV) | P `svc:api/items.py::build_router.read_item` · C `web:app/src/api/items.ts::getDefaultItem` | c | key-match (P2: binding-confirmed) | P1 | config-bound base URL | LNK |
+| LNK-14 | http | `GET /api/health`; base URL `base_url` in `config/job.yaml` (origin `http://api:8000`, the Compose service `api` of LNK-22, so it binds to unit `svc` alone), read by `job/settings.py` | P `svc:api/health.py::build_router.health` · C `job:job/run_report.py::preflight` | c | binding-confirmed | P1 | config-bound base URL | LNK |
 | LNK-15 | http | `POST /job/trigger`; base URL `os.environ.get("FX_JOB_URL", "http://localhost:8300")`; fx-job's Compose port is 8300 (`job` Compose service: build context `../../fx-job`, port 8300, unit `job`; the binding is **P2**, Q-ENV) | P `job:job/trigger_server.py::trigger` · C `svc:clients/jobs.py::trigger_job` | c | key-match (P2: binding-confirmed) | P1 | config-bound base URL | LNK |
 | LNK-16 | http | `GET /job/status` fetched from `http://localhost:8000`; `fx-svc` (Compose) **and** `fx-job` (`scripts/dev.sh`) both claim 8000. True target: `job:job/trigger_server.py::status` | P `job:job/trigger_server.py::status` · C `web:app/src/ui/JobStatus.tsx::JobStatus` | p | port-shared | P1 | | LNK |
-| LNK-17 | http | `` fetch(`/api/items/${id}`) `` where `id` is a component prop: key `GET /api/items/{?}`. True target: `read_item` | P `svc:api/items.py::read_item` · C `web:app/src/ui/Item.tsx::ItemView` | p | partial-key | P1 | | LNK |
+| LNK-17 | http | `` fetch(`/api/items/${id}`) `` where `id` is a component prop: key `GET /api/items/{?}`. True target: `read_item` | P `svc:api/items.py::build_router.read_item` · C `web:app/src/ui/Item.tsx::ItemView` | p | partial-key | P1 | | LNK |
 | LNK-18 | http | URL binding: `http://localhost:8200/mcp` (consumer); ports 8000 and 8200 are launch configs of **one** unit (`svc`: `.mcp.json` and Compose) | P `svc:mcp/server.py::main` (`POST /mcp`) · C `web:app/src/mcp/client.ts::connect` | c | binding-confirmed | P1 | | LNK |
 | LNK-19 | script_tool | `scripts/refresh.sh` sets `MCP_URL=http://localhost:8200/mcp` (bound to unit `svc`) and runs `mcp-call reindex` (literal tool name) | P `svc:mcp/server.py::reindex` · C `svc:scripts/refresh.sh::<script>` | c | key-match | P1 | | LNK |
 | LNK-20 | script_tool | `scripts/dyn.sh` runs `eval "mcp-call $TOOL"`, no binding. By the `unknown-key` rule (one link per provider of the kind, spec3 §7.2) the candidates are **every** `mcp_tool` provider in the system, including `fx-job`'s second `reindex` (NC-5). True targets: any | P `svc:mcp/server.py::get_item`, `svc:mcp/server.py::reindex`, `svc:mcp/server.py::list_orders`, `job:job/mcp_admin.py::reindex` · C `svc:scripts/dyn.sh::<script>` | p | shell-dynamic | P1 | | LNK |
@@ -171,9 +173,9 @@ answer must contain.
 | LNK-27 | data_entity | `cypher:label:Order`: `CREATE (:Order {id: 1})` and `MATCH (o:Order)` | P `svc:db/graph.py::link_order` · C `svc:db/graph.py::neighbors` | c | key-match | P3 | | LNK |
 | LNK-28 | config_key | `pydantic-settings:db.pool_size`: `db.pool_size` in `config/app.yaml`, read through `Settings.db_pool_size` | P `svc:config/app.yaml @db.pool_size` · C `svc:db/orders.py::connect` | c | key-match | P3 | | LNK |
 | LNK-29 | config_key | `settings.get(section + "." + key)` with computed parts; no provable provider | C `job:job/settings.py::lookup` | p | runtime-built | P3 | runtime-built key | LNK |
-| LNK-30 | call | `repo.save(o)` where `repo: Repo = Depends(get_repo)`; `SqlRepo.save` and `MemRepo.save` both exist. True target: `SqlRepo.save`, both in the candidate set | C `svc:api/orders.py::create_order` | p | name-match | P1 | DI or reflection | LNK |
+| LNK-30 | call | `repo.save(o)` where `repo: Repo = Depends(get_repo)`; `SqlRepo.save` and `MemRepo.save` both exist. True target: `SqlRepo.save`, both in the candidate set | C `svc:api/orders.py::build_router.create_order` | p | name-match | P1 | DI or reflection | LNK |
 | LNK-39 | call | service locator: `registry.get(kind).run(evt)`; `AuditPlugin.run` and `MailPlugin.run` exist. True target: `AuditPlugin.run` | C `svc:plugins/loader.py::dispatch` | p | name-match | P1 | DI or reflection | LNK |
-| LNK-40 | call | `store.load(item_id)` with `store = Depends(get_store)`; `DbStore.load` and `CacheStore.load` exist. True target: `DbStore.load` | C `svc:api/items.py::read_item` | p | name-match | P1 | DI or reflection | LNK |
+| LNK-40 | call | `store.load(item_id)` with `store = Depends(get_store)`; `DbStore.load` and `CacheStore.load` exist. True target: `DbStore.load` | C `svc:api/items.py::build_router.read_item` | p | name-match | P1 | DI or reflection | LNK |
 | LNK-31 | call | Java reflection `Class.forName(cfg).getMethod("quote")`. True target: `Pricing.quote(int,String,Currency)` | C `fx-lib:quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java::QuoteCli.main(String[])` | p | name-match | P2 | DI or reflection | LNK |
 | LNK-32 | rpc | `getattr(stub, method_name)(req)`: method name is a parameter. True target: `/acme.fxlib.Pricing/Quote` | C `svc:clients/pricing.py::quote_dynamic` | p | runtime-built / unknown-key | P2 | DI or reflection | LNK |
 | LNK-33 | library_api | **skew:** `fx-job` pins `fx-svc-common==1.4` and is typed against `job/stubs/fx_svc_common_1_4.pyi`; it calls `fmt_money(amount,locale)`; provider 2.1 is `fmt_money(amount,*,locale)`. Key `python:fx_svc_common.fmt.fmt_money(amount,*,locale)` | P `svc:common/fx_svc_common/fmt.py::fmt_money` · C `job:job/run_report.py::render_row` | p | name-only-provider (`versionSkew`) | P2 | version skew | LNK |
@@ -182,7 +184,7 @@ answer must contain.
 | LNK-41 | library_api | **skew control:** `fmt_date(ts)` has the same signature in 1.4 and 2.1; the `versionSkew` note is present on the link | P `svc:common/fx_svc_common/fmt.py::fmt_date` · C `job:job/run_report.py::render_row` | c | key-match (`versionSkew` note) | P2 | | LNK |
 | LNK-42 | http | `GET /legacy/fee` fetched by `legacy_fee`; `svc-legacy` is unbuildable and never built in the steady state | P `svc:legacy/app.py::fee` · C `svc:api/orders.py::legacy_fee` | p | target-not-mapped | P1 | | LNK |
 | LNK-43 | http | `GET /tools/run` fetched by `run_tool`; `svc-tools` is never built | P `svc:tools/app.py::run` · C `svc:api/orders.py::run_tool` | p | target-not-mapped | P1 | | LNK |
-| LNK-44 | data_entity | `sql:table:order_report`: written by `INSERT INTO order_report` in `fx-job`, read by `SELECT * FROM order_report` (no column key, so no column link); no DDL in any repository | P `job:job/run_report.py::write_report` · C `svc:api/reports.py::report_view` | c | key-match | P3 | | LNK, OV-1 |
+| LNK-44 | data_entity | `sql:table:order_report`: written by `INSERT INTO order_report` in `fx-job`, read by `SELECT * FROM order_report` (no column key, so no column link); no DDL in any repository | P `job:job/run_report.py::write_report` · C `svc:api/reports.py::build_router.report_view` | c | key-match | P3 | | LNK, OV-1 |
 
 A Compose build context that leaves its own repository and resolves to a sibling repository's unit (`../../fx-job`, LNK-15) is a **P2** check (Q-ENV: the consumer's `os.environ` variable name is in no P1 bundle record, so LNK-15 reads `key-match` at P1; the resolution itself is asserted at P1 on real extractor records by `test_linker_bind.py`); `OV-2` plants the same binding as a P3 overlay assertion and is not a P1 row.
 
@@ -202,11 +204,11 @@ through `cpg/ccg/keynorm.py::mask_http_segments` composed with a short decode/re
 
 | ID | consumer literal (as written) | expected `keyNorm` | outcome | provider | locator C |
 |---|---|---|---|---|---|
-| KN-1 | `/api/v1/%2E%2E/health` | `GET /api/health` (decode `%2E%2E`, then resolve; the K42 shape) | c, key-match | `svc:api/health.py::health` | `web:app/src/ui/Probe.tsx::probeEncoded` |
-| KN-2 | `/api/items/%2E%2E/%2E%2E/api/health` | `GET /api/health` (two encoded dot segments) | c, key-match | `svc:api/health.py::health` | `web:app/src/ui/Probe.tsx::probeDeep` |
-| KN-3 | `/api/%68ealth` | `GET /api/health` (`%68` is unreserved, decoded) | c, key-match | `svc:api/health.py::health` | `web:app/src/ui/Probe.tsx::probeUnreserved` |
-| KN-4 | `/api/files/a%2fb` | `GET /api/files/a%2Fb` (reserved escape kept, hex uppercased; one segment, matches `{}`) | c, key-match | `svc:api/files.py::read_file` | `web:app/src/ui/Probe.tsx::probeReserved` |
-| KN-5 | `/api/hooks/x7k2%2Dq9w4%2Dm1p8%2Dz3v6` | `GET /api/hooks/{?}` (decoded `x7k2-q9w4-m1p8-z3v6` fails the token screen and is masked; the encoded form passes it) | p, partial-key | `svc:api/hooks.py::receive_hook` (`GET /api/hooks/{}`) | `web:app/src/ui/Probe.tsx::probeToken` |
+| KN-1 | `/api/v1/%2E%2E/health` | `GET /api/health` (decode `%2E%2E`, then resolve; the K42 shape) | c, key-match | `svc:api/health.py::build_router.health` | `web:app/src/ui/Probe.tsx::probeEncoded` |
+| KN-2 | `/api/items/%2E%2E/%2E%2E/api/health` | `GET /api/health` (two encoded dot segments) | c, key-match | `svc:api/health.py::build_router.health` | `web:app/src/ui/Probe.tsx::probeDeep` |
+| KN-3 | `/api/%68ealth` | `GET /api/health` (`%68` is unreserved, decoded) | c, key-match | `svc:api/health.py::build_router.health` | `web:app/src/ui/Probe.tsx::probeUnreserved` |
+| KN-4 | `/api/files/a%2fb` | `GET /api/files/a%2Fb` (reserved escape kept, hex uppercased; one segment, matches `{}`) | c, key-match | `svc:api/files.py::build_router.read_file` | `web:app/src/ui/Probe.tsx::probeReserved` |
+| KN-5 | `/api/hooks/x7k2%2Dq9w4%2Dm1p8%2Dz3v6` | `GET /api/hooks/{?}` (decoded `x7k2-q9w4-m1p8-z3v6` fails the token screen and is masked; the encoded form passes it) | p, partial-key | `svc:api/hooks.py::build_router.receive_hook` (`GET /api/hooks/{}`) | `web:app/src/ui/Probe.tsx::probeToken` |
 
 **Mutants actually run** (same harness, same five literals): *resolve-before-decode* leaves `GET /api/v1/../health`
 and `GET /api/items/../../api/health`, so it fails **KN-1 and KN-2**; *mask-before-decode* leaves the secret-shaped
@@ -230,9 +232,9 @@ are given so the extractor's side is checkable too.
 | AC6-DYN-2 | library_api | Python `__import__("plugins." + name)` | the suffix is a parameter | C `svc:plugins/loader.py::load_legacy` | p | dynamic-import | P1 | dynamic import | AC-6 |
 | AC6-DYN-3 | library_api | TS ``await import(`./plugins/${name}`)`` | `name` is a prop | C `web:app/src/plugins/load.ts::loadPlugin` | p | dynamic-import | P1 | dynamic import | AC-6 |
 | AC6-EX-1 | launch | `.mcp.example.json` server entry for `fx-svc` (`File.role = example`) | the file is an example, not the deployed config. True: unit `svc` | C `svc:.mcp.example.json @mcpServers.fx-svc` | p | example-config | P1 | | AC-6 |
-| AC6-EX-2 | http | `VITE_REPORTS_BASE` set **only** in `deploy/compose.example.yaml`; consumer of `GET /api/reports/{}` | the only binding is an example config. True: `svc:api/reports.py::report_view` | P `svc:api/reports.py::report_view` · C `web:app/src/ui/Reports.tsx::Reports` | p | example-config | P1 | | AC-6 |
+| AC6-EX-2 | http | `VITE_REPORTS_BASE` set **only** in `deploy/compose.example.yaml`; consumer of `GET /api/reports/{}` | the only binding is an example config. True: `svc:api/reports.py::build_router.report_view` | P `svc:api/reports.py::build_router.report_view` · C `web:app/src/ui/Reports.tsx::Reports` | p | example-config | P1 | | AC-6 |
 | AC6-EX-3 | env_var | `FX_DB_URL` set **only** in `svc:.env.example`, read in `db/orders.py::connect` | the only writer is an example file. **Gate P3**: `env_var` is a P3 kind | C `svc:db/orders.py::connect` | p | example-config | P3 | | AC-6 |
-| AC6-EX-4 | http | `FX_PEER_BASE` set **only** in `svc` of `deploy/compose.example.yaml` (`build.context: ..`, unit `svc`); `clients/peer.py::peer_health` does `requests.get(os.environ["FX_PEER_BASE"] + "/api/health")` | the only binding of the Python consumer is an example config. True: `svc:api/health.py::health` | P `svc:api/health.py::health` · C `svc:clients/peer.py::peer_health` | p | example-config | P1 | | AC-6 |
+| AC6-EX-4 | http | `FX_PEER_BASE` set **only** in `svc` of `deploy/compose.example.yaml` (`build.context: ..`, unit `svc`); `clients/peer.py::peer_health` does `requests.get(os.environ["FX_PEER_BASE"] + "/api/health")` | the only binding of the Python consumer is an example config. True: `svc:api/health.py::build_router.health` | P `svc:api/health.py::build_router.health` · C `svc:clients/peer.py::peer_health` | p | example-config | P1 | | AC-6 |
 | AC6-PM-1 | mcp_tool | Markdown **prose**: "call the `get_item` tool" in `.claude/agents/agent.md` | a prompt names a tool; it does not call it. True: `get_item` | C `svc:.claude/agents/agent.md::<document>` | p | prompt-mention | P1 | prompt mention | AC-6 |
 | AC6-PM-2 | mcp_tool | Markdown **table cell**: `| reindex | rebuilds the index |` in `.claude/agents/tools.md` | same | C `svc:.claude/agents/tools.md::<document>` | p | prompt-mention | P1 | prompt mention | AC-6 |
 | AC6-PM-3 | mcp_tool | Python triple-quoted `SYSTEM_PROMPT` naming `list_orders` | same | C `svc:prompts/system.py::<module>` | p | prompt-mention | P1 | prompt mention | AC-6 |
@@ -257,14 +259,14 @@ so it must be **confirmed**: an engine that downgrades everything dynamic to `po
 
 ### 5.4 B1's four assertions (`B1*`)
 
-Each entity has two writers (W, W2) and readers (R); `B1-1..4` are asserted on W, W2 and R of each.
+Each entity has two writers (W, W2) and readers (R); `B1-1..4` are asserted on W, W2 and R of each. The field rows gate P3 with the table rows: P1 stores and walks `CALLS`, not `READS`/`WRITES`, so AC-3 closes at P3.
 
 | ID | entity | role | locator | st | reason | gate | serves |
 |---|---|---|---|---|---|---|---|
-| B1F-W | field `svc:state/cache.py::OrderCache.entries` | writer W (`self.entries[k] = v`) | `svc:state/cache.py::OrderCache.put` | c | resolved-receiver | P1 | B1-1, B1-3, B1-4 |
-| B1F-R | same | reader R | `svc:state/cache.py::OrderCache.get` | c | resolved-receiver | P1 | B1-1, B1-2, B1-3 |
-| B1F-W2 | same | other writer W2 (`del self.entries[k]`) | `svc:state/cache.py::OrderCache.evict` | c | resolved-receiver | P1 | B1-2, B1-3, B1-4 |
-| B1F-RU | same, key `?.entries` | reader through an untyped parameter | `svc:api/orders.py::peek` | p | field-name-match | P1 | B1-1 (listed after the confirmed reader), B1-3 |
+| B1F-W | field `svc:state/cache.py::OrderCache.entries` | writer W (`self.entries[k] = v`) | `svc:state/cache.py::OrderCache.put` | c | resolved-receiver | P3 | B1-1, B1-3, B1-4 |
+| B1F-R | same | reader R | `svc:state/cache.py::OrderCache.get` | c | resolved-receiver | P3 | B1-1, B1-2, B1-3 |
+| B1F-W2 | same | other writer W2 (`del self.entries[k]`) | `svc:state/cache.py::OrderCache.evict` | c | resolved-receiver | P3 | B1-2, B1-3, B1-4 |
+| B1F-RU | same, key `?.entries` | reader through an untyped parameter | `svc:api/orders.py::peek` | p | field-name-match | P3 | B1-1 (listed after the confirmed reader), B1-3 |
 | B1S-D | `sql:table:orders` | definition (DDL) | `svc:db/schema.sql` (`schemaEntry`, `objectKey` `sql:table:orders`) | c | key-match | P3 | B1-3 (rename) |
 | B1S-W | same | writer W (`INSERT INTO orders`) | `svc:db/orders.py::insert_order` | c | key-match | P3 | B1-1, B1-3, B1-4 |
 | B1S-R | same | reader R, **in another repo** (`SELECT count(*) FROM orders`: the table key only, so no column key is read; LNK-26's `render_row` is the column reader) | `job:job/run_report.py::load_orders` | c | key-match | P3 | B1-1, B1-2, B1-3 |
@@ -273,7 +275,7 @@ Each entity has two writers (W, W2) and readers (R); `B1-1..4` are asserted on W
 ### 5.5 AC-25 impact shape (`DF-*`, `CD-*`, `RV-*`)
 
 The changed function for the data-flow set is `CF-DF` = `svc:core/flow.py::base_price` (its return value
-changes); for the control-dependency set, `CF-CD` = `svc:core/rules.py::eligible` (its condition changes). A
+changes); for the control-dependency set, `CF-CD` = `svc:core/rules.py::eligible` (its condition changes). DF-3 is asked of a second anchor, `CF-DF3` = `svc:core/flow.py::apply_discount`: the base_price-anchored effect would lie at distance 3, beyond the walk's bound 2 (index D3), and a planted row sits at distance <= 2. A
 `group` is (repository, component, distance). Chains are one `DATA`/`CONTROLLED_BY` hop per distance step. An
 HTTP link counts as one hop, and DF-3 and RV-3 are link-level relations unless S20/S33 provide a cross-language
 `DATA` hop at P1 (OI-4). The A25-3 pairs (possible item planted to sort first under name, path and line order):
@@ -288,8 +290,8 @@ HTTP link counts as one hop, and DF-3 and RV-3 are link-level relations unless S
 | ID | effect | locator | dist (direct?) | group | st | reason | gate | serves |
 |---|---|---|---|---|---|---|---|---|
 | DF-1 | `apply_discount` uses `base_price`'s return | `svc:core/flow.py::apply_discount` | 1 (direct) | fx-svc / core / 1 | c | intra-flow | P1 | A25-1..3; A25-4 via RV-1 |
-| DF-2 | `create_order` uses `apply_discount`'s result: "a changed return value used two calls away" | `svc:api/orders.py::create_order` | 2 (indirect) | fx-svc / api / 2 | c | intra-flow | P1 | A25-1..3 |
-| DF-3 | the response `total` of `POST /api/v1/orders` shown by the UI (crosses LNK-36) | `web:app/src/ui/OrderTotal.tsx::OrderTotal` | 3 (indirect) | fx-web / ui / 3 | c | key-match | P1 | A25-1..3 |
+| DF-2 | `create_order` uses `apply_discount`'s result: "a changed return value used two calls away" | `svc:api/orders.py::build_router.create_order` | 2 (indirect) | fx-svc / api / 2 | c | intra-flow | P1 | A25-1..3 |
+| DF-3 | the response `total` of `POST /api/v1/orders` shown by the UI (crosses LNK-36); asked of `CF-DF3` = `svc:core/flow.py::apply_discount` | `web:app/src/ui/OrderTotal.tsx::OrderTotal.place` | 2 (indirect) | fx-web / ui / 2 | c | key-match | P1 | A25-1..3 |
 | DF-4 | `accept_quote` passes the discount through an untyped parameter: `discount.apply(rate)` | `svc:api/orders.py::accept_quote` | 2 (indirect) | fx-svc / api / 2 | p | name-match | P1 | A25-1..3 (A25-3 pair above) |
 | CD-1 | a call guarded **inside** `eligible`: `if o.total > LIMIT: audit(o)` | `svc:core/rules.py::audit` | 1 (direct) | fx-svc / core / 1 | c | intra-flow | P1 | A25-1..3; A25-4 via RV-2 |
 | CD-2 | a call in **another function** guarded by the condition: `finalize` runs `if eligible(o): notify(o)` | `svc:core/flow.py::notify` | 1 (direct) | fx-svc / core / 1 | c | intra-flow | P1 | A25-1..3 |
@@ -298,17 +300,18 @@ HTTP link counts as one hop, and DF-3 and RV-3 are link-level relations unless S
 
 **Expected answer order** (A25-2; repository, component by byte order, distance ascending; inside a group
 `confirmed` first, then by name):
-- forward `CF-DF`: (fx-svc, api, 2) [DF-2, DF-4] · (fx-svc, core, 1) [DF-1] · (fx-web, ui, 3) [DF-3];
+- forward `CF-DF`: (fx-svc, api, 2) [DF-2, DF-4] · (fx-svc, core, 1) [DF-1];
+- forward `CF-DF3`: (fx-web, ui, 2) [DF-3];
 - forward `CF-CD`: (fx-svc, bus, 2) [CD-3, CD-4] · (fx-svc, core, 1) [CD-1, CD-2].
 
 The reverse question ("what does this depend on?") for the **same changed function**, and a cross-repository one.
-The list is known and complete; no other dependency may be listed as `confirmed`. The reverse relation is **data dependency** (what the subject's value is computed from), over functions, to distance <= 3; a call whose result is unused (`audit(o)` in `eligible`) and a call-based reading are not the model, and RV-3 stops at distance 3 for that reason (S33 confirms, OI-1).
+The list is known and complete; no other dependency may be listed as `confirmed`. The reverse relation is **data dependency** (what the subject's value is computed from), over functions, to distance <= 3; a call whose result is unused (`audit(o)` in `eligible`) and a call-based reading are not the model, and RV-3 stops at distance 2 (the walk's bound) for that reason (S33 confirms, OI-1).
 
 | ID | subject | planted dependencies (dist, group, st); listed in this group order | gate | serves |
 |---|---|---|---|---|
 | RV-1 | `svc:core/flow.py::base_price` | fx-svc/core/1: `svc:core/rules.py::is_member` (c), `svc:core/hooks.py::find_hook` (p, name-match) · fx-svc/db/1: `svc:db/orders.py::load_rate` (c) · fx-svc/db/2: `svc:db/orders.py::connect` (c) | P1 | A25-4; A25-1..3 on each of the 4 |
 | RV-2 | `svc:core/rules.py::eligible` | fx-svc/core/1: `svc:core/rules.py::tier_of` (c), `svc:core/hooks.py::find_hook` (p, name-match) · fx-svc/db/2: `svc:db/orders.py::load_rate` (c) · fx-svc/state/1: `svc:state/cache.py::OrderCache.get` (c) | P1 | A25-4; A25-1..3 on each of the 4 |
-| RV-3 | `web:app/src/ui/OrderTotal.tsx::OrderTotal` (cross-repository) | fx-svc/api/1: `svc:api/orders.py::create_order` (c) · fx-svc/core/2: `svc:core/flow.py::apply_discount` (c) · fx-svc/core/3: `svc:core/flow.py::base_price` (c) | P1 | A25-4; A25-1..3 on each of the 3 |
+| RV-3 | `web:app/src/ui/OrderTotal.tsx::OrderTotal.place` (cross-repository; the nested function owning the `fetch` site) | fx-svc/api/1: `svc:api/orders.py::build_router.create_order` (c) · fx-svc/core/2: `svc:core/flow.py::apply_discount` (c) | P1 | A25-4; A25-1..3 on each of the 2 |
 
 Inside a group of `confirmed` items the order is by name. The two `find_hook` rows are the same function listed in
 two answers (one planted function, two dependency entries).
@@ -318,7 +321,7 @@ flag-true form. Each manifest row below also carries a `p1Form` field; the P1 ga
 re-run asserts the form above. The P1 form is the answer of the shipped V-both walk (answer algorithm and schema label `"1.2"`,
 `docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` §2) at the default depth bound 2, derived by hand from the fixture
 source and the walk rules (`docs/test-reports/connected-code-graph-p1-41-rederivation-report.md`), assuming the frontend resolves what the
-manifests plant. The ask is a symbol anchor: `svc:core/flow.py::base_price` for `CF-DF`, `svc:core/rules.py::eligible` for `CF-CD` (a
+manifests plant. The ask is a symbol anchor: `svc:core/flow.py::base_price` for `CF-DF`, `svc:core/flow.py::apply_discount` for `CF-DF3`, `svc:core/rules.py::eligible` for `CF-CD` (a
 `file:line` or symbol ask resolves to a `Symbol`, never to a `Cond`), and the subject of each `RV` row (depends-on). Each row lists the items the answer
 holds; under a false flag only the flow-dependent hops are `possible`/`flow-unavailable:python`, a resolved direct call stays `confirmed`,
 a `CALLS_NAME` hop keeps `name-match` (`-answer-spec2.md` §5). Three kinds of item beyond the planted ones: a **callee run** item (`calleeRun`,
@@ -329,22 +332,22 @@ that the data-dependency model does not plant), and **not listed** (`listed: fal
 | Row | P1 form (status / reason) | Note |
 |---|---|---|
 | DF-1 | `svc:core/flow.py::apply_discount` (d1) `confirmed` / `resolved-call` | a direct caller of the changed symbol, no labelled hop |
-| DF-2 | `svc:api/orders.py::create_order` (d2) `possible` / `flow-unavailable:python` | two calls away through a flow-dependent hop (`-answer-spec2.md` §5 `B-flow` item B) |
-| DF-3 | not listed (d3 is beyond the bound 2) | the `TO ←` row into LNK-36 leaves `create_order` at d2, the `VIA ←` row to the consumer is inc 1; the consumer function is `OrderTotal.place` (nested function, own `Symbol`) |
+| DF-2 | `svc:api/orders.py::build_router.create_order` (d2) `possible` / `flow-unavailable:python` | two calls away through a flow-dependent hop (`-answer-spec2.md` §5 `B-flow` item B) |
+| DF-3 | `web:app/src/ui/OrderTotal.tsx::OrderTotal.place` (d2) `possible` / `flow-unavailable:python`; extras `svc:api/orders.py::build_router.create_order` (d1) `confirmed` / `resolved-call`, `svc:api/orders.py::accept_quote` (d1) `possible` / `name-match`, `job:job/run_report.py::requeue` (d2) `possible` / `flow-unavailable:python`, `web:app/src/api/dyn.ts::forward` (d2) `possible` / `unknown-key`; callee run (the callees of the function-state callers `create_order`/`accept_quote`: `repo.save(o)` name-matched) `svc:db/repo.py::Repo.save` (d2) `possible` / `flow-unavailable:python`, `svc:db/repo.py::SqlRepo.save` (d2) `possible` / `flow-unavailable:python`, `svc:db/repo.py::MemRepo.save` (d2) `possible` / `flow-unavailable:python` | asked of `CF-DF3` = `apply_discount`: `create_order` is its direct caller; the `TO ←` row into LNK-36 costs 0 and the `VIA ←` row to the consumer 1, so the consumer function `OrderTotal.place` (nested function, own `Symbol`) is d2; `requeue` is LNK-11's other consumer of the same endpoint (an extra: if the linker's `VIA` site is the wrapper's, the item is that function, confirmed at the first run); `forward` is the runtime-built consumer of AC6-URL, linked `possible`/`unknown-key` to every `http` provider; the callee run starts at function-state callers, never at the anchor, so `base_price` (the anchor's own callee) is not listed |
 | DF-4 | `svc:api/orders.py::accept_quote` (d2) `possible` / `name-match` | a `CALLS_NAME ←` row keeps its own reason and may not carry `flow-unavailable` |
 | CD-1, CD-3, CD-4 | not asserted, not listed | the control half is "reported not closed" (`docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md` §2.3); `audit` is inside the anchor, `publish_created` and `publish_alert` are callees of `notify`, at d3 |
 | CD-2 | not asserted; carries the caller `svc:core/flow.py::finalize` (d1) `confirmed` / `resolved-call` and the callee run item `svc:core/flow.py::notify` (d2) `possible` / `flow-unavailable:python` | the answer to a `Symbol` anchor: `finalize` is a direct caller (confirmed, as DF-1); `notify` is a callee of `finalize` (V-both), listed at d2, not at the planted d1, and not as control-dependency evidence |
 | RV-1 | `svc:db/orders.py::connect` (d2) `possible` / `flow-unavailable:python`; extra `svc:state/cache.py::OrderCache.get` (d2) `possible` / `flow-unavailable:python`; others as above | the extra is `load_rate`'s `_RATES.get(...)` name-matched (the depends-on walk is call-based) |
 | RV-2 | `svc:db/orders.py::load_rate` (d2) `possible` / `flow-unavailable:python`; extra `svc:core/rules.py::audit` (d1) `confirmed` / `resolved-call`; others as above | `audit(o)` is a call with an unused result: a data-dependency model omits it, the call-based walk lists it |
-| RV-3 | none listed | the subject `OrderTotal` owns only `useState`; the `fetch` site belongs to `OrderTotal.place`, so no `Link` is reached (a subject of `OrderTotal.place` is a fixture decision, see the report) |
+| RV-3 | `svc:api/orders.py::build_router.create_order` (d1) `confirmed` / `resolved-call`; `svc:core/flow.py::apply_discount` (d2) `confirmed` / `resolved-call`; extras `svc:db/repo.py::Repo.save` (d2) `possible` / `name-match`, `svc:db/repo.py::SqlRepo.save` (d2) `possible` / `name-match`, `svc:db/repo.py::MemRepo.save` (d2) `possible` / `name-match` | the subject is `OrderTotal.place`, the owner of the `fetch` site (the enclosing `OrderTotal` owns only `useState`, so no `Link` is reached from it); `base_price` (d3) is not planted; the extras are `create_order`'s `repo.save(o)` name-matched |
 
 Every resolved answer over flag-false code carries `notices` `flow-not-enumerated` (`-answer-spec2.md` §5.1), `langs` the languages of the flag-false
 units hosting a visited code node: the `p1Form.notices` of each row, below.
 
 | Ask (rows) | `notices` `langs` |
 |---|---|
-| `CF-DF` (DF-1 to DF-4), `CF-CD` (CD-1 to CD-4), RV-1, RV-2 | `python` |
-| RV-3 | `javascript` |
+| `CF-DF` (DF-1, DF-2, DF-4), `CF-CD` (CD-1 to CD-4), RV-1, RV-2 | `python` |
+| `CF-DF3` (DF-3), RV-3 | `javascript`, `python` |
 
 Consequence for A25-3: in a P1 run no forward group holds both statuses (api/2 `[DF-2, DF-4]` both `possible`; core/1 `[DF-1]`; core/1 `[CD-2 caller]` `confirmed`; core/2 `[CD-2 callee]` `possible`), so every forward pair is vacuous; the reverse list carries the check: RV-1's group fx-svc / core / 1 holds `is_member` `confirmed` and `find_hook` `possible`/`name-match` (RV-2: `tier_of` and `audit` `confirmed`, `find_hook` `possible`).
 
@@ -386,9 +389,9 @@ columns it writes to `order_report`) and `job:job/trigger_server.py::status` (th
 
 | ID | change set | affected code (other repositories) | st | reason | gate | serves |
 |---|---|---|---|---|---|---|
-| OV-1 | `CS-JOB` | listed: `svc:api/reports.py::report_view`, reader of `sql:table:order_report` (written by fx-job; LNK-44) | c | key-match | P3 | AC-19, LNK-44 |
+| OV-1 | `CS-JOB` | listed: `svc:api/reports.py::build_router.report_view`, reader of `sql:table:order_report` (written by fx-job; LNK-44) | c | key-match | P3 | AC-19, LNK-44 |
 | OV-2 | `CS-JOB` | listed: `JobPanel`, consumer of `GET /job/status` through `VITE_JOB_BASE` = `http://job:8300` (Compose; `job` Compose service: build context `../../fx-job`, port 8300, unit `job`) | c | binding-confirmed | P3 | AC-19 |
-| OV-3 | `CS-JOB` | **not listed:** `svc:api/health.py::health`, `web:app/src/ui/Health.tsx::Health`, and `svc:clients/jobs.py::trigger_job` (LNK-15's caller of `POST /job/trigger`, which `CS-JOB` does not edit) | none | none | P3 | AC-19 |
+| OV-3 | `CS-JOB` | **not listed:** `svc:api/health.py::build_router.health`, `web:app/src/ui/Health.tsx::Health`, and `svc:clients/jobs.py::trigger_job` (LNK-15's caller of `POST /job/trigger`, which `CS-JOB` does not edit) | none | none | P3 | AC-19 |
 | OV-4 | `CS-SVC` | listed: `job:job/run_report.py::render_row` (LNK-26's reader of `sql:column:orders.total`): the column is removed and a new one added | c | key-match | P3 | AC-19 |
 | OV-5 | `CS-JOB` | listed **after** OV-2: `web:app/src/ui/JobStatus.tsx::JobStatus`, the other consumer of `GET /job/status` (LNK-16) | p | port-shared | P3 | AC-19 |
 
@@ -437,7 +440,7 @@ rows below are the named instances.
 | SK-5 | `app/src/i18n/format.ts` | **production** file under the frontend ignore rules | `file` record; not listed | listed, `frontend-ignore`; no `file` record |
 | SK-6 | `app/src/i18n/messages.test.ts` | both `test` and frontend-ignored | listed **once**, `test` | listed once, `test` |
 | SK-7 | `app/vendor/pkg/x.test.ts` | a test under a vendored directory | not listed; no `file` record (explained by `vendoredDirs`) | same |
-| SK-8 | `scripts/build.test.ts` (in `fx-web`, outside `rootPath`) | location outside the unit | not in this unit's list | same |
+| SK-8 | `scripts/build.test.ts` (in `fx-web`, outside `rootPath`) | location outside the unit; the skip classifier calls it a test, so no fallback unit (`fx-web:scripts`) is created for it | not in this unit's list; no unit exists for it | same |
 | SK-9 | `app/src/types/api.d.ts` | declaration file is not a source file | not listed; no `file` record | same |
 | SK-10 | `app/src/ui/latest.ts` | decoy: "test" inside a name | `file` record; not listed | same |
 | SK-11 | `app/src/ui/e2e-helper.ts` | decoy: "e2e" in a name, not a directory segment | `file` record; not listed | same |
@@ -461,7 +464,7 @@ the provider named (a consumer with no provider keeps its `CONSUMES` edge and ge
 | NC-3 | **verb mismatch:** `web:app/src/ui/Probe.tsx::probeVerb` does `fetch("/api/items/7", {method: "DELETE"})`; `read_item` is `GET` only | a `CONSUMES` edge, no `Link` to `read_item` | P1 | LNK |
 | NC-4 | **name extension:** `web:app/src/bus/consumer.ts::onDlq` subscribes `orders.created.dlq`; no producer | a `CONSUMES` edge, no `Link` (not to `kafka:orders.created`) | P2 | LNK |
 | NC-5 | **tool collision:** `job:job/mcp_admin.py::reindex` registers a second tool `reindex` | LNK-12 (URL binding) and LNK-19 (`MCP_URL`) each have exactly one provider, `svc:mcp/server.py::reindex`; LNK-20, which has no binding, lists both | P1 | LNK |
-| NC-6 | **log message:** `svc:api/items.py::read_item` logs `"GET /api/items/1 ok"` | no `CONSUMES` from that literal | P1 | LNK |
+| NC-6 | **log message:** `svc:api/items.py::build_router.read_item` logs `"GET /api/items/1 ok"` | no `CONSUMES` from that literal | P1 | LNK |
 | NC-7 | **prefix mismatch:** `web:app/src/ui/Probe.tsx::probePrefix` fetches `/items/7` (no `/api`) | a `CONSUMES` edge, no confirmed `Link` to `read_item` | P1 | LNK |
 
 ### 5.13 Field-depth cap (`FT-*`)
@@ -527,7 +530,7 @@ the 12 negatives, twins and controls (NC-1..7, TW-1..3, OV-3, FT-2).
 | AC-25 reverse (`RV`) | 3 | Field depth (`FT`) | 2 |
 | Negative controls (`NC`) | 7 | **Rows** | **134** |
 
-Positive items: **122** (LNK-41, KN-3 and KN-4 are controls by purpose but are asserted links, so they count). By earliest gate: P1 93 · P2 16 · P3 21 · P4 1 · P5 3 (= 134). `fx-lib` rows are all P2
+Positive items: **122** (LNK-41, KN-3 and KN-4 are controls by purpose but are asserted links, so they count). By earliest gate: P1 89 · P2 16 · P3 25 · P4 1 · P5 3 (= 134). `fx-lib` rows are all P2
 (LNK-23, 24, 25, 31, AC6-TOP-3, SQC-JAVA); no P3 row needs Java.
 
 The AC-25 set is **60 distinct assertions** (§3). DF-3 (via LNK-36) and OV-2 plant a UI consumer
@@ -597,7 +600,7 @@ its tests), because a check that cannot fail is not a check. Type: C contract, F
 | ID | title | steps | expected | planted failing input | prio | type | gate |
 |---|---|---|---|---|---|---|---|
 | TP-001 | Materializer determinism | run `cpg/fixtures/materialize.py` twice into clean dirs | same SHAs for four repositories, branches and tags, both runs | a materializer mutant with the committer date unset (SHAs differ) | high | F | S39 |
-| TP-002 | Locators resolve | convert every §5 locator by spec3 §3.5, §1.9 | `qname` starts `path + "::"`; the symbol is in the file at the pinned commit; Java locators carry a §4.3 signature; `line` in span; every `{kind, keyNorm}` hashes | a manifest copy with `svc:api/health.py::health` rewritten to `svc:api/healthz.py::health`, and one Java locator without a signature | high | C | S39 |
+| TP-002 | Locators resolve | convert every §5 locator by spec3 §3.5, §1.9 | `qname` starts `path + "::"`; the symbol is in the file at the pinned commit; Java locators carry a §4.3 signature; `line` in span; every `{kind, keyNorm}` hashes | a manifest copy with `svc:api/health.py::build_router.health` rewritten to `svc:api/healthz.py::health`, and one Java locator without a signature | high | C | S39 |
 | TP-003 | Manifests validate | validate `expected/*.yaml` and `cross.yaml` against `fixture-manifest-v1.schema.json`; codes against the registry | all valid; every `possible` has a reason | a row with `possible` and no reason; a row with reason `foo-bar` | high | C | S39 |
 | TP-004 | Minimums census | a script recomputes §6 from the manifests: floors, 20 cells, per-gate shape counts | every floor of eval-protocol §12.2 met; counts equal §6's tables; skew reads 0 before P2 | a manifest copy with one `AC6-PM` row deleted and one shape tag changed (both must turn it red) | high | C | S39 |
 | TP-005 | keyNorm rows (F-13) | run `cpg/tests/test_fixture_keynorm_mutants.py` (in the repo; `.venv/bin/python -m pytest` from `cpg/`: 7 passed on 2026-11-01), which normalizes each `KN-*` literal with `cpg/ccg/keynorm.py` composed with decode and dot resolution | the keys of §5.2 | the two mutants in that file: resolve-before-decode fails KN-1, KN-2; mask-before-decode fails KN-5 | high | F | S39 (after S12) |
@@ -605,7 +608,7 @@ its tests), because a check that cannot fail is not a check. Type: C contract, F
 | TP-007 | Omitted-file probe | generate the probe table (language x reason x overlap x location x override); run each `SK-*` | outcomes of §5.11 per mode; sorted, unique, POSIX; no `file` record for a listed path | an extractor mutant that emits `file` records for test files; a table cell with no row | high | I | P1 |
 | TP-008 | AC-25 presentation | ask the forward and reverse questions for `CF-DF`, `CF-CD`, `RV-1..3`; assert the 60 assertions of §3, in the §5.5 order | all pass, bound to S33's fields (OI-1) | answer builders that sort (a) by (repository, component, distance, name) with no status key (the four A25-3 pairs), (b) by distance first (api/2 before core/1 fails A25-2), (c) with distance off by one (A25-1), (d) with groups flattened (A25-2) | high | I | P1 |
 | TP-009 | AC-6 gate per kind | per kind, every row `possible` with its reason, none `confirmed` | pass per kind | an engine stub that confirms one instance; one that emits `possible` with no reason | high | F | P1/P2/P3 by kind |
-| TP-010 | Link matrix, closed world | emit and compare every `LNK`, `B1`, `KN`, `FT` status and reason; check B1-1..4 on the field (P1) and the table (P3); no emitted link outside the manifests | exact match; zero unplanted links | a stub that emits one unplanted link; one with a wrong reason | high | I | by row |
+| TP-010 | Link matrix, closed world | emit and compare every `LNK`, `B1`, `KN`, `FT` status and reason; check B1-1..4 on the field and the table (both P3); no emitted link outside the manifests | exact match; zero unplanted links | a stub that emits one unplanted link; one with a wrong reason | high | I | by row |
 | TP-011 | Scenarios | run `SC-*` of §8 and the SQC/TF branches | AB, OV, SQC, TF as in §5.7-§5.10 at their gates | a stub that reports a failed unit as current (AB-1); one that keeps the note on the Java change (SQC-JAVA); a line-keyed verdict that fails TF-1 | medium | I | P1-P5 |
 | TP-012 | Negative controls | NC-1..7, OV-3 | no link, nothing unaffected listed | a stub linking NC-3 (wrong verb) and NC-7 (missing prefix) to `read_item` | medium | F | P1/P3 |
 | TP-013 | Stratum labelling | check manifests and any split file | every row `stratum: fixture-dev`; no row in a held-out split (F7) | a manifest row labelled held-out or unlabelled | medium | C | S39 |
@@ -661,6 +664,7 @@ implementation's output.
 - **D-8** Skew, reflection and dynamic-RPC rows (LNK-31..35, 41) use the existing registry (it has no skew code).
   which has no skew code: `name-only-provider` with `versionSkew`, `name-match`, `runtime-built / unknown-key`.
 - **D-9** AC-9b's P1 pair is unit-level in `fx-svc`, carried by `http` links; the repository-level pair is `fx-job` at P3.
+- **D-10** The O-3 router shapes (a router in a module variable; a router with its own `prefix=`) are `possible` in the P1 pack (rule-pack spec §12.2). They are asserted by P1-16 conformance (`cpg/tests/test_packrt_run.py`: `test_a_factory_whose_router_carries_its_own_prefix_is_possible_with_the_lower_bound_key`, `test_a_router_held_in_a_module_variable_stays_unmounted_possible_o3`), not by a fixture row; the confirmed `http` rows are planted in the factory form (§4).
 
 **Open items**
 

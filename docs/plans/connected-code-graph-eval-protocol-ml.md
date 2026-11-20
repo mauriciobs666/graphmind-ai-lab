@@ -1,8 +1,8 @@
 # Connected code graph — evaluation protocol (P0(f))
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.8 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.9 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
 
-*2026-11-06 (v1.8): S50 cleanups (§2.3, §2.4, §5.3, §8.2, §9.3, §13.2, Appendix B); v1.7's §7.2 rule stands, and the v1.4 edits are in `docs/reviews/connected-code-graph-p0-impl.md` §S06.*
+*2026-11-19 (v1.9): §10.4 repeat protocol and §12.3 AC-24 record fields (`docs/reviews/connected-code-graph-p1-35-ml.md`); v1.8's §7.2 rule stands, and the v1.4 edits are in `docs/reviews/connected-code-graph-p0-impl.md` §S06.*
 
 This is step S06 (unit P0-05) of the P0 plan. v1.0 cited `docs/plans/connected-code-graph-p0.md`.
 That plan is now superseded by `docs/plans/connected-code-graph-p0-2.md`, whose §6 and §12 keep
@@ -1286,17 +1286,16 @@ diagnostics only.
   at most one over-ask), and the over-asking rate on unambiguous items is reported with it as `k/24`
   and a Wilson 95% interval. An always-asking system scores 0/24 there; an always-resolving one
   fails the ambiguity set.
-- **Repeats are uncached by a bypass, not by an empty cache.** The interpretation cache is the
-  engine's and is keyed without a repeat index (answer spec §3), so after repeat 1 an empty cache
-  serves repeats 2-5. **Requirement on the engine (an obligation for the answer-spec owner):** a
+- **Repeat 1 is uncached because the cache is asserted empty; repeats 2-5 are uncached by a bypass.** The interpretation cache is the
+  engine's and is keyed without a repeat index (answer spec §3), so repeat 1 fills it and would serve repeats 2-5. **Requirement on the engine (an obligation for the answer-spec owner):** a
   documented input or flag that disables the interpretation cache for a run, neither reading nor
   writing it. Its name is recorded as `cacheBypass` in the AC-24 pre-registration (§12.3). Every repeat
-  must carry `provenance.cacheHit == false`; a `true` voids that item's repeats. Because `cacheHit` is
+  must carry `provenance.cacheHit == false`. Repeat 1 is asked without the bypass, on a cache the harness asserts empty before the run; it is the scored draw (the first fresh interpretation of the question for that snapshot, the same request as a bypassed one) and exercises the production path. A `true` on repeat 1 means the cache was not empty and stops the run (C5); a `true` on a repeat 2-5, which carries the bypass, voids that item's repeats. Because `cacheHit` is
   the engine's self-report, the harness also checks the endpoint: the completion requests the
   interpreter endpoint received during the 5 repeats, counted from the endpoint's own log or a
   counting proxy, must be at least 5, and every request beyond 5 must be a logged retry (the same request body after a transport error or a non-2xx response); fewer than 5, or an extra request that is not a retry, fails. **Planted inputs:** with the cache on, the same question twice must
   give `cacheHit == true` on the second (so the field can read `true`, and the voiding rule is
-  exercised); with the bypass, five repeats must give `false` five times and at least 5 endpoint requests; a
+  exercised); repeat 1 without the bypass on an empty cache must give `false`, and repeats 2-5 with the bypass must give `false` and carry `cacheBypass` (five `false` and at least 5 endpoint requests in all); a
   stub engine that caches but reports `false` (1 request) must fail the count; a stub whose first attempt at one repeat returns a 5xx and is retried (6 requests, the extra a logged retry) must pass; a stub that sends a sixth request with a different body must fail.
 - **Reported:** understood rate pooled and per language; the over-asking rate on unambiguous items;
   ambiguity handling with the extras per item; and the flip rate over 5 repeats per item
@@ -1627,6 +1626,14 @@ The example values are illustrative, except the `ac5-gate-1` record's `algorithm
   `grammarHash` from the working tree's prompt and grammar files, and `modelFingerprint`, `samplingHash`
   and `resolverVersion` from the answers' provenance, and compares them with the record. Any difference
   makes the run "after adaptation" (ML §4.5), as for `ccg-prereg-v1`.
+
+  The AC-24 record also carries what makes the scorer and the run reproducible: `harnessHash` (SHA-256 of
+  the harness file, `cpg/eval/tools` being outside `coreTreeHash`'s remit for scoring), the `repeatProtocol`
+  (§10.4: repeat 1 uncached on an empty cache, repeats 2-5 with the bypass), the unusable-reply observable
+  (the interpreter's own `draft is None`, never an answer-shape guess), `sampler` (the pinned request
+  parameters, `effective` null with `effectiveStatus`, the honoured-`repeat_penalty` probe reference, and the
+  canary digest), `heldoutListSha256`, `expectedHeldoutCounts`, and the LM Studio version. The harness
+  recomputes `harnessHash` and the tree hashes, and refuses a difference unless the run is stamped "after adaptation".
 
 ## 13. Tooling procedures for GC (M5)
 

@@ -1,9 +1,12 @@
 """Static file reads."""
 from fastapi import APIRouter
 
-router = APIRouter()
 
+def build_router():
+    router = APIRouter()
 
-@router.get("/files/{name}")
-def read_file(name: str):
-    return {"name": name, "bytes": 0}
+    @router.get("/files/{name}")
+    def read_file(name: str):
+        return {"name": name, "bytes": 0}
+
+    return router
