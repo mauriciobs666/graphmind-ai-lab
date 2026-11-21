@@ -386,6 +386,9 @@ def _fetch_world(tmp_path, literal, system=SYSTEM):
     from ccg.linker import link
     from ccg.packrt import run_packs
     w = copy.deepcopy(world())
+    # the `fetch` seed is scoped to JS/TS files (P1-57a): the `fetch` call site lives in a TS function, not in the world's Python `caller`
+    w[0] += [file_rec("c", "web/c.ts", lang="javascript"), sym_rec("fcaller", "c", "web/c.ts", start=1, end=9)]
+    next(r for r in w[0] if r.get("id") == H("cs", "http"))["symbolId"] = H("sym", "fcaller")
     w[0].append({"type": "valueSet", "id": H("vs", 1), "callSiteId": H("cs", "http"), "arg": "a0", "values": [{"const": literal}]})
     fp = pack("fetch")
     pf = run_packs([w[0]], [fp])                                                               # the real fetch pack over the unit's `fetch` call site

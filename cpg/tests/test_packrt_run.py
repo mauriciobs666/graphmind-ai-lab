@@ -484,7 +484,8 @@ def test_a_sort_removed_from_both_candidates_and_output_would_be_seen_by_the_ord
     recs = app_records(prefix="/a") + [
         sym("h0", "alpha", fid="f1", path="svc/app.py", parent="build"), dec("d0", "h0", "router.get", ("a0", "/alpha")),
         sym("h9", "omega", fid="f1", path="svc/app.py", parent="build"), dec("d9", "h9", "router.get", ("a0", "/omega"))]
-    recs += fetch_chain()[1:] + [call("c0", "caller", "get", line=29, resolution="resolved", targets=("get",)), vs("c0", "a0", "/api/y")]
+    # the fetch chain keeps its own `web/client.ts` file record: its id "f1" would collide with the app's `svc/app.py`, and the `fetch` seed is scoped to JS/TS files (P1-57a)
+    recs += [{**r, "id": "fts"} if r["type"] == "file" else {**r, "fileId": "fts"} if "fileId" in r else r for r in fetch_chain()] + [call("c0", "caller", "get", line=29, resolution="resolved", targets=("get",)), vs("c0", "a0", "/api/y")]
     got = facts(recs, FASTAPI, FETCH)
     assert len(got.providers) == 3 and len(got.consumers) == 2
     assert json.dumps(got, sort_keys=True) == json.dumps(run_packs([list(reversed(recs))], [FETCH, FASTAPI]), sort_keys=True)
