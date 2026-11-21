@@ -111,6 +111,9 @@ def model(chain, *, wrapper_site, url_like, verbs=None, fallback="GET"):
             if s == "bare":
                 continue
             possible = partial or opaque or SHAPES[s][4]
+            if SHAPES[s][3] == "/{?}":                                      # P1-55: no literal segment: keyless, `possible`
+                consumers.add((i, None, "possible"))
+                continue
             consumers.add((i, f"{verb_from(i)} {SHAPES[s][3]}", "possible" if possible else "confirmed"))
     return consumers, lifted
 
@@ -219,7 +222,7 @@ def test_every_cell_of_the_reference_model(wrapper_site, url_like):
         want_c, want_l = model(chain, wrapper_site=wrapper_site, url_like=url_like)
         got_c, got_l, _ = observed(records(chain), the_pack(wrapper_site=wrapper_site, url_like=url_like))
         if (got_c, got_l) != (want_c, want_l):
-            wrong.append((chain, sorted(want_c ^ got_c), sorted(want_l ^ got_l)))
+            wrong.append((chain, sorted(want_c ^ got_c, key=repr), sorted(want_l ^ got_l, key=repr)))
     assert wrong == []
 
 
@@ -237,7 +240,7 @@ def test_two_leaves_of_one_wrapper_yield_one_consumer_at_the_wrapper_when_it_is_
         want = model(chain, wrapper_site=wrapper_site, url_like=True)
         got_c, got_l, out = observed(records(chain, leaves=2), the_pack(wrapper_site=wrapper_site, url_like=True))
         if (got_c, got_l) != want:
-            wrong.append((chain, sorted(want[0] ^ got_c), sorted(want[1] ^ got_l)))
+            wrong.append((chain, sorted(want[0] ^ got_c, key=repr), sorted(want[1] ^ got_l)))
         if wrapper_site and informative(x_slot):
             assert [i["siteId"] for i in out.lifted if i["leaf"]] == ["s1"]               # X once; s0 and sB are dropped
             assert {c["siteId"] for c in out.consumers} == {"s1"}
@@ -346,7 +349,7 @@ def test_a_parameter_that_feeds_two_seed_slots_belongs_to_the_first_one_reached_
             sym("G", "g", fid="f1", path="svc/client.py", start=30),
             call("c", "G", "f", line=31, resolution="resolved", targets=("F",)), vs("c", "a0", X)]
     out = run_packs([recs], [the_pack(wrapper_site=True, url_like=False)])
-    assert [(c["siteId"], c["key"]) for c in out.consumers] == [("g1", "GET /a/{?}"), ("g2", "GET /{?}")]
+    assert [(c["siteId"], c["key"]) for c in sorted(out.consumers, key=lambda c: c["siteId"])] == [("g1", "GET /a/{?}"), ("g2", None)]     # `g2`'s `\x01\x01` names no literal segment (P1-55)
     assert sorted(i["siteId"] for i in out.lifted) == ["g1", "g2"]
 
 

@@ -1,0 +1,211 @@
+{
+ "records": [
+  {
+   "contentHash": "f7f01ee0826134f88264c59f2a349287d8ef357fcb6001a33f24fec1b634f90b",
+   "id": "e3303992c00185c99b2fcd5eb7fdf866",
+   "kind": "code",
+   "lang": "python",
+   "lineCount": 463,
+   "path": "decision-models/decisionmodels/lmstudio.py",
+   "repoId": "graphmind-ai-lab",
+   "role": "primary",
+   "type": "file",
+   "unitId": "ea820cc0544a4a41667e670a78a36443"
+  },
+  {
+   "complexity": 9,
+   "fileId": "e3303992c00185c99b2fcd5eb7fdf866",
+   "fingerprint": "e13fa1d897854d7a44df22d35013350a39a3ad1da066f270f28a731613d72d7c",
+   "id": "dc94da243ba758ab63a8a3823d566f7d",
+   "kind": "method",
+   "lang": "python",
+   "lastChangedAt": "2026-11-12T20:21:25Z",
+   "lastChangedCommit": "b91508225349e9bdac046c6bbe356e5f122b2132",
+   "lineEnd": 390,
+   "lineStart": 357,
+   "name": "residency",
+   "nameNorm": "residency",
+   "parentId": "e5c72dd656719af70d92e228216a6bae",
+   "path": "decision-models/decisionmodels/lmstudio.py",
+   "qname": "decision-models/decisionmodels/lmstudio.py::LMStudio.residency",
+   "repoId": "graphmind-ai-lab",
+   "type": "symbol"
+  },
+  {
+   "callKind": "call",
+   "calleeName": "Request",
+   "externalTarget": "urllib.py:<module>.<member>(request).Request.__init__",
+   "id": "eb54631ae0b54ed9b6ba5f1e480b4ba4",
+   "line": 366,
+   "ordinal": 0,
+   "reason": "name-match",
+   "resolution": "external",
+   "status": "possible",
+   "symbolId": "dc94da243ba758ab63a8a3823d566f7d",
+   "targets": [],
+   "type": "callsite"
+  },
+  {
+   "dynamic": false,
+   "fileId": "e3303992c00185c99b2fcd5eb7fdf866",
+   "id": "1b729a38419ccf6759cbaf5861b2b7a7",
+   "line": 40,
+   "module": "urllib.request",
+   "names": [],
+   "ordinal": 5,
+   "type": "import"
+  },
+  {
+   "dynamic": false,
+   "fileId": "e3303992c00185c99b2fcd5eb7fdf866",
+   "id": "3f65d5d982bee71c341b06666926a106",
+   "line": 37,
+   "module": "json",
+   "names": [],
+   "ordinal": 2,
+   "type": "import"
+  },
+  {
+   "dynamic": false,
+   "fileId": "e3303992c00185c99b2fcd5eb7fdf866",
+   "id": "795197f7de60815d3c0fc771c0628a0b",
+   "line": 43,
+   "module": "typing",
+   "names": [
+    {
+     "name": "Any"
+    }
+   ],
+   "ordinal": 8,
+   "type": "import"
+  },
+  {
+   "dynamic": false,
+   "fileId": "e3303992c00185c99b2fcd5eb7fdf866",
+   "id": "9d65338170ecd14e4358b1356a4b4591",
+   "line": 39,
+   "module": "urllib.error",
+   "names": [],
+   "ordinal": 4,
+   "type": "import"
+  },
+  {
+   "dynamic": false,
+   "fileId": "e3303992c00185c99b2fcd5eb7fdf866",
+   "id": "b48e91432b73ad3dd53674d08db70e04",
+   "line": 36,
+   "module": "http.client",
+   "names": [],
+   "ordinal": 1,
+   "type": "import"
+  },
+  {
+   "dynamic": false,
+   "fileId": "e3303992c00185c99b2fcd5eb7fdf866",
+   "id": "bf083725e0ef0a0c0de6fb2b53415189",
+   "line": 34,
+   "module": "__future__",
+   "names": [
+    {
+     "name": "annotations"
+    }
+   ],
+   "ordinal": 0,
+   "type": "import"
+  },
+  {
+   "dynamic": false,
+   "fileId": "e3303992c00185c99b2fcd5eb7fdf866",
+   "id": "e21879ad519f5d064852bf26f1147c66",
+   "line": 38,
+   "module": "time",
+   "names": [],
+   "ordinal": 3,
+   "type": "import"
+  },
+  {
+   "dynamic": false,
+   "fileId": "e3303992c00185c99b2fcd5eb7fdf866",
+   "id": "f8a17c7ffa009658702bc7a9b6a58d6c",
+   "line": 41,
+   "module": "collections.abc",
+   "names": [
+    {
+     "name": "Callable"
+    },
+    {
+     "name": "Mapping"
+    },
+    {
+     "name": "Sequence"
+    }
+   ],
+   "ordinal": 6,
+   "type": "import"
+  },
+  {
+   "dynamic": false,
+   "fileId": "e3303992c00185c99b2fcd5eb7fdf866",
+   "id": "fbbaea4dacd74c7be5ffa5f1633aba3b",
+   "line": 42,
+   "module": "dataclasses",
+   "names": [
+    {
+     "name": "dataclass"
+    }
+   ],
+   "ordinal": 7,
+   "type": "import"
+  },
+  {
+   "arg": "a0",
+   "callSiteId": "eb54631ae0b54ed9b6ba5f1e480b4ba4",
+   "id": "9ad41eac03114dcc2b67db7395e50274",
+   "type": "valueSet",
+   "values": [
+    {
+     "template": [
+      {
+       "unknown": "runtime-built"
+      },
+      {
+       "unknown": "runtime-built"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "arg": "kw.method",
+   "callSiteId": "eb54631ae0b54ed9b6ba5f1e480b4ba4",
+   "id": "9f0c32ac1275a2f38dd49fd05c8997e5",
+   "type": "valueSet",
+   "values": [
+    {
+     "const": "GET"
+    }
+   ]
+  },
+  {
+   "def": "eb54631ae0b54ed9b6ba5f1e480b4ba4",
+   "fromPath": "r",
+   "id": "54ed793471f62bc4e891c81b7db14cbd",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "a0",
+   "type": "data",
+   "use": "7f2eebdd5bd691a1f6a4521efbed48e0"
+  },
+  {
+   "def": "22ff2aa5a7655eca46281722dc1805f9",
+   "fromPath": "recv._base_url",
+   "id": "90c5c24effdd728d89efc49db4511ebe",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "a0",
+   "type": "data",
+   "use": "eb54631ae0b54ed9b6ba5f1e480b4ba4"
+  }
+ ],
+ "source": "real extractor output (ccg.build over this repository); regenerate with tests/data/p1_55_unknown_url_regen.py"
+}

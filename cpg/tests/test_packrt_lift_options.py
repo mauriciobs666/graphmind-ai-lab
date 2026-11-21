@@ -22,6 +22,7 @@ UNK = {"unknown": "point-derived"}
 def fetch_with(*, own=None, url_like=None, scope=None):
     p = copy.deepcopy(FETCH)
     lifting = p["liftings"][0]
+    lifting.pop("ownSite", None)                       # the shipped pack sets it (P1-55): `own=None` is the word absent
     if own is not None:
         lifting["ownSite"] = own
     if url_like is not None:
@@ -181,7 +182,7 @@ def test_a_rule_scope_still_means_the_leaf_sites_file_and_is_independent_of_the_
 
 def test_with_all_three_words_off_or_absent_the_fetch_pack_gives_the_same_facts():
     for recs in (fetch_chain(), fetch_chain(init=True), without_caller("/own/x"), with_caller("timeout")):
-        a = run(recs, FETCH)
+        a = run(recs, fetch_with())
         b = run(recs, fetch_with(own=False, url_like=False))
         assert a == b
 

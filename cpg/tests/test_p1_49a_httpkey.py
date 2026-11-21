@@ -124,6 +124,12 @@ def reference_key(verb: str, url: str) -> tuple[str, bool, bool]:
     return f"{verb} /" + "/".join(segs), dropped, unresolved
 
 
+def reference_outcome(key: str, status: str, reason: str) -> tuple:
+    """Rule 4 (P1-55), written from the plan: a consumer path whose segments are all `{?}` (at least one) is keyless."""
+    segs = [x for x in key.split(" ", 1)[1].split("/") if x]
+    return (None, "possible", "runtime-built") if segs and all(x == "{?}" for x in segs) else (key, status, reason)
+
+
 def reference_status(url: str) -> tuple[str, str]:
     _, dropped, unresolved = reference_key("GET", url)
     return ("possible", "partial-key") if (dropped or unresolved) else ("confirmed", "key-match")
@@ -258,7 +264,7 @@ def test_grid_status_through_run_packs_is_the_models_status_and_the_models_key(p
     (c,) = run_packs([one_call(value)], [URL_PACK]).consumers
     key, _, _ = reference_key("GET", url)
     status, reason = reference_status(url)
-    assert (c["key"], c["status"], c["reason"]) == (key, status, reason), (position, url, cause)
+    assert (c["key"], c["status"], c["reason"]) == reference_outcome(key, status, reason), (position, url, cause)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -307,7 +313,7 @@ def test_spot_rows_status_through_run_packs(url, path, dropped, unresolved):
     value = template_of(url, lambda m: {"unknown": "point-derived"} if m == X else {"importRef": {"module": "m", "name": "N"}})
     (c,) = run_packs([one_call(value)], [URL_PACK]).consumers
     want = ("possible", "partial-key") if (dropped or unresolved) else ("confirmed", "key-match")
-    assert (c["key"], c["status"], c["reason"]) == ("GET " + path, *want)
+    assert (c["key"], c["status"], c["reason"]) == reference_outcome("GET " + path, *want)
 
 
 @pytest.mark.parametrize("cause,url,key,status", [

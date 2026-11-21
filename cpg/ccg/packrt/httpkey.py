@@ -4,6 +4,8 @@
 here are the RFC 3986 order (F-13): percent-decode unreserved characters, then collapse ``/`` runs and resolve dot
 segments; the old order (dots first) is not implemented anywhere. Step 3 (mount composition) is the caller's.
 
+The no-literal-segment rule (P1-55, :func:`names_no_literal_segment`) is the caller's: such a consumer key is keyless.
+
 The unknown-origin key rule (P1-49; rule-pack spec §1.4 and ``docs/plans/connected-code-graph-p1-linking.md`` P1-49 rules 1-3):
 a value piece that is not known is a marker, ``UNKNOWN`` (``\\x00``: a name that should have resolved) or ``UNKNOWN_VALUE``
 (``\\x01``: a value not statically known). :func:`split_url` drops an unresolved origin from a consumer URL and says so;
@@ -108,6 +110,14 @@ def is_url_like(alt: str) -> bool:
     """Does ``alt`` read as a URL or a URL path: it starts with ``/`` (so ``//``), starts with ``scheme://``, or is a run of
     markers followed by ``/``? A wholly unresolved piece is not URL-like (the caller decides what to do with it)."""
     return alt.startswith("/") or bool(_SCHEME.match(alt)) or bool(_MARKER_RUN_THEN_SLASH.match(alt))
+
+
+def names_no_literal_segment(key: str) -> bool:
+    """P1-55: a normalized consumer key whose path holds at least one ``{?}`` segment and no other segment names nothing: it is
+    unknown as a whole (``GET /{?}``, ``GET /{?}/{?}``), not partial. The root ``/`` alone is a key (no unknown segment), and so is
+    a path with any literal or known-parameter (``{}``) segment."""
+    segs = [s for s in key.partition(" ")[2].split("/") if s]
+    return bool(segs) and all(s == CONSUMER for s in segs)
 
 
 class NormalizedKey(NamedTuple):

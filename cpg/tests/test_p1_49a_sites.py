@@ -138,7 +138,7 @@ def test_a_caller_slot_of_two_adjacent_x01_is_resolved_because_it_is_not_wholly_
     out = facts(with_url(X + X), FETCH)
     assert _lifted_at(out, "c1")["resolved"] is True
     (c,) = out.consumers
-    assert (c["status"], c["reason"]) == ("possible", "partial-key")
+    assert (c["key"], c["status"], c["reason"]) == (None, "possible", "runtime-built")     # P1-55: `\x01\x01` names no literal segment
 
 
 def test_the_same_three_rows_hold_for_x00():

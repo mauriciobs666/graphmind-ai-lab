@@ -403,6 +403,10 @@ def test_the_pack_file_validates_and_carries_its_directory_name(pid):
     assert pack["id"] == pid
 
 
+#: Packs whose file carries one line beyond the spec block (P1-55: `fetch-url`'s `ownSite`); the pin removes exactly that line.
+SPEC_PLUS_LINES = {"fetch": "    ownSite: true"}
+
+
 @pytest.mark.parametrize("pid", REAL_PACKS)
 def test_the_pack_file_is_the_spec_block_plus_status_paper(pid):
     """Extracted mechanically (spec 10): the file's text, less comments and the one `status: paper` line, is the block."""
@@ -410,8 +414,14 @@ def test_the_pack_file_is_the_spec_block_plus_status_paper(pid):
     body = [ln for ln in text.splitlines() if not ln.startswith("#")]
     assert body.count("status: paper") == 1
     body.remove("status: paper")
+    expected = {**PACKS[pid], "status": "paper"}
+    if pid in SPEC_PLUS_LINES:           # P1-55: the one further line the spec block owes at the feature's close
+        line = SPEC_PLUS_LINES[pid]
+        assert body.count(line) == 1
+        body.remove(line)
+        expected["liftings"] = [{**lf, "ownSite": True} for lf in expected["liftings"]]
     assert "\n".join(body).strip() == without_comment_lines(spec_block_text(pid))
-    assert rulepack.load_yaml(text) == {**PACKS[pid], "status": "paper"}
+    assert rulepack.load_yaml(text) == expected
 
 
 @pytest.mark.parametrize("pid", REAL_PACKS)

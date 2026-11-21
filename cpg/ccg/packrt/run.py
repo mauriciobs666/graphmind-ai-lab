@@ -13,7 +13,7 @@ import re
 from typing import NamedTuple
 
 from ccg.packrt.extract import Corpus, Ctx, arg_paths, eval_expr, slot_mode
-from ccg.packrt.httpkey import has_unresolved, is_wholly_unresolved, normalize_key_parts
+from ccg.packrt.httpkey import has_unresolved, is_wholly_unresolved, names_no_literal_segment, normalize_key_parts
 from ccg.packrt.launch import launch_facts
 from ccg.packrt.lift import run_lifting
 from ccg.packrt.match import Hit, UnsupportedSubject, clause_hit, scope_ok
@@ -161,6 +161,8 @@ class _Run:
             key = parts.key
             if unresolved and (parts.unresolved_in_path or parts.origin_dropped):
                 status, reason = "possible", "partial-key"
+            if edge == "CONSUMES" and names_no_literal_segment(key):     # P1-55: no literal segment names nothing: unknown as a whole
+                key, status, reason = None, "possible", "runtime-built"
         if item and item["status"] != "confirmed" and status == "confirmed":
             status, reason = item["status"], item["reason"]
         evidence: dict = {}
