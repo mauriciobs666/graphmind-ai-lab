@@ -580,7 +580,7 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
   providers (stakeholder, Q-NC5 A: P1-17's rule stands; NC-5 narrows to LNK-12, bound, and LNK-20; the P1-36 report carries the count of
   unbound `mcp_tool`/`http` links whose key has providers in more than one unit, a line `teco` adds to `-p1-gates.md` P1-36).
 - *Rows that need no fixture edit.* LNK-14's base is a config value no Binder input reads: `possible`/`partial-key` (P1-49 rule 3).
-  LNK-08 and TW-2: the observed forms of P1-49. LNK-18 and AC6-EX-2 move to P2 (stakeholder, Q-CENSUS A): the P1 census is **87**, the AC-6 example-config floor at P1 counts instances that emit the reason (live: AC6-EX-4 only; AC6-EX-1 is open, P1-56); both are filed as P2 backlog items (owner `architect`) in the close list of `docs/plans/connected-code-graph-p1.md`.
+  LNK-08 and TW-2: the observed forms of P1-49. LNK-18 and AC6-EX-2 move to P2 (stakeholder, Q-CENSUS A): the P1 census is **87**, the AC-6 example-config floor at P1 counts instances that emit the reason (AC6-EX-4 and the reshaped AC6-EX-1, P1-56); both are filed as P2 backlog items (owner `architect`) in the close list of `docs/plans/connected-code-graph-p1.md`.
 - **53a (`qa-engineer`):** (1) the pin, authored red against the unmodified fixtures, two tiers. *Offline tier (no Joern, no store):*
   the real config and shell extractors over `fx-svc`/`fx-job`, plus synthetic provider/consumer facts in the style of
   `tests/linker_bind_helpers.py` (a mention `mcp__fx-svc-exec__list_orders`, a loopback `:8000` consumer, a `:8200/mcp` mcp_tool
@@ -607,7 +607,7 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
   gains `BOUND_BY` ord 0 and 1; LNK-02 and LNK-06 go `key-match` to `binding-confirmed`; LNK-12 loses its `job` provider link and its `svc`
   link becomes `binding-confirmed`. Any other changed row stops the unit. Must not regress: LNK-13/14/15/22, AC6-EX-1/4, `UNIT_FLOORS` (68, 67), the walk rows.
 - **53c (`tdd-engineer`, serial after 53b **and after P1-54**, which fixes the env-read recognition 53c's EX-4 depends on and probes which `peer.py` shape carries a flow edge; it regenerates the same pinned SHAs and family counts):** the AC-6 example-config floor at P1
-  (AC6-EX-1, AC6-EX-4; see P1-56 for EX-1) counts instances whose P1 form carries the `example-config` reason, not manifest rows gated P1. EX-4 does not
+  (AC6-EX-4 and the reshaped AC6-EX-1, P1-56) counts instances whose P1 form carries the `example-config` reason, not manifest rows gated P1. EX-4 does not
   today: `fx-svc/clients/peer.py` reads `os.environ["FX_PEER_BASE"]`, and `bind.py` reads only `environ.get`/`getenv` (`_ENV_READS`), so
   its link is `possible`/`partial-key`. Edit `peer.py` to `os.environ.get("FX_PEER_BASE", "")` **and** `deploy/compose.example.yaml`'s `FX_PEER_BASE` to `http://api:8000`:
   `example-config` is the reason of a link whose only binding chain runs through a file with `role: example` (the chain is weakened,
@@ -693,22 +693,50 @@ address built at runtime be shown as possible; a consumer that links to nothing 
   segment, and the Link and its ordered `LIFTED_VIA` entries are right; qualified naming is a P2 extractor item); the P1T-06 locator
   rule says so. A committed census driver for the Link-level rows (the QA scratch instrument) belongs to P1-41 dispatch B.
 
-## P1-56 · AC-6 instances the P1 contract cannot show: AC6-EX-1 and AC6-PM-3 — pending Q-AC6
+## P1-56 · AC-6 instances the P1 contract cannot show: AC6-EX-1 and AC6-PM-3 reshaped — `qa-engineer` (56a), `tdd-engineer` (56b)
 
-Cause: QA report D1, D2. **AC6-EX-1** (`.mcp.example.json`, kind `launch`, expected `possible`/`example-config`): no P1 element can carry
-it. `example-config` is the reason of a `Link`/`VIA` whose only binding chain runs through a `role: example` file; a `launch` row is
-not a stored `Link` at P1 (P1-53) and `LAUNCHES` has no status or reason (`-p1-graph.md` G8); the launch-target export is P2
-(P1-17 ruling). The earlier count of EX-1 toward the floor read a ledger claim the live build does not bear out. **AC6-PM-3** (a
-Python triple-quoted `SYSTEM_PROMPT` naming `list_orders`): the P1 prompt-mention extractor is Markdown-only (P1-12, P1-44); no step
-plans a Python string-constant mention. Both rows were gated P1 without a mechanism.
-**Probe, dispatchable now (`tdd-engineer`, no fixture or engine edit):** (1) EX-1 reshaped as an `mcp_tool` example: a second
-`.mcp.example.json` server entry with a `url` (`http://localhost:8200/mcp`) and a Python consumer in `fx-svc` (the `fastmcp` `tool-call`
-rule, `streamablehttp_client` or the config URL source) bound only through that example entry: does the fixture build give a Link
-`possible`/`example-config` (port 8200 is `svc`'s after 53b)? (2) PM-3 reshaped as a Markdown list item in a prompt file: does the
-extractor emit the mention and the linker the `possible`/`prompt-mention` Link, as PM-1 and PM-2 do? Report both with the observed Links.
-**Then, per the stakeholder's answer to Q-AC6 (returned to `teco`, not decided here):** the chosen reshaping is a fixture and manifest
-edit (`tdd-engineer`: the new file content, pinned SHAs and family counts regenerated, serial after 53c; `qa-engineer`: manifest and
-test-plan row text; the P1T-12 and P1T-25 text), with the pin's Link tier asserting the row.
+Cause: QA report D1, D2; stakeholder answers (Q-AC6: PM-3 B; EX-1 B', after the Python-consumer shape failed its probe). **Basis.**
+AC6-EX-1 as written (`.mcp.example.json`, kind `launch`) has no P1 carrier: `example-config` is the reason of a `Link`/`VIA` whose only
+binding chain runs through a `role: example` file, a `launch` row is not a stored `Link` at P1 (P1-53), `LAUNCHES` carries no status
+or reason (`-p1-graph.md` G8). A Python MCP consumer cannot bind a config URL either: `bind.py:_config_urls` returns nothing unless the
+consumer has a `server` name, which only a prompt mention `mcp__<server>__<tool>` has (`link.py:_server_name`). AC6-PM-3 as written (a
+Python triple-quoted prompt) has no extractor: the P1 mention extractor is Markdown-only (P1-12, P1-44). The session probe's outcomes (scratch, not committed) are restated only where the design depends on them.
+**Final shapes (both rows keep their ids, `gate: P1`; the census stays 134 rows and 87 at P1).**
+- **AC6-PM-3**, `kind: mcp_tool`, shape `prompt mention`: a Markdown list item in a new prompt file `fx-svc/.claude/agents/orders.md`
+  (`- Use list_orders to see what a customer has bought.`), consumer `svc:.claude/agents/orders.md::<document>`, expected
+  `possible`/`prompt-mention` to `svc:mcp/server.py::list_orders`. Observed in the probe: the mention is extracted and linked exactly as
+  PM-1/PM-2 are. A new file, not a line in `agent.md` or `tools.md`: a document's Link to a provider is one Link per (provider,
+  consumer symbol), so a second mention in an existing document would share PM-1's or PM-2's Link.
+- **AC6-EX-1**, `kind: mcp_tool` (was `launch`), shape `example config`: a second entry in `fx-svc/.mcp.example.json`,
+  `"fx-svc-remote": {"url": "http://localhost:8200/mcp"}` (no entry of that name in the primary `.mcp.json`), and a **separate** prompt
+  file `fx-svc/.claude/agents/remote.md` whose only tool mention is `` call the `mcp__fx-svc-remote__list_orders` tool ``. Consumer
+  `svc:.claude/agents/remote.md::<document>`, expected `possible`/`example-config` to `svc:mcp/server.py::list_orders`, `BOUND_BY` ord 0
+  `.mcp.example.json @mcpServers.fx-svc-remote.url`. **Why a separate file:** the probe saw `example-config` on a Link whose document
+  also held a plain `list_orders` mention, because the best site sets the Link's reason; in `remote.md` the example mention is the only
+  site, so the row's expectation does not depend on a neighbouring mention and PM-3's `prompt-mention` is not masked. This isolated
+  form was not observed; 56b's first step observes it, and if the Link reason is not `example-config` the unit stops and returns to the
+  architect. The row's `shape` stays distinct from EX-4's (`http`). The `launch`×`possible` cell of the fixtures plan §7 has no row at
+  P1 and the sentence "every kind x status cell has at least one row" gets that exception (P2 re-adds it with the launch-target export).
+- `fx-svc/prompts/system.py` stays in the tree as unplanted code (the Python prompt shape is a P2 backlog item); no manifest row
+  names it after 56a.
+**Sequence.** Both sub-units run **after P1-55** (which uses the live fixture build) and after 53c; 56a before 56b (the pin is red first).
+- **56a (`qa-engineer`):** manifest `expected/fx-svc.yaml` rows AC6-PM-3 and AC6-EX-1 (kind, locator, `aux`, item text, status and reason as
+  above); fixtures plan and P1 test-plan text (§5, §7 matrix exception, P1T-12, P1T-25: the example-config floor is EX-1 and EX-4, both
+  emitting the reason; shapes `mcp_tool` and `http`); the pin's Link tier asserts both Links on their own consumer symbols (PM-3
+  `possible`/`prompt-mention`, EX-1 `possible`/`example-config` with the `BOUND_BY` ord 0 locator) in
+  `tests/test_fixture_binding_live.py`, and the offline tier asserts the config entry (`example: true`, loopback port 8200) in
+  `tests/test_fixture_binding_offline.py`. Done: red for exactly the two missing Links; `tests/test_fixtures.py` consistency green.
+- **56b (`tdd-engineer`):** `fx-svc/.mcp.example.json`, `fx-svc/.claude/agents/orders.md`, `fx-svc/.claude/agents/remote.md`, the
+  `fx-svc` entries of `PINNED_SHAs` in `tests/test_fixtures.py` (all five commits and four branches change; `fx-job`, `fx-lib`, `fx-web`
+  do not), the prompt-file and unit counters in `tests/test_manifest.py` (about lines 494 and 519; two new `.claude/agents/*.md` units, so
+  33 becomes 35 units in the fixture build). `UNIT_FLOORS` (68, 67) does not move (no callable locator is added). Steps: observe the
+  isolated EX-1 Link; add the files and regenerate the SHAs and counters; the pin green. Done: both Links as stated, the pin and
+  `tests/test_fixtures.py` green, every other Link row of the fixture build unchanged (diff of the link multiset: exactly two Links
+  added). Gate `analyst`; `cpg/fixtures/**` is hashed, so it lands before the `ac5-gate-1` record.
+**P2 backlog items (owner `architect`; listed in the close list of `docs/plans/connected-code-graph-p1.md`):** Python string-constant
+prompt mentions (the original AC6-PM-3 shape); a way for a code consumer to bind a config URL (a server name for a code consumer, or a
+unit-scoped config URL rule) and the launch-target export with a reason on `LAUNCHES` (the original AC6-EX-1 `launch` shape and a Python
+example-config consumer).
 
 ## P1-17 · linker — `tdd-engineer`
 
