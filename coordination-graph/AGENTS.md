@@ -26,7 +26,7 @@ consumers: `skills/coordination-graph/SKILL.md`.
   shared port, loopback, `COORDGRAPH_EPHEMERAL_PORT` unset. `COORDGRAPH_SHARED_CONFIRM` is the
   standing env form for routine commands only (`hook-sync` and `retry-failed` are routine);
   `bootstrap`, `rebuild`, `kb-reconcile` need the flag. Shared KB accepts only 8200, which is the
-  `COORDGRAPH_KB_URL` default. Do not weaken either guard; `tests/test_shared.py` pins both.
+  `COORDGRAPH_KB_URL` default. Never weaken either guard (`tests/test_shared.py`).
 - **The hook hard-codes `--confirm coordination`** (a literal, never env), so the guard refuses it
   on an ephemeral port: live tests use a shim that drops that pair. A guard refusal is reported
   as a refusal, never queued. Fast path: bash 5 only, payload read with `cat`; its shell globs
@@ -36,20 +36,19 @@ consumers: `skills/coordination-graph/SKILL.md`.
   file. Identity is resolved at read time only (`lint`, `history-coverage`, `drift`/`query` header, views,
   `propose`). A test enforces it.
 - **Never run `migrate --apply` on real files or the real registry**: it allocates permanent
-  IDs via `wi new`. Use `--dry-run`, or a scratch `COORDGRAPH_REPO_ROOT` and registry.
+  IDs via `wi new`; use `--dry-run` or a scratch root and registry.
 - **Per-source atomic replace**: one statement per source; a failed replace leaves the previous
   subgraph, and one is skipped when sha256 and `parserVersion` match. `rebuild` forces every
   source, prunes, sweeps orphans and proves parity against a fresh parse, never the graph itself.
 - **The file wins** over a `⚠ drift` row or `Drift:` source.
-- **KB retry**: a mapped `failed` document (terminal) is re-submitted by `kb-sync`, flagged by `kb-reconcile`;
-  `processing` never.
+- **KB retry**: `kb-sync` re-posts a `failed` document only if unsearchable (the POST supersedes the old
+  same-text copy); an embedded one is `degraded`. Bounded by `COORDGRAPH_KB_RETRY_*`.
 - **Fixtures live in `tmp_path`**, never under a `docs/plans/`-shaped path.
-- **Do not edit the root `AGENTS.md` from here**; `teco` owns it.
+- **Do not edit the root `AGENTS.md`**; `teco` owns it.
 
 ## Conventions
 
 - One runtime dependency (`falkordb`), pinned in `pyproject.toml`; parsers, discovery, keys and
   config are stdlib only. The venv is this component's own (`setup.sh`), not shared.
-- Configuration is env-overridable through `coordgraph/config.py` (`COORDGRAPH_*`); tests set
-  every value and never rely on the ambient environment.
+- Configuration is env-overridable through `coordgraph/config.py` (`COORDGRAPH_*`); tests set every value.
 - Docs follow the root `AGENTS.md` module convention; this file is rewritten in place.

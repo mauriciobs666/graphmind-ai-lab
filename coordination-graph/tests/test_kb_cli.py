@@ -172,6 +172,20 @@ def test_kb_status_exit_codes_and_output(repo, capsys):
     assert "stale\tkb/a.md § Alpha\tstale — read `kb/a.md` § `Alpha`" in capsys.readouterr().out
 
 
+def test_kb_status_lists_failed_documents_degraded_when_searchable_failed_doc_when_not(repo, capsys):
+    root, mirror, chat = repo
+    (root / "coordination-graph" / "kb-files.txt").write_text("kb/a.md\n")
+    cli.main(["kb-sync"])
+    capsys.readouterr()
+    [d] = chat.current()
+    chat.failed.add(d["id"])
+    assert cli.main(["kb-status"]) == 0  # still searchable: informational
+    assert f"degraded\tkb/a.md § Alpha\t{d['id']}: extraction failed, still searchable" in capsys.readouterr().out
+    chat.held.add(d["id"])
+    assert cli.main(["kb-status"]) == 2
+    assert "failed-doc\tkb/a.md § Alpha" in capsys.readouterr().out
+
+
 def test_kb_status_exits_1_only_when_it_could_not_run(repo, monkeypatch, capsys):
     monkeypatch.setattr(commands_kb.kbsync.KbSync,
                         "read_all", lambda self: (_ for _ in ()).throw(RuntimeError("graph gone")))
@@ -267,3 +281,12 @@ def test_an_ephemeral_mirror_accepts_a_loopback_scratch_falkor_chat(monkeypatch)
     monkeypatch.setenv("COORDGRAPH_KB_URL", "http://127.0.0.1:18200")
     cfg = Config.from_env()
     commands_kb._engine(cfg, type("Db", (), {"select_graph": lambda s, k: None})(), None)
+
+
+def test_the_engine_carries_the_configured_retry_bounds(monkeypatch):
+    monkeypatch.setenv("COORDGRAPH_KB_URL", "http://127.0.0.1:18200")
+    monkeypatch.setenv("COORDGRAPH_KB_RETRY_MAX", "7")
+    monkeypatch.setenv("COORDGRAPH_KB_RETRY_BACKOFF_S", "12")
+    monkeypatch.setenv("COORDGRAPH_KB_RETRY_RUN_CAP", "5")
+    eng = commands_kb._engine(Config.from_env(), type("Db", (), {"select_graph": lambda s, k: None})(), None)
+    assert (eng.retry_max, eng.retry_backoff_ms, eng.retry_run_cap) == (7, 12_000, 5)

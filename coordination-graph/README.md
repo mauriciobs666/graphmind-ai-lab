@@ -74,9 +74,9 @@ Every store-backed command takes `--graph KEY` (default `COORDGRAPH_KEY`, itself
 
 | Command | What it does |
 |---|---|
-| `kb-sync [-v] [--detach-finish] [PATH...]` | Mirror the registered KB files (`kb-files.txt`) into `ws:agent-team`, section by section; a section whose mapped document ended `failed` in falkor-chat (a `processing` one is left alone) is re-submitted, new version first, old removed once it is searchable. `--detach-finish` launches a detached `kb-finish` when a section is pending. |
-| `kb-status [--ids ID...]` | Last sync time; stale, pending, unmirrored and duplicate claims. |
-| `kb-reconcile` | Check every mapped KB document against `ws:agent-team`; a missing, hash-mismatched or `failed` document is re-ingested. |
+| `kb-sync [-v] [--detach-finish] [PATH...]` | Mirror the registered KB files (`kb-files.txt`) into `ws:agent-team`, section by section. A mapped document that ended `failed` in falkor-chat is re-submitted only when it is not searchable (a `processing` one is left alone; an embedded one is reported `degraded`, never re-posted: re-posting retires the searchable copy at once). Retries are bounded per section (`RETRY_MAX`, doubling `RETRY_BACKOFF_S`) and per run (`RETRY_RUN_CAP`). `--detach-finish` launches a detached `kb-finish` when a section is pending. |
+| `kb-status [--ids ID...]` | Last sync time; stale, pending, unmirrored and duplicate claims; a `failed` document as `degraded` (still searchable, informational) or `failed-doc` (not searchable). |
+| `kb-reconcile` | Check every mapped KB document against `ws:agent-team`; a missing or hash-mismatched document is re-ingested, a `failed` one follows the `kb-sync` retry rule. |
 | `kb-finish [--once]` | Complete or give up pending sections; loops until settled unless `--once`; one instance at a time (`kb-finish.lock`). |
 
 **Hook (called by `hooks/post-tool-sync.sh`, not by hand; both routine, both take `--graph`/`--confirm`):**
@@ -148,7 +148,7 @@ Writes use producer `kb-mirror`.
 All `COORDGRAPH_*`, read in `coordgraph/config.py`: `REPO_ROOT` (else `CLAUDE_PROJECT_DIR`, else
 the package's repo), `STATE_DIR` (default `coordination-graph/.state`), `FALKORDB_HOST` /
 `FALKORDB_PORT` (default `localhost` / 6379), `EPHEMERAL_PORT`, `SHARED_CONFIRM`, `KEY`, `KB_URL`, `KB_GRAPH`
-(default `ws:agent-team`), `EMBED_URL`, `KB_BUDGET_S`, `KB_HTTP_TIMEOUT_S` (must be < 20),
+(default `ws:agent-team`), `EMBED_URL`, `KB_BUDGET_S`, `KB_HTTP_TIMEOUT_S` (must be < 20), `KB_RETRY_MAX` (3), `KB_RETRY_BACKOFF_S` (1800, doubling), `KB_RETRY_RUN_CAP` (4),
 `HOOK_DISABLED`, and `WI_ROOT` (where `wilib` is imported from, read side only).
 
 ## Exit codes

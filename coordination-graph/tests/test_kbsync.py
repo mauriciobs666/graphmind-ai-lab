@@ -525,6 +525,7 @@ def test_sync_resubmits_a_section_whose_mapped_document_is_failed():
     _, doc = sync(engine, mirror, ONE)
     old = row(mirror, doc, "Alpha")["documentIds"][0]
     chat.failed.add(old)
+    chat.held.add(old)  # failed AND unembedded: not searchable
     chat.calls.clear()
     out, doc = sync(engine, mirror, ONE)
     assert out["Alpha"].status == "synced" and chat.posts() == ["Alpha"] and chat.deletes() == [old]
@@ -539,6 +540,7 @@ def test_the_failed_document_is_removed_only_once_its_replacement_is_ready():
     _, doc = sync(engine, mirror, ONE)
     old = row(mirror, doc, "Alpha")["documentIds"][0]
     chat.failed.add(old)
+    chat.held.add(old)  # failed AND unembedded: not searchable
     seen = []
     chat.on_delete = lambda i: seen.append((i, [(d["id"], d["status"]) for d in chat.docs.values() if d["id"] != i
                                                  and d["id"] not in chat.held]))
@@ -562,6 +564,7 @@ def test_when_the_resubmission_fails_too_the_old_mapping_stays_and_the_section_i
     _, doc = sync(engine, mirror, ONE)
     old = row(mirror, doc, "Alpha")["documentIds"][0]
     chat.failed.add(old)
+    chat.held.add(old)
     chat.during_post = lambda: chat.failed.update(chat.docs)
     out, doc = sync(engine, mirror, ONE)
     assert out["Alpha"].status == "failed" and out["Alpha"].incomplete
@@ -576,6 +579,7 @@ def test_only_the_failed_claim_of_a_split_section_is_resubmitted():
     ids = dict(zip(row(mirror, doc, "Facts")["claimHashes"], row(mirror, doc, "Facts")["documentIds"], strict=True))
     bad = ids[claim_hash("- two fact")]
     chat.failed.add(bad)
+    chat.held.add(bad)
     chat.calls.clear()
     out, doc = sync(engine, mirror, BULLETS)
     assert out["Facts"].status == "synced" and chat.posts() == ["kb — two fact"] and chat.deletes() == [bad]
@@ -592,6 +596,124 @@ def test_a_healthy_unchanged_section_costs_one_observation_read_and_no_http():
     out, _ = sync(engine, mirror, TWO)
     assert [o.status for o in out.values()] == ["unchanged", "unchanged"]
     assert len(reads) == 2 and all(len(r) == 1 for r in reads) and chat.calls == []
+
+
+# --- a failed-document retry never hides a working claim, and is bounded -------------------------------
+
+def failed_section(text=ONE, *, embedded: bool, **kw):
+    """A synced one-claim section whose mapped document is `failed`; `embedded` = still searchable."""
+    engine, mirror, chat, clock = make_engine(**kw)
+    _, doc = sync(engine, mirror, text)
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+    chat.failed.add(old)
+    if not embedded:
+        chat.held.add(old)
+    chat.calls.clear()
+    return engine, mirror, chat, clock, doc, old, claim_hash("Alpha body.")
+
+
+def test_an_embedded_but_failed_document_is_reported_degraded_and_never_reposted():
+    # rules out: re-posting it, which auto-supersedes (documentCurrent=false) the only searchable copy
+    engine, mirror, chat, _, doc, old, h = failed_section(embedded=True)
+    out, _ = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "degraded" and not out["Alpha"].incomplete and old in out["Alpha"].detail
+    assert chat.posts() == [] and chat.searchable(h) == 1
+
+
+@pytest.mark.parametrize("how", ["sync", "reconcile", "finish"])
+def test_the_claim_stays_searchable_through_every_run_over_an_embedded_failed_document(how):
+    engine, mirror, chat, _, doc, old, h = failed_section(embedded=True)
+    chat.hold_new = True
+    for _ in range(2):
+        if how == "sync":
+            sync(engine, mirror, ONE)
+        elif how == "reconcile":
+            assert [o.status for o in engine.reconcile([doc])] == ["degraded"]
+        else:
+            engine.finish(once=True)
+        assert chat.searchable(h) == 1 and chat.posts() == []
+    assert row(mirror, doc, "Alpha")["documentIds"] == [old]
+
+
+def test_the_retry_of_an_unsearchable_failed_document_that_fails_again_keeps_the_mapping_and_counts():
+    engine, mirror, chat, _, doc, old, h = failed_section(embedded=False)
+    chat.during_post = lambda: chat.failed.update(d for d in chat.docs if d != old)
+    out, _ = sync(engine, mirror, ONE)
+    r = row(mirror, doc, "Alpha")
+    assert out["Alpha"].status == "failed" and r["documentIds"] == [old] and "pendingDocumentIds" not in r
+    assert r["retryCount"] == 1 and chat.searchable(h) == 0 and len(chat.docs) == 1  # the new one is deleted
+
+
+def test_a_timed_out_post_of_the_retry_leaves_the_mapping_on_the_old_id_and_counts_the_attempt():
+    engine, mirror, chat, _, doc, old, h = failed_section(embedded=False)
+    chat.timeout_mode = "commit"
+    out, _ = sync(engine, mirror, ONE)
+    r = row(mirror, doc, "Alpha")
+    assert out["Alpha"].status == "failed" and "outcome unknown" in out["Alpha"].detail
+    assert r["documentIds"] == [old] and r["retryCount"] == 1 and chat.searchable(h) <= 1
+
+
+def test_kb_finish_giving_up_on_a_retry_keeps_the_old_mapping_and_the_count():
+    engine, mirror, chat, clock, doc, old, h = failed_section(embedded=False, cap_ms=10_000)
+    chat.hold_new = True
+    out, _ = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "pending" and row(mirror, doc, "Alpha")["state"] == "pending"
+    clock.sleep(11)
+    [res] = engine.finish(once=True)
+    r = row(mirror, doc, "Alpha")
+    assert res.status == "failed" and r["documentIds"] == [old] and r["state"] == "synced" and r["retryCount"] == 1
+    assert len(chat.docs) == 1
+
+
+def test_a_successful_retry_clears_the_count_and_the_claim_is_searchable_once():
+    engine, mirror, chat, _, doc, old, h = failed_section(embedded=False)
+    out, _ = sync(engine, mirror, ONE)
+    r = row(mirror, doc, "Alpha")
+    assert out["Alpha"].status == "synced" and "retryCount" not in r and chat.searchable(h) == 1
+
+
+def test_the_retry_limit_stops_a_persistently_failing_document_until_the_section_is_edited():
+    # rules out: re-posting on every sync/hook run
+    engine, mirror, chat, clock, doc, old, h = failed_section(embedded=False, retry_max=2, retry_backoff_ms=1000)
+    chat.during_post = lambda: chat.failed.update(d for d in chat.docs if d != old)
+    for _ in range(2):
+        assert sync(engine, mirror, ONE)[0]["Alpha"].status == "failed"
+        clock.sleep(10)
+    chat.calls.clear()
+    out, _ = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "failed" and "retry limit" in out["Alpha"].detail and chat.posts() == []
+    chat.during_post = None
+    out, doc2 = sync(engine, mirror, ONE.replace("body.", "body v2."))  # an edit starts over
+    assert out["Alpha"].status == "synced" and "retryCount" not in row(mirror, doc2, "Alpha")
+
+
+def test_a_retry_waits_out_the_doubling_backoff():
+    engine, mirror, chat, clock, doc, old, h = failed_section(embedded=False, retry_backoff_ms=60_000)
+    chat.during_post = lambda: chat.failed.update(d for d in chat.docs if d != old)
+    sync(engine, mirror, ONE)
+    chat.calls.clear()
+    clock.sleep(59)
+    out, _ = sync(engine, mirror, ONE)
+    assert "backoff" in out["Alpha"].detail and chat.posts() == []
+    clock.sleep(2)
+    sync(engine, mirror, ONE)
+    assert chat.posts() != [] and row(mirror, doc, "Alpha")["retryCount"] == 2
+    chat.calls.clear()
+    clock.sleep(61)  # the second wait is twice the first
+    assert "backoff" in sync(engine, mirror, ONE)[0]["Alpha"].detail and chat.posts() == []
+
+
+def test_one_run_retries_at_most_run_cap_sections():
+    engine, mirror, chat, _ = make_engine(retry_run_cap=1)
+    _, doc = sync(engine, mirror, TWO)
+    for h in ("Alpha", "Beta"):
+        i = row(mirror, doc, h)["documentIds"][0]
+        chat.failed.add(i)
+        chat.held.add(i)
+    chat.calls.clear()
+    out, _ = sync(engine, mirror, TWO)
+    assert out["Alpha"].status == "synced" and out["Beta"].status == "failed" and "cap" in out["Beta"].detail
+    assert chat.posts() == ["Alpha"]
 
 
 # --- reconcile -------------------------------------------------------------------------------------
@@ -623,9 +745,10 @@ def test_reconcile_reingests_a_failed_mapped_document():
     bad = row(mirror, doc, "Alpha")["documentIds"][0]
     good = row(mirror, doc, "Beta")["documentIds"][0]
     chat.failed.add(bad)
+    chat.held.add(bad)
     chat.calls.clear()
     results = {o.heading: o for o in engine.reconcile([doc])}
-    assert results["Alpha"].status == "re-ingested" and "failed" in results["Alpha"].detail
+    assert results["Alpha"].status == "re-ingested"
     assert chat.posts() == ["Alpha"] and chat.deletes() == [bad] and good in chat.docs and "Beta" not in results
 
 

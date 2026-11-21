@@ -42,6 +42,9 @@ from .store import StoreError
 PRODUCER = "kb-mirror"
 TTL_MS = LEASE_TTL_S * 1000
 FINISH_CAP_MS = 15 * 60 * 1000  # plan 3.5: per-section cap of the detached `kb-finish`
+RETRY_MAX = 3  # failed-document re-submissions per section until an edit (or a success) resets the count
+RETRY_BACKOFF_MS = 30 * 60 * 1000  # doubles per attempt (30 min, 60 min): longer than the 15 min `kb-finish` cap
+RETRY_RUN_CAP = 4  # sections one run may re-submit: a saturated embedder is what failed them
 POLL_S = 0.5
 TITLE_LIMIT = 200  # falkor-chat's `ingest_document` title bound
 
@@ -82,7 +85,11 @@ GIVE_UP = (_FENCE + f"SET {_CLEAR_PENDING}, ks.state = 'synced', ks.pendingSince
 SWAP = (_FENCE + "SET ks.documentIds = $ids, ks.claimHashes = $hashes, ks.claimTitles = $titles, "
         "ks.sectionHash = $sectionHash, ks.mode = $mode, ks.needsResplit = $needsResplit, ks.heading = $heading, "
         "ks.ord = $ord, ks.state = 'synced', ks.syncedAt = timestamp(), "
-        f"{_CLEAR_PENDING}, ks.pendingSince = null, ks.leaseToken = null, ks.leaseUntil = null\nRETURN count(ks) AS n")
+        f"{_CLEAR_PENDING}, ks.pendingSince = null, ks.leaseToken = null, ks.leaseUntil = null, "
+        "ks.retryCount = null, ks.lastRetryAt = null\nRETURN count(ks) AS n")
+# one failed-document re-submission is about to start (kept by GIVE_UP, cleared by SWAP): the bound on retries
+RETRY = (_FENCE + "SET ks.retryCount = coalesce(ks.retryCount, 0) + 1, ks.lastRetryAt = timestamp()\n"
+         "RETURN count(ks) AS n")
 REMOVE = _FENCE + "DETACH DELETE ks\nRETURN count(ks) AS n"
 READ_ONE = "MATCH (ks:KbSection {key: $key}) RETURN properties(ks) AS p, timestamp() AS now"
 READ_ALL = "MATCH (ks:KbSection) RETURN properties(ks) AS p, timestamp() AS now"
@@ -264,7 +271,7 @@ def _stripped_hash(claim: Claim) -> str | None:
 class KbOutcome:
     path: str
     heading: str
-    status: str  # synced | unchanged | pending | refused | failed | removed
+    status: str  # synced | unchanged | degraded | pending | refused | failed | removed
     detail: str = ""
 
     @property
@@ -379,10 +386,14 @@ class KbSync:
     """
 
     def __init__(self, graph, http, observer, *, budget_s: float = 10.0, poll_s: float = POLL_S,
-                 ttl_ms: int = TTL_MS, cap_ms: int = FINISH_CAP_MS, sleep: Callable[[float], None] = time.sleep,
+                 ttl_ms: int = TTL_MS, cap_ms: int = FINISH_CAP_MS, retry_max: int = RETRY_MAX,
+                 retry_backoff_ms: int = RETRY_BACKOFF_MS, retry_run_cap: int = RETRY_RUN_CAP,
+                 sleep: Callable[[float], None] = time.sleep,
                  monotonic: Callable[[], float] = time.monotonic, token: Callable[[], str] | None = None):
         self.graph, self.http, self.observer = graph, http, observer
         self.budget_s, self.poll_s, self.ttl_ms, self.cap_ms = budget_s, poll_s, ttl_ms, cap_ms
+        self.retry_max, self.retry_backoff_ms, self.retry_run_cap = retry_max, retry_backoff_ms, retry_run_cap
+        self._run_retries = 0
         self.sleep, self.monotonic = sleep, monotonic
         self.new_token = token or (lambda: uuid.uuid4().hex)
 
@@ -448,7 +459,7 @@ class KbSync:
             self._release(key, token)
 
     def _sync_locked(self, key, token, path, section, ctx, force, bad_ids, out) -> KbOutcome:
-        row, _ = self._read(key)
+        row, now = self._read(key)
         if row.get("pendingDocumentIds") and row.get("pendingSectionHash") == section.section_hash \
                 and row.get("pendingMode") == section.mode:  # the same edit, still in flight: `finish` owns it
             return out("pending", "this exact text is already submitted and embedding; left to `kb-finish`")
@@ -460,12 +471,21 @@ class KbSync:
             for name in ("pendingDocumentIds", "pendingClaimHashes", "pendingClaimTitles", "pendingKeepHashes",
                          "pendingMode", "pendingSectionHash"):
                 row.pop(name, None)
-        if not force and row.get("state") == "synced" and row.get("sectionHash") == section.section_hash \
+        if row.get("state") == "synced" and row.get("sectionHash") == section.section_hash \
                 and row.get("mode") == section.mode:
-            failed = self._failed_ids(row)  # one read under the lease; `failed` is terminal, so never stale
-            if not failed:
+            retry, degraded = self._failed_ids(row)  # one read under the lease; `failed` is terminal
+            hold = self._retry_hold(row, now) if retry else None
+            if retry and hold is None:
+                if not self._fenced(RETRY, key, token):
+                    raise LeaseLost("lease lost counting a retry")
+                self._run_retries += 1
+                bad_ids = bad_ids | retry
+            elif not force:
+                if hold:
+                    return out("failed", f"{len(retry)} document(s) failed and are not searchable; {hold}")
+                if degraded:
+                    return out("degraded", f"extraction failed, still searchable: {', '.join(sorted(degraded))}")
                 return out("unchanged")
-            bad_ids = bad_ids | failed  # a failed document never recovers: re-submit its claim (not `processing`)
         reason = ctx.refusal(key, section)
         if reason:
             return out("refused", reason)
@@ -501,11 +521,29 @@ class KbSync:
         ctx.update(key, path, section.heading, [c.claim_hash for c in section.claims])
         return out("synced", f"{len(posted)} new, {len(plan.keep)} kept, {len(plan.remove)} removed")
 
-    def _failed_ids(self, row: dict) -> frozenset[str]:
-        """The section's mapped documents falkor-chat marked `failed` (its terminal status), one batched read."""
+    def _failed_ids(self, row: dict) -> tuple[frozenset[str], frozenset[str]]:
+        """`(retry, degraded)`: the section's mapped documents falkor-chat marked `failed` (terminal), one batched
+        read. A failed document whose chunks are all embedded is still searchable (extraction is enrichment) and
+        re-posting it would retire it at once (auto-supersede flips `documentCurrent`): it is `degraded`, never
+        retried; only an unsearchable one is."""
         ids = row.get("documentIds") or []
         obs = self.observer.observe(ids)
-        return frozenset(i for i in ids if obs.get(i) is not None and obs[i].failed)
+        failed = [obs[i] for i in ids if obs.get(i) is not None and obs[i].failed]
+        return (frozenset(o.id for o in failed if not o.ready), frozenset(o.id for o in failed if o.ready))
+
+    def _retry_hold(self, row: dict, now: int) -> str | None:
+        """Why a failed-document retry must wait or stop (None: go): the attempt limit, the doubling backoff, then
+        the per-run cap (graph note 2.4: `retryCount`, `lastRetryAt`)."""
+        count = int(row.get("retryCount") or 0)
+        if count >= self.retry_max:
+            return f"retry limit reached ({count}); edit the section to start over"
+        wait = self.retry_backoff_ms * 2 ** (count - 1) if count else 0
+        left = int(row.get("lastRetryAt") or 0) + wait - now
+        if count and left > 0:
+            return f"retry backoff: next attempt in {left // 1000} s"
+        if self._run_retries >= self.retry_run_cap:
+            return "per-run retry cap reached; the next run retries"
+        return None
 
     def _check_receipt(self, key, token, receipt, claim, row, ctx) -> str | None:
         """The receipt backstop (m8, P4-m1): falkor-chat auto-supersedes a current document with the same
@@ -744,14 +782,19 @@ class KbSync:
         ids, hashes = row.get("documentIds") or [], row.get("claimHashes") or []
         obs = self.observer.observe(ids)
         bad = frozenset(i for i, h in zip(ids, hashes, strict=False)
-                        if obs.get(i) is None or not obs[i].exists or obs[i].hash != h or obs[i].failed)
+                        if obs.get(i) is None or not obs[i].exists or obs[i].hash != h)
         results = [KbOutcome(path, section.heading, "non-current", f"{i} is superseded (currentVersion = false): "
                              "two headings hold one claim; reported, not re-ingested")
                    for i in ids if i not in bad and obs[i].current is False]
         if bad:
             outcome = self.sync_section(path, section, ctx, force=True, bad_ids=bad)
             results.append(KbOutcome(path, section.heading, "re-ingested" if outcome.status == "synced"
-                                     else outcome.status, f"{len(bad)} missing, mismatched or failed id(s): {outcome.detail}"))
+                                     else outcome.status, f"{len(bad)} missing or mismatched id(s): {outcome.detail}"))
+        elif any(obs[i].failed for i in ids if obs.get(i) is not None):  # `kb-sync`'s rule: retry or `degraded`
+            outcome = self.sync_section(path, section, ctx)
+            if outcome.status != "unchanged":
+                results.append(KbOutcome(path, section.heading, "re-ingested" if outcome.status == "synced"
+                                         else outcome.status, outcome.detail))
         return results
 
 
@@ -759,7 +802,7 @@ class KbSync:
 
 @dataclass(frozen=True)
 class StatusLine:
-    kind: str  # stale | pending | unmirrored | coarse | unmapped-id | duplicate | unregistered
+    kind: str  # stale | pending | unmirrored | coarse | degraded | failed-doc | unmapped-id | duplicate | unregistered
     path: str
     heading: str
     detail: str
@@ -776,7 +819,7 @@ class StatusReport:
 
     @property
     def clean(self) -> bool:
-        return all(line.kind == "coarse" for line in self.lines)
+        return all(line.kind in ("coarse", "degraded") for line in self.lines)  # informational: nothing to fix
 
     def header(self) -> str:
         when = "never" if self.last_sync_ms is None else \
@@ -785,10 +828,12 @@ class StatusReport:
 
 
 def status(docs: list[KbDoc], rows: list[dict], last_sync_ms: int | None,
-           ids: Iterable[str] | None = None) -> StatusReport:
+           ids: Iterable[str] | None = None, obs: dict[str, Obs] | None = None) -> StatusReport:
     """Flags (a) a returned id whose section's file text no longer matches its synced hash, or is pending;
     (b) any unmirrored section; (c) duplicate claims (plan 3.5). With `ids`, (a) and the coarse note cover only
-    the sections holding one of them; (b), (c) and an id mapped by no section are always listed."""
+    the sections holding one of them; (b), (c) and an id mapped by no section are always listed. With `obs` (one
+    `Observer.observe` over every mapped id) a synced section's `failed` document is listed: `degraded` when
+    still searchable (extraction failed; never retried), `failed-doc` when not (`kb-sync` retries it)."""
     report = StatusReport(last_sync_ms)
     wanted = None if ids is None else set(ids)
     by_key = {r["key"]: r for r in rows}
@@ -816,6 +861,12 @@ def status(docs: list[KbDoc], rows: list[dict], last_sync_ms: int | None,
             elif row.get("sectionHash") != s.section_hash:
                 if relevant:
                     report.lines.append(StatusLine("stale", doc.path, s.heading, "stale — " + read))
+            elif obs and relevant and (bad := [obs[i] for i in row["documentIds"] if i in obs and obs[i].failed]):
+                for o in bad:
+                    kind = "degraded" if o.ready else "failed-doc"
+                    note = ("extraction failed, still searchable" if o.ready
+                            else "document failed and is not searchable; `kb-sync` retries it")
+                    report.lines.append(StatusLine(kind, doc.path, s.heading, f"{o.id}: {note}"))
             elif row.get("needsResplit") and relevant:
                 report.lines.append(StatusLine("coarse", doc.path, s.heading,
                                                "coarse: one document for a judgment split; resplit at the next pass"))

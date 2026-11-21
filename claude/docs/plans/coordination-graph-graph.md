@@ -208,8 +208,11 @@ deliberately not mirrored (FR-1). The graph can only report "not in any open bac
              documentIds: [..], claimTitles: [..], claimHashes: [..], syncedAt,
              pendingDocumentIds: [..], pendingClaimTitles: [..], pendingClaimHashes: [..],
              pendingKeepHashes: [..], pendingMode, pendingSectionHash,
-             leaseToken, leaseUntil})
+             leaseToken, leaseUntil,
+             retryCount, lastRetryAt})
 ```
+
+`retryCount`/`lastRetryAt` bound the re-submission of a `failed`, unsearchable mapped document (set under the lease before the POST, kept by the give-up, cleared by the swap); `COORDGRAPH_KB_RETRY_*` hold the limits (`coordination-graph/README.md`).
 
 `mode` is the split mode the mapped documents were made with (`whole`: one document per `##`
 section; `bullets`: one per top-level bullet). `needsResplit` is `true` only when the section is

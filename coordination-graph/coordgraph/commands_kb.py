@@ -40,7 +40,9 @@ def _engine(cfg: Config, db, graph) -> kbsync.KbSync:
     else:
         store.require_shared_kb_url(cfg.kb_url)
     http = kbsync.KbHttp(cfg.kb_url, cfg.kb_http_timeout_s)
-    return kbsync.KbSync(graph, http, kbsync.Observer(db.select_graph(cfg.kb_graph)), budget_s=cfg.kb_budget_s)
+    return kbsync.KbSync(graph, http, kbsync.Observer(db.select_graph(cfg.kb_graph)), budget_s=cfg.kb_budget_s,
+                         retry_max=cfg.kb_retry_max, retry_backoff_ms=int(cfg.kb_retry_backoff_s * 1000),
+                         retry_run_cap=cfg.kb_retry_run_cap)
 
 
 def load_docs(root: Path) -> tuple[list[KbDoc], list[kbsync.KbOutcome]]:
@@ -125,7 +127,8 @@ def kb_status_cmd(args) -> int:
         rows, _ = engine.read_all()
         files = engine._q(kbsync.READ_FILES)  # noqa: SLF001 - one read, no reason for a second API
         last = max((int(r[2]) for r in files if r[2] is not None), default=None)
-        report = kbsync.status(docs, rows, last, args.ids or None)
+        mapped = sorted({i for r in rows for i in (r.get("documentIds") or [])})
+        report = kbsync.status(docs, rows, last, args.ids or None, engine.observer.observe(mapped))
     except Exception as exc:  # noqa: BLE001
         return _fail("kb-status", exc)
     print(report.header())
@@ -149,7 +152,7 @@ def kb_reconcile_cmd(args) -> int:
     for o in outcomes:
         if o.status != "unchanged":
             print(o.render())
-    reported = [o for o in outcomes if o.status in ("pending", "refused", "failed", "orphan", "non-current")]
+    reported = [o for o in outcomes if o.status in ("pending", "refused", "failed", "orphan", "non-current", "degraded")]
     print(f"kb-reconcile: {len(outcomes)} result(s), {len(reported)} to review", file=sys.stderr)
     return 2 if reported else 0
 

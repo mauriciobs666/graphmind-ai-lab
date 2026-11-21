@@ -267,20 +267,51 @@ def test_the_17_marker_stripped_claims_of_falkordb_reference_are_reingested_by_t
     assert len(texts) == 17 and all(t[0] in "-*0123456789" for t in texts)  # the list marker is kept
 
 
-def test_a_document_that_ended_failed_is_resubmitted_and_the_new_one_is_searchable_first(live):
+def _fail_document(live, document_id, *, embedded):
+    """Reproduce a failed extract job on the scratch graph (SERVER.md 1): `status = failed`; an unembedded one
+    also loses its chunk vectors (the embed job failed too)."""
+    g = live.db.select_graph("ws:coordtest")
+    g.query("MATCH (d:Document {documentId: $id}) SET d.status = 'failed'", {"id": document_id})
+    if not embedded:
+        g.query("MATCH (:Document {documentId: $id})-[:HAS_CHUNK]->(c:Chunk) SET c.embedding = null",
+                {"id": document_id})
+
+
+def _synced_fact(live, tag, word):
     eng = live.engine()
-    tag = uuid.uuid4().hex[:8]
     path = f"live/{tag}.md"
-    doc = kb(f"# T\n\n## Fact\n\nRetry {tag} marmot.\n", path)
+    doc = kb(f"# T\n\n## Fact\n\nRetry {tag} {word}.\n", path)
     run_sync(eng, doc)
     key = kbsync.section_key(path, doc.sections[0])
     [old] = row_of(live, key)["documentIds"]
-    # a failed extract job marks the whole document failed (SERVER.md 1): reproduce it on the scratch graph
-    live.db.select_graph("ws:coordtest").query("MATCH (d:Document {documentId: $id}) SET d.status = 'failed'",
-                                               {"id": old})
-    assert live.observer.observe([old])[old].failed
+    return eng, doc, key, old
+
+
+def test_a_failed_but_embedded_document_is_degraded_and_stays_current_and_searchable(live):
+    eng, doc, key, old = _synced_fact(live, uuid.uuid4().hex[:8], "marmot")
+    _fail_document(live, old, embedded=True)
     out = run_sync(eng, doc)
-    assert out["Fact"].status == "synced", out["Fact"]
+    assert out["Fact"].status == "degraded", out["Fact"]
+    assert row_of(live, key)["documentIds"] == [old] and live.observer.observe([old])[old].current is True
+    assert old in search(live, doc.sections[0].claims[0].text)
+
+
+def test_an_unsearchable_failed_document_is_resubmitted_counted_and_the_count_cleared_on_success(live):
+    eng, doc, key, old = _synced_fact(live, uuid.uuid4().hex[:8], "otter")
+    _fail_document(live, old, embedded=False)
+    live.fake.set_mode("down")
+    try:
+        out = run_sync(live.engine(budget_s=2.0), doc)
+    finally:
+        live.fake.set_mode("ok")
+    assert out["Fact"].status in ("pending", "failed")
+    assert row_of(live, key)["retryCount"] == 1 and row_of(live, key).get("lastRetryAt")
+    eng.finish()  # settles or gives up the in-flight attempt
+    row = row_of(live, key)
+    if row["documentIds"] == [old]:  # gave up: the second attempt waits out the backoff, so lift it for the test
+        live.mirror.query("MATCH (s:KbSection {key: $k}) SET s.lastRetryAt = 0", {"k": key})
+        assert run_sync(eng, doc)["Fact"].status == "synced"
     [new] = row_of(live, key)["documentIds"]
     assert new != old and live.observer.observe([new])[new].ready and live.observer.observe([old])[old].exists is False
+    assert "retryCount" not in row_of(live, key)
     assert run_sync(eng, doc)["Fact"].status == "unchanged"

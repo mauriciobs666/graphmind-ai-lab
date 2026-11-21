@@ -42,7 +42,7 @@ class FakeMirror:
         self.log: list[str] = []
         self.names = {id(getattr(kbsync, n)): n for n in
                       ("ACQUIRE", "RELEASE", "RENEW", "MARK", "RECORD", "CANCEL", "GIVE_UP", "SWAP", "REMOVE",
-                       "READ_ONE", "READ_ALL", "READ_FILES", "UPSERT_FILE")}
+                       "RETRY", "READ_ONE", "READ_ALL", "READ_FILES", "UPSERT_FILE")}
 
     def steal(self, key: str, token: str = "other") -> None:
         """Another actor takes the lease on `key` (as after an expiry)."""
@@ -128,7 +128,14 @@ class FakeMirror:
             self._set(s, documentIds=p["ids"], claimHashes=p["hashes"], claimTitles=p["titles"],
                       sectionHash=p["sectionHash"], mode=p["mode"], needsResplit=p["needsResplit"],
                       heading=p["heading"], ord=p["ord"], state="synced", syncedAt=self.now,
-                      **dict.fromkeys(self._PENDING), pendingSince=None, leaseToken=None, leaseUntil=None)
+                      **dict.fromkeys(self._PENDING), pendingSince=None, leaseToken=None, leaseUntil=None,
+                      retryCount=None, lastRetryAt=None)
+        return Result([[1 if s else 0]])
+
+    def _retry(self, p):
+        s = self._fenced(p)
+        if s:
+            self._set(s, retryCount=int(s.get("retryCount") or 0) + 1, lastRetryAt=self.now)
         return Result([[1 if s else 0]])
 
     def _remove(self, p):
@@ -183,6 +190,13 @@ class FakeChat:
         for doc in self.late:
             self._commit(doc)
         self.late.clear()
+
+    def searchable(self, claim_hash_: str) -> int:
+        """How many documents search would return for this claim: falkor-chat reads `documentCurrent = true`
+        chunks only (a superseded document is invisible whatever its status) and an unembedded chunk is not
+        findable; the document `status` is not consulted, so a `failed` but embedded one counts."""
+        return sum(1 for d in self.docs.values() if d["hash"] == claim_hash_ and d["current"]
+                   and d["chunks"] > 0 and d["id"] not in self.held)
 
     def current(self, producer: str = kbsync.PRODUCER) -> list[dict]:
         return [d for d in self.docs.values() if d["producer"] == producer and d["current"]]

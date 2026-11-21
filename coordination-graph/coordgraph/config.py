@@ -72,6 +72,9 @@ class Config:
     kb_budget_s: float
     kb_http_timeout_s: float
     hook_disabled: bool
+    kb_retry_max: int = 3  # COORDGRAPH_KB_RETRY_MAX: failed-document re-submissions per section
+    kb_retry_backoff_s: float = 1800.0  # COORDGRAPH_KB_RETRY_BACKOFF_S: first wait; doubles per attempt
+    kb_retry_run_cap: int = 4  # COORDGRAPH_KB_RETRY_RUN_CAP: sections one run may re-submit
     shared_confirm: str | None = None  # COORDGRAPH_SHARED_CONFIRM: the standing (env) shared-instance confirmation
 
     @classmethod
@@ -101,5 +104,8 @@ class Config:
             kb_budget_s=_float(env, "COORDGRAPH_KB_BUDGET_S", 10.0),
             kb_http_timeout_s=timeout,
             hook_disabled=disabled,
+            kb_retry_max=_int(env, "COORDGRAPH_KB_RETRY_MAX", 3),
+            kb_retry_backoff_s=_float(env, "COORDGRAPH_KB_RETRY_BACKOFF_S", 1800.0),
+            kb_retry_run_cap=_int(env, "COORDGRAPH_KB_RETRY_RUN_CAP", 4),
             shared_confirm=(env.get("COORDGRAPH_SHARED_CONFIRM") or "").strip() or None,
         )

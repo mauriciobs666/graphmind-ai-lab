@@ -14,6 +14,7 @@ def test_defaults_with_an_empty_environment():
     assert c.kb_graph == "ws:agent-team"
     assert c.embed_url == DEFAULT_EMBED_URL
     assert (c.kb_budget_s, c.kb_http_timeout_s, c.hook_disabled) == (10.0, 10.0, False)
+    assert (c.kb_retry_max, c.kb_retry_backoff_s, c.kb_retry_run_cap) == (3, 1800.0, 4)
 
 
 def test_package_repo_root_is_the_repo_holding_this_component():
@@ -33,12 +34,16 @@ def test_every_value_is_env_overridable(tmp_path):
         "COORDGRAPH_KB_BUDGET_S": "3.5",
         "COORDGRAPH_KB_HTTP_TIMEOUT_S": "4",
         "COORDGRAPH_HOOK_DISABLED": "1",
+        "COORDGRAPH_KB_RETRY_MAX": "5",
+        "COORDGRAPH_KB_RETRY_BACKOFF_S": "60",
+        "COORDGRAPH_KB_RETRY_RUN_CAP": "2",
     }
     c = Config.from_env(env)
     assert c.repo_root == tmp_path and c.state_dir == tmp_path / "st"
     assert (c.falkordb_host, c.falkordb_port, c.key) == ("db", 6390, "scratch")
     assert (c.kb_url, c.kb_graph, c.embed_url) == ("http://kb:1", "ws:x", "http://e:2")
     assert (c.kb_budget_s, c.kb_http_timeout_s, c.hook_disabled) == (3.5, 4.0, True)
+    assert (c.kb_retry_max, c.kb_retry_backoff_s, c.kb_retry_run_cap) == (5, 60.0, 2)
 
 
 def test_repo_root_falls_back_to_claude_project_dir_and_state_follows_it(tmp_path):
