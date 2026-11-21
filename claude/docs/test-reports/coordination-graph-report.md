@@ -1,6 +1,6 @@
 # Coordination graph — acceptance test report (S10)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** GAL-F0002 (coordination-graph S10) · **Extends:** `claude/docs/test-plans/coordination-graph.md` · **Item:** `GAL-F0002`
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** GAL-F0002 (coordination-graph S10) · **Extends:** `claude/docs/test-plans/coordination-graph.md` · **Item:** `GAL-F0002`
 
 ## 1. Summary
 

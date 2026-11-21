@@ -1,6 +1,6 @@
 # Coordination graph — graph model, write path and operations
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — · **Version:** 4 · **Extended by:** `docs/plans/cross-initiative-coordination.md` · **Item:** `GAL-F0002`
+> **Status:** archived · **Owner:** `graph-dba` · **Tracks:** — · **Version:** 4 · **Extended by:** `docs/plans/cross-initiative-coordination.md` · **Item:** `GAL-F0002`
 
 Revised 2026-11-20 (v4) for `claude/docs/plans/coordination-graph3.md` §4 (G1–G6); plan3 controls where it disagrees with this note.
 

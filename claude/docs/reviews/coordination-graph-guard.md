@@ -1,6 +1,6 @@
 # Review: coordination-graph S1c (cobb guard widening)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** coordination-graph (S1c, M7)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** coordination-graph (S1c, M7)
 
 **Scope:** commit `c85cd417` (`claude/cobb/hooks/guard-cobb-topic-writes.sh`, `claude/cobb/kaizen/history.md`) against `claude/docs/plans/coordination-graph.md` §4 row S1c and `claude/docs/reviews/coordination-graph.md` M7. The core's `case` semantics were read in `claude/scripts/guard-doc-writes.sh`. The hook was executed with synthetic PreToolUse JSON.
 

@@ -1,6 +1,6 @@
 # Review — coordination-graph implementation plan and graph note
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Item:** `GAL-F0002`
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — · **Item:** `GAL-F0002`
 
 ## Pass 1
 

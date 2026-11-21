@@ -1,6 +1,6 @@
 # In-flight work, backlogs and reference lookup in the graph — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Extended by:** `docs/requirements/cross-initiative-coordination.md` · **Last updated:** 2026-11-20 · **Item:** `GAL-F0002`
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Extended by:** `docs/requirements/cross-initiative-coordination.md` · **Last updated:** 2026-11-20 · **Item:** `GAL-F0002`
 
 ## Intent
 

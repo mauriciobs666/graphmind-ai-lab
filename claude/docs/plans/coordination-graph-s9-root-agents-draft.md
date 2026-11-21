@@ -1,6 +1,6 @@
 # S9 root `AGENTS.md` draft (AC-1, net-zero words)
 
-> **Status:** active · **Owner:** `cobb` · **Tracks:** coordination-graph S9 (plan `claude/docs/plans/coordination-graph.md` §4 row S9)
+> **Status:** archived · **Owner:** `cobb` · **Tracks:** coordination-graph S9 (plan `claude/docs/plans/coordination-graph.md` §4 row S9)
 
 Wording only: `cobb` does not edit root `AGENTS.md`; `teco` applies it (S9 row). Each pair is an exact
 replace-this-with-that on today's root `AGENTS.md`; every `Replace` text occurs exactly once, so a literal

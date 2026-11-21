@@ -1,6 +1,6 @@
 # Work-item identity in the coordination graph — plan extension
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `claude/docs/plans/coordination-graph.md`, `claude/docs/plans/coordination-graph2.md` · **Extended by:** `docs/plans/cross-initiative-coordination.md` · **Item:** `GAL-F0002`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — · **Extends:** `claude/docs/plans/coordination-graph.md`, `claude/docs/plans/coordination-graph2.md` · **Extended by:** `docs/plans/cross-initiative-coordination.md` · **Item:** `GAL-F0002`
 
 Extends the base plan (`claude/docs/plans/coordination-graph.md`, "§") and its first extension
 (`claude/docs/plans/coordination-graph2.md`, "plan2"); both stay authoritative except where this

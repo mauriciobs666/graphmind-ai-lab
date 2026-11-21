@@ -1,6 +1,6 @@
 # coordination-graph manual walkthrough: test report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** coordination-graph (S9 manual)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** coordination-graph (S9 manual)
 
 Target: `claude/docs/manuals/agent-team.md`, section "Asking 'what's going on?' across the whole repo", the two FAQ entries about the mirror/hook, and the "Learnings store" paragraph (uncommitted working tree, 2026-11-21). Spec = the manual's own claims; no separate plan (short manual, short report).
 

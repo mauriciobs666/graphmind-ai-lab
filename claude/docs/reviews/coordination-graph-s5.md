@@ -1,6 +1,6 @@
 # Coordination graph S5 — skill, template and catalog gate
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** coordination-graph (S5)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** coordination-graph (S5)
 
 ## Scope & verdict
 

@@ -1,6 +1,6 @@
 # coordination-graph S2 gate (KB prerequisite, narrowed K-058)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-058 (coordination-graph S2)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-058 (coordination-graph S2)
 
 ## Scope & verdict
 
