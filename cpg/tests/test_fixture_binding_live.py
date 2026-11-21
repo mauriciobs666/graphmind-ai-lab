@@ -25,7 +25,7 @@ from ccg.packrt import run_packs
 from ccg.refresh import DEFAULT_PACKS
 from ccg.rulepack import load_pack
 from ccg.staleness import local_head
-from test_fixture_binding_offline import CPG, M, SYSTEM_YAML, World, link_violations, locator_str, p56_link_violations
+from test_fixture_binding_offline import CPG, M, SYSTEM_YAML, World, chain_of, link_violations, links_from, locator_str, p56_link_violations
 
 SYSTEM = "fixture-binding-live"
 
@@ -108,3 +108,20 @@ def test_a_real_extraction_of_jobs_py_yields_the_environ_read_shape_the_binder_t
              if r.get("type") == "callsite" and "clients/jobs.py" in fixture_build.loc_of.get(r["symbolId"], "") and "environ" in (r.get("externalTarget") or "")]
     assert reads, "no environ callsite extracted from fx-svc/clients/jobs.py"
     assert all(r["externalTarget"] in _ENV_READ_TARGETS for r in reads), [r["externalTarget"] for r in reads]
+
+
+@pytest.mark.live
+@pytest.mark.parametrize("service, consumer, provider", [
+    ("legacy", "svc:api/orders.py::legacy_fee", "svc:legacy/app.py::fee"),
+    ("tools", "svc:api/orders.py::run_tool", "svc:tools/app.py::run"),
+])
+def test_p1_57d_lnk_42_43_bind_through_compose_in_the_all_built_world(fixture_build, service, consumer, provider):
+    """P1-57 D12, the all-built world of the fixture build: `legacy_fee`/`run_tool` fetch `http://<service>:<port>/...`, the chain is the Compose
+    service's published port (`ports`) then its `build.context` mount, so each consumer links to exactly its provider, `confirmed`/`binding-confirmed`. (The
+    SC-STEADY `possible`/`target-not-mapped` form needs the unit unbuilt: the scenario driver's row, `tests/test_fixture_gate_p1.py`.)"""
+    ls = links_from(fixture_build, consumer)
+    assert [(fixture_build.loc_of.get(l.provider), l.status, l.reason, l.to_unit) for l in ls] == [(provider, "confirmed", "binding-confirmed", None)]
+    chain = chain_of(fixture_build, ls[0])
+    assert [(o, rp, r["path"], r["type"], r["kind"], r["service"]) for o, r, rp in chain] == [
+        (0, "fx-svc", "deploy/compose.yaml", "launchFact", "port", service),
+        (1, "fx-svc", "deploy/compose.yaml", "launchFact", "mount", service)]

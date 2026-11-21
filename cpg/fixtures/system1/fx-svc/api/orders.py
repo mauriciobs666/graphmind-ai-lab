@@ -6,8 +6,8 @@ from pydantic import BaseModel
 from core.flow import apply_discount
 from db.repo import Repo, get_repo
 
-LEGACY_FEE_PATH = "/legacy/fee"
-TOOLS_RUN_PATH = "/tools/run"
+LEGACY_FEE_URL = "http://legacy:8010/legacy/fee"
+TOOLS_RUN_URL = "http://tools:8020/tools/run"
 
 
 class OrderIn(BaseModel):
@@ -49,8 +49,8 @@ def peek(cache, key):
 
 
 def legacy_fee():
-    return requests.get(LEGACY_FEE_PATH, timeout=5).json()
+    return requests.get(LEGACY_FEE_URL, timeout=5).json()
 
 
 def run_tool():
-    return requests.get(TOOLS_RUN_PATH, timeout=5).json()
+    return requests.get(TOOLS_RUN_URL, timeout=5).json()

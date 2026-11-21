@@ -5,6 +5,16 @@ services:
       dockerfile: deploy/Dockerfile
     ports:
       - "8000:8000"
+  legacy:
+    build:
+      context: ../legacy
+    ports:
+      - "8010:8010"
+  tools:
+    build:
+      context: ../tools
+    ports:
+      - "8020:8020"
   web:
     image: fx-web:latest
     environment:
