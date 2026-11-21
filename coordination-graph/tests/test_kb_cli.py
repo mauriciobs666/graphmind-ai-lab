@@ -141,7 +141,7 @@ def test_kb_sync_launches_a_detached_finish_only_when_a_section_is_pending(repo,
     root, mirror, chat = repo
     (root / "coordination-graph" / "kb-files.txt").write_text("kb/a.md\n")
     launched = []
-    monkeypatch.setattr(commands_kb, "detach_finish", lambda cfg: launched.append(1))
+    monkeypatch.setattr(commands_kb, "detach_finish", lambda cfg, confirm, graph: launched.append(1))
     assert cli.main(["kb-sync", "--detach-finish"]) == 0 and launched == []
     chat.hold_new = True
     (root / "kb" / "a.md").write_text(ONE.replace("body.", "body v2."))

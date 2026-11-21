@@ -36,6 +36,7 @@ POLL_TIMEOUT_S = 5.0
 SHARED_PORTS = frozenset({6379, 6390, 3000})
 SHARED_KB_PORTS = frozenset({8200})  # the real falkor-chat (`COORDGRAPH_KB_URL`'s default)
 EPHEMERAL_ENV = "COORDGRAPH_EPHEMERAL_PORT"
+SHARED_KEYS = frozenset({"coordination"})  # the only graph shared mode may write: the mirror (note 5.5 step 5)
 SHARED_CONFIRM_ENV = "COORDGRAPH_SHARED_CONFIRM"
 LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
 
@@ -143,16 +144,23 @@ def connect(host: str, port: int, key: str, env: Mapping[str, str] | None = None
 def require_shared(host: str, port: int, key: str, confirm: str | None, env: Mapping[str, str] | None = None) -> None:
     """Authorize one deliberate connection to the shared instance (the counterpart of `require_ephemeral`).
 
-    `confirm` must be exactly the graph key about to be written: a typo, a stale value or a copy from another
-    key refuses. Loopback only. Never alongside an ephemeral declaration: `COORDGRAPH_EPHEMERAL_PORT` set means
-    the caller believes it is on a scratch instance, so both at once is a mistake, not a mode.
+    `confirm` must be exactly the graph key about to be written, and that key must be the coordination mirror's
+    (`SHARED_KEYS`): a confirmation can never name another component's graph. The port must be a shared one
+    (`SHARED_PORTS`), so the two modes are exact complements. Loopback only. Never alongside an ephemeral
+    declaration: `COORDGRAPH_EPHEMERAL_PORT` set means the caller believes it is on a scratch instance, so both at
+    once is a mistake, not a mode.
     """
     env = os.environ if env is None else env
     if host not in LOOPBACK_HOSTS:
         raise RefusedEndpoint(f"refusing non-loopback FalkorDB host {host!r}")
     if (env.get(EPHEMERAL_ENV) or "").strip():
         raise RefusedEndpoint(f"refusing shared access while {EPHEMERAL_ENV} is set: pick one of the two modes")
-    if not key or confirm != key:
+    if port not in SHARED_PORTS:
+        raise RefusedEndpoint(f"refusing FalkorDB port {port}: not a shared instance port {sorted(SHARED_PORTS)}")
+    if key not in SHARED_KEYS:
+        raise RefusedEndpoint(f"refusing graph {key!r} on the shared instance: not the coordination mirror "
+                              f"({', '.join(sorted(SHARED_KEYS))})")
+    if confirm != key:
         raise RefusedEndpoint(
             f"refusing shared FalkorDB {host}:{port}: --confirm / {SHARED_CONFIRM_ENV} must equal the graph key "
             f"{key!r}, got {confirm!r}"
@@ -181,7 +189,9 @@ def open_graph(host: str, port: int, key: str, confirm: str | None = None, env: 
 
 def require_shared_kb_url(url: str) -> None:
     """The shared-mode counterpart of `require_ephemeral_kb_url`: the mirror is the shared graph, so the KB
-    endpoint must be the real falkor-chat (loopback, a shared falkor-chat port), never a scratch one."""
+    endpoint must be the real falkor-chat (loopback, a shared falkor-chat port), never a scratch one.
+    The real falkor-chat (8200) fronts the `falkordb-dev` container published on 6379, the port a shared
+    mirror connects to by default."""
     parts = urlsplit(url)
     if parts.hostname not in LOOPBACK_HOSTS:
         raise RefusedEndpoint(f"refusing non-loopback falkor-chat host {parts.hostname!r}")

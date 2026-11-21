@@ -21,6 +21,10 @@ so the ephemeral guard stays unweakened; bump `PARSER_VERSION` before the first 
 - How the non-interactive hook is authorized on the shared instance is not decided here (S8 design question).
 - Verified: 1009 offline tests (955 before; 52 new in `tests/test_shared.py`, 2 in `test_sync.py`), no database
   connection in any new test.
+- S8-pre gate fixes (F1, F2, F3): shared mode now also requires a shared port (`SHARED_PORTS`, so the two modes are
+  exact complements) and the key to be the coordination mirror's (`SHARED_KEYS`), so a confirmation cannot name another
+  component's graph (`cpg_*`, `kaizen_team`); documented mapping: the real falkor-chat (8200) fronts `falkordb-dev`
+  on 6379. `kb-sync --detach-finish` hands `--confirm` and `--graph` to the child unconditionally. 1025 offline.
 
 ## 2026-11-20 — S7a: read views (`views.py`)
 

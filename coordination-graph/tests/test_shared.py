@@ -57,9 +57,29 @@ def test_connect_shared_refuses_a_confirm_that_is_not_exactly_the_key(confirm):
 
 def test_connect_shared_compares_against_the_key_it_selects_not_a_default():
     with pytest.raises(store.RefusedEndpoint):
-        store.connect_shared("localhost", 6379, "other-key", KEY, {})  # the confirm names a different graph
-    store.connect_shared("localhost", 6379, "other-key", "other-key", {})
-    assert FakeFalkorDB.built == [("localhost", 6379)]
+        store.connect_shared("localhost", 6379, KEY, "other-key", {})  # the confirm names a different graph
+    assert FakeFalkorDB.built == []
+
+
+@pytest.mark.parametrize("key", ["cpg_falkorchat", "kaizen_team", "ws:agent-team", "coordination2", "Coordination"])
+def test_connect_shared_refuses_a_matching_confirm_for_a_foreign_graph(key):
+    with pytest.raises(store.RefusedEndpoint, match="coordination mirror"):
+        store.connect_shared("localhost", 6379, key, key, {})
+    assert FakeFalkorDB.built == []
+
+
+@pytest.mark.parametrize("port", [12345, 45001, 16390, 8200])
+def test_connect_shared_refuses_a_port_that_is_not_a_shared_one(port):
+    with pytest.raises(store.RefusedEndpoint, match="not a shared"):
+        store.connect_shared("localhost", port, KEY, KEY, {})
+    assert FakeFalkorDB.built == []
+
+
+@pytest.mark.parametrize("port", sorted(store.SHARED_PORTS))
+def test_every_shared_port_is_reachable_in_shared_mode_only(port):
+    store.connect_shared("localhost", port, KEY, KEY, {})
+    with pytest.raises(store.RefusedEndpoint):
+        store.connect("localhost", port, KEY, {"COORDGRAPH_EPHEMERAL_PORT": str(port)})
 
 
 def test_connect_shared_refuses_an_empty_key_even_with_an_empty_confirm():
@@ -99,10 +119,10 @@ def test_a_blank_confirm_does_not_fall_back_to_the_ephemeral_path():
     assert FakeFalkorDB.built == []
 
 
-def test_a_given_confirm_never_reaches_the_ephemeral_guard_so_an_ephemeral_port_needs_no_confirm_either():
-    # one mode or the other: a confirm on a scratch port is the shared path (which does not check the port)
-    store.open_graph("127.0.0.1", 45001, KEY, KEY, {})
-    assert FakeFalkorDB.built == [("127.0.0.1", 45001)]
+def test_a_confirm_on_a_scratch_port_is_refused_the_modes_are_exact_complements():
+    with pytest.raises(store.RefusedEndpoint):
+        store.open_graph("127.0.0.1", 45001, KEY, KEY, {})
+    assert FakeFalkorDB.built == []
 
 
 # --- confirmation(): flag, env, and which commands accept the env ------------------------------
@@ -150,14 +170,26 @@ def test_a_routine_command_with_only_the_env_targets_the_shared_instance(monkeyp
     assert FakeFalkorDB.built == [("localhost", 6379)]
 
 
+@pytest.mark.parametrize("graph", ["cpg_falkorchat", "kaizen_team"])
+def test_a_command_cannot_be_pointed_at_a_foreign_graph_by_confirming_it(graph, capsys):
+    assert cli.main(["sync", "--all", "--graph", graph, "--confirm", graph]) == 1
+    assert "coordination mirror" in capsys.readouterr().err and FakeFalkorDB.built == []
+
+
+def test_a_confirmed_arbitrary_loopback_port_is_refused(monkeypatch, capsys):
+    monkeypatch.setenv("COORDGRAPH_FALKORDB_PORT", "12345")
+    assert cli.main(["drift", "--confirm", KEY]) == 1
+    assert "not a shared" in capsys.readouterr().err and FakeFalkorDB.built == []
+
+
 def test_a_routine_command_with_a_wrong_flag_or_graph_mismatch_never_connects(monkeypatch):
     with pytest.raises(store.RefusedEndpoint):
         commands_store._target(SimpleNamespace(confirm="wrong"))
     with pytest.raises(store.RefusedEndpoint):
-        commands_store._target(SimpleNamespace(confirm=KEY, graph="scratch"))  # --graph moved, confirm did not
+        commands_store._target(SimpleNamespace(confirm="scratch", graph=KEY))  # --confirm names another key
     monkeypatch.setenv("COORDGRAPH_SHARED_CONFIRM", KEY)
     with pytest.raises(store.RefusedEndpoint):
-        commands_store._target(SimpleNamespace(graph="scratch"))
+        commands_store._target(SimpleNamespace(graph="scratch"))  # env names coordination, --graph another
     assert FakeFalkorDB.built == []
 
 
@@ -238,10 +270,27 @@ def test_build_puts_the_effective_confirmation_on_the_cfg(monkeypatch):
     assert commands_kb._build(SimpleNamespace())[0].shared_confirm is None
 
 
-def test_a_detached_finish_inherits_the_flag(tmp_path):
+def test_a_detached_finish_inherits_the_flag_and_the_graph(tmp_path):
     cfg = Config.from_env({"COORDGRAPH_STATE_DIR": str(tmp_path / "s")})
     calls = []
-    commands_kb.detach_finish(cfg, KEY, popen=lambda argv, **kw: calls.append(argv))
-    assert calls[0][-3:] == ["kb-finish", "--confirm", KEY]
+    commands_kb.detach_finish(cfg, KEY, KEY, popen=lambda argv, **kw: calls.append(argv))
+    assert calls[0][-5:] == ["kb-finish", "--confirm", KEY, "--graph", KEY]
     commands_kb.detach_finish(cfg, popen=lambda argv, **kw: calls.append(argv))
     assert calls[1][-1] == "kb-finish"
+
+
+def test_kb_sync_hands_its_confirm_and_graph_to_the_detached_finish(monkeypatch, tmp_path):
+    launched = []
+    out = commands_kb.kbsync.KbOutcome("kb/a.md", "H", "pending", "")
+    cfg = Config.from_env({"COORDGRAPH_REPO_ROOT": str(tmp_path)})
+    monkeypatch.setattr(commands_kb, "_build", lambda args: (cfg, tmp_path, None, None))
+    monkeypatch.setattr(commands_kb, "_engine", lambda *a: SimpleNamespace(
+        read_all=lambda: ([], 0), sync_file=lambda doc, ctx, rows: [out]))
+    monkeypatch.setattr(commands_kb, "load_docs", lambda root: ([SimpleNamespace(path="kb/a.md")], []))
+    monkeypatch.setattr(commands_kb.kbsync.Context, "build", classmethod(lambda cls, docs, rows: None))
+    monkeypatch.setattr(commands_kb, "detach_finish", lambda cfg, confirm, graph: launched.append((confirm, graph)))
+    assert cli.main(["kb-sync", "--detach-finish", "--confirm", "C", "--graph", "G"]) == 2
+    assert launched == [("C", "G")]  # distinct values: a swapped pair is caught
+    launched.clear()
+    assert cli.main(["kb-sync", "--detach-finish"]) == 2
+    assert launched == [(None, None)]

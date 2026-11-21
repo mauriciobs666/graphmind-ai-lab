@@ -76,14 +76,16 @@ def _report(outcomes: list[kbsync.KbOutcome], name: str, verbose: bool = False) 
     return 2 if bad else 0
 
 
-def detach_finish(cfg: Config, confirm: str | None = None, popen=subprocess.Popen) -> None:
+def detach_finish(cfg: Config, confirm: str | None = None, graph: str | None = None,
+                  popen=subprocess.Popen) -> None:
     """Launch `coordgraph kb-finish` detached, never holding the caller's pipes (plan 3.2, P2-M1).
 
-    A shared-mode run given `--confirm` hands it on, so the child targets the same instance (an env
-    confirmation is inherited as it is)."""
+    A run given `--confirm` / `--graph` hands them on, so the child targets the same instance and graph (an
+    env confirmation is inherited as it is)."""
     cfg.state_dir.mkdir(parents=True, exist_ok=True)
     log = open(cfg.state_dir / "hook.log", "ab")  # noqa: SIM115 - handed to the child
-    argv = [sys.executable, "-m", "coordgraph", "kb-finish", *([] if confirm is None else ["--confirm", confirm])]
+    argv = [sys.executable, "-m", "coordgraph", "kb-finish", *([] if confirm is None else ["--confirm", confirm]),
+            *([] if graph is None else ["--graph", graph])]
     popen(argv, start_new_session=True, stdin=subprocess.DEVNULL,
           stdout=log, stderr=log)
 
@@ -110,8 +112,7 @@ def kb_sync_cmd(args) -> int:
                 outcomes.append(kbsync.KbOutcome(doc.path, "(file)", "failed", f"{type(exc).__name__}: {exc}"))
     code = _report(outcomes, "kb-sync", getattr(args, "verbose", False))
     if code and getattr(args, "detach_finish", False) and any(o.status == "pending" for o in outcomes):
-        confirm = getattr(args, "confirm", None)
-        detach_finish(cfg) if confirm is None else detach_finish(cfg, confirm)
+        detach_finish(cfg, getattr(args, "confirm", None), getattr(args, "graph", None))
     return code
 
 
