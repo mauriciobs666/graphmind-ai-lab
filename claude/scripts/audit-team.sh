@@ -464,14 +464,14 @@ else
 fi
 
 # 15. hook registered on BOTH events (S0/S8; plan §3.2). Each event is judged
-#     independently by coordgraph-hook-registered.py (command path AND a
-#     Write/Edit/Bash matcher), in the project settings files only. A named
+#     independently by coordgraph-hook-registered.py (aligned to hookreg.py and
+#     its golden table: valid command AND a Write/Edit/Bash matcher), in the project settings files only. A named
 #     FAIL until the stakeholder applies coordination-graph/docs/hook-settings.md;
 #     never a crash. AUDIT_CG_SETTINGS overrides the file list (selftest seam).
 hook_sh="coordination-graph/hooks/post-tool-sync.sh"
 hook_files="${AUDIT_CG_SETTINGS:-$ROOT/.claude/settings.json $ROOT/.claude/settings.local.json}"
 # shellcheck disable=SC2086
-hook_out="$(python3 "$CL/scripts/coordgraph-hook-registered.py" "$hook_sh" $hook_files 2>&1)"; hook_rc=$?
+hook_out="$(python3 "$CL/scripts/coordgraph-hook-registered.py" "$ROOT" $hook_files 2>&1)"; hook_rc=$?
 if [ "$hook_rc" -eq 0 ]; then
   if [ -x "$ROOT/$hook_sh" ]; then
     pass "coordination-graph hook: registered on PostToolUse and PostToolUseFailure (matcher covers Write/Edit/Bash), script executable"
