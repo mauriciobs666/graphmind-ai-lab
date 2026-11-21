@@ -326,3 +326,35 @@ Kill switch (env set `1/true/yes/on`, case-folded, file), root from `$CLAUDE_PRO
 
 ### Proposed REVIEW.md lines
 None: F2 restates the existing oversubscription rule (which this unit's author did not run), and F3's guard-before-network is a one-off.
+
+## S8 Pass 2
+
+**Scope.** Fix commit `4b90a853` and cobb's `coordination-graph/docs/hook-settings.md` (`8467a31c`), from a fresh `git archive HEAD` copy (made a throwaway `git init` there: `test_migrate.py` runs `git status`, and without a repo 87 tests error, an environment artefact). CPG: considered, not relevant — no loaded graph for this component. Suite: **1127 passed, 86 deselected** (with the repo init; 1040 + 87 environment errors without). Live tests not re-run (as in Pass 1).
+
+**Verdict: approve with suggestions.** No blocker. One major left, in cobb's go-live text (G1); one test-stability item is only partly fixed (F2).
+
+### Dispositions
+- **F1 fixed (executed).** `payload="$(cat)"`; no-change call 1/30/100/300 KB = 19.1/19.5/21.9/23.7 ms (was 19/24/43/104).
+- **F2 partly fixed (executed).** The assertion is now `min(20) < 50 ms`. At 24 busy loops on 8 cores it still failed 2 of 4 runs (every call was 56–110 ms, the machine itself being that slow). Better than 3/3 for `max`, not stable under the rule. Remaining fix as in Pass 1: compare against a same-run baseline (ratio to the same loop with a stub that does nothing), keep the absolute figure to the recorded measurement. Minor now.
+- **F3 fixed (executed).** `store.require_endpoint` runs before the ping; a loopback listener on a non-shared port received nothing (timed out), where Pass 1 saw the `PING`.
+- **F4 fixed, one cost (executed).** `Run.refused`: message "refused by the guard … nothing is queued or retried … `COORDGRAPH_HOOK_DISABLED=1`", identical on stdout (`hook.log`) and stderr, no `failed.json` entry, `failed.json` untouched by a refused `retry-failed` (due entry kept, `retry-due` set to now+60). Interaction with F3 checked: the guard now also runs before the silent FalkorDB-down branch, so a refusal is loud even when FalkorDB is down. Cost: a first-run refusal sets `retry-due` +15 min and the shell's no-stamp branch exits 0 silently until then, so edits in that window are neither mirrored nor warned about (and a config fix takes up to 15 min to take effect). Acceptable given the loud first message; say it in the README next to "healed by `sync`", or delete `retry-due` in the message's fix hint.
+- **F5 fixed (read; script path run).** `COORDGRAPH_HOOK_TIMEOUT_S` must match `^[0-9]+$` and be > 0, else 50; abc/0/-5 no longer reach `timeout`.
+- **F6 mostly fixed.** (a) first-load wording now "Loaded: … S8a step 5; Not done: registering the hook and the KB sync" (read, matches HISTORY). (b) KB URL now "accepts only 8200, the default" (read, matches `config.py`). (c) AGENTS.md **529 words** (counted). Shell/Python discovery tie: the new regex filter plus a test. I re-probed it on a planted tree of 25 shapes (nested plans/reviews, nested kaizen, `x/claude/y/kaizen`, nested archive/deprecated, hidden dirs, dir named `*.md`, `-coordination.md`, spaces, symlinks): Pass-1 shell vs `discover()` differed on 6 shapes, the new shell differs on **2**: a symlinked file (`find -type f` skips it, `discover()` keeps it: the hook misses it) and a dot-named file `docs/reviews/.hid.md` (shell passes it, `discover()` refuses it: harmless, `hook-sync` reports "not a covered file"). Both are nits; fix is `-type f -o -type l` and `[^./][^/]*`, and the tie test should plant these two. (d) the bash-5 note and the first-run cap (20 files + "and N more") are present (read).
+
+### (a) Cross-checks between the fixes
+F4's `retry-due` rewrites (+15 min first run, +60 s refused retry) and F3's early guard compose: the refused retry writes `retry-due` after `take_pending`/`save_failed` rewrote it to the past, verified by running `retry-failed` against a due entry (retry-due ended at now+60). The regex filter and the capped first-run listing both sit in `discover()`/the fault branch and use the same filtered list, so the cap counts only covered files. A refused foreground non-first run advances the stamp and queues nothing, so that edit is only healed by a manual `sync <file>` (documented in the message).
+
+### (b) AGENTS.md trim
+Compared against the pre-fix text: nothing load-bearing is gone. The `PARSER_VERSION is 2` sentence left, but `parserVersion` stays in the per-source-replace bullet and `README.md:132` carries the value and the re-sync consequence; `parse/source.py:13` is the constant. The tmp_path fixture rule, the root-`AGENTS.md` rule and the rewrite rule are shortened, not dropped. The rewritten hook bullet (cat payload, bash 5, tie test, seams "never set") is accurate against the script.
+
+### (c) `docs/hook-settings.md` (cobb)
+Judged against the script, plan §3.2/Q5/S8 and the permission rules.
+- **G1 — major (verified by reading `commands_store`/`sync`: neither imports `hookstate` or writes `failed.json`).** §5 says that if `sync --all` fails for a source, "leave the stamp (the failure state in `failed.json` carries the retry)". `sync --all` records no failure state, and the stamp was touched *before* it, so a failed source is older than the stamp and nothing ever re-enters it: it stays unmirrored until the next edit. Fix: "re-run `sync --all` (or `sync <file>`) until `drift` is clean; do not rely on the hook for it".
+- **G2 — minor.** The stamp-before-sync order is right (files edited during `sync --all` stay newer than the stamp; `sync --all` hashes everything so earlier edits are covered; moving an existing stamp later after a hook first run loses nothing for the same reason). But step 5 leaves the unrecorded first-run window the doc itself notes (the first tool call after registering does a full hash-compare against the shared instance). Cheaper: `touch coordination-graph/.state/disabled` before registering and remove it after the go-live `drift` is clean, so the first load is the recorded one. Suggestion, not run.
+- **G3 — nit.** §3 and §4 use bare `coordgraph`, §5 `./coordgraph.sh`; use one. "No `hooks` key in either settings file" and the executable bit I confirmed (grep count 0 in both; mode 100755).
+- **Block vs script/plan: matches.** Matcher `Write|Edit|Bash`, both events, timeout 60 over the script's 50 s bound, shell form with a quoted `${CLAUDE_PROJECT_DIR}`, no `args`; `MultiEdit` omission and the hooks-doc claims were checked by cobb, which I did not re-fetch.
+- **Permissions: clean.** Registration is the stakeholder's act, `.claude/settings*.json` is never edited through Bash, the kill switch is a plain file or env. Go-live commands pass the explicit `--confirm coordination`; the doc does not say who runs them (plan S8 does not either): say "stakeholder".
+- **Unverified payload fields: honest and contained.** The fast path and the sync do not use the payload; only the R12 cross-session retry (`file_path`) does, and it degrades to the normal backoff retry if the field differs. S0 must confirm it; the doc's §6 says so.
+
+### Proposed REVIEW.md lines
+None.
