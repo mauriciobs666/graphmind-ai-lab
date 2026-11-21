@@ -1,6 +1,8 @@
 # Connected code graph — P1 live QA pass (post P1-51b/52/53a/53b/53c/54)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** P1-41 prerequisites (P1-51b, P1-52, P1-53a/b/c, P1-54)
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** P1-41 (prerequisites P1-51b, P1-52, P1-53a/b/c, P1-54; dispatch B)
+
+*2026-11-20: section "P1-41 dispatch B" appended; the two sentences of sections 2 and Recommendations that called the census driver unbuilt are rewritten.*
 
 CPG: considered, not relevant — the subject is the `ccg` build/link pipeline and its stored output; no `cpg_<component>` Joern graph answers it.
 
@@ -24,7 +26,7 @@ Command (cwd `cpg/`, started 20:04, finished 20:41, wall about 37 min; the syste
 
 ## 2. Fixture census (P1T-05 instrument, Link level)
 
-**Instrument** (scratch, not committed: `qa/test_qa_census.py` and `qa/test_qa_rows.py` in the session scratchpad): the fixture system is materialized from `cpg/fixtures/system1` and every unit built through the sandbox (`ccg.build.build_units`, the same fixture as `tests/test_fixture_binding_live.py`), then `run_packs` (the 9 default packs), `Binder` and `link`, then `build_rows` (assembler, no store write). No store was touched; Docker toolchain only. Each of the P1 rows (gate read through the committed manifests' merged attributes, `p1Form` where a row carries one, the manifest form otherwise) is compared with the Link(s) from its consumer locator. There is no committed census driver (P1-41 dispatch B is unbuilt): the existing offline/live pins assert only LNK-45, 16, 19, 12, 02, 06, AC6-EX-4.
+**Instrument** (scratch, not committed: `qa/test_qa_census.py` and `qa/test_qa_rows.py` in the session scratchpad): the fixture system is materialized from `cpg/fixtures/system1` and every unit built through the sandbox (`ccg.build.build_units`, the same fixture as `tests/test_fixture_binding_live.py`), then `run_packs` (the 9 default packs), `Binder` and `link`, then `build_rows` (assembler, no store write). No store was touched; Docker toolchain only. Each of the P1 rows (gate read through the committed manifests' merged attributes, `p1Form` where a row carries one, the manifest form otherwise) is compared with the Link(s) from its consumer locator. The committed driver is `cpg/tests/test_fixture_gate_p1.py` (P1-41 dispatch B, section below); this section records the scratch instrument of the earlier pass, whose rows D1-D6 below are since fixed or ruled.
 
 **Row count (recomputed from the manifests): 134 distinct row ids, of which 87 have gate P1** (`LNK` 27, `SK` 18, `AC6` 11, `NC` 6, `KN` 5, `DF` 4, `CD` 4, `TW` 3, `RV` 3, `MR` 2, `AB` 2, `FT` 2). Matches the ledger's 87. The fixture build produced **48 Links** (store-side `Link|TO|Symbol` 48, `CallSite|VIA|Link` 48, `Link|BOUND_BY|ConfigEntry` 10).
 
@@ -110,5 +112,89 @@ No new red anywhere else in the scope I ran: slice-live 3 passed, pin run 109 pa
 
 Covered: the refresh against 6390 (1306 units fresh), AC-5 by two instruments and four definitions, the Link-level fixture census (34 of 87 rows compared, 28 at expected), the five 53b rows, LNK-11, EX-4, 51b Done-when (a) and (d), slice-live, and the four pin files. Not covered: the 53 rows of section 2 that are not Link-level (edge, Binder, scenario, extractor and engine rows), 51b Done-when (b) (the ten-unit before/after diff), the pre-53b fixture rebuild (so "five rows changed" is not reproduced), the full suite, and any `ask`/answer-level assertion (P1-41 dispatch B).
 
-Recommendations: (1) architect/tdd: decide D1 first, since it decides whether the AC-6 floor is 2 or 1 at P1: either emit `example-config` for `.mcp.example.json` (EX-1) or restate the floor as 1 and take it to the stakeholder (the ruling counted EX-1 on a ledger claim the live build does not bear out). (2) D2 to D5 are rows the manifest gates at P1 that nothing asserts; each needs a call: fix the engine, move the row to P2 with a `p1Form`, or correct the manifest. AC6-URL-2 looks like a P2 (Compose-binding) expectation left at P1. (3) D6: fix the locator (`...index.ts::query`) or the extractor naming; add a live-tier locator-resolution check, since TP-002 passes it. (4) D7: re-pin `ac5-http.jsonl` provider lines or define the hit by provider `qname`. (5) The live pins assert 7 of the 34 Link-level rows; a committed census driver of the section 2 instrument would have shown D1 to D6 before this pass.
+Recommendations: (1) architect/tdd: decide D1 first, since it decides whether the AC-6 floor is 2 or 1 at P1: either emit `example-config` for `.mcp.example.json` (EX-1) or restate the floor as 1 and take it to the stakeholder (the ruling counted EX-1 on a ledger claim the live build does not bear out). (2) D2 to D5 are rows the manifest gates at P1 that nothing asserts; each needs a call: fix the engine, move the row to P2 with a `p1Form`, or correct the manifest. AC6-URL-2 looks like a P2 (Compose-binding) expectation left at P1. (3) D6: fix the locator (`...index.ts::query`) or the extractor naming; add a live-tier locator-resolution check, since TP-002 passes it. (4) D7: re-pin `ac5-http.jsonl` provider lines or define the hit by provider `qname`. (5) Done: the census driver is committed (`cpg/tests/test_fixture_gate_p1.py`, section "P1-41 dispatch B").
 
+
+
+## P1-41 dispatch B: the 87 P1 fixture rows (2026-11-20)
+
+CPG: considered, not relevant — the subject is the `ccg` build/link/answer pipeline over the materialized fixtures; no `cpg_<component>` Joern graph answers it.
+
+**Verdict: 76 of 87 P1 rows at expected, 11 red (defects D8-D14 below).** Run 2026-11-20 against HEAD `039d5785` plus the uncommitted driver files, one run of the live tier on the throwaway store `ccg-falkordb-tw-16393` (started and used by this run; `ccg-falkordb:6390`, `falkordb-dev:6379` and `ccg-falkordb-tw-16390` untouched, nothing stopped). Command (cwd `cpg/`): `CCG_GATE_P1_OUT=<ledger.json> CCG_FALKORDB_PORT=16393 CCG_CONFIG_DIR=<scratch> CCG_REQUIRE_LIVE=1 .venv/bin/python -m pytest tests/test_fixture_gate_p1.py -m "live or not live" -q -p no:cacheprovider` -> `12 failed, 79 passed in 264.27s` (91 tests: 3 offline, 87 row tests, 1 closed-world test; 11 red row tests plus the red closed-world test). The ledger JSON written by the run holds 87 row verdicts: 76 pass, 11 fail.
+
+### 1. Row set (two definitions)
+
+Recomputed from `cpg/fixtures/system1/expected/*.yaml` (`M.holders` and the merged `gate`): **134 distinct row ids, 87 gate P1** (`LNK` 27, `SK` 18, `AC6` 11, `NC` 6, `KN` 5, `DF` 4, `CD` 4, `TW` 3, `RV` 3, `MR` 2, `AB` 2, `FT` 2); P2 18, P3 25, P4 1, P5 3. Second definition (raw manifest entries, the holder copies in `fx-svc`/`fx-web`/`fx-job` counted separately): 175 entries, **111 with gate P1**. The 87 equals the ledger's and the plan's; no `B1F-*`/`B1S-*` row is P1. The offline test `test_the_p1_row_set_is_the_87_distinct_ids_of_the_manifests_and_every_row_has_one_means` asserts 134/87/175/111 and that the 87 ids equal the union of the driver's per-family means (no row without a means, none twice).
+
+### 2. Driver and means
+
+`cpg/tests/test_fixture_gate_p1.py` and `cpg/tests/fixture_gate_p1_helpers.py` (uncommitted, for the coordinator to commit). One pytest test per row id; every expectation is read from the manifests (`CCG_GATE_P1_EXPECTED` names another manifest directory: the mutation hook); the status/reason is the row's `p1Form` where it carries one. Instruments: **world** = fixtures materialized, every unit built through the sandbox, `run_packs` (9 default packs), `Binder`, `link`, `build_rows`; **store** = the SC-STEADY scenario refreshed into the throwaway store (the real build of the materialized HEAD builds `svc-legacy` *fresh*, so `svc-legacy` and `svc-tools` are failed by a `refresh(build=...)` wrapper to reach the plan's steady state, see O-1) and read by Cypher and `Client.ask`; **SC-FAIL-UNIT** for AB-1 (fx-svc at H1, then H4 with `svc-legacy` failing).
+
+| Means | Rows | n | Reuse of an existing test |
+|---|---|---|---|
+| Link-level, world + store (provider set, status, link reason, `BOUND_BY` ordinals, consumer key for KN) | LNK-01, 02, 04, 06, 07, 08, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 36, 37, 38, 45; KN-1..5; AC6-EX-1, EX-4, PM-1..3; TW-2 | 31 | `test_fixture_binding_offline.link_violations` (LNK-45/16/19/12/02/06, AC6-EX-4 chains) and `p56_link_violations` (AC6-PM-3, EX-1) are called on the same build |
+| Binder outcome (world) | LNK-21, LNK-22 | 2 | `check_chain`/`DOCKERFILE_ENTRY` of the offline pin |
+| Keyless fan-out + CONSUMES fact + `build_rows` (world + store) | AC6-URL-1, 2, 3 | 3 | none |
+| Call edges (store: `CALLS`, `CALLS_NAME`) | LNK-30, 39, 40, TW-3, MR-PY, MR-TS | 6 | none |
+| `library_api` consumer fact (world) | AC6-DYN-1, 2, 3, TW-1 | 4 | none |
+| `DATA` edge (store) | FT-1, FT-2 | 2 | none |
+| Negative controls (store) | NC-1, 2, 3, 5, 6, 7 | 6 | NC-5 composes LNK-12/19/20 |
+| `SkippedFile` + `File` (store, OFF form) | SK-1..18 | 18 | the unit tier is `test_skipped_files.py` (not rerun) |
+| Scenario build (store) | AB-1, AB-2, LNK-42, LNK-43 | 4 | none |
+| `Client.ask` (store) | DF-1..4, CD-1..4, RV-1..3 | 11 | none |
+
+Total 87. The AC6-URL keyless assertion is made on the pack's `CONSUMES` fact (kind `http`, key `None`, `possible`/`runtime-built`), never the lifted fact (QA report D5); `build_rows` holds **no** `CONSUMES` edge for a keyless site (it drops it, `consumer-key-none`), so the edge-level reason `runtime-built` is observable only on that fact: the driver asserts that absence too. LNK-22 binds a synthetic site `http://api:8000/api/health` through the real `Binder` (no stored Link at P1).
+
+### 3. Results by row id
+
+**Pass (76):** LNK-01, 02, 04, 06, 07, 08, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 30, 36, 37, 38, 39, 40, 45; KN-1..5; AC6-URL-1, AC6-URL-2, AC6-EX-1, AC6-EX-4, AC6-PM-1, AC6-PM-2, AC6-PM-3; TW-2, TW-3; DF-1, DF-2, DF-4; CD-1, CD-2, CD-3, CD-4; RV-1, RV-2, RV-3; NC-1, 2, 3, 5, 6, 7; FT-1, FT-2; AB-1, AB-2; SK-1..9 and SK-11..18. **Red (11):** AC6-DYN-1, AC6-DYN-2, AC6-DYN-3, AC6-URL-3, DF-3, LNK-42, LNK-43, MR-PY, MR-TS, SK-10, TW-1.
+
+Per family (pass/total): LNK 25/27, KN 5/5, AC6 7/11, TW 2/3, DF 3/4, CD 4/4, RV 3/3, NC 6/6, FT 2/2, MR 0/2, AB 2/2, SK 17/18. Observations behind the passes: LNK-02/06/12 each link to exactly their `svc` provider, `confirmed`/`binding-confirmed`, `BOUND_BY` [0]; LNK-45 `possible`/`prompt-mention`, [0, 1]; LNK-16 `port-shared`, [0, 1]; AC6-EX-4 `example-config`, [0, 1, 2]; AC6-EX-1 `example-config`, [0, 1]; LNK-19 both `reindex` providers `confirmed`/`key-match`, no `BOUND_BY`; LNK-20 four providers `shell-dynamic`; LNK-08 and TW-2 no Link, consumer `CONSUMES` `possible`/`partial-key` with the p1Form key. The walk rows: `CF-DF` holds exactly DF-1, DF-2, DF-4 with notices `[python]`, `depthBound.bound` 2, `unexplored` >= 1; `CF-CD` exactly `finalize` (d1 `confirmed`) and `notify` (d2 `possible`/`flow-unavailable:python`), CD-1/3/4 not listed; RV-1, RV-2 and RV-3 each hold exactly their P1-form items. AB-1: after H1 then H4, `svc-legacy` is `stale-kept` at the H1 commit with `failedAt`, the other `fx-svc` units `fresh` at H4, and the answer for `legacy/app.py::fee` carries that unit in `staleness.units` (`buildStatus` `stale-kept`, `builtCommit` H1, `reason` `extract:failed`, `failedAt`). AB-2: `svc-tools` `not-mapped`, every other unit `fresh` in SC-STEADY. SK: OFF form (see O-2).
+
+**Pass the two-instrument comparison:** the 31 Link-level rows are green under both the world and the store instrument (no row is red under one only).
+
+### 4. Defects (rows asserted and red; routed back, no assertion weakened, no source, fixture or manifest edited)
+
+| ID | Sev | Rows | Title | Expected (manifest) | Observed |
+|---|---|---|---|---|---|
+| D8 | Medium | DF-3 (item), closed world | `DbStore.load` is a false-positive HTTP consumer: `self.session.fetch(item_id)` is read as a keyless fetch | no consumer at `svc:state/stores.py::DbStore.load` (no row names it as a consumer; it is only LNK-40's candidate) | 12 `possible`/`unknown-key` Links (world; 10 in the store, which has two providers fewer) to every http provider; it is an unplanted item in the `CF-DF3` answer (d2). `state/stores.py:14` |
+| D9 | Medium | DF-3 | `CF-DF3` answer differs from DF-3's P1 form in four items | exactly `place`, `create_order`, `accept_quote`, `requeue` (d2 `possible`/`flow-unavailable:python`), `forward`, three `save` callees | `requeue` is d2 `possible`/`partial-key`; unplanted `clients/jobs.py::call_named` and `app/src/api/dyn.ts::go` (d2 `possible`/`unknown-key`: the P1-55 keyless Links, so the manifest's p1Form pre-dates P1-49/P1-55); plus D8's `DbStore.load`. Likely manifest-fix (requeue, call_named, go) |
+| D10 | Major | AC6-DYN-1, 2, 3; TW-1 | No `library_api` consumer is produced at P1: AC-6 dynamic import is 0 of 3 | `possible`/`dynamic-import` consumers (Python `import_module(name)`, `__import__("plugins." + name)`, TS `` import(`./plugins/${name}`) ``); TW-1 `confirmed`/`key-match` for the literal | no pack in `cpg/packs` emits kind `library_api` (9 default packs run); no consumer fact at `plugins/loader.py::load_plugin`, `load_legacy`, `load_audit`, `app/src/plugins/load.ts::loadPlugin`; the calls exist only as bare callsites (`import_module`, `__import__`, `import`) with no edge. The fixtures plan §6 floor for the group at P1 is 3 |
+| D11 | Minor | AC6-URL-3 | `dyn.ts::forward` has no keyless `CONSUMES` fact | `runtime-built` consumer (as URL-1 `call_named` and URL-2 `go` show) | only a lifted fact `possible`/`partial-key` with no alternatives; the 12 `unknown-key` Links from `forward` exist, but the edge-level reason `runtime-built` is not on any fact for it |
+| D12 | Major | LNK-42, LNK-43 | No `target-not-mapped` Link is produced for a consumer of an unmapped unit's provider | `possible`/`target-not-mapped` Link from `legacy_fee` / `run_tool` | SC-STEADY (`svc-legacy`, `svc-tools` `not-mapped`): zero Links from either consumer; the consumer's `CONSUMES` edge (`confirmed`/`lifted-role`, `GET /legacy/fee`, `GET /tools/run`) points at a contract point with 0 providers. With no bundle there is no provider fact to link to; the plan assigns AC-9b's closure to these two rows. Decision for `architect`: produce the Link from a stale-kept bundle only, or restate the rows |
+| D13 | Medium | SK-10 | A production file with `test` inside its name is omitted | `app/src/ui/latest.ts` included with a `file` record | listed `frontend-ignore`, no `File` node; its sibling decoy `e2e-helper.ts` (SK-11) is included |
+| D14 | Minor | MR-PY, MR-TS | Precondition of the row not met (fixtures `TP-015`): BLOCKED, not passed | the frontend resolves the call to Y (`Rules.fee`, `Formatter.render`) | `price_with` site `fee` and `formatTotal` site `render` have no resolved `CALLS` edge; only `CALLS_NAME` candidates (`Rules.fee`, `PremiumRules.fee`; `Formatter.render`, `FancyFormatter.render`), so the `resolution-unverified` form cannot arise (it would read `name-match`) |
+
+### 5. Closed world
+
+A Link is unplanted only if it matches no row of any manifest at any gate. **Definition B** (the Link's consumer is a consumer-ish locator of some row; the verdict): world 86 Links, 12 unplanted, all from one consumer; store 76 Links, 10 unplanted, same consumer: `svc:state/stores.py::DbStore.load` (D8). **Definition A** (the consumer is any locator of any row): 0 unplanted in both instruments (`DbStore.load` appears as LNK-40's candidate), so the two definitions differ by exactly D8. `JobPanel.<anon>#1` (`possible`/`partial-key` to `job/trigger_server.py::status`) matches OV-2 (P3) and is "planted, not asserted at P1".
+
+**Planted, not asserted at P1 (47 rows gated later, never red):** P2 (18): AC6-EX-2, AC6-TOP-1..3, LNK-05, 09, 18, 23, 24, 25, 31, 32, 33, 34, 35, 41, NC-4, SQC-JAVA. P3 (25): AB-3, AB-4, AC6-EX-3, AC6-QL-1..3, B1F-R, B1F-RU, B1F-W, B1F-W2, B1S-D, B1S-R, B1S-W, B1S-W2, LNK-03, 26, 27, 28, 29, 44, OV-1..5. P4 (1): SQC-PY. P5 (3): TF-1..3. Also the `OrderCache.entries` field rows (named by the gate text; no manifest row id).
+
+### 6. Instrument spread and counts under more than one definition
+
+| Definition | Count |
+|---|---|
+| P1 rows, distinct ids | 87 (76 pass, 11 red) |
+| P1 rows, raw manifest entries (holder copies counted) | 111 (100 on green rows, 11 on red rows: each red id has one holder) |
+| P1 rows by means | Link-level 31 (31 green), Binder 2 (2), fan-out 3 (2), call edges 6 (4), library_api 4 (0), DATA 2 (2), negative controls 6 (6), skipped files 18 (17), scenario 4 (2), `Client.ask` 11 (10) |
+| Links, world instrument (all units built) | 86 |
+| Links, store instrument (SC-STEADY) | 76; the 10 fewer = `legacy_fee` and `run_tool` (confirmed in the all-built world, absent in the store, D12) + 8 fan-out Links (four keyless consumers x two providers fewer, the providers of the unmapped units) |
+| Link-level rows red under world only / store only | 0 / 0 |
+| Unplanted Links, definition B / A | world 12 / 0; store 10 / 0 |
+
+### 7. Mutation test of the driver
+
+Copy-aside (manifest directory `cpg/fixtures/system1/expected` copied to the scratchpad; `fixture_gate_p1_helpers.py` copied aside; nothing restored by `git`). Three silent corruptions applied at once: (a) a status: `LNK-45` `possible` -> `confirmed` in the copy of `fx-svc.yaml`; (b) a provider id: `LNK-12`'s provider `mcp/server.py::reindex` -> `mcp/server.py::get_item`; (c) a `BOUND_BY` ordinal: `BOUND_ORDS["LNK-16"]` `[0, 1]` -> `[0, 2]` in the helper. Run `CCG_GATE_P1_EXPECTED=<copy> ... pytest tests/test_fixture_gate_p1.py -m "live or not live" -k test_link_level_row` -> `3 failed, 28 passed in 165.59s`: `LNK-45` ("Link ... is possible/prompt-mention, expected confirmed/prompt-mention", reported by the world, store and pin checks), `LNK-12` ("go to [reindex], expected exactly [get_item, reindex]"), `LNK-16` (ordinals) red and the other 28 Link rows green. The helper was restored from the copy (sha256 equal) and the manifests are unmodified (`git status` shows only the two new driver files). An offline test (`test_a_mutated_manifest_status_turns_the_link_checker_red_and_the_unmutated_one_green`) keeps the same three mutants on synthetic records in the default suite. The ordinal mutant was not run on the other rows of `BOUND_ORDS`.
+
+### 8. Observations and what was not executable
+
+- **O-1 (precondition, SC-STEADY):** the manifests say `svc-legacy` is unbuildable at HEAD (`legacy/broken.py`, syntax error) and `svc-tools` never built. The real refresh of the materialized HEAD builds both `fresh` (`legacy` and `tools` python units, status `fresh`, `failReason` None), so the steady state is reached only through the injected failure; the Link and `Client.ask` rows are asserted in that injected state. Whether the real extractor should fail on `broken.py` is for `architect`.
+- **O-2 (SK, ON column):** the runner always passes `override=False` and `jssrc2cpg` has no ignore override (`extractors/joern/skipped.py`), so the ON form (SK-5 `included`) is **not executable here**; SK rows are asserted in the OFF form, which equals the ON form for all rows but SK-5. SK-8 holds: no `scripts` unit exists, no `SkippedFile`/`File` for `scripts/build.test.ts`.
+- **O-3:** AC6-PM-1..3 are asserted as "the true target is among the Links, every Link `possible`/`prompt-mention`" (superset allowed). AC6-PM-2 (`reindex` in a table cell) links to both `reindex` providers (`svc:mcp/server.py::reindex` and `job:job/mcp_admin.py::reindex`), the Q-NC5 same-name shape the P1-36 plan already tracks; AC6-PM-3 and AC6-EX-1 are additionally exact through `p56_link_violations`.
+- **O-4:** AC6-URL-1 and URL-2 pass at their P1 forms (`possible`/`runtime-built` fact, no stored `CONSUMES` edge, `unknown-key` fan-out to 12 providers in the world, 10 in the store).
+- Not run: the whole `cpg/` suite, the unit tiers of SK/NC/MR, the ON-override column, the flag-true form of the walk rows, rendering of the notice text.
+
+### 9. Recommendations
+
+(1) `architect`: D12 first (AC-9b's closure rests on LNK-42/43; produce a `target-not-mapped` Link from what, when the unit never built?), then D10 (a `library_api` pack or move AC6-DYN-1..3 and TW-1 to P2: the P1 AC-6 dynamic-import floor is 0 of 3 as built). (2) `tdd-engineer`: D8 (the Python `fetch` matching `self.session.fetch(...)` is a false-positive consumer, a closed-world defect that also pollutes DF-3), D13 (SK-10) and D11. (3) Manifest/plan owner: D9 (re-derive DF-3's p1Form after P1-49/P1-55) and D14 (MR rows blocked at TP-015; decide whether the precondition is a P1 or P3 matter). (4) The driver is red by design until these land: commit it with the red rows listed above, or gate on the defect ids.
