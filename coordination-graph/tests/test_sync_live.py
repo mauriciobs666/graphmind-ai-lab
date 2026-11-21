@@ -278,6 +278,33 @@ def test_every_view_header_reads_the_settings_under_the_repo_root(synced, capsys
     assert "Hook: registered" in out, (code, out)
 
 
+def test_a_backlog_with_the_full_milestone_grammar_syncs_to_parity_and_passes_the_dry_run(env, capsys):
+    root = env[0]
+    put(root, B, BACKLOG + "- **Milestone:** M1 — order 2 — approved 2026-01-01 — started 2026-01-02\n")
+    assert run(capsys, "bootstrap")[0] == 0
+    assert run(capsys, "sync", "--all")[0] == 0
+    _db, graph = graph_of(env)
+    props = rows(graph, "MATCH (i:Item) WHERE i.milestoneOrder IS NOT NULL RETURN i.milestoneOrder, "
+                        "i.milestoneApproved, i.milestoneStarted")
+    assert props == [[2, "2026-01-01", "2026-01-02"]]
+    assert sync.parity(graph, parser(env)).ok
+    code, out = run(capsys, "rebuild", "--dry-run")
+    assert code == 0 and "unknown-property" not in out, out
+
+
+def test_a_read_view_on_an_absent_key_fails_and_does_not_create_it(env, capsys):
+    """The header's drift reads run on RO_QUERY: an unbootstrapped key errors instead of being materialised."""
+    root, key, c = env
+    for view in ("drift", "inflight"):
+        capsys.readouterr()
+        code = main([view])
+        err = capsys.readouterr().err
+        assert code == 1 and err.startswith(f"{view}: "), err
+        assert view == "drift" or "no synced mirror" in err, err
+    assert key not in [k.decode() if isinstance(k, bytes) else k for k in store.connect(
+        c.host, c.port, key, {"COORDGRAPH_EPHEMERAL_PORT": str(c.port)})[0].execute_command("KEYS", "*")]
+
+
 def test_query_prints_the_header_flags_drift_and_is_read_only(synced, capsys):
     root = synced[0]
     _, graph = graph_of(synced)

@@ -348,9 +348,25 @@ def test_list_and_enum_shapes():
 def test_only_note_properties_are_allowed():
     b = clean_backlog()
     b.meta["itemCount"] = 1  # the pre-note name: no longer a property
-    b.rows[0]["milestoneOrder"] = 2
+    b.rows[0]["milestoneRank"] = 2  # not a property of FORMATS section 7.3
     got = [v for v in validate(one(b)).violations if v.code == "unknown-property"]
-    assert {"itemCount", "milestoneOrder"} <= {v.message.split()[0] for v in got}
+    assert {"itemCount", "milestoneRank"} <= {v.message.split()[0] for v in got}
+
+
+def test_the_milestone_properties_of_an_item_are_note_properties():
+    b = clean_backlog()
+    b.rows[0].update(milestone="M1", milestoneOrder=2, milestoneApproved="2026-01-01",
+                     milestoneStarted="2026-01-02")
+    assert "unknown-property" not in codes(validate(one(b)))
+    b.rows[0]["milestoneOrder"] = "2"
+    assert "bad-shape" in codes(validate(one(b)))
+
+
+def test_a_parsed_backlog_item_with_the_full_milestone_grammar_passes_the_dry_run(tmp_path):
+    write(tmp_path, "a/docs/BACKLOG.md", "# B\n\n### K-001 — One\n\n- **Status:** 🔵 proposed\n"
+          "- **Milestone:** M1 — order 2 — approved 2026-01-01 — started 2026-01-02\n")
+    report = dryrun.rebuild_dry_run(tmp_path)
+    assert [v for v in report.violations if v.code == "unknown-property"] == []
 
 
 def test_item_ref_form():

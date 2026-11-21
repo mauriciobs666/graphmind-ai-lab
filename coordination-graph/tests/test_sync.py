@@ -430,7 +430,7 @@ def test_a_read_view_with_a_bogus_work_items_root_reports_registry_unavailable(r
     """Plan3 test 12, second half: `drift` and `query` still print their header, with the degraded registry line."""
     code = ("import types\nfrom coordgraph import commands_store as c, config\nfrom tests.memgraph import MemGraph\n"
             "class G(MemGraph):\\n"
-            "    def ro_query(self, q):\\n        return types.SimpleNamespace(header=[[1, 'n']], result_set=[[1]])\\n"
+            "    def ro_query(self, q, params=None):\\n        if q == 'RETURN 1':\\n            return types.SimpleNamespace(header=[[1, 'n']], result_set=[[1]])\\n        return super().ro_query(q, params)\\n"
             f"root = {str(repo)!r}\ng = G()\n"
             "from coordgraph import sync\nsync.sync_all(g, sync.Parser.for_root(root))\n"
             "c._target = lambda a: (config.Config.from_env(), 'k', __import__('pathlib').Path(root), None, g)\n"
@@ -454,3 +454,25 @@ def test_a_source_stamped_parser_version_1_is_resynced(repo):
         g.sources[path][1]["parserVersion"] = 1
     assert statuses(sync.sync_all(g, parser(repo))) == {L: "synced", B: "synced", R: "synced"}
     assert {m["parserVersion"] for _, m, _ in g.sources.values()} == {2}
+
+
+def test_the_header_check_only_reads_through_ro_query_so_it_can_never_write(repo):
+    """DESIGN section 6: the drift check behind every view's header runs on `RO_QUERY` (and so cannot create an absent key)."""
+    g = MemGraph()
+    sync.sync_all(g, parser(repo))
+    put(repo, L, LEDGER.replace("**queued**", "**accepted**"))  # a changed source also reads its children
+
+    class ReadOnly:
+        def __init__(self, inner):
+            self.inner, self.read = inner, []
+
+        def ro_query(self, q, params=None):
+            self.read.append(q)
+            return self.inner.query(q, params)
+
+        def query(self, q, params=None):
+            raise AssertionError(f"drift.check wrote or used GRAPH.QUERY: {q}")
+
+    ro = ReadOnly(g)
+    rep = drift.check(ro, parser(repo))
+    assert not rep.clean and len(ro.read) >= 2

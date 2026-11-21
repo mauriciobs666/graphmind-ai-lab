@@ -6,8 +6,8 @@ covering Write, Edit and Bash; `disabled` (kill switch) wins over everything; an
 unproven is `not registered`: the header never over-claims. This is a static reading of the files: it does not
 know whether Claude Code actually fires the hook in a given context (docs/hook-settings.md section 6).
 
-Matchers follow Claude Code: empty or `*` matches every tool, a name list of letters/digits/`_` split on `|` is
-exact, anything else is a regular expression, judged conservatively as a full match of the tool name
+Matchers follow Claude Code: empty or `*` matches every tool, a name list of letters/digits/`_`/`-` split on `|` or `,` (spaces
+ignored) is exact, anything else is a regular expression, judged conservatively as a full match of the tool name
 (`Wri.|Edi.|Bas.` is not enough; an invalid one covers nothing). The handler
 must be `type: command` with no `if` filter, and its command must name this script as its executable (an
 existing file with the executable bit) or as the argument of `bash`/`sh` (an existing file), by an absolute

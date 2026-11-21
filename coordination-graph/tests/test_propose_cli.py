@@ -52,7 +52,7 @@ class ProposeGraph(MemGraph):
         if q == commands_propose.DEP_ITEMS:
             return Result([[r["ref"], r.get("scope"), r["open"], p] for _m, p, r in self._items()
                            if r["ref"] in params["candidates"]])
-        raise AssertionError(f"unexpected read: {q[:60]}")
+        return super().ro_query(q, params)  # the header's drift reads
 
 
 @pytest.fixture

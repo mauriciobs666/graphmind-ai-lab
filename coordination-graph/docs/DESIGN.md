@@ -8,7 +8,7 @@
 > post-edit hook, the KB mirror and lint. Data formats (source grammars, the graph schema, key rules,
 > KB mapping nodes, hook state files) are in `coordination-graph/docs/FORMATS.md`, read by lookup.
 > Change history is in `coordination-graph/docs/HISTORY.md`. Section numbers are stable and cited
-> from the code's and the context files' pointers.
+> from `coordination-graph/AGENTS.md`.
 
 ## Index
 
@@ -260,9 +260,9 @@ PATH arguments may be absolute (made repo-relative) or repo-relative.
 | Command | 0 | 1 | 2 |
 |---|---|---|---|
 | `lint` | no error finding (warnings do not fail) | an error finding | |
-| `migrate` | ok | a failed write | bad usage (`--apply` without exactly one covered backlog PATH, a missing file, or titles needing review) |
+| `migrate` | ok | a failed write | bad usage (no mode, `--apply` without exactly one covered backlog PATH, a missing file, or titles needing review) |
 | `facts`, `history-coverage` | always | | |
-| `bootstrap`, `sync`, `rebuild`, `propose` | ok | refused or unreachable endpoint, a failed source, failed parity, no synced backlog for `propose` | |
+| `bootstrap`, `sync`, `rebuild`, `propose` | ok | refused or unreachable endpoint, a failed source, failed parity, no synced backlog for `propose`, `propose --per-milestone` below 1 | |
 | `rebuild --dry-run` | no violation | a violation | |
 | `drift` | no drift | drift, or a failure | |
 | `query` | ok | failure | |
@@ -278,7 +278,7 @@ absent mirror adds `(no synced mirror: run `coordgraph bootstrap` and `coordgrap
 
 ## 6. Views and `propose`
 
-Every view statement runs through `GRAPH.RO_QUERY`, so a view can never write; every answer prints
+Every view statement, the header's drift reads included, runs through `GRAPH.RO_QUERY`, so a view can never write (an absent key errors instead of being created); every answer prints
 the sync header (§4.6) first, with `⚠ drift` on each row whose file row no longer matches the graph.
 Identity is resolved at read time (§3); the slug join is never skipped.
 
@@ -387,7 +387,7 @@ holds other components' graphs. Two exact-complement modes, chosen per command b
 (matcher `Write|Edit|Bash`) that mirrors a changed coordination or KB file before the agent reads the
 tool result. **Registration is a stakeholder action**: the settings block is in
 `coordination-graph/docs/hook-settings.md`, and nothing fires the script until it is applied. **Where
-Claude Code fires it (which tool calls, which contexts) is unverified until the S0 probe has run**; the
+Claude Code fires it (which tool calls, which contexts) is unverified until the S0 probe (`claude/cobb/scripts/hook-probe.md`) has run**; the
 `Hook:` header state is a static reading (§4.6) and does not prove it fires.
 
 ### 8.1 Fast path

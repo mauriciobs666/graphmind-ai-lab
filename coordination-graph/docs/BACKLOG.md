@@ -1,7 +1,7 @@
 # coordination-graph — Backlog
 
 Living backlog, per the module documentation convention (root `AGENTS.md`) — forward-looking only:
-delivered work leaves this file and is recorded in `HISTORY.md`. Items carry no ID yet; `wi` mints them.
+delivered work leaves this file and is recorded in `HISTORY.md`. Items carry scheme IDs (`GAL-F00NN`) minted by `wi`.
 
 ## Open items
 

@@ -40,10 +40,13 @@ text; it re-implements `wi`'s own header reader and a test pins the two together
 - **`itemId`.** The first backticked token of `Item:` (else the bare value; `—` and empty mean
   none), as written. An empty token or one over 512 UTF-8 bytes is not stored and adds the source
   warning `header Item: unusable (empty or over 512 bytes); itemId not stored`.
-- **`aliases`.** The tokens of `Aliases:`; `[]` for a header block without `Aliases:`; absent when
+- **`aliases`.** The backticked tokens of `Aliases:`, else the whole value as one token (`A-1, B-2`
+  unbackticked is the single alias `A-1, B-2`; `—` and empty mean none); `[]` for a header block without `Aliases:`; absent when
   the file has no header block.
 - **Decoding.** UTF-8 with replacement, a leading BOM removed (so the header sits under the title).
-  Every hash is over the **raw bytes**.
+  `sha256` and `bytes` of a source or KB file are over its **raw bytes**; `itemHash`, `rowHash`,
+  `claim_hash` and `sectionHash` are over the decoded text (normalised cells for `rowHash`, normalised
+  text for `claim_hash`, the stripped body for `sectionHash`).
 
 ## 2. Ledger
 

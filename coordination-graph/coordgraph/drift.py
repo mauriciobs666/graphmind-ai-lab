@@ -53,7 +53,7 @@ def _stamp(ms: int | None) -> str:
 def check(graph, parser: Parser, paths: Iterable[str] | None = None) -> DriftReport:
     """Drift over `paths` (default: every covered file and every stored source)."""
     want = None if paths is None else set(paths)
-    rows = graph.query("MATCH (s:Source) RETURN s.path, s.sha256, s.syncedAt, s.parserVersion").result_set
+    rows = graph.ro_query("MATCH (s:Source) RETURN s.path, s.sha256, s.syncedAt, s.parserVersion").result_set
     stored = {r[0]: (r[1], r[2], r[3]) for r in rows if want is None or r[0] in want}
     candidates = {p for p in parser.found if want is None or p in want}
     drifts: list[SourceDrift] = []
@@ -79,7 +79,7 @@ def _changed(graph, parser: Parser, path: str) -> SourceDrift:
         _, now = store.write_form(kind, meta, rows)
     except (BacklogParseError, store.StoreError) as exc:
         return SourceDrift(path, "changed", note=f"does not parse: {exc}")
-    have = {child_key(p): canon_hash(p) for (p,) in graph.query(CHILD_QUERY, {"path": path}).result_set}
+    have = {child_key(p): canon_hash(p) for (p,) in graph.ro_query(CHILD_QUERY, {"path": path}).result_set}
     new = {child_key(p): canon_hash(p) for p in now}
     out = [(k, "changed") for k in new if k in have and new[k] != have[k]]
     out += [(k, "added in file") for k in new if k not in have]

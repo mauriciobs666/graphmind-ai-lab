@@ -45,7 +45,7 @@ SOURCE_PROPS = frozenset({
 SOURCE_EXTRA = {
     "ledger": {"citedReviews", "resolvedReviews"},
     "review": {"latestVerdict", "latestPass", "verdictClass"},
-    "backlog": {"scope", "scopeKind"},
+    "backlog": {"scope"},
     "requirement": set(),
 }
 SOURCE_REQUIRED = frozenset({"path", "kind", "component", "slug", "sha256", "bytes", "parserVersion",
@@ -60,11 +60,12 @@ UNIT_REQUIRED_MINIMAL = frozenset({"key", "unitKey", "unitLabel", "statusToken",
                                    "component", "tableIdx", "rowIdx"})
 UNIT_REQUIRED_FULL = UNIT_REQUIRED_MINIMAL | {"unit", "cites", "rowHash"}
 ITEM_PROPS = frozenset({"ref", "scope", "itemId", "backlogPath", "ord", "itemType", "title", "statusMarker",
-                        "open", "priority", "milestone", "dependsOn", "touches", "itemHash"})
+                        "open", "priority", "milestone", "milestoneOrder", "milestoneApproved",
+                        "milestoneStarted", "dependsOn", "touches", "itemHash"})
 ITEM_REQUIRED = frozenset({"ref", "backlogPath", "ord", "title", "open", "itemHash"})
 LIST_PROPS = frozenset({"aliases", "warnings", "citedReviews", "resolvedReviews", "needs", "cites",
                         "dependsOn", "touches"})
-INT_PROPS = frozenset({"bytes", "parserVersion", "rowCount", "latestPass", "tableIdx", "rowIdx", "ord"})
+INT_PROPS = frozenset({"bytes", "parserVersion", "rowCount", "latestPass", "tableIdx", "rowIdx", "ord", "milestoneOrder"})
 
 _ROLES = {"ledger": ("coordination",), "review": ("ml", "rca", "impl"), "requirement": (), "backlog": ()}
 _NO_STATUS_TABLE = re.compile(r"^table (\d+): no Status column$")

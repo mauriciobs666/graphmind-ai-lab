@@ -23,6 +23,9 @@ class MemGraph:
         self.source_labels: dict[str, list[str]] = {}  # planted label drift, by path
         self.child_shapes: dict[str, tuple[str, list[str]]] = {}  # planted (relationship, labels) drift, by path
 
+    def ro_query(self, q, params=None):
+        return self.query(q, params)
+
     def query(self, q, params=None):
         params = params or {}
         for kind, stmt in store.REPLACE.items():
