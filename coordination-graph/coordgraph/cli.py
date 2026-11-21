@@ -125,6 +125,10 @@ def cmd_history_coverage(args, root: Path) -> int:
     return 0
 
 
+CONFIRM_HELP = ("act on the SHARED FalkorDB instead of an ephemeral one; must equal the graph key "
+                "(the env COORDGRAPH_SHARED_CONFIRM does the same for routine commands)")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="coordgraph")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -142,7 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
     facts.add_argument("--like")
     hc = sub.add_parser("history-coverage", help="delivery-heading match rate over every history file")
     hc.add_argument("--verbose", "-v", action="store_true")
-    sub.add_parser("bootstrap", help="create indexes and constraints (ephemeral targets only)")
+    sub.add_parser("bootstrap", help="create indexes and constraints (ephemeral targets; shared only with --confirm)")
     sync = sub.add_parser("sync", help="parse and replace the named, changed or all mirrored files")
     group = sync.add_mutually_exclusive_group()
     group.add_argument("--changed", action="store_true", help="every covered file whose hash moved")
@@ -169,8 +173,12 @@ def build_parser() -> argparse.ArgumentParser:
     kf.add_argument("--once", action="store_true", help="a single pass instead of looping until settled")
     for name in ("bootstrap", "sync", "rebuild", "drift", "query", "kb-sync", "kb-status", "kb-reconcile", "kb-finish"):
         sub.choices[name].add_argument("--graph", help="graph key (default: COORDGRAPH_KEY)")
+    for name in ("bootstrap", "sync", "rebuild", "drift", "query", "kb-sync", "kb-status", "kb-reconcile", "kb-finish"):
+        sub.choices[name].add_argument("--confirm", metavar="GRAPHKEY", help=CONFIRM_HELP)
     views.register(sub)
     commands_propose.register(sub)
+    for name in (*views.COMMANDS, *commands_propose.COMMANDS):
+        sub.choices[name].add_argument("--confirm", metavar="GRAPHKEY", help=CONFIRM_HELP)
     return p
 
 

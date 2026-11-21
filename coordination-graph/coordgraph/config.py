@@ -72,6 +72,7 @@ class Config:
     kb_budget_s: float
     kb_http_timeout_s: float
     hook_disabled: bool
+    shared_confirm: str | None = None  # COORDGRAPH_SHARED_CONFIRM: the standing (env) shared-instance confirmation
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
@@ -100,4 +101,5 @@ class Config:
             kb_budget_s=_float(env, "COORDGRAPH_KB_BUDGET_S", 10.0),
             kb_http_timeout_s=timeout,
             hook_disabled=disabled,
+            shared_confirm=(env.get("COORDGRAPH_SHARED_CONFIRM") or "").strip() or None,
         )

@@ -2,18 +2,21 @@
 
 Exit codes, the same for all four commands: 0 everything settled, 2 not complete (a section pending, refused or
 failed, or for `kb-status` anything flagged: the hook turns this into its "say so" message), 1 the command itself
-could not run. The mirror graph goes through `store.connect` (ephemeral targets only) and falkor-chat's REST
-endpoint must be a loopback, non-shared one too (`store.require_ephemeral_kb_url`); its graph is read by read-only
-queries on `$COORDGRAPH_KB_GRAPH` through the same connection. Imports no `wilib`.
+could not run. The mirror graph goes through `store.open_graph`: ephemeral by default, the shared instance only
+with a confirmation equal to the graph key (`commands_store.confirmation`; `kb-reconcile` takes the flag only).
+falkor-chat's REST endpoint must match the mode: a loopback, non-shared one when ephemeral
+(`store.require_ephemeral_kb_url`), the real one when shared (`store.require_shared_kb_url`); its graph is read by
+read-only queries on `$COORDGRAPH_KB_GRAPH` through the same connection. Imports no `wilib`.
 """
 from __future__ import annotations
 
 import fcntl
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
-from . import kbsync, store
+from . import commands_store, kbsync, store
 from .config import Config
 from .discover import kb_files
 from .parse.kb import KbDoc, parse_kb
@@ -24,12 +27,18 @@ def _build(args):
     cfg = Config.from_env()
     key = getattr(args, "graph", None) or cfg.key
     root = Path(getattr(args, "repo_root", None) or cfg.repo_root)
-    db, graph = store.connect(cfg.falkordb_host, cfg.falkordb_port, key)
-    return cfg, root, db, graph
+    confirm = commands_store.confirmation(args, cfg)
+    db, graph = store.open_graph(cfg.falkordb_host, cfg.falkordb_port, key, confirm)
+    return replace(cfg, shared_confirm=confirm), root, db, graph
 
 
 def _engine(cfg: Config, db, graph) -> kbsync.KbSync:
-    store.require_ephemeral_kb_url(cfg.kb_url)  # the mirror is ephemeral-only: so must its falkor-chat be
+    # the falkor-chat endpoint must match the mirror's mode (`_build` put the effective confirmation on `cfg`):
+    # scratch with an ephemeral mirror, the real one with the shared
+    if cfg.shared_confirm is None:
+        store.require_ephemeral_kb_url(cfg.kb_url)
+    else:
+        store.require_shared_kb_url(cfg.kb_url)
     http = kbsync.KbHttp(cfg.kb_url, cfg.kb_http_timeout_s)
     return kbsync.KbSync(graph, http, kbsync.Observer(db.select_graph(cfg.kb_graph)), budget_s=cfg.kb_budget_s)
 
@@ -67,11 +76,15 @@ def _report(outcomes: list[kbsync.KbOutcome], name: str, verbose: bool = False) 
     return 2 if bad else 0
 
 
-def detach_finish(cfg: Config, popen=subprocess.Popen) -> None:
-    """Launch `coordgraph kb-finish` detached, never holding the caller's pipes (plan 3.2, P2-M1)."""
+def detach_finish(cfg: Config, confirm: str | None = None, popen=subprocess.Popen) -> None:
+    """Launch `coordgraph kb-finish` detached, never holding the caller's pipes (plan 3.2, P2-M1).
+
+    A shared-mode run given `--confirm` hands it on, so the child targets the same instance (an env
+    confirmation is inherited as it is)."""
     cfg.state_dir.mkdir(parents=True, exist_ok=True)
     log = open(cfg.state_dir / "hook.log", "ab")  # noqa: SIM115 - handed to the child
-    popen([sys.executable, "-m", "coordgraph", "kb-finish"], start_new_session=True, stdin=subprocess.DEVNULL,
+    argv = [sys.executable, "-m", "coordgraph", "kb-finish", *([] if confirm is None else ["--confirm", confirm])]
+    popen(argv, start_new_session=True, stdin=subprocess.DEVNULL,
           stdout=log, stderr=log)
 
 
@@ -97,7 +110,8 @@ def kb_sync_cmd(args) -> int:
                 outcomes.append(kbsync.KbOutcome(doc.path, "(file)", "failed", f"{type(exc).__name__}: {exc}"))
     code = _report(outcomes, "kb-sync", getattr(args, "verbose", False))
     if code and getattr(args, "detach_finish", False) and any(o.status == "pending" for o in outcomes):
-        detach_finish(cfg)
+        confirm = getattr(args, "confirm", None)
+        detach_finish(cfg) if confirm is None else detach_finish(cfg, confirm)
     return code
 
 
@@ -124,6 +138,7 @@ def kb_status_cmd(args) -> int:
 def kb_reconcile_cmd(args) -> int:
     """`coordgraph kb-reconcile`: mapping vs falkor-chat (re-ingest, adopt, report non-current and orphans)."""
     try:
+        commands_store.confirmation(args, Config.from_env(), flag_only=True)  # the re-seed needs the flag itself
         cfg, root, db, graph = _build(args)
         engine = _engine(cfg, db, graph)
         docs, outcomes = load_docs(root)

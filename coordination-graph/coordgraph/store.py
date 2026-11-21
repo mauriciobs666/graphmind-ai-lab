@@ -36,6 +36,8 @@ POLL_TIMEOUT_S = 5.0
 SHARED_PORTS = frozenset({6379, 6390, 3000})
 SHARED_KB_PORTS = frozenset({8200})  # the real falkor-chat (`COORDGRAPH_KB_URL`'s default)
 EPHEMERAL_ENV = "COORDGRAPH_EPHEMERAL_PORT"
+SHARED_CONFIRM_ENV = "COORDGRAPH_SHARED_CONFIRM"
+LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 # note section 4.2. UNIQUE entries get their supporting RANGE index first (index before constraint).
 UNIQUE: tuple[tuple[str, str], ...] = (
@@ -97,12 +99,12 @@ def require_ephemeral(host: str, port: int, env: Mapping[str, str] | None = None
     """Refuse any endpoint but an explicitly announced ephemeral one.
 
     Allowed only on loopback, when `COORDGRAPH_EPHEMERAL_PORT` names exactly this port, and never on
-    a shared port (6379 and the other known shared instances). S8a's first load into the shared
-    instance needs a deliberate, separate override; this guard has none.
+    a shared port (6379 and the other known shared instances). The shared instance is reached only through
+    `connect_shared`; this guard has no override.
     """
     env = os.environ if env is None else env
     declared = (env.get(EPHEMERAL_ENV) or "").strip()
-    if host not in ("localhost", "127.0.0.1", "::1"):
+    if host not in LOOPBACK_HOSTS:
         raise RefusedEndpoint(f"refusing non-loopback FalkorDB host {host!r}")
     if port in SHARED_PORTS:
         raise RefusedEndpoint(f"refusing shared FalkorDB port {port}")
@@ -120,7 +122,7 @@ def require_ephemeral_kb_url(url: str) -> None:
     named together: loopback host, and not a shared falkor-chat port (the unset default is one).
     """
     parts = urlsplit(url)
-    if parts.hostname not in ("localhost", "127.0.0.1", "::1"):
+    if parts.hostname not in LOOPBACK_HOSTS:
         raise RefusedEndpoint(f"refusing non-loopback falkor-chat host {parts.hostname!r} for an ephemeral mirror")
     if parts.port in SHARED_KB_PORTS:
         raise RefusedEndpoint(
@@ -136,6 +138,58 @@ def connect(host: str, port: int, key: str, env: Mapping[str, str] | None = None
 
     db = FalkorDB(host=host, port=port)
     return db, db.select_graph(key)
+
+
+def require_shared(host: str, port: int, key: str, confirm: str | None, env: Mapping[str, str] | None = None) -> None:
+    """Authorize one deliberate connection to the shared instance (the counterpart of `require_ephemeral`).
+
+    `confirm` must be exactly the graph key about to be written: a typo, a stale value or a copy from another
+    key refuses. Loopback only. Never alongside an ephemeral declaration: `COORDGRAPH_EPHEMERAL_PORT` set means
+    the caller believes it is on a scratch instance, so both at once is a mistake, not a mode.
+    """
+    env = os.environ if env is None else env
+    if host not in LOOPBACK_HOSTS:
+        raise RefusedEndpoint(f"refusing non-loopback FalkorDB host {host!r}")
+    if (env.get(EPHEMERAL_ENV) or "").strip():
+        raise RefusedEndpoint(f"refusing shared access while {EPHEMERAL_ENV} is set: pick one of the two modes")
+    if not key or confirm != key:
+        raise RefusedEndpoint(
+            f"refusing shared FalkorDB {host}:{port}: --confirm / {SHARED_CONFIRM_ENV} must equal the graph key "
+            f"{key!r}, got {confirm!r}"
+        )
+
+
+def connect_shared(host: str, port: int, key: str, confirm: str | None, env: Mapping[str, str] | None = None):
+    """`(db, graph)` for the shared instance; raises `RefusedEndpoint` unless `confirm == key`."""
+    require_shared(host, port, key, confirm, env)
+    from falkordb import FalkorDB  # lazy: offline paths never import it
+
+    db = FalkorDB(host=host, port=port)
+    return db, db.select_graph(key)
+
+
+def open_graph(host: str, port: int, key: str, confirm: str | None = None, env: Mapping[str, str] | None = None):
+    """The one choke point commands use: ephemeral by default, shared only when `confirm` is given.
+
+    `confirm=None` is `connect` (the ephemeral guard, unchanged); any other value, even an empty one, is
+    `connect_shared`, so a blank or wrong confirmation refuses instead of silently falling back.
+    """
+    if confirm is None:
+        return connect(host, port, key, env)
+    return connect_shared(host, port, key, confirm, env)
+
+
+def require_shared_kb_url(url: str) -> None:
+    """The shared-mode counterpart of `require_ephemeral_kb_url`: the mirror is the shared graph, so the KB
+    endpoint must be the real falkor-chat (loopback, a shared falkor-chat port), never a scratch one."""
+    parts = urlsplit(url)
+    if parts.hostname not in LOOPBACK_HOSTS:
+        raise RefusedEndpoint(f"refusing non-loopback falkor-chat host {parts.hostname!r}")
+    if parts.port not in SHARED_KB_PORTS:
+        raise RefusedEndpoint(
+            f"refusing falkor-chat port {parts.port} for a shared mirror: COORDGRAPH_KB_URL must be the shared "
+            f"falkor-chat ({', '.join(str(p) for p in sorted(SHARED_KB_PORTS))})"
+        )
 
 
 # --- the write boundary -------------------------------------------------------------------

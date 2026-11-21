@@ -2,9 +2,11 @@
 
 Each takes an `argparse.Namespace`-like object and returns an exit code. Optional attributes
 (read with `getattr`): `repo_root`, `graph` (overrides `COORDGRAPH_KEY`), `manifest` (a path to
-write the `(path, sha256)` manifest to). Every connection goes through `store.connect`, so only an
-explicitly announced ephemeral FalkorDB is ever reached. `sync` and `rebuild` import no `wilib`; the
-read commands (`drift`, `query`) load `identity` lazily for the header's registry line.
+write the `(path, sha256)` manifest to), `confirm` (`--confirm GRAPHKEY`). Every connection goes through
+`store.open_graph`: an explicitly announced ephemeral FalkorDB by default, the shared instance only when a
+confirmation equal to the graph key is given (`--confirm`, or the standing `COORDGRAPH_SHARED_CONFIRM` for the
+routine commands; `bootstrap`, `rebuild` and `kb-reconcile` accept the flag only). `sync` and `rebuild` import no
+`wilib`; the read commands (`drift`, `query`) load `identity` lazily for the header's registry line.
 """
 from __future__ import annotations
 
@@ -16,12 +18,31 @@ from .config import Config
 from .scope import load_legacy_paths
 
 
+def confirmation(args, cfg: Config, *, flag_only: bool = False) -> str | None:
+    """The shared-instance confirmation for this run, or `None` (ephemeral mode).
+
+    The command-line flag always wins. The standing env value (`COORDGRAPH_SHARED_CONFIRM`, what the
+    non-interactive hook sets) authorizes only the routine commands: a `flag_only` command (the first load,
+    the destructive rebuild, the KB re-seed) refuses it rather than falling back to ephemeral mode.
+    """
+    flag = getattr(args, "confirm", None)
+    if flag is not None:
+        return flag
+    if cfg.shared_confirm is not None and flag_only:
+        raise store.RefusedEndpoint(
+            "refusing to act on COORDGRAPH_SHARED_CONFIRM alone: this command needs "
+            f"--confirm {cfg.shared_confirm!r} on the command line"
+        )
+    return cfg.shared_confirm
+
+
 def bootstrap(args) -> int:
-    """`coordgraph bootstrap`: indexes, UNIQUE constraints, `SyncState`; idempotent. Ephemeral targets only."""
+    """`coordgraph bootstrap`: indexes, UNIQUE constraints, `SyncState`; idempotent. Shared only with `--confirm`."""
     cfg = Config.from_env()
     key = getattr(args, "graph", None) or cfg.key
     try:
-        db, graph = store.connect(cfg.falkordb_host, cfg.falkordb_port, key)
+        confirm = confirmation(args, cfg, flag_only=True)
+        db, graph = store.open_graph(cfg.falkordb_host, cfg.falkordb_port, key, confirm)
         result = store.bootstrap(db, graph, key)
     except store.StoreError as exc:
         print(f"bootstrap: {exc}", file=sys.stderr)
@@ -45,12 +66,13 @@ def rebuild_dry_run(args) -> int:
     return 0 if report.ok else 1
 
 
-def _target(args):
+def _target(args, *, flag_only: bool = False):
     """`(cfg, key, root, db, graph)`; raises `store.StoreError` (incl. `RefusedEndpoint`) or a connection error."""
     cfg = Config.from_env()
     key = getattr(args, "graph", None) or cfg.key
     root = Path(getattr(args, "repo_root", None) or cfg.repo_root)
-    db, graph = store.connect(cfg.falkordb_host, cfg.falkordb_port, key)
+    confirm = confirmation(args, cfg, flag_only=flag_only)
+    db, graph = store.open_graph(cfg.falkordb_host, cfg.falkordb_port, key, confirm)
     return cfg, key, root, db, graph
 
 
@@ -90,7 +112,7 @@ def rebuild_cmd(args) -> int:
     if getattr(args, "dry_run", False):
         return rebuild_dry_run(args)
     try:
-        cfg, key, root, db, graph = _target(args)
+        cfg, key, root, db, graph = _target(args, flag_only=True)
         result = sync.rebuild(db, graph, key, sync.Parser.for_root(root))
     except Exception as exc:  # noqa: BLE001
         return _fail("rebuild", exc)

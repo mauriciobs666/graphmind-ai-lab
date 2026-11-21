@@ -8,7 +8,9 @@ from ..discover import component_of, slug_of
 from .header import Header, parse_header
 
 # Bumping forces `sync --all` to re-parse every source (graph note section 2.2, G6).
-PARSER_VERSION = 1
+# 2: bumped before the first shared-instance load (stakeholder, 2026-11-20); nothing mirrored under 1
+# exists outside ephemeral containers.
+PARSER_VERSION = 2
 
 
 def decode(raw: bytes) -> str:

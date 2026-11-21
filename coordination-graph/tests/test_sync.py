@@ -440,3 +440,17 @@ def test_a_read_view_with_a_bogus_work_items_root_reports_registry_unavailable(r
     out = run_py(code, {"COORDGRAPH_WI_ROOT": "/nonexistent", "COORDGRAPH_REPO_ROOT": str(repo)})
     assert out.returncode == 0, out.stderr
     assert out.stdout.count("Registry: unavailable — identities compared as written") == 2, out.stdout
+
+
+def test_parser_version_is_2_so_a_store_written_under_1_re_syncs_every_source():
+    """Bumped before the first shared-instance load (S8-pre): a graph stamped 1 is stale to `sync` and `drift`."""
+    assert PARSER_VERSION == 2
+
+
+def test_a_source_stamped_parser_version_1_is_resynced(repo):
+    g = MemGraph()
+    sync.sync_all(g, parser(repo))
+    for path in (L, B, R):
+        g.sources[path][1]["parserVersion"] = 1
+    assert statuses(sync.sync_all(g, parser(repo))) == {L: "synced", B: "synced", R: "synced"}
+    assert {m["parserVersion"] for _, m, _ in g.sources.values()} == {2}

@@ -2,6 +2,26 @@
 
 > Dated log of actual changes to the `coordination-graph` component. Most recent first.
 
+## 2026-11-20 — S8-pre: deliberate shared-instance path; `PARSER_VERSION` 1 -> 2
+
+Pre-work for S8a/S8 (`claude/docs/plans/coordination-graph.md` S8a/S8 rows; graph note v4 §5.5; impl review `## S3b`
+decision on `connect_shared`, `## S6` F1). Stakeholder decisions (2026-11-20): build a separate, explicit shared path
+so the ephemeral guard stays unweakened; bump `PARSER_VERSION` before the first shared load.
+
+- `store.connect_shared(host, port, key, confirm)` / `require_shared`: loopback only, `confirm` must equal the graph
+  key exactly, refused while `COORDGRAPH_EPHEMERAL_PORT` is set. `store.open_graph(..., confirm=None)` is the one
+  choke point the commands use: `None` is `connect` (the ephemeral guard, byte-for-byte unchanged), anything else,
+  even `""`, is `connect_shared`. KB counterpart `store.require_shared_kb_url` (loopback, port 8200 only); the
+  engine picks the check from the mirror's mode, so a shared mirror never pairs with a scratch falkor-chat or the reverse.
+- CLI: `--confirm GRAPHKEY` on every store-backed command; `COORDGRAPH_SHARED_CONFIRM` is the same value as a
+  standing env setting, honoured by the routine commands only. `bootstrap`, `rebuild` and `kb-reconcile` refuse
+  the env alone and need the flag. A detached `kb-finish` inherits a flag confirmation.
+- `PARSER_VERSION` is 2: every graph stamped 1 re-syncs on the next `sync`/`drift`. `tests/test_requirements.py`
+  now reads the constant instead of pinning 1; `tests/test_sync.py` pins 2 and the 1 -> 2 resync.
+- How the non-interactive hook is authorized on the shared instance is not decided here (S8 design question).
+- Verified: 1009 offline tests (955 before; 52 new in `tests/test_shared.py`, 2 in `test_sync.py`), no database
+  connection in any new test.
+
 ## 2026-11-20 — S7a: read views (`views.py`)
 
 Delivered base-plan step S7a (`claude/docs/plans/coordination-graph.md` §3.4/§3.4a, FR-6/FR-8/FR-9/FR-12, AC-5/AC-6/AC-7/AC-9;
