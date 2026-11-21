@@ -139,8 +139,8 @@ refuse a non-loopback `COORDGRAPH_KB_URL`, and refuse port **8200** (the real fa
 default when the variable is unset). For a rehearsal, start a scratch falkor-chat (the live
 fixture does this) and point `COORDGRAPH_KB_URL` at its loopback URL, with
 `COORDGRAPH_FALKORDB_PORT` and `COORDGRAPH_EPHEMERAL_PORT` set to the ephemeral container's port.
-In shared mode the rule inverts: `COORDGRAPH_KB_URL=http://localhost:8200` (the real falkor-chat,
-which fronts `falkordb-dev` on 6379) must be set explicitly, and any other URL refuses.
+In shared mode the rule inverts: `COORDGRAPH_KB_URL` defaults to `http://localhost:8200` (the real
+falkor-chat, which fronts `falkordb-dev` on 6379), so nothing needs exporting, and any other URL refuses.
 Writes use producer `kb-mirror`.
 
 ## Configuration
@@ -171,13 +171,16 @@ stakeholder (plan S8, `claude/docs/plans/coordination-graph.md` §3.2), and unti
 fires it. Where it fires (S0 probe, FR-4) is not recorded here.
 
 - **Fast path.** A call that changed nothing runs one pruned `find -newer .state/stamp` over the
-  repo (plus the KB registry) and exits 0: no Python, no database. **Measured 2026-11-21, to process
-  exit, on this repo** (4,424 files after pruning `.git`, `node_modules`, hidden dirs, `archive/` and
-  root `deprecated/`; a scratch state dir, the CLI stubbed out): 20 consecutive calls 10.8-13.4 ms
-  (median 11.4); an earlier run of five on the same tree 22-31 ms, and 77 ms for the first call after
-  idle (cold cache). The offline and live tests assert < 50 ms for each of 20 calls, to pipe EOF, on a
-  tmp tree. If a busier tree misses 50 ms, the plan's recorded fallback is a `find` restricted to the
-  directories that hold sources (§R2).
+  repo (plus the KB registry) and exits 0: no Python, no database. The script needs **bash 5**
+  (`EPOCHSECONDS`, `EPOCHREALTIME`, `${v,,}`). **Measured 2026-11-21 to process exit** (python
+  `subprocess`, 20 calls per row, this repo as root: 4,467 files after pruning, a scratch state dir,
+  the CLI stubbed, other work running on the machine), by size of the `PostToolUse` payload on
+  stdin: 1 KB median 12.9 ms, 30 KB 12.6, 300 KB 15.9, 2 MB 32.7. The payload is read with `cat`:
+  the earlier `read -r -d ''` took a pipe a byte at a time and cost 12.0, 16.1, 95.9 and 535.1 ms
+  at the same sizes. The tests pin the structure (no CLI call) and a relative bound (a 300 KB payload
+  within 8x the best small call plus 20 ms) rather than a wall time, which CPU load inflates; the
+  no-change test asserts the best of 20 calls is under 50 ms. If a busier tree misses 50 ms, the
+  plan's recorded fallback is a `find` restricted to the directories that hold sources (§R2).
 - **A changed mirrored file** (coordination glob set or KB registry) runs `hook-sync` in the
   foreground under `timeout 50`. It pings FalkorDB (1 s), and for a changed KB file also falkor-chat
   `/health` and the embedder `/models` (2 s each); a down dependency marks the files it serves
@@ -188,7 +191,12 @@ fires it. Where it fires (S0 probe, FR-4) is not recorded here.
   an edited mirrored file could not be synced or is pending; **every such edit warns again**, no
   throttle. A call that edited no mirrored file never warns or waits. An exit other than 0/2 from
   `hook-sync` (venv missing, exception, killed by the timeout) is the hook's own fault: the shell
-  exits 2 naming every file and queues them in `failed.pending`.
+  exits 2 naming up to 20 files (then "and N more") and queues them all in `failed.pending`.
+  **A guard refusal is not an outage:** `hook-sync` exits 2 with "refused by the guard: <reason>"
+  (also written to `hook.log`), queues nothing and promises no retry (for instance
+  `COORDGRAPH_EPHEMERAL_PORT` exported in the hook's environment); a first run asks again after 15
+  minutes, not one. Edits refused meanwhile are healed by `coordgraph sync <file>` or `sync --all`.
+  The guard runs before the FalkorDB ping, so a refused run sends nothing to the listener.
 - **Failure state** in `$COORDGRAPH_STATE_DIR` (default `coordination-graph/.state/`):
   `failed.json` (per repo-relative path: `sha256`, `error`, `attempts`, `nextRetryAt`), `failed.pending`
   (the shell's lock-guarded append), `retry-due` (epoch seconds), `stamp`, `hook.log`, the locks.
@@ -212,10 +220,11 @@ fires it. Where it fires (S0 probe, FR-4) is not recorded here.
 - **Not covered, by construction:** an edit outside Claude Code (the sync header flags it), a file
   deletion, a worktree edit before it is merged (the root is `$CLAUDE_PROJECT_DIR`, never the
   payload `cwd`).
-- **Test seams** (the script only): `COORDGRAPH_HOOK_CLI` (entry point) and
-  `COORDGRAPH_HOOK_TIMEOUT_S` (the 50 s bound). Live tests use a shim that drops the
+- **Test seams** (the script only; **never set in production**): `COORDGRAPH_HOOK_CLI` (entry
+  point) and `COORDGRAPH_HOOK_TIMEOUT_S` (the 50 s bound; anything but a positive integer means
+  50). Live tests use a shim that drops the
   `--confirm coordination` pair, because the guard refuses it on an ephemeral port.
 
-The first load into the shared instance (plan S8a) and the hook's go-live (`sync --all`, stamp
-initialisation, after the stakeholder registers it) are not part of this component's code and have
-not been run here.
+The first load into the shared instance is done (S8a step 5: 548 sources, parity ok); only the KB
+sync is still open. The hook's go-live (the stakeholder registers it, then the stamp is initialised)
+is not part of this component's code and has not been run here.

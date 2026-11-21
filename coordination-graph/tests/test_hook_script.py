@@ -88,7 +88,9 @@ def h(tmp_path):
     return hook
 
 
-def test_nothing_changed_is_exit_0_with_no_call_and_under_50_ms(h):
+def test_nothing_changed_is_exit_0_with_no_call_and_fast(h):
+    # structure pins "no Python"; the latency bound uses the BEST of 20 runs, which CPU load cannot inflate the
+    # way it inflates a maximum (REVIEW.md timing rule). The recorded figures live in the README.
     h.put(L, mtime=time.time() - 500)
     times = []
     for _ in range(20):
@@ -96,7 +98,22 @@ def test_nothing_changed_is_exit_0_with_no_call_and_under_50_ms(h):
         assert r.returncode == 0 and r.stdout == "" and r.stderr == ""
         times.append(r.elapsed)
     assert h.calls() == []
-    assert max(times) < 0.05, times
+    assert min(times) < 0.05, times
+
+
+def test_a_large_payload_does_not_slow_the_no_change_path(h):
+    # bash reads a pipe a byte at a time with `read -d ''`: cost linear in the payload (~100 ms at 300 KB, ~25x a
+    # small call). A relative measure of best-of-7 interleaved runs: load scales both sides alike.
+    h.put(L, mtime=time.time() - 500)
+    big = '{"tool_response":"' + "x" * 300_000 + '"}'
+    small, large = [], []
+    for _ in range(7):
+        small.append(h.run().elapsed)
+        r = h.run(payload=big)
+        assert r.returncode == 0 and r.stderr == ""
+        large.append(r.elapsed)
+    assert h.calls() == []
+    assert min(large) < 8 * min(small) + 0.02, (min(small), min(large))
 
 
 # --- kill switch -------------------------------------------------------------------------------------------
@@ -350,3 +367,51 @@ def test_a_write_naming_a_file_that_never_failed_or_lies_outside_the_root_does_n
     h.run(payload=edit_payload(h.root / L))
     h.run(payload=edit_payload("/elsewhere/a/docs/plans/x-coordination.md"))
     assert h.calls() == []
+
+
+# --- hardening of the seams and the failure message ---------------------------------------------------------------
+
+@pytest.mark.parametrize("bad", ["abc", "", "-5", "1.5", "5s"])
+def test_a_non_numeric_timeout_falls_back_to_the_default_not_to_timeouts_exit_125(h, bad):
+    h.put(L)
+    r = h.run(COORDGRAPH_HOOK_TIMEOUT_S=bad)
+    assert r.returncode == 0 and r.stderr == "" and len(h.calls()) == 1
+
+
+def test_a_first_run_that_faults_names_a_few_files_and_the_count_not_all_of_them(h):
+    h.stamp.unlink()
+    for i in range(40):
+        h.put(f"d{i}/docs/BACKLOG.md", mtime=time.time() - 9000)
+    h.script("hook-sync", rc=1)
+    r = h.run()
+    assert r.returncode == 2 and len(r.stderr.splitlines()) < 30 and "and 2" in r.stderr and "more" in r.stderr
+    assert len((h.state / "failed.pending").read_text().split()) == 40  # every file is still queued
+
+
+def test_the_script_says_it_needs_bash_5_and_that_both_seams_are_never_set_in_production():
+    head = HOOK.read_text().split("set -u")[0]
+    assert "bash 5" in head.lower() and "never set in production" in head
+
+
+def test_the_shell_discovery_equals_the_python_discovery_on_one_tree(h):
+    from coordgraph.discover import discover, kb_files
+
+    old = time.time() - 9000
+    covered = ["a/docs/plans/x-coordination.md", "docs/plans/top-coordination.md", "a/b/docs/reviews/r-impl.md",
+               "docs/reviews/r.md", "a/docs/requirements/q.md", "docs/BACKLOG.md", "a/docs/BACKLOG.md",
+               "claude/cobb/kaizen/plan.md"]
+    uncovered = ["a/docs/notes.md", "a/docs/plans/x.md", "archive/docs/BACKLOG.md", "a/archive/docs/reviews/r.md",
+                 "deprecated/docs/BACKLOG.md", ".git/docs/BACKLOG.md", "n/node_modules/docs/BACKLOG.md",
+                 ".venv/docs/BACKLOG.md", ".h/docs/BACKLOG.md", "x/claude/cobb/kaizen/plan.md",
+                 "claude/cobb/kaizen/history.md", "a/docs/reviews/deep/r.md", "a/docs/reviews/r.txt"]
+    for rel in covered + uncovered:
+        h.put(rel, mtime=old)
+    h.put("coordination-graph/kb-files.txt", "# r\nkb/a.md\n\nkb/gone.md\n", mtime=old)
+    h.put("kb/a.md", mtime=old)
+    h.stamp.unlink()
+    h.set_stamp(old - 1000)
+    h.run()
+    (call,) = h.calls()
+    shell = set(call.split(" | ")[0].split("--confirm coordination ")[1].split(" "))
+    python = {f.path for f in discover(h.root)} | {p for p in kb_files(h.root) if (h.root / p).is_file()}
+    assert shell == python and shell >= set(covered) and not shell & set(uncovered)

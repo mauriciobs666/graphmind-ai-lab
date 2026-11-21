@@ -50,6 +50,7 @@ def env(tmp_path, monkeypatch):
         return None, graph
 
     monkeypatch.setattr(store, "open_graph", open_graph)
+    monkeypatch.setattr(store, "require_endpoint", lambda *a, **k: None)
     monkeypatch.setattr(commands_hook, "ping", lambda host, port, timeout=1.0: None)
     monkeypatch.setattr(commands_hook.time, "time", lambda: NOW)
     put(tmp_path, ".work-items/project.json", json.dumps({"key": "GAL", "legacy_paths": {}}))
@@ -178,13 +179,68 @@ def test_one_failing_file_does_not_stop_the_others(env, capsys):
     assert L in capsys.readouterr().err
 
 
-def test_a_refused_endpoint_is_a_failure_naming_the_guard(env, monkeypatch, capsys):
+def refuse_guard(monkeypatch, reason="refusing shared access while COORDGRAPH_EPHEMERAL_PORT is set"):
     def refuse(*a, **k):
-        raise store.RefusedEndpoint("refusing shared FalkorDB: --confirm must equal the graph key")
+        raise store.RefusedEndpoint(reason)
 
-    monkeypatch.setattr(store, "open_graph", refuse)
+    monkeypatch.setattr(store, "require_endpoint", refuse)
+
+
+def test_a_refused_endpoint_is_reported_as_a_refusal_not_an_outage_and_is_never_queued(env, monkeypatch, capsys):
+    refuse_guard(monkeypatch)
     assert cli.main(["hook-sync", L]) == 2
-    assert "refusing shared FalkorDB" in capsys.readouterr().err and L in failed(env)
+    cap = capsys.readouterr()
+    assert "refused by the guard" in cap.err and "COORDGRAPH_EPHEMERAL_PORT" in cap.err and L in cap.err
+    assert "retried automatically" not in cap.err and "COORDGRAPH_HOOK_DISABLED=1" in cap.err
+    assert "refused by the guard" in cap.out  # stdout is the shell's hook.log
+    assert not env.state.failed_json.exists() and not env.state.retry_due.exists()
+
+
+def test_a_refusal_does_not_touch_entries_already_in_the_failure_state(env, monkeypatch):
+    env.state.ensure()
+    entry = {"sha256": "x", "error": "e", "attempts": 2, "nextRetryAt": NOW - 1}
+    env.state.save_failed({L: dict(entry)})
+    env.state.write_retry_due(int(NOW) + 60)  # the shell's bump before it forked this retry
+    refuse_guard(monkeypatch)
+    assert cli.main(["retry-failed"]) == 0
+    assert failed(env) == {L: entry}
+    assert env.state.retry_due.read_text().strip() == str(int(NOW) + 60)  # not rewritten to the past: no fork per call
+
+
+def test_the_guard_runs_before_the_ping(env, monkeypatch):
+    refuse_guard(monkeypatch)
+    monkeypatch.setattr(commands_hook, "ping", lambda *a, **k: pytest.fail("pinged before the guard"))
+    assert cli.main(["hook-sync", L]) == 2
+
+
+def test_a_refused_run_never_connects_to_a_listener_on_a_non_shared_port(env, monkeypatch, capsys):
+    monkeypatch.undo()  # real guard, real ping
+    monkeypatch.setenv("COORDGRAPH_REPO_ROOT", str(env.root))
+    monkeypatch.setenv("COORDGRAPH_STATE_DIR", str(env.root / "state"))
+    for name in ("COORDGRAPH_SHARED_CONFIRM", "COORDGRAPH_EPHEMERAL_PORT", "COORDGRAPH_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    srv.settimeout(0.5)
+    monkeypatch.setenv("COORDGRAPH_FALKORDB_PORT", str(srv.getsockname()[1]))
+    try:
+        assert cli.main(["hook-sync", "--confirm", "coordination", L]) == 2
+        with pytest.raises(socket.timeout):
+            srv.accept()  # nobody connected
+    finally:
+        srv.close()
+    assert "not a shared instance port" in capsys.readouterr().err
+
+
+def test_a_first_run_refused_by_the_guard_is_loud_logged_and_asks_again_only_after_15_minutes(env, monkeypatch,
+                                                                                            capsys):
+    refuse_guard(monkeypatch, "nope")
+    assert cli.main(["hook-sync", "--first-run"]) == 2
+    cap = capsys.readouterr()
+    assert "refused by the guard: nope" in cap.err and "refused by the guard: nope" in cap.out
+    assert not env.state.stamp.exists() and env.state.retry_due.read_text().strip() == str(int(NOW + 900))
+    assert not env.state.failed_json.exists()
 
 
 def test_the_shells_pending_paths_are_merged_into_failed_json_by_the_next_run(env):
@@ -218,12 +274,6 @@ def test_first_run_with_the_mirror_down_is_silent_leaves_no_stamp_and_waits_a_mi
     assert cap.err == "" and cap.out == ""
     assert not env.state.stamp.exists() and env.state.retry_due.read_text().strip() == str(int(NOW + 60))
     assert not env.state.failed_json.exists()
-
-
-def test_first_run_refused_by_a_guard_is_loud_but_once_a_minute(env, monkeypatch, capsys):
-    monkeypatch.setattr(store, "open_graph", lambda *a, **k: (_ for _ in ()).throw(store.RefusedEndpoint("nope")))
-    assert cli.main(["hook-sync", "--first-run"]) == 2
-    assert "nope" in capsys.readouterr().err and not env.state.stamp.exists()
 
 
 def test_first_run_with_nothing_edited_and_kb_services_down_exits_0_without_a_warning(env, monkeypatch, capsys):

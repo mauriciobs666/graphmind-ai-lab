@@ -11,7 +11,8 @@
 # Root is $CLAUDE_PROJECT_DIR, never the payload's cwd. The shared-instance confirmation is this script's own
 # decision: the LITERAL key below, passed as a flag, never read from the environment and never exported.
 # COORDGRAPH_HOOK_CLI replaces the coordgraph entry point and COORDGRAPH_HOOK_TIMEOUT_S the 50 s foreground
-# bound (tests only).
+# bound: both are test seams, never set in production (a non-numeric timeout falls back to 50).
+# Needs bash 5 (EPOCHSECONDS, EPOCHREALTIME, ${v,,}).
 set -u
 
 HERE="${BASH_SOURCE[0]%/*}"
@@ -33,14 +34,21 @@ export COORDGRAPH_REPO_ROOT="$ROOT" COORDGRAPH_STATE_DIR="$STATE"
 unset COORDGRAPH_SHARED_CONFIRM  # the flag below is the only authority this hook acts on
 
 payload=""
-[ -t 0 ] || IFS= read -r -d '' payload || true
+# `read -d ''` takes a pipe a byte at a time (~100 ms per 300 KB); `cat` does not
+[ -t 0 ] || payload="$(cat)"
+
+COVERED='^((.*/)?docs/(plans/[^/]*-coordination|reviews/[^/]*|requirements/[^/]*)\.md|(.*/)?docs/BACKLOG\.md|claude/[^/]+/kaizen/plan\.md)$'
 
 # every mirrored file under $ROOT (newer than $1 when given), repo-relative, one per line
 discover() {
   local newer=()
   [ -n "${1:-}" ] && newer=(-newer "$1")
   local f
-  while IFS= read -r f; do printf '%s\n' "${f#"$ROOT"/}"; done < <(
+  while IFS= read -r f; do
+    f="${f#"$ROOT"/}"
+    # find's `*` also crosses `/`; discover.py's globs do not: keep exactly the shapes it covers
+    [[ $f =~ $COVERED ]] && printf '%s\n' "$f"
+  done < <(
     find "$ROOT" -mindepth 1 \( -type d \( -name '.?*' -o -name node_modules -o -name archive \
       -o -path "$ROOT/deprecated" \) -prune \) -o -type f "${newer[@]}" \( \
       -path '*/docs/plans/*-coordination.md' -o -path '*/docs/reviews/*.md' -o -path '*/docs/requirements/*.md' \
@@ -102,7 +110,9 @@ fi
 
 args=(hook-sync --confirm "$CONFIRM_KEY")
 if ((FIRST)); then args+=(--first-run --stamp-at "$START"); else args+=("${C[@]}"); fi
-err="$(timeout "${COORDGRAPH_HOOK_TIMEOUT_S:-50}" "$CLI" "${args[@]}" 2>&1 >>"$STATE/hook.log" </dev/null)"
+limit="${COORDGRAPH_HOOK_TIMEOUT_S:-}"
+[[ $limit =~ ^[0-9]+$ ]] && ((limit > 0)) || limit=50
+err="$(timeout "$limit" "$CLI" "${args[@]}" 2>&1 >>"$STATE/hook.log" </dev/null)"
 rc=$?
 
 fail=0
@@ -117,7 +127,8 @@ case $rc in
     echo $((NOW + 60)) >"$STATE/retry-due"
     {
       printf 'coordgraph failed: exit %s; see %s. Not synced (retried automatically):\n' "$rc" "$STATE/hook.log"
-      printf '  %s\n' "${C[@]}"
+      printf '  %s\n' "${C[@]:0:20}"
+      ((${#C[@]} > 20)) && printf '  ... and %s more (all queued in %s)\n' $((${#C[@]} - 20)) "$STATE/failed.pending"
       printf 'this update is not complete — say so\n'
     } >&2
     fail=1

@@ -28,6 +28,7 @@ from .hookstate import HookState, backoff_s, relative
 PING_TIMEOUT_S = 1.0  # fail fast (plan 3.2 step 5.1): FalkorDB 1 s, falkor-chat and the embedder 2 s each
 HEALTH_TIMEOUT_S = 2.0
 FIRST_RUN_RETRY_S = 60
+REFUSED_RETRY_S = 15 * 60  # a guard refusal is a configuration fact: asking again each minute only nags
 
 
 def ping(host: str, port: int, timeout: float = PING_TIMEOUT_S) -> None:
@@ -53,7 +54,7 @@ class Run:
     deferred: dict[str, float] = field(default_factory=dict)  # retry only: path -> epoch s it may be tried again
     reached: bool = False  # FalkorDB answered and the guard let us in
     silent: bool = False  # first run, FalkorDB down: say nothing, retry later
-    config_error: str | None = None  # first run, connection refused by a guard
+    refused: str | None = None  # the guard refused the endpoint: a policy fact, never queued as a retryable failure
 
     def fail_all(self, paths, reason: str, dep: str | None = None) -> None:
         for p in paths:
@@ -77,6 +78,11 @@ def process(args, cfg: Config, root: Path, paths: list[str], *, first_run: bool 
             present.append(p)
         else:
             run.ok.add(p)  # a gone file is dropped from the failure state; `sync --all` prunes the graph
+    try:  # the pure guard first: a refused configuration never sends a byte to whatever listens there
+        store.require_endpoint(cfg.falkordb_host, cfg.falkordb_port, key, confirm)
+    except store.RefusedEndpoint as exc:
+        run.refused = str(exc)
+        return run
     try:
         ping(cfg.falkordb_host, cfg.falkordb_port)
     except OSError as exc:
@@ -88,11 +94,11 @@ def process(args, cfg: Config, root: Path, paths: list[str], *, first_run: bool 
         return run
     try:
         db, graph = store.open_graph(cfg.falkordb_host, cfg.falkordb_port, key, confirm)
-    except Exception as exc:  # noqa: BLE001 - a refused endpoint is one clear line
-        if first_run:
-            run.config_error = str(exc)
-        else:
-            run.fail_all(present, str(exc))
+    except store.RefusedEndpoint as exc:
+        run.refused = str(exc)
+        return run
+    except Exception as exc:  # noqa: BLE001 - the connection failed after the ping
+        run.fail_all(present, str(exc))
         return run
     run.reached = True
     coord = [p for p in present if p not in kb_set]
@@ -199,6 +205,12 @@ def _message(run: Run) -> str:
     return "\n".join(lines)
 
 
+def _refusal(run: Run, paths: list[str]) -> str:
+    named = f" (not mirrored: {', '.join(paths[:5])}{' ...' if len(paths) > 5 else ''})" if paths else ""
+    return (f"coordgraph: refused by the guard: {run.refused}{named}; nothing is queued or retried: fix the "
+            "configuration, or set COORDGRAPH_HOOK_DISABLED=1 to silence the hook, then run `coordgraph sync <file>`")
+
+
 def hook_sync_cmd(args) -> int:
     """`coordgraph hook-sync [--first-run] [PATH...]`: sync the paths the shell found changed."""
     cfg = Config.from_env()
@@ -212,9 +224,12 @@ def hook_sync_cmd(args) -> int:
     if run.silent:  # nothing reachable and nothing known to be edited: no warning, retried after retry-due
         state.write_retry_due(int(now) + FIRST_RUN_RETRY_S)
         return 0
-    if run.config_error:
-        state.write_retry_due(int(now) + FIRST_RUN_RETRY_S)
-        print(f"coordgraph: {run.config_error}", file=sys.stderr)
+    if run.refused:
+        if args.first_run:
+            state.write_retry_due(int(now) + REFUSED_RETRY_S)
+        message = _refusal(run, [] if args.first_run else paths)
+        print(message)  # stdout is the shell's hook.log
+        print(message, file=sys.stderr)
         return 2
     record(state, root, run, now)
     if args.first_run:
@@ -244,6 +259,10 @@ def retry_failed_cmd(args) -> int:
         if not due:
             return 0
         run = process(args, cfg, root, due, retry=True)
+        if run.refused:  # leave the failure state as it is, and pace the next look (the pending merge above
+            state.write_retry_due(int(now) + FIRST_RUN_RETRY_S)  # rewrote retry-due to the past)
+            print(_refusal(run, []))
+            return 0
         record(state, root, run, now)
     for p, reason in sorted(run.failed.items()):
         print(f"retry-failed: {p}: {reason}")

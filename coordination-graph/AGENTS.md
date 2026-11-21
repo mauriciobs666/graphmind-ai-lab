@@ -10,8 +10,9 @@ consumers: `skills/coordination-graph/SKILL.md`.
 ## What is true now
 
 - **Built:** every subcommand in `README.md`, the shared-instance path (`--confirm`) and the
-  post-edit hook (`hooks/post-tool-sync.sh`, `hook-sync`, `retry-failed`). **Not done:** registering
-  the hook (the stakeholder applies `cobb`'s settings block) and the first load itself (S8a).
+  post-edit hook (`hooks/post-tool-sync.sh`, `hook-sync`, `retry-failed`). **Loaded:** the shared
+  mirror (S8a step 5, parity ok). **Not done:** registering the hook (the stakeholder applies
+  `cobb`'s settings block) and the KB sync.
 - **Tests run with this directory as the working directory**, never from the repo root (rootdir
   and `testpaths` would be wrong). Default run is offline (`-m 'not live'`); `live` needs Docker.
 
@@ -24,26 +25,24 @@ consumers: `skills/coordination-graph/SKILL.md`.
   `--confirm <key>` on a store-backed command, key = `coordination` and equal to the confirm,
   shared port, loopback, `COORDGRAPH_EPHEMERAL_PORT` unset. `COORDGRAPH_SHARED_CONFIRM` is the
   standing env form for routine commands only (`hook-sync` and `retry-failed` are routine);
-  `bootstrap`, `rebuild`, `kb-reconcile` need the flag. Shared KB needs
-  `COORDGRAPH_KB_URL=http://localhost:8200` explicit. Do not weaken either guard;
-  `tests/test_shared.py` pins both. `PARSER_VERSION` is 2.
-- **The hook script hard-codes `--confirm coordination`** (a literal, never env) and exports no
-  confirmation, so the guard refuses it on an ephemeral port: live tests use a shim that drops
-  that pair; `tests/test_hook_script.py` pins the literal. Its fast path is bash only, < 50 ms.
-  `COORDGRAPH_HOOK_CLI`/`_TIMEOUT_S` are test seams.
+  `bootstrap`, `rebuild`, `kb-reconcile` need the flag. Shared KB accepts only 8200, which is the
+  `COORDGRAPH_KB_URL` default. Do not weaken either guard; `tests/test_shared.py` pins both.
+- **The hook hard-codes `--confirm coordination`** (a literal, never env), so the guard refuses it
+  on an ephemeral port: live tests use a shim that drops that pair. A guard refusal is reported
+  as a refusal, never queued. Fast path: bash 5 only, payload read with `cat`; its shell globs
+  are tied to `discover.py` by a test. `COORDGRAPH_HOOK_CLI`/`_TIMEOUT_S`: test seams, never set.
 - **The sync path never imports `wilib`** (or `identity`): `sync`, `rebuild`, `kbsync`,
   `commands_kb` and `commands_hook` stay offline: a source's subgraph is a pure function of its
   file. Identity is resolved at read time only (`lint`, `history-coverage`, `drift`/`query` header, views,
-  `propose`). A test enforces the import rule; keep it passing.
+  `propose`). A test enforces it.
 - **Never run `migrate --apply` on real files or the real registry**: it allocates permanent
   IDs via `wi new`. Use `--dry-run`, or a scratch `COORDGRAPH_REPO_ROOT` and registry.
 - **Per-source atomic replace**: one statement per source; a failed replace leaves the previous
   subgraph, and one is skipped when sha256 and `parserVersion` match. `rebuild` forces every
   source, prunes, sweeps orphans and proves parity against a fresh parse, never the graph itself.
 - **The file wins.** A `⚠ drift` row or `Drift:` source means the graph lags; quote the file.
-- **Fixtures are built in `tmp_path`**, never checked in under a `docs/plans/`-shaped path
-  (discovery would treat them as sources).
-- **Do not edit the root `AGENTS.md` from here**; `teco` owns it under a net-zero word budget.
+- **Fixtures are built in `tmp_path`**, never under a `docs/plans/`-shaped path (they would be sources).
+- **Do not edit the root `AGENTS.md` from here**; `teco` owns it.
 
 ## Conventions
 
@@ -51,5 +50,4 @@ consumers: `skills/coordination-graph/SKILL.md`.
   config are stdlib only. The venv is this component's own (`setup.sh`), not shared.
 - Configuration is env-overridable through `coordgraph/config.py` (`COORDGRAPH_*`); tests set
   every value and never rely on the ambient environment.
-- Docs follow the module convention in the root `AGENTS.md`; this file is rewritten, not appended
-  to, and `docs/HISTORY.md` gets a dated entry per delivered step.
+- Docs follow the root `AGENTS.md` module convention; this file is rewritten, not appended to.

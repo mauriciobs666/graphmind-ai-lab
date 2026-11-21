@@ -176,6 +176,14 @@ def connect_shared(host: str, port: int, key: str, confirm: str | None, env: Map
     return db, db.select_graph(key)
 
 
+def require_endpoint(host: str, port: int, key: str, confirm: str | None, env: Mapping[str, str] | None = None) -> None:
+    """The pure guard `open_graph` applies, with no connection: lets a caller refuse before touching the network."""
+    if confirm is None:
+        require_ephemeral(host, port, env)
+    else:
+        require_shared(host, port, key, confirm, env)
+
+
 def open_graph(host: str, port: int, key: str, confirm: str | None = None, env: Mapping[str, str] | None = None):
     """The one choke point commands use: ephemeral by default, shared only when `confirm` is given.
 
