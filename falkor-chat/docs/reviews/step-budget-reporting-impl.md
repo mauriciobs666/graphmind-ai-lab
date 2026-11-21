@@ -1,6 +1,6 @@
 # Step-budget reporting (K-096) — implementation review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-096
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-096
 
 ## Scope & verdict
 

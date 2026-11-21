@@ -1,6 +1,6 @@
 # Review: GRAPH.CONFIG defaults for production (K-098 graph-dba note)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-098
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-098
 
 ## Scope and verdict
 

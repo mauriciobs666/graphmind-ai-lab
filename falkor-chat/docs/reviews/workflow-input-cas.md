@@ -1,6 +1,6 @@
 # Review — Workflow input CAS (`ctxVersion` on the resume), graph design note
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-097
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-097
 
 ## Scope & verdict
 

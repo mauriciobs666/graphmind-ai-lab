@@ -1,6 +1,6 @@
 # K-095 `config.AGENT_NAME` removal — implementation review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-095
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-095
 
 ## Scope & verdict
 

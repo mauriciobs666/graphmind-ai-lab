@@ -1,6 +1,6 @@
 # GRAPH.CONFIG defaults for production
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** K-098
+> **Status:** archived · **Owner:** `graph-dba` · **Tracks:** K-098
 
 > 2026-11-20 revision: §3.1's scoped variant gains a `WITH` barrier, and its plan and `DISTINCT` claims are corrected (`docs/reviews/hybrid-search-bounded.md` F1, F2).
 

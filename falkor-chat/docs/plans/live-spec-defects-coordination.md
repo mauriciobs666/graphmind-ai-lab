@@ -133,3 +133,18 @@ serving a workspace on the new code at once, never a mix of old and new.
 3. Verify: re-run the dry run. Every workspace must list 0. The script is idempotent, so a
    non-zero count (a document an old server ingested in between) is fixed by re-running
    `--apply`.
+
+## Milestone close (2026-11-21)
+
+**Frozen** (flipped to `Status: archived` by `teco`): `docs/plans/graph-config-defaults-graph.md`,
+`docs/plans/message-quoting.md`, `docs/plans/workflow-input-cas-graph.md`, and the reviews
+`agent-name-removal-impl`, `document-lsh-bands-impl`, `graph-config-defaults`,
+`graph-config-defaults-impl`, `hybrid-search-bounded`, `message-quoting`, `message-quoting-impl`,
+`step-budget-reporting-impl`, `workflow-input-cas`, `workflow-input-cas-impl`. None of these items
+had a requirements document; each was briefed by its BACKLOG body. This ledger stays `active`
+until the stakeholder has run `## Rollout runbook`.
+
+**Closeout list for the human to apply** (each item checked as present in `docs/HISTORY.md`
+first). Delete these delivered items from `docs/BACKLOG.md`: K-096 (`:748`), K-097 (`:774`),
+K-091 (`:953`), K-094 (`:1058`), K-095 (`:1076`), K-098 (`:1093`). K-093 stays open, unblocked
+by U12.

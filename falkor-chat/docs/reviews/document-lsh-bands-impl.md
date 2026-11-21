@@ -1,6 +1,6 @@
 # K-091 implementation review — `Document.lshBand0..7` stored at ingest, plus backfill
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-091
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-091
 
 ## Scope & verdict
 

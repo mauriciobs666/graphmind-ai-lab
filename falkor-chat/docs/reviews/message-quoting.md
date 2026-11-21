@@ -1,6 +1,6 @@
 # Review — message quoting plan (K-094)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-094
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-094
 
 ## Scope & verdict
 

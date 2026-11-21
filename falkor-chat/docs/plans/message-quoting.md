@@ -1,6 +1,6 @@
 # Message quoting — write `REPLY_TO` from the post front doors
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-094 · **Reviews:** `falkor-chat/docs/reviews/message-quoting.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-094 · **Reviews:** `falkor-chat/docs/reviews/message-quoting.md`
 
 ## 1. Goal & scope
 

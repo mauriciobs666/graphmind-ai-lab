@@ -1,6 +1,6 @@
 # GRAPH.CONFIG defaults — implementation review (U5, deployment config)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-098
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-098
 
 ## Scope & verdict
 

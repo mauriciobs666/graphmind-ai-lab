@@ -1,6 +1,6 @@
 # Workflow input CAS — `ctxVersion` on the resume (graph design)
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** K-097 · **Reviews:** `falkor-chat/docs/reviews/workflow-input-cas.md`
+> **Status:** archived · **Owner:** `graph-dba` · **Tracks:** K-097 · **Reviews:** `falkor-chat/docs/reviews/workflow-input-cas.md`
 
 Change against the live spec: DESIGN §6.2 ("Who writes the run `ctx`", "Residual window (R-1)",
 "Timer release…", the `WorkflowRun` property list) and QUERIES §12 (model block, status-move

@@ -1,6 +1,6 @@
 # Review — Workflow input CAS (`ctxVersion`), implementation diff gate
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-097
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-097
 
 ## Scope & verdict
 

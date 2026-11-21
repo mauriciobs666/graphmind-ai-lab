@@ -1,6 +1,6 @@
 # Review: bounded `Repository.hybrid_search` (U12)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-098
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-098
 
 ## Scope & verdict
 
