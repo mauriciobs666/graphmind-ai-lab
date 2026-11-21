@@ -79,6 +79,13 @@ Every store-backed command takes `--graph KEY` (default `COORDGRAPH_KEY`, itself
 | `kb-reconcile` | Check every mapped KB document against `ws:agent-team`. |
 | `kb-finish [--once]` | Complete or give up pending sections; loops until settled unless `--once`; one instance at a time (`kb-finish.lock`). |
 
+**Hook (called by `hooks/post-tool-sync.sh`, not by hand; both routine, both take `--graph`/`--confirm`):**
+
+| Command | What it does |
+|---|---|
+| `hook-sync [--first-run [--stamp-at EPOCH]] [PATH...]` | Sync the named changed files (coordination files and registered KB files) in the foreground; exit 2 when any file failed or is pending. `--first-run` takes no PATH: hash-compare every discovered file and create `.state/stamp`. |
+| `retry-failed` | Retry every due entry of `.state/failed.json`; one instance at a time (`retry.lock`), meant to run detached. |
+
 ## Reading the sync header
 
 Every read view (`drift`, `query`, `inflight`, `unit`, `planned`, `propose`) prints it first:
@@ -91,7 +98,7 @@ Drift: none
 
 - `Synced` is the oldest and newest sync time over the covered sources. `never` means a source
   has no sync time. `Hook` is `disabled` when `COORDGRAPH_HOOK_DISABLED` is `1/true/yes/on` or
-  `<state dir>/disabled` exists; the hook itself is not built yet (see "Not yet").
+  `<state dir>/disabled` exists (the kill switch, see "The post-edit hook").
 - `Registry:` is the work-item registry read at query time; `Registry: unavailable -- identities
   compared as written` means identities were not resolved.
 - `Drift: <n> source(s)` is followed by one line per source: state `changed`, `unsynced`, `gone`
@@ -110,7 +117,7 @@ failed source and no orphans. Run `rebuild --dry-run` first: it validates offlin
 ## The shared instance
 
 Every store-backed command (`bootstrap`, `sync`, `rebuild`, `drift`, `query`, `inflight`, `unit`,
-`planned`, `propose`, `kb-*`) takes `--confirm GRAPHKEY`. Without it the ephemeral guard applies
+`planned`, `propose`, `kb-*`, `hook-sync`, `retry-failed`) takes `--confirm GRAPHKEY`. Without it the ephemeral guard applies
 unchanged. With it the command connects through `store.connect_shared`, which requires: loopback host,
 a shared port (6379/6390/3000), the graph key to be the coordination mirror's (`coordination`),
 `--confirm` to equal that key exactly, and `COORDGRAPH_EPHEMERAL_PORT` to be unset. Anything else
@@ -118,7 +125,7 @@ refuses before connecting, so ephemeral and shared are exact complements.
 
 `COORDGRAPH_SHARED_CONFIRM=<key>` is the standing form of the same confirmation, honoured by the
 routine commands only (`sync`, `drift`, `query`, the views, `propose`, `kb-sync`, `kb-status`,
-`kb-finish`; the flag wins when both are given). `bootstrap`, `rebuild` and `kb-reconcile` are
+`kb-finish`, `hook-sync`, `retry-failed`; the flag wins when both are given). `bootstrap`, `rebuild` and `kb-reconcile` are
 flag-only and refuse the env alone. `kb-sync --detach-finish` hands `--confirm` and `--graph` on to the
 child.
 
@@ -153,10 +160,62 @@ the package's repo), `STATE_DIR` (default `coordination-graph/.state`), `FALKORD
 - `unit` and `planned`: 1 also when the lookup finds nothing.
 - `kb-*`: 0 settled, 2 not complete (a section pending, refused or failed; for `kb-status`
   anything flagged), 1 the command could not run.
+- `hook-sync`: 0 synced or nothing to do, 2 a file failed or is pending; `retry-failed`: 0.
 
-## Not yet
+## The post-edit hook
 
-The post-edit hook (`hooks/post-tool-sync.sh`, `hook-sync`, `retry-failed`), its contract, kill
-switch and failure/backoff behaviour, the S0 probe result for FR-4, and the first load into the shared
-instance (the path exists; the load has not been run) are plan steps S8 and S8a (`claude/docs/plans/coordination-graph.md`, §3.2). They are
-documented here when built; nothing about them is stated now.
+`hooks/post-tool-sync.sh` is the `PostToolUse` and `PostToolUseFailure` handler (matcher
+`Write|Edit|Bash`) that mirrors a coordination file into the graph before the agent reads the tool
+result. **It is built but not registered by this component**: the settings block is applied by the
+stakeholder (plan S8, `claude/docs/plans/coordination-graph.md` §3.2), and until it is, nothing
+fires it. Where it fires (S0 probe, FR-4) is not recorded here.
+
+- **Fast path.** A call that changed nothing runs one pruned `find -newer .state/stamp` over the
+  repo (plus the KB registry) and exits 0: no Python, no database. **Measured 2026-11-21, to process
+  exit, on this repo** (4,424 files after pruning `.git`, `node_modules`, hidden dirs, `archive/` and
+  root `deprecated/`; a scratch state dir, the CLI stubbed out): 20 consecutive calls 10.8-13.4 ms
+  (median 11.4); an earlier run of five on the same tree 22-31 ms, and 77 ms for the first call after
+  idle (cold cache). The offline and live tests assert < 50 ms for each of 20 calls, to pipe EOF, on a
+  tmp tree. If a busier tree misses 50 ms, the plan's recorded fallback is a `find` restricted to the
+  directories that hold sources (§R2).
+- **A changed mirrored file** (coordination glob set or KB registry) runs `hook-sync` in the
+  foreground under `timeout 50`. It pings FalkorDB (1 s), and for a changed KB file also falkor-chat
+  `/health` and the embedder `/models` (2 s each); a down dependency marks the files it serves
+  failed with no sync attempt. A file whose hash already equals the graph's is a no-op, not a
+  warning. KB sync waits at most `COORDGRAPH_KB_BUDGET_S`; a section still embedding is *pending*
+  and a detached `kb-finish` completes it.
+- **Exit 2** (stderr names each file, the reason, "this update is not complete — say so") whenever
+  an edited mirrored file could not be synced or is pending; **every such edit warns again**, no
+  throttle. A call that edited no mirrored file never warns or waits. An exit other than 0/2 from
+  `hook-sync` (venv missing, exception, killed by the timeout) is the hook's own fault: the shell
+  exits 2 naming every file and queues them in `failed.pending`.
+- **Failure state** in `$COORDGRAPH_STATE_DIR` (default `coordination-graph/.state/`):
+  `failed.json` (per repo-relative path: `sha256`, `error`, `attempts`, `nextRetryAt`), `failed.pending`
+  (the shell's lock-guarded append), `retry-due` (epoch seconds), `stamp`, `hook.log`, the locks.
+  Backoff after the n-th failure is 1, 2, 4, 8, then 15 minutes; a new edit (different sha256)
+  restarts it. With no edit in the call and `retry-due` passed, the shell bumps `retry-due` by 60 s
+  *first*, then launches `retry-failed` detached (all three streams redirected, `setsid`), so a
+  crashing retry costs one fork a minute. `retry-failed` drops an entry whose file is gone or whose
+  hash already equals the graph's (it never deletes a source: `sync --all` prunes) and leaves a KB
+  section inside its 15-minute `kb-finish` cap to `kb-finish`.
+- **No stamp** (fresh clone): one `hook-sync --first-run` hash-compares every discovered file and
+  creates the stamp at the call's start. FalkorDB down then is silent, leaves the stamp absent and
+  waits for `retry-due` (+60 s) before trying again. A Write/Edit payload naming a file that is in
+  the failure state re-enters the sync even when the stamp is past its mtime.
+- **Kill switch.** `COORDGRAPH_HOOK_DISABLED` = `1`/`true`/`yes`/`on`, or a file `.state/disabled`:
+  exit 0 at once. The sync header then reads `Hook: disabled`.
+- **Authorization.** The shared instance needs `--confirm coordination`. The script passes that
+  literal itself on `hook-sync` and `retry-failed`; it never reads the key from the environment,
+  unsets any ambient `COORDGRAPH_SHARED_CONFIRM` and exports none. The guards are unchanged:
+  loopback, shared port, key exactly `coordination`, `COORDGRAPH_EPHEMERAL_PORT` unset, KB URL the
+  real falkor-chat.
+- **Not covered, by construction:** an edit outside Claude Code (the sync header flags it), a file
+  deletion, a worktree edit before it is merged (the root is `$CLAUDE_PROJECT_DIR`, never the
+  payload `cwd`).
+- **Test seams** (the script only): `COORDGRAPH_HOOK_CLI` (entry point) and
+  `COORDGRAPH_HOOK_TIMEOUT_S` (the 50 s bound). Live tests use a shim that drops the
+  `--confirm coordination` pair, because the guard refuses it on an ephemeral port.
+
+The first load into the shared instance (plan S8a) and the hook's go-live (`sync --all`, stamp
+initialisation, after the stakeholder registers it) are not part of this component's code and have
+not been run here.

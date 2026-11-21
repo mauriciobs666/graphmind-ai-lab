@@ -5,7 +5,8 @@ Each takes an `argparse.Namespace`-like object and returns an exit code. Optiona
 write the `(path, sha256)` manifest to), `confirm` (`--confirm GRAPHKEY`). Every connection goes through
 `store.open_graph`: an explicitly announced ephemeral FalkorDB by default, the shared instance only when a
 confirmation equal to the graph key is given (`--confirm`, or the standing `COORDGRAPH_SHARED_CONFIRM` for the
-routine commands; `bootstrap`, `rebuild` and `kb-reconcile` accept the flag only). `sync` and `rebuild` import no
+routine commands, `hook-sync` and `retry-failed` among them (the hook passes the flag itself); `bootstrap`,
+`rebuild` and `kb-reconcile` accept the flag only). `sync` and `rebuild` import no
 `wilib`; the read commands (`drift`, `query`) load `identity` lazily for the header's registry line.
 """
 from __future__ import annotations
