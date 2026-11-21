@@ -32,7 +32,7 @@ import yaml  # noqa: E402
 REPO = C.CPG.parent
 WORK = C.CPG / ".ccg-work" / "frontend-fitness" / "joern"
 EXTRACT_SC = C.CPG / "extractors" / "joern" / "extract.sc"   # the projection the P1 record pins
-RECORD_ID = "ccg-p1-flow-python-v1"
+RECORD_ID = "ccg-p1-flow-python-v2"
 DECISION_CELL = "fixed-new"
 Z = 1.959964
 SYNTH_NAMES = {"<module>", "<global>", "<body>", ":program", "<clinit>", "<fakeNew>", "<includes>"}
@@ -214,8 +214,8 @@ def resolve_path(p):
 
 
 def load_record(path, rid=None):
-    """A pre-registration record (default `ccg-p1-flow-python-v1`): a JSON object, or a JSON-lines file holding it (cpg/eval/preregistration.jsonl).
-    The sample digest lives in the later `ccg-p1-flow-python-v1-draw` record, which the same file must also hold."""
+    """A pre-registration record (default `ccg-p1-flow-python-v2`): a JSON object, or a JSON-lines file holding it (cpg/eval/preregistration.jsonl).
+    The sample digest lives in the later `ccg-p1-flow-python-v2-draw` record, which the same file must also hold."""
     rid = rid or RECORD_ID
     text = resolve_path(path).read_text(encoding="utf-8")
     cands = []
@@ -495,7 +495,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("lang")
     ap.add_argument("--flow-set", choices=["p0", "p1"], default="p0", help="p0 (default): the committed P0 paths; p1: every path is a `-p1` name")
-    ap.add_argument("--record", help="p1 only, required: the pre-registration record (ccg-p1-flow-python-v1); refuses on any script/sample sha mismatch")
+    ap.add_argument("--record", help="p1 only, required: the pre-registration record (ccg-p1-flow-python-v2); refuses on any script/sample sha mismatch")
     ap.add_argument("--join", choices=["new", "p0"], help="p1 only (default new): new = P1-09 scorer fix; p0 = JOIN_P0_ONLY, a diagnostic cell")
     ap.add_argument("--run-record", help="p1 only: an s28-run.json other than the default (e.g. the shipped-P0 copy); the cell is then a diagnostic")
     a = ap.parse_args(argv)

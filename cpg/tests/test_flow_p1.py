@@ -968,8 +968,57 @@ def test_a_record_may_be_jsonl_lines_among_others_and_must_carry_both_ids(tmp_pa
     only_v1.write_text(rec.read_text().splitlines()[0] + "\n")
     with pytest.raises(SystemExit, match="-draw"):
         sm.main(["python", "--flow-set", "p1", "--record", str(only_v1)])
-    with pytest.raises(SystemExit, match="no `ccg-p1-flow-python-v1` record"):
+    with pytest.raises(SystemExit, match="no `ccg-p1-flow-python-v2` record"):
         sm.main(["python", "--flow-set", "p1", "--record", str(tmp_path / "work" / "python" / "s28-run.json")])
+
+
+REAL_PREREG = Path(__file__).resolve().parents[1] / "eval" / "preregistration.jsonl"
+V1, V2 = "ccg-p1-flow-python-v1", "ccg-p1-flow-python-v2"
+
+
+def _prereg_without_v2(tmp_path):
+    """A temp copy of the committed record file with any -v2 lines dropped (what the file held before the -v2 append); never the real file."""
+    keep = [l for l in REAL_PREREG.read_text(encoding="utf-8").splitlines() if l.strip() and not json.loads(l)["id"].startswith(V2)]
+    out = tmp_path / "prereg-no-v2.jsonl"
+    out.write_text("\n".join(keep) + "\n", encoding="utf-8")
+    return out
+
+
+def test_the_live_tool_record_id_is_v2():
+    assert sm.RECORD_ID == V2
+
+
+def test_the_committed_v1_line_stays_in_the_record_file_and_is_still_addressable():
+    ids = [json.loads(l)["id"] for l in REAL_PREREG.read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert V1 in ids
+    assert sm.load_record(REAL_PREREG, V1)["id"] == V1  # explicitly, as superseded history
+
+
+def test_load_record_without_a_v2_line_fails_loudly_and_never_falls_back_to_v1(tmp_path):
+    jl = _prereg_without_v2(tmp_path)
+    assert V1 in jl.read_text()  # the -v1 line is there to be (wrongly) fallen back to
+    with pytest.raises(SystemExit, match=f"no `{V2}` record"):
+        sm.load_record(jl)
+    with pytest.raises(SystemExit, match=f"no `{V2}-draw` record"):
+        sm.load_record(jl, sm.RECORD_ID + "-draw")
+
+
+def test_main_on_a_record_file_holding_only_v1_lines_is_refused(tmp_path, monkeypatch):
+    ff = p1_world(tmp_path, monkeypatch)
+    jl = tmp_path / "v1only.jsonl"
+    old = [json.loads(l) for l in Path(write_record(tmp_path, ff)).read_text().splitlines()]
+    jl.write_text("".join(json.dumps({**d, "id": d["id"].replace(V2, V1)}) + "\n" for d in old))
+    with pytest.raises(SystemExit, match=f"no `{V2}` record"):
+        sm.main(["python", "--flow-set", "p1", "--record", str(jl)])
+
+
+def test_load_record_finds_a_v2_line_once_present(tmp_path):
+    jl = _prereg_without_v2(tmp_path)
+    with jl.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"id": V2, "supersedes": V1, "synthetic": True}) + "\n")
+        f.write(json.dumps({"id": V2 + "-draw", "synthetic": True}) + "\n")
+    assert sm.load_record(jl)["synthetic"] is True and sm.load_record(jl)["id"] == V2
+    assert sm.load_record(jl, sm.RECORD_ID + "-draw")["id"] == V2 + "-draw"
 
 
 def test_p1_is_python_only(tmp_path, monkeypatch):
@@ -1048,6 +1097,8 @@ MUTANTS = {
     "join_default_old": ("s28_metrics.py", [('join = a.join or "new"', 'join = a.join or "p0"')]),
     "join_switch_ignored": ("s28_metrics.py", [('C.JOIN_P0_ONLY = join == "p0"', "C.JOIN_P0_ONLY = False")]),
     "diag_unlabelled": ("s28_metrics.py", [('"value": None if diag else bool(asshipped_ok and not guard)', '"value": bool(asshipped_ok and not guard)')]),
+    "record_id_still_v1": ("s28_metrics.py", [('RECORD_ID = "ccg-p1-flow-python-v2"', 'RECORD_ID = "ccg-p1-flow-python-v1"')]),
+    "load_record_falls_back_to_v1": ("s28_metrics.py", [('    raise SystemExit(f"--record: no `{rid}` record', '    for d in cands:\n        if isinstance(d, dict) and d.get("id") == "ccg-p1-flow-python-v1":\n            return d\n    raise SystemExit(f"--record: no `{rid}` record')]),
     "join_not_restored": ("s28_metrics.py", [("        C.JOIN_P0_ONLY = saved_join", "        pass")]),
 }
 
