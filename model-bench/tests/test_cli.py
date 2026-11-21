@@ -221,6 +221,46 @@ def _store_rerun(root, run_id: str, model_key: str, correct: int, total: int = 4
     )
 
 
+def _store_timed(root, model_key: str, started: str, correct: int, total: int = 40) -> None:
+    """A run stored the way the harness names it: `<packId>-<armKey>-<UTC start stamp>`, with the
+    same instant in `fingerprint.startedAt` (`runner.run_pack`'s `run_id`)."""
+    items = [
+        item(f"g{i:02d}", correct=i < correct, metric="falseAdvanceRate") for i in range(total)
+    ]
+    store(
+        run(
+            f"{PACK}-{model_key}-{started}",
+            items=items,
+            aggregates=classification_aggregates(correct, total),
+            fingerprint_fields=model_fields(
+                modelKey=model_key, packId=PACK, startedAt=started, endedAt=started
+            ),
+            session_id="s1",
+        ),
+        root,
+    )
+
+
+def test_plain_compare_collapses_each_key_to_its_newest_run_and_pairs_distinct_arms(
+    workspace, capsys
+) -> None:
+    """Defect R1: with aaa, a newer aaa rerun and bbb, the verdict paired aaa against its own
+    rerun and never compared bbb. A plain compare now keeps the newest run per key (the rule
+    `--models` uses; file-name order is key then start stamp, so the last run of a key is its
+    newest, asserted here by giving the *newer* run the better score and the *older* the worse):
+    one arms-table row per key, and a verdict between aaa and bbb."""
+    _store_timed(workspace, "aaa", "2026-09-03T10:00:00Z", 20)
+    _store_timed(workspace, "aaa", "2026-09-03T11:00:00Z", 40)
+    _store_timed(workspace, "bbb", "2026-09-03T10:30:00Z", 34)
+    code = main(["compare", "--pack", PACK, "--root", str(workspace)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "aaa is better than bbb" in out
+    assert "better than aaa" not in out and "aaa (run" not in out
+    assert out.count("| aaa |") == 1 and out.count("| bbb |") == 1
+    assert "40/40" in out and "20/40" not in out  # the older aaa run is not an arm
+
+
 def test_plain_compare_counts_distinct_arms_not_runs_so_its_advice_is_actionable(
     workspace, capsys
 ) -> None:
@@ -1277,6 +1317,7 @@ _READ_FAILURES = [
         lambda: LMStudioCallFailed("GET /api/v0/models: HTTP 500", status=500, body=None),
         id="callfailed",
     ),
+    pytest.param(lambda: TimeoutError("timed out"), id="socket-timeout"),
 ]
 
 

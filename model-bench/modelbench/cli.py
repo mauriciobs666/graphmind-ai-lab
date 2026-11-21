@@ -247,13 +247,16 @@ def _select_arms(
             )
         candidates = [by_key[m] for m in wanted]
     elif not negative_control:
-        # Distinct keys, not runs: `--models` resolves one arm per key, so counting runs would
-        # refuse a comparison its own advice cannot narrow.
-        keys = list(dict.fromkeys(r.armKey for r in candidates))
-        if len(keys) > 2:
+        # One arm per key, its newest run (the rule `--models` applies): file-name order is run id
+        # order, `<packId>-<armKey>-<UTC start stamp>`, so a key's last run is its newest. Without
+        # this the verdict paired a key against its own rerun and counting runs refused a
+        # comparison `--models a,b` could not narrow.
+        candidates = list({r.armKey: r for r in candidates}.values())
+        if len(candidates) > 2:
             raise CompareArmCountError(
-                f"compare without --models needs exactly two arms and found {len(keys)} "
-                f"({', '.join(keys)}); --models a,b selects which arms to compare"
+                f"compare without --models needs exactly two arms and found {len(candidates)} "
+                f"({', '.join(r.armKey for r in candidates)}); --models a,b selects which arms "
+                "to compare"
             )
     if negative_control and candidates:
         # Two copies of ONE record, deliberately. The mode's own `--help` text and the report's

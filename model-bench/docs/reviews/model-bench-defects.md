@@ -78,3 +78,28 @@ Dropping it leaves the suite green (3658 passed). `compare --negative-control` o
 
 1. **Stakeholder (F2):** refuse plain `compare` for 0 and 1 arms as well (literal `!= 2`, two existing tests rewritten), or only for more than two (as shipped)?
 2. Is widening defect 5 to `LMStudioCallFailed` and to steps 7/8 (F1) in scope for this wave, or a new backlog item?
+
+## Pass 2
+
+Scope: fix round `6c7dda13` (code + tests) against Pass 1. Rulings folded in: defect 3 stays "more than two arms" (F2 answered, no code change); defect 5 widened (Open question 2 answered). Suite re-run: `3669 passed, 5 deselected, 2 xfailed`. Mutants on a scratchpad copy, bytecode off.
+
+**Verdict: approve with suggestions.** F1/F3/F4 are fixed. One residual (R1) is the original defect 3's own wording and still reproduces; it needs a ruling or a fix.
+
+`CPG: considered, not relevant — a ~40-line change in one stdlib-only module, fully read.`
+
+Dispositions:
+- **F1 fixed.** The wrapper catches `(LMStudioUnreachable, LMStudioCallFailed, TimeoutError)` and wraps steps 3, 3a, 7 and 8. Mutants: dropping `CallFailed` turns 4 cases red; step 7 bare turns 2 red; step 8 bare turns 2 red. Every read between the probe and item 1 is covered: the other `lmstudio.*` reads in `run_pack` (`_between_item_residency`, `_within_load_basis`, step 10's retries, `_decision_instance_config`) carry their own handling and are correctly left alone (`grep 'lmstudio\.\(residency\|catalog\|loaded_instances\|probe\)' runner.py`).
+- **TimeoutError is untested (mutant `(Unreachable, CallFailed)` only: suite green, 3666 passed), and it does not matter.** `_raw_get` catches `TimeoutError` and folds it to `None`, so `residency()`/`catalog()` cannot raise a bare `TimeoutError`; the branch is defensive and matches the module's grouping. Either drop it from the wrapper or add one parametrized case; take-or-leave (nit).
+- **F2 answered** (ruling), nothing to recheck.
+- **F3 fixed.** Counting is by distinct key (`dict.fromkeys`); the mutant counting runs turns `test_plain_compare_counts_distinct_arms...` red. Consistent with `--models`' one-arm-per-key resolution: the advice can now always narrow.
+- **F4 fixed.** Dropping the exemption turns `test_plain_compare_with_a_negative_control_is_exempt...` red.
+- **F5 open (owner: the live-spec unit).** The ruling leaves the list valid; it must now state that plain `compare` counts distinct keys. **F6 open** (nit).
+- Same-revision interaction: wrapper widening vs the unwrapped reads is clean (above). Distinct-key count vs `--models` is clean. The interaction that breaks is R1.
+
+### R1 (major, reproduced) — 2 distinct keys over 3+ runs still pairs the first two runs by file name, possibly a model against itself
+
+Real parser: stored `aaa` (40/40), `aaa-rerun` (an `aaa` run, 10/40), `bbb` (34/40); `compare --pack guard-judge-understanding` exits 0. The arms table lists three rows, and the verdict is "aaa (run aaa) is better than aaa (run aaa-rerun) ... +75.0 pp, McNemar p=0.000". `bbb` is never compared. The "(run X)" labels disclose which runs were paired, so it is not silent about identity, but the headline is a model against itself.
+
+This is still defect 3, not a different matter. The recorded wording is "pairs the first two arms by file-name order, not the newest": the cause is plain `compare` taking runs, not arms, in file order, and the new count-by-key check only decides whether to refuse. The "more than two arms" ruling does not cover it: here there are exactly two arms (keys) and the pairing is still wrong. The shipped test pins the opposite (`aaa`, `aaa-rerun`, `bbb` -> exit 0) without asserting what was compared, so it can't catch this.
+
+Suggested fix (in `_select_arms`' plain branch, before the count): collapse to the newest run per `armKey`, the rule `--models` already uses (`{r.armKey: r for r in candidates}`; file-name order sorts by arm key then start time, so last is newest). Effect: the arms table lists one row per key (newest), and repeat runs drop out of a plain compare's table (they stay in `models --tested` and reachable via... nothing in `compare`; if repeat-run display matters, keep them in the table and pair only the newest of each key, a larger change in `compare_report`). I ran the collapse as a mutant on the copy: `tests/test_cli.py` stays green (83 passed), so no existing test pins the repeat-run rows. Add a test asserting the verdict names `aaa` and `bbb`, not `aaa` twice. The stakeholder should confirm that dropping repeat runs from a plain compare's table is acceptable; I can't tell from the repo whether the `(run X)` labelled rows are a designed feature (they suggest it) or a by-product.
