@@ -406,9 +406,9 @@ def test_the_pack_file_validates_and_carries_its_directory_name(pid):
 #: Packs whose file differs from the spec block (P1-55: `fetch-url`'s extra `ownSite` line; P1-57a: the `fetch` seed's `scope.path`, one more key
 #: on the spec's own seeds line). The pin removes the `ownSite` line and swaps the seed line back for the spec's, so nothing else may differ.
 SPEC_PLUS_LINES = {"fetch": "    ownSite: true"}
-FETCH_SEED_SCOPE = {"path": {"regex": ".*\\.(js|jsx|cjs|mjs|ts|tsx|cts|mts|vue)"}}
+FETCH_SEED_SCOPE = {"path": {"regex": ".*\\.(js|jsx|cjs|mjs|ts|tsx|cts|mts)"}}
 FETCH_SEED_LINE_FILE = ('    seeds: [{call: {callee: fetch, resolution: [external, unresolved]}, arg: a0, '
-                        'scope: {path: {regex: ".*\\\\.(js|jsx|cjs|mjs|ts|tsx|cts|mts|vue)"}}}]')
+                        'scope: {path: {regex: ".*\\\\.(js|jsx|cjs|mjs|ts|tsx|cts|mts)"}}}]')
 FETCH_SEED_LINE_SPEC = "    seeds: [{call: {callee: fetch, resolution: [external, unresolved]}, arg: a0}]"
 
 

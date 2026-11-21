@@ -60,14 +60,15 @@ def split_reason(reason) -> tuple[str | None, str | None]:
 
 
 def expected_form(held: dict) -> dict:
-    """The P1 form of a row: the `p1Form` where it carries one, the manifest form otherwise. Keys: status, edge, link, linked (False: no Link), key."""
+    """The P1 form of a row: the `p1Form` where it carries one, the manifest form otherwise. Keys: status, edge, link, linked (False: no Link), key, consumes_fact (False: the consumer has no CONSUMES fact, so no edge reason)."""
     rows = list(held.values())
     p1 = next((r["p1Form"] for r in rows if r.get("p1Form")), None)
     src = p1 if p1 else {}
     status = src.get("status", src.get("st")) or merged_attr(held, "status") or merged_attr(held, "st")
     reason = src.get("reason") or merged_attr(held, "reason")
     edge, link = split_reason(reason)
-    return {"status": status, "edge": edge, "link": link, "linked": src.get("linked", True), "key": src.get("key"), "p1Form": bool(p1)}
+    return {"status": status, "edge": edge, "link": link, "linked": src.get("linked", True), "key": src.get("key"), "p1Form": bool(p1),
+            "consumes_fact": src.get("consumes_fact", True)}
 
 
 def short(repo: str) -> str:

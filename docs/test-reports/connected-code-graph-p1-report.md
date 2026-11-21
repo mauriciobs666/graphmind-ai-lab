@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `qa-engineer` · **Tracks:** P1-41 (prerequisites P1-51b, P1-52, P1-53a/b/c, P1-54; dispatch B)
 
-*2026-11-20: section "P1-41 dispatch B" appended; the two sentences of sections 2 and Recommendations that called the census driver unbuilt are rewritten.*
+*2026-11-21: section "P1-41 dispatch C" appended (its 81-row, all-pass verdict supersedes dispatch B's 87-row verdict). 2026-11-20: section "P1-41 dispatch B" appended; the two sentences of sections 2 and Recommendations that called the census driver unbuilt are rewritten.*
 
 CPG: considered, not relevant — the subject is the `ccg` build/link pipeline and its stored output; no `cpg_<component>` Joern graph answers it.
 
@@ -120,7 +120,7 @@ Recommendations: (1) architect/tdd: decide D1 first, since it decides whether th
 
 CPG: considered, not relevant — the subject is the `ccg` build/link/answer pipeline over the materialized fixtures; no `cpg_<component>` Joern graph answers it.
 
-**Verdict: 76 of 87 P1 rows at expected, 11 red (defects D8-D14 below).** Run 2026-11-20 against HEAD `039d5785` plus the uncommitted driver files, one run of the live tier on the throwaway store `ccg-falkordb-tw-16393` (started and used by this run; `ccg-falkordb:6390`, `falkordb-dev:6379` and `ccg-falkordb-tw-16390` untouched, nothing stopped). Command (cwd `cpg/`): `CCG_GATE_P1_OUT=<ledger.json> CCG_FALKORDB_PORT=16393 CCG_CONFIG_DIR=<scratch> CCG_REQUIRE_LIVE=1 .venv/bin/python -m pytest tests/test_fixture_gate_p1.py -m "live or not live" -q -p no:cacheprovider` -> `12 failed, 79 passed in 264.27s` (91 tests: 3 offline, 87 row tests, 1 closed-world test; 11 red row tests plus the red closed-world test). The ledger JSON written by the run holds 87 row verdicts: 76 pass, 11 fail.
+**Superseded by dispatch C (end of this report): this verdict was 76 of 87 P1 rows at expected, 11 red (defects D8-D14 below), all since fixed or moved.**  Run 2026-11-20 against HEAD `039d5785` plus the uncommitted driver files, one run of the live tier on the throwaway store `ccg-falkordb-tw-16393` (started and used by this run; `ccg-falkordb:6390`, `falkordb-dev:6379` and `ccg-falkordb-tw-16390` untouched, nothing stopped). Command (cwd `cpg/`): `CCG_GATE_P1_OUT=<ledger.json> CCG_FALKORDB_PORT=16393 CCG_CONFIG_DIR=<scratch> CCG_REQUIRE_LIVE=1 .venv/bin/python -m pytest tests/test_fixture_gate_p1.py -m "live or not live" -q -p no:cacheprovider` -> `12 failed, 79 passed in 264.27s` (91 tests: 3 offline, 87 row tests, 1 closed-world test; 11 red row tests plus the red closed-world test). The ledger JSON written by the run holds 87 row verdicts: 76 pass, 11 fail.
 
 ### 1. Row set (two definitions)
 
@@ -198,3 +198,25 @@ Copy-aside (manifest directory `cpg/fixtures/system1/expected` copied to the scr
 ### 9. Recommendations
 
 (1) `architect`: D12 first (AC-9b's closure rests on LNK-42/43; produce a `target-not-mapped` Link from what, when the unit never built?), then D10 (a `library_api` pack or move AC6-DYN-1..3 and TW-1 to P2: the P1 AC-6 dynamic-import floor is 0 of 3 as built). (2) `tdd-engineer`: D8 (the Python `fetch` matching `self.session.fetch(...)` is a false-positive consumer, a closed-world defect that also pollutes DF-3), D13 (SK-10) and D11. (3) Manifest/plan owner: D9 (re-derive DF-3's p1Form after P1-49/P1-55) and D14 (MR rows blocked at TP-015; decide whether the precondition is a P1 or P3 matter). (4) The driver is red by design until these land: commit it with the red rows listed above, or gate on the defect ids.
+
+
+## P1-41 dispatch C: the 81 P1 rows against the final manifest (2026-11-21)
+
+CPG: considered, not relevant — the subject is the `ccg` build/link/answer pipeline over the materialized fixtures; no `cpg_<component>` Joern graph answers it.
+
+**Verdict: 81 of 81 P1 rows at expected, 0 red; closed world 0 unplanted Links in both instruments.** HEAD `e40e2f17` plus the uncommitted driver edits (`cpg/tests/test_fixture_gate_p1.py`, `cpg/tests/fixture_gate_p1_helpers.py`; commits 57a, 57c, 57d are in). One live run on the throwaway `ccg-falkordb-tw-16394` (started and removed by this run; `ccg-falkordb:6390`, `falkordb-dev:6379`, `ccg-falkordb-tw-16390` were running before and after, untouched). Command (cwd `cpg/`): `CCG_GATE_P1_OUT=<ledger> CCG_FALKORDB_PORT=16394 CCG_CONFIG_DIR=<scratch> CCG_REQUIRE_LIVE=1 .venv/bin/python -m pytest tests/test_fixture_gate_p1.py -m "live or not live" -q -p no:cacheprovider` -> `86 passed in 340.41s`. The 86 are 3 offline, 81 row tests, the closed-world test and the new DbStore.load test. The ledger JSON holds 81 row verdicts, 81 pass.
+
+### Driver changes
+- Row set: `len(P1) == 81`, `(raw, raw_p1) == (175, 105)`; `LIB_IDS` (AC6-DYN-1/2/3, TW-1), `test_library_api_row`, and MR-PY/MR-TS (and their branch of `test_call_edge_row`) removed (P2). `sorted(MEANS) == sorted(ROW_IDS)` holds (offline test green). Means counts from the ledger: link 31, skipped-file 18, `Client.ask` 11, negative control 6, scenario 4, call-edge 4, fan-out 3, DATA edge 2, Binder 2.
+- AC6-URL-3: `expected_form` carries `consumes_fact` (default true; the p1Form's false); `test_keyless_url_row` then skips the edge-reason and dropped-edge checks and asserts the pack emitted no http CONSUMES fact at `forward`; the Links stay `possible`/`unknown-key` fan-outs.
+- LNK-42/43 (`test_target_not_mapped_row`): suspected bug (provider compared with `unit:<rootPath>` against a linker `unit:<hex id>` anchor) is **not real** for the instrument that test reads: the store's Link has no `TO` Symbol and a `TO_UNIT` Unit whose `rootPath` the driver reads, so `unit:legacy`/`unit:tools` is right (the hex form appears only in `world_recs`, which this test does not use). Added regardless an explicit store assertion: Link `possible`/`target-not-mapped`, provider Symbol None, `TO_UNIT` = Unit `fx-svc` with rootPath `legacy` (LNK-42) / `tools` (LNK-43), buildStatus `not-mapped`; the contract-walk check is unchanged.
+- New `test_dbstore_load_is_no_consumer` (D8 regression): no consumer fact at `svc:state/stores.py::DbStore.load` in the world, no Link from it in world or store, no CONSUMES edge in the store.
+
+### Results
+All 81 pass (per-row verdicts in the run's ledger JSON): the LNK rows (incl. LNK-42 and LNK-43 via the scenario test), KN-1..5, AC6-URL-1/2/3, AC6-EX-1/4, AC6-PM-1/2/3, TW-2, TW-3, FT-1/2, NC-1/2/3/5/6/7, SK x18, DF-1..4, CD-1..4, RV-1..3, AB-1, AB-2 (the ledger holds the per-row evidence; defects D8, D9, D11, D12, D13 and the D10/D14 moves are cleared by 57a/57c/57d and the P2 move). Closed world: world 74 Links, store 68 Links, 0 unplanted under both definitions (A and B). DbStore.load: 0 facts, 0 Links.
+
+### Mutation spot-check
+A copy of the manifests (`CCG_GATE_P1_EXPECTED`) with two expectations broken, run on the same throwaway with `-k "LNK-42 or URL-3"`: `2 failed in 229.31s`, both killed. LNK-42 set to `confirmed`/`key-match`: `Link is possible/target-not-mapped, provider symbol None, to_unit fx-svc:'legacy' (not-mapped); expected confirmed/key-match`. AC6-URL-3 `consumes_fact: true`: `no http CONSUMES fact for ['web:app/src/api/dyn.ts::forward'] ... lifted facts [('possible', 'partial-key', [])]`. (A carrier-level break, e.g. removing the Compose `legacy` service, was not run.)
+
+### Gaps and notes
+Not covered: a carrier-level mutation; the known reds (`test_p1_11b_*`, leaf-harness survivor-tell, package-data-glob, `test_scip_parse` x4, `test_units` golden, `test_ac8_lib` flake) were not run or touched; the DF-3 manifest note `pending_57a` still sits in `fx-web.yaml` although the live CF-DF3 answer now matches its p1Form (DF-3 passed): suggest dropping the note (a manifest edit, not done here). One run only, so flakiness is unmeasured.

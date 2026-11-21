@@ -16,7 +16,7 @@ liftings:
   - id: fetch-url
     role: {kind: http, slot: url}
     ownSite: true
-    seeds: [{call: {callee: fetch, resolution: [external, unresolved]}, arg: a0, scope: {path: {regex: ".*\\.(js|jsx|cjs|mjs|ts|tsx|cts|mts|vue)"}}}]
+    seeds: [{call: {callee: fetch, resolution: [external, unresolved]}, arg: a0, scope: {path: {regex: ".*\\.(js|jsx|cjs|mjs|ts|tsx|cts|mts)"}}}]
     companions: [{role: verb, arg: a1.method, bareDefault: GET, unknown: "*"}]
 rules:
   - id: http-client

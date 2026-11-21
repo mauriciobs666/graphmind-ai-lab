@@ -1,4 +1,4 @@
-"""P1-41 dispatch B: the fixture gate, part 1 — the 87 P1 rows asserted on the materialized fixture system, one test per row id.
+"""P1-41 dispatch B: the fixture gate, part 1 — the 81 P1 rows asserted on the materialized fixture system, one test per row id.
 
 Plan: `docs/plans/connected-code-graph-p1-gates.md` P1-41; fixtures plan §5-§7 (`docs/test-plans/connected-code-graph-fixtures.md`); `docs/test-plans/connected-code-graph-p1.md` §6.
 Run (cwd `cpg/`; the live tier needs Docker, the toolchain image and a THROWAWAY FalkorDB, never 6379, 6390 or another run's instance):
@@ -57,25 +57,24 @@ ROW_IDS = list(P1)
 LINK_IDS = [r for r in ROW_IDS if r.startswith(("LNK", "KN", "AC6-EX", "AC6-PM", "TW-2")) and r not in ("LNK-21", "LNK-22", "LNK-30", "LNK-39", "LNK-40", "LNK-42", "LNK-43")]
 BINDER_IDS = ["LNK-21", "LNK-22"]
 FANOUT_IDS = list(H.FANOUT_ROWS)
-CALLNAME_IDS = ["LNK-30", "LNK-39", "LNK-40", "TW-3", "MR-PY", "MR-TS"]
-LIB_IDS = ["AC6-DYN-1", "AC6-DYN-2", "AC6-DYN-3", "TW-1"]
+CALLNAME_IDS = ["LNK-30", "LNK-39", "LNK-40", "TW-3"]
 FT_IDS = ["FT-1", "FT-2"]
 NC_IDS = ["NC-1", "NC-2", "NC-3", "NC-5", "NC-6", "NC-7"]
 SK_IDS = [r for r in ROW_IDS if r.startswith("SK-")]
 SCEN_IDS = ["AB-1", "AB-2", "LNK-42", "LNK-43"]
 WALK_IDS = ["DF-1", "DF-2", "DF-3", "DF-4", "CD-1", "CD-2", "CD-3", "CD-4", "RV-1", "RV-2", "RV-3"]
 MEANS = {**{r: "link (world + store)" for r in LINK_IDS}, **{r: "Binder outcome (world)" for r in BINDER_IDS}, **{r: "fan-out link + CONSUMES fact (world + store)" for r in FANOUT_IDS},
-         **{r: "call edges (store)" for r in CALLNAME_IDS}, **{r: "library_api consumer fact (world)" for r in LIB_IDS}, **{r: "DATA edge (store)" for r in FT_IDS},
+         **{r: "call edges (store)" for r in CALLNAME_IDS}, **{r: "DATA edge (store)" for r in FT_IDS},
          **{r: "negative control (store)" for r in NC_IDS}, **{r: "skippedFiles + File (store)" for r in SK_IDS},
          **{r: "scenario build (store)" for r in SCEN_IDS}, **{r: "Client.ask (store)" for r in WALK_IDS}}
 
 
 # ---- offline: the row set and the mapping ---------------------------------------------------------------------------------------------------
-def test_the_p1_row_set_is_the_87_distinct_ids_of_the_manifests_and_every_row_has_one_means():
+def test_the_p1_row_set_is_the_81_distinct_ids_of_the_manifests_and_every_row_has_one_means():
     assert len(H.M.holders(MFS)) == 134
-    assert len(P1) == 87, len(P1)
+    assert len(P1) == 81, len(P1)
     raw, raw_p1 = H.raw_counts(MFS)
-    assert (raw, raw_p1) == (175, 111), (raw, raw_p1)         # the second definition: holder copies counted separately
+    assert (raw, raw_p1) == (175, 105), (raw, raw_p1)         # the second definition: holder copies counted separately
     assert not any(r.startswith("B1F") or r.startswith("B1S") for r in P1)        # the B1 rows gate P3
     assert sorted(MEANS) == sorted(ROW_IDS), (sorted(set(ROW_IDS) - set(MEANS)), sorted(set(MEANS) - set(ROW_IDS)))
 
@@ -330,7 +329,7 @@ def test_binder_outcome_row(rid, gate_build):
 @pytest.mark.live
 @pytest.mark.parametrize("rid", FANOUT_IDS)
 def test_keyless_url_row(rid, gate_build, steady):
-    """AC6-URL-n (P1 form): the keyless consumer's CONSUMES fact is `possible`/`runtime-built` (the edge reason; asserted on the pack's CONSUMES fact, the
+    """AC6-URL-n (P1 form; URL-3 is single-reason with `consumes_fact: false`: no CONSUMES fact at all): the keyless consumer's CONSUMES fact is `possible`/`runtime-built` (the edge reason; asserted on the pack's CONSUMES fact, the
     row `build_rows` consumes, never on the lifted fact), `build_rows` drops it for its missing key (`consumer-key-none`, so no stored CONSUMES edge exists),
     and the Links are `possible`/`unknown-key` fan-outs, in both instruments."""
     form = H.expected_form(P1[rid])
@@ -340,6 +339,11 @@ def test_keyless_url_row(rid, gate_build, steady):
     w = gate_build.w
     sym_ids = {i for i, lc in w.loc_of.items() if any(H.is_under(lc, c) for c in cons)}
     facts = [f for f in w.facts.consumers if f["anchorId"] in sym_ids and f["kind"] == "http"]
+    if not form["consumes_fact"]:       # p1Form consumes_fact: false (AC6-URL-3): the single-reason form; the Links exist, no CONSUMES fact does, so there is no edge reason to check
+        if facts:
+            viol.append(f"{rid}: p1Form says no CONSUMES fact, but the pack emitted {[(f['key'], f['status'], f['reason']) for f in facts]}")
+        _record(rid, viol, ["world", "store"])
+        return
     if not facts:
         lifted = [(f.get("status"), f.get("reason"), f.get("alternatives")) for f in w.facts.lifted if f["symbolId"] in sym_ids]
         keyless = sorted((w.loc_of.get(f["anchorId"], "?"), f["siteId"][:8], f["status"], f["reason"]) for f in w.facts.consumers if f["key"] is None and f["kind"] == "http")
@@ -365,10 +369,8 @@ def _calls(store, loc_):
 @pytest.mark.parametrize("rid", CALLNAME_IDS)
 def test_call_edge_row(rid, steady):
     """LNK-30/39/40: the site of the consumer has no resolved `CALLS` edge and a `CALLS_NAME` candidate set that holds every planted candidate (the engine reads
-    that as `possible`/`name-match`). TW-3: the site is resolved (`CALLS`) to the true target of its LNK twin. MR-PY/MR-TS: the precondition (fixtures TP-015) is a
-    resolved `CALLS` edge to the frontend's wrong callee Y; without it the row is vacuous, reported BLOCKED."""
+    that as `possible`/`name-match`). TW-3: the site is resolved (`CALLS`) to the true target of its LNK twin (MR-PY/MR-TS are P2)."""
     viol = []
-    row = next(iter(P1[rid].values()))
     cons = H.consumers_of(MFS, rid)[0]
     calls = _calls(steady, cons)
     if rid in ("LNK-30", "LNK-39", "LNK-40"):
@@ -383,39 +385,12 @@ def test_call_edge_row(rid, steady):
             miss = [c for c in cands if c.split(":", 1)[1] not in cand]
             if miss:
                 viol.append(f"{rid}: CALLS_NAME candidate set {cand} lacks {miss}")
-    elif rid == "TW-3":
+    else:  # TW-3
         true = H.locs_of(MFS, "LNK-39", ("trueTarget",)) or [H.loc(t["repoId"], t["path"], t["qname"].split("::", 1)[-1]) for t in next(iter(P1["LNK-39"].values()))["trueTarget"]]
         sites = [c for c in calls if c[1] == "run"]
         if not sites or sites[0][2] != [true[0].split(":", 1)[1]]:
             viol.append(f"TW-3: site run resolves to {[s[2] for s in sites]}, expected [{true[0].split(':', 1)[1]}] (confirmed/resolved-call)")
-    else:
-        y = H.loc(row["resolvedCallee"]["repoId"], row["resolvedCallee"]["path"], row["resolvedCallee"]["qname"].split("::", 1)[-1]) if "resolvedCallee" in row else None
-        if y is None:
-            y = H.locs_of(MFS, rid, ("Y",))[0]
-        name = (row.get("callsite") or row.get("call_site"))["name"]
-        sites = [c for c in calls if c[1] == name]
-        if not sites or y.split(":", 1)[1] not in sites[0][2]:
-            viol.append(f"{rid}: BLOCKED (fixtures TP-015): the frontend leaves no resolved CALLS edge from {cons} site {name} to {y} "
-                        f"(resolved {[s[2] for s in sites]}, CALLS_NAME candidates {[s[3] for s in sites]}), so the possible/resolution-unverified form cannot be derived")
     _record(rid, viol, ["store"])
-
-
-@pytest.mark.live
-@pytest.mark.parametrize("rid", LIB_IDS)
-def test_library_api_row(rid, gate_build):
-    """AC6-DYN-1..3 (`possible`/`dynamic-import`) and TW-1 (`confirmed`/`key-match`): a `library_api` CONSUMES fact at the consumer, in the pack output."""
-    form = H.expected_form(P1[rid])
-    w = gate_build.w
-    cons = H.consumers_of(MFS, rid)
-    ids = {i for i, lc in w.loc_of.items() if any(H.is_under(lc, c) for c in cons)}
-    facts = [f for f in w.facts.consumers if f["anchorId"] in ids and f["kind"] == "library_api"]
-    viol = []
-    if not facts:
-        viol.append(f"{rid}: no library_api CONSUMES fact for {cons} (packs run: {sorted(DEFAULT_PACKS)}; no pack in cpg/packs emits kind library_api)")
-    for f in facts:
-        if (f["status"], f["reason"]) != (form["status"], form["edge"]):
-            viol.append(f"{rid}: library_api fact is {f['status']}/{f['reason']}, expected {form['status']}/{form['edge']}")
-    _record(rid, viol, ["world"])
 
 
 @pytest.mark.live
@@ -501,14 +476,20 @@ def test_target_not_mapped_row(rid, steady):
     unit_root = row["provider"][0]["path"].split("/")[0]
     got = H.recs_from(steady.recs, cons)
     viol = []
-    if not got:
+    # The store Link's provider is its TO_UNIT unit (the linker anchors `unit:<hex unit id>`; the store reads the unit's rootPath): no TO Symbol, TO_UNIT = the unit at rootPath.
+    q = steady.q("MATCH (s:Symbol {qname:$q, repoId:'fx-svc'})-[:HAS_CALL]->(:CallSite)-[:VIA]->(l:Link) OPTIONAL MATCH (l)-[:TO]->(t:Symbol) OPTIONAL MATCH (l)-[:TO_UNIT]->(tu:Unit) "
+                 "RETURN l.status, l.reason, t.qname, tu.repoId, tu.rootPath, tu.buildStatus", q=cons[0].split(":", 1)[1])
+    if not q:
         cp = steady.q("MATCH (s:Symbol {qname:$q})-[:HAS_CALL]->(c:CallSite)-[e:CONSUMES]->(p:ContractPoint) OPTIONAL MATCH (p)<-[:PROVIDES]-(x) "
                       "RETURN e.status, e.reason, p.keyNorm, count(x)", q=cons[0].split(":", 1)[1])
         viol.append(f"{rid}: no Link from {cons} (consumer CONSUMES edge, status/reason/key/providers: {cp}; units: "
                     f"{steady.q('MATCH (u:Unit {repoId:$r}) WHERE u.rootPath=$p RETURN u.buildStatus', r='fx-svc', p=unit_root)})")
+    for st, rs, tq, ur, up, ubs in q:
+        if (st, rs) != (form["status"], form["link"]) or tq is not None or (ur, up) != ("fx-svc", unit_root):
+            viol.append(f"{rid}: Link is {st}/{rs}, provider symbol {tq!r}, to_unit {ur}:{up!r} ({ubs}); expected {form['status']}/{form['link']}, provider None, to_unit fx-svc:{unit_root!r}")
     for r in got:
         if (r.status, r.reason) != (form["status"], form["link"]) or r.provider != f"unit:{unit_root}":
-            viol.append(f"{rid}: Link is {r.status}/{r.reason} to {r.provider}, expected {form['status']}/{form['link']} to unit:{unit_root}")
+            viol.append(f"{rid}: Link record is {r.status}/{r.reason} to {r.provider}, expected {form['status']}/{form['link']} to unit:{unit_root}")
     try:
         doc = steady.ask({"useCase": "impact", "anchor": {"kind": "contract", "key": row["keyNorm"]}})
         listed = {(i["repoId"], i["subject"]["qname"]) for i in doc["items"]}
@@ -582,6 +563,25 @@ def test_closed_world_every_link_matches_some_row_of_some_manifest(gate_build, s
         report[name] = {"links": len(recs), "unplanted_A_links": len(a), "unplanted_B_links": len(b), "unplanted_B_consumers": sorted({r.consumer for r in b})}
     LEDGER["_closed_world"] = report
     assert all(r["unplanted_B_links"] == 0 for r in report.values()), json.dumps(report, indent=1)
+
+
+@pytest.mark.live
+def test_dbstore_load_is_no_consumer(gate_build, steady):
+    """D8 regression (P1-57a): `svc:state/stores.py::DbStore.load` (`self.session.fetch(item_id)`) has no consumer fact and no Link, in both instruments."""
+    base = "svc:state/stores.py::DbStore.load"
+    w = gate_build.w
+    ids = {i for i, lc in w.loc_of.items() if H.is_under(lc, base)}
+    facts = [(f["kind"], f["key"], f["status"], f["reason"]) for f in w.facts.consumers if f["anchorId"] in ids]
+    viol = [f"[world] CONSUMES fact(s) at {base}: {facts}"] if facts else []
+    for name, recs in (("world", gate_build.recs), ("store", steady.recs)):
+        got = H.recs_from(recs, [base])
+        if got:
+            viol.append(f"[{name}] {len(got)} Link(s) from {base}")
+    n = steady.q("MATCH (s:Symbol {qname:'state/stores.py::DbStore.load', repoId:'fx-svc'})-[:HAS_CALL]->(c:CallSite)-[e:CONSUMES]->() RETURN count(e)")[0][0]
+    if n:
+        viol.append(f"[store] {n} CONSUMES edge(s) from {base}")
+    LEDGER["_dbstore_load"] = {"violations": viol}
+    assert not viol, "\n".join(viol)
 
 
 def test_zz_write_the_ledger():
