@@ -226,6 +226,8 @@ P1-37 are the AC-5 evidence and are never used here.
 | P1T-25 | AC-6 per kind | P1-41, P1-17 |
 | P1T-17, P1T-18 | AC-25 in the P1 form (index §5) and the reverse question | P1-39 |
 
+**Fixture-system driver (P1-42).** `cpg/tests/test_fixture_gate_p1_ac.py` (checkers in `fixture_gate_p1_ac_helpers.py`) asserts P1T-17/18 (AC-25 shape, data-flow effect, reverse question, control half reported not closed), P1T-21 (AC-9), P1T-22 (AC-16: engine, CLI, MCP, parser-path plain language, and the raw recipe by chain replay), P1T-23 (AC-17, AC-18), P1T-24 (AC-21) and P1T-25 (AC-6 per kind, dynamic import recorded "not met at P1") on the materialized fixtures; P1T-19 and P1T-20 are not in it. Figures: `docs/test-reports/connected-code-graph-p1-report.md`, section "P1-42".
+
 **P1T-20 sample and pass rule.** One structured impact request per dev anchor, sampled by the change the AC names:
 AC-1 the anchors of `ac5-http.jsonl` whose changed symbol is a `falkor-chat` server endpoint; AC-2 the anchors of
 `ac5-mcp.jsonl` and `ac5-wiring.jsonl` whose changed symbol is a `falkor-chat` MCP tool; AC-4 the anchors of
