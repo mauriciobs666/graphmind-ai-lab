@@ -1,0 +1,341 @@
+{
+ "records": [
+  {
+   "contentHash": "6957cf2e63a601ae6b81b7057aafa60e8e85c752e7f4af9d01b15e943a736df1",
+   "id": "471c84e792959bd20f6c62c70d476eee",
+   "kind": "code",
+   "lang": "javascript",
+   "lineCount": 760,
+   "path": "falkor-chat/web/app.js",
+   "repoId": "graphmind-ai-lab",
+   "role": "primary",
+   "type": "file",
+   "unitId": "717cbfbcca83cbbb67b358c2db04ee2f"
+  },
+  {
+   "complexity": 7,
+   "fileId": "471c84e792959bd20f6c62c70d476eee",
+   "fingerprint": "d5b5189338236b728eee3fdcd940b95de4874d7cf053637fe01341d9836e3f6e",
+   "id": "7d1cfe2d04f812e01e16df0fc16cddfc",
+   "kind": "function",
+   "lang": "javascript",
+   "lastChangedAt": "2026-07-02T23:27:36Z",
+   "lastChangedCommit": "77a77e3c94e02f0d9dc6f9fae6c386b32568c566",
+   "lineEnd": 56,
+   "lineStart": 36,
+   "name": "api",
+   "nameNorm": "api",
+   "parentId": "42914163692173d22fa5412374cf3e95",
+   "path": "falkor-chat/web/app.js",
+   "qname": "falkor-chat/web/app.js::api",
+   "repoId": "graphmind-ai-lab",
+   "type": "symbol"
+  },
+  {
+   "callKind": "call",
+   "calleeName": "fetch",
+   "externalTarget": "fetch",
+   "id": "875f30a49491209da0e2d3e87bb8aee8",
+   "line": 37,
+   "ordinal": 0,
+   "reason": "name-match",
+   "resolution": "external",
+   "status": "possible",
+   "symbolId": "7d1cfe2d04f812e01e16df0fc16cddfc",
+   "targets": [],
+   "type": "callsite"
+  },
+  {
+   "arg": "a1.headers[\"Content-Type\"]",
+   "callSiteId": "875f30a49491209da0e2d3e87bb8aee8",
+   "id": "09da07f0955887e6327eab84605b30d5",
+   "type": "valueSet",
+   "values": [
+    {
+     "const": "application/json"
+    }
+   ]
+  },
+  {
+   "arg": "a0",
+   "callSiteId": "875f30a49491209da0e2d3e87bb8aee8",
+   "id": "614f260d56c12d930b7178e19fccb7bf",
+   "type": "valueSet",
+   "values": [
+    {
+     "unknown": "point-derived"
+    }
+   ]
+  },
+  {
+   "def": "875f30a49491209da0e2d3e87bb8aee8",
+   "fromPath": "r.status",
+   "id": "3ff23aa8fd24671e78ef3abbed361405",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "",
+   "type": "data",
+   "use": "6a6a8b97e2273d09c242c99ffd31d7c3"
+  },
+  {
+   "def": "875f30a49491209da0e2d3e87bb8aee8",
+   "fromPath": "r.ok",
+   "id": "412ccce674b61c1905c497248a5182e0",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "",
+   "type": "data",
+   "use": "5494022403483186c97f7fc39064a25d"
+  },
+  {
+   "def": "875f30a49491209da0e2d3e87bb8aee8",
+   "fromPath": "r",
+   "id": "667ea4eaf3b95ae247601fa09f5620bb",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "recv",
+   "type": "data",
+   "use": "e1c289e31bca826f24f2b6b8ed5f7e15"
+  },
+  {
+   "def": "875f30a49491209da0e2d3e87bb8aee8",
+   "fromPath": "r.status",
+   "id": "8a4be09cc20159ae806e151779738770",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "a0",
+   "type": "data",
+   "use": "650bcadc30dfde631e42138493792d4c"
+  },
+  {
+   "def": "875f30a49491209da0e2d3e87bb8aee8",
+   "fromPath": "r",
+   "id": "b8a795c1432e5a2613279507591f40a1",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "recv",
+   "type": "data",
+   "use": "1fa0ed1f7ceb50f7178a3bb258890b59"
+  },
+  {
+   "def": "e169e6c90770e390cf321f667cfcfca3",
+   "fromPath": "p0",
+   "id": "d872c29a15ce29a2b7081d26ff03187b",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "a0",
+   "type": "data",
+   "use": "875f30a49491209da0e2d3e87bb8aee8"
+  },
+  {
+   "def": "875f30a49491209da0e2d3e87bb8aee8",
+   "fromPath": "r.status",
+   "id": "ff358ec3b6e359ae23e7d0f1b4dde3ba",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "ret",
+   "type": "data",
+   "use": "155ea8bda88f2da0745b46c84e40e922"
+  },
+  {
+   "contentHash": "640566e32673fa5f8d2ddf861c77428270172487c778b13215ac4297632468cf",
+   "id": "1242a82f5080a29a54aa3d811eacb089",
+   "kind": "code",
+   "lang": "javascript",
+   "lineCount": 166,
+   "path": "salesperson/src/api/client.ts",
+   "repoId": "graphmind-ai-lab",
+   "role": "primary",
+   "type": "file",
+   "unitId": "c2341bca0404a6a3eadab1d72ba5f4db"
+  },
+  {
+   "complexity": 11,
+   "fileId": "1242a82f5080a29a54aa3d811eacb089",
+   "fingerprint": "92354c07a32b0184c2428f94db873a927bfdd0807403e081387670aee86c7855",
+   "id": "3e0e2e00a2cea8e99fd32ff6c2b1082e",
+   "kind": "function",
+   "lang": "javascript",
+   "lastChangedAt": "2026-09-14T00:46:22Z",
+   "lastChangedCommit": "bbd9eb75046fb0565509df7a584b5f5163e62d6b",
+   "lineEnd": 166,
+   "lineStart": 107,
+   "name": "apiFetch",
+   "nameNorm": "apifetch",
+   "parentId": "77b0ab99f37781f48d22290ee7e4c387",
+   "path": "salesperson/src/api/client.ts",
+   "qname": "salesperson/src/api/client.ts::apiFetch",
+   "repoId": "graphmind-ai-lab",
+   "type": "symbol"
+  },
+  {
+   "callKind": "call",
+   "calleeName": "fetch",
+   "externalTarget": "fetch",
+   "id": "41d8c78a0fa5b76642dc74e73958888a",
+   "line": 118,
+   "ordinal": 0,
+   "reason": "name-match",
+   "resolution": "external",
+   "status": "possible",
+   "symbolId": "3e0e2e00a2cea8e99fd32ff6c2b1082e",
+   "targets": [],
+   "type": "callsite"
+  },
+  {
+   "arg": "a0",
+   "callSiteId": "41d8c78a0fa5b76642dc74e73958888a",
+   "id": "0feb8fa261f1c2fbb9153992dc0fd18b",
+   "type": "valueSet",
+   "values": [
+    {
+     "unknown": "point-derived"
+    }
+   ]
+  },
+  {
+   "arg": "a1.signal",
+   "callSiteId": "41d8c78a0fa5b76642dc74e73958888a",
+   "id": "b6f3e365e4b96d92b923b635dace6805",
+   "type": "valueSet",
+   "values": [
+    {
+     "unknown": "point-derived"
+    }
+   ]
+  },
+  {
+   "arg": "a1.method",
+   "callSiteId": "41d8c78a0fa5b76642dc74e73958888a",
+   "id": "c399d8e4f58ff8574123a395995cda9a",
+   "type": "valueSet",
+   "values": [
+    {
+     "unknown": "point-derived"
+    }
+   ]
+  },
+  {
+   "arg": "a1.headers",
+   "callSiteId": "41d8c78a0fa5b76642dc74e73958888a",
+   "id": "e0af2d7794e072b3f67c9e76bd2f25a6",
+   "type": "valueSet",
+   "values": [
+    {
+     "unknown": "point-derived"
+    }
+   ]
+  },
+  {
+   "def": "41d8c78a0fa5b76642dc74e73958888a",
+   "fromPath": "r.status",
+   "id": "17b730f4ffad3e8bb0120162e4380e1b",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "",
+   "type": "data",
+   "use": "dc1aab6306a91669075ff1edde170aa4"
+  },
+  {
+   "def": "41d8c78a0fa5b76642dc74e73958888a",
+   "fromPath": "r.status",
+   "id": "1ec2991699f503e77a831f759dce20bf",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "a0.status",
+   "type": "data",
+   "use": "9d6f537d19e4f01cf83f3fdfdc801a83"
+  },
+  {
+   "def": "41d8c78a0fa5b76642dc74e73958888a",
+   "fromPath": "r.ok",
+   "id": "6336ec4799486af365c71e19404fb48f",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "",
+   "type": "data",
+   "use": "ae67a2212a3b8a684a89c771b32904e5"
+  },
+  {
+   "def": "7345bac4fad5e72ddee308b7652bb966",
+   "fromPath": "r",
+   "id": "74fb52637d16d96bae43c550b01ec0d0",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "a1.body",
+   "type": "data",
+   "use": "41d8c78a0fa5b76642dc74e73958888a"
+  },
+  {
+   "def": "41d8c78a0fa5b76642dc74e73958888a",
+   "fromPath": "r",
+   "id": "9c064c416295ccba10f9c3860e3bffe9",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "",
+   "type": "data",
+   "use": "61dafdaff991a0b66def095d6752a791"
+  },
+  {
+   "def": "5cb61d0b7a08ee25601c8d92957c578e",
+   "fromPath": "r",
+   "id": "c214d105659f01e9282e311cb51ad7bf",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "a0",
+   "type": "data",
+   "use": "41d8c78a0fa5b76642dc74e73958888a"
+  },
+  {
+   "def": "41d8c78a0fa5b76642dc74e73958888a",
+   "fromPath": "r",
+   "id": "d2b980dded44d5407c650e5e40c9f604",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "recv",
+   "type": "data",
+   "use": "866ff529b8e79e1c09d5ce521e6e5d6a"
+  },
+  {
+   "def": "3584bd914767bc6ec2cd94a767006185",
+   "fromPath": "p0.body",
+   "id": "d99a32e42f65e5dd315cd182e95be83e",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "a1.body",
+   "type": "data",
+   "use": "41d8c78a0fa5b76642dc74e73958888a"
+  },
+  {
+   "def": "41d8c78a0fa5b76642dc74e73958888a",
+   "fromPath": "r",
+   "id": "e678c3b25905db220a4138ea7c46a7be",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "recv",
+   "type": "data",
+   "use": "b0941dcaac55bf665d5d3d7f7602c1a7"
+  },
+  {
+   "def": "3584bd914767bc6ec2cd94a767006185",
+   "fromPath": "p0.method",
+   "id": "e6f94013cd9c8f246917530d594d94a6",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "a1.method",
+   "type": "data",
+   "use": "41d8c78a0fa5b76642dc74e73958888a"
+  },
+  {
+   "def": "53eabafb79ad505d68973e074a1441fc",
+   "fromPath": "r.signal",
+   "id": "f5baa1e8a64f0fe3bbbe816a52d52bfd",
+   "reason": "intra-flow",
+   "status": "confirmed",
+   "toPath": "a1.signal",
+   "type": "data",
+   "use": "41d8c78a0fa5b76642dc74e73958888a"
+  }
+ ],
+ "source": "real extractor output (ccg.build over this repository, builtCommit 24cdff79dc87377c06e8330d4159c9eba4c85ad2); regenerate with tests/data/p1_57a_fetch_sites_regen.py"
+}

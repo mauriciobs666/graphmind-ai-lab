@@ -403,8 +403,13 @@ def test_the_pack_file_validates_and_carries_its_directory_name(pid):
     assert pack["id"] == pid
 
 
-#: Packs whose file carries one line beyond the spec block (P1-55: `fetch-url`'s `ownSite`); the pin removes exactly that line.
+#: Packs whose file differs from the spec block (P1-55: `fetch-url`'s extra `ownSite` line; P1-57a: the `fetch` seed's `scope.path`, one more key
+#: on the spec's own seeds line). The pin removes the `ownSite` line and swaps the seed line back for the spec's, so nothing else may differ.
 SPEC_PLUS_LINES = {"fetch": "    ownSite: true"}
+FETCH_SEED_SCOPE = {"path": {"regex": ".*\\.(js|jsx|cjs|mjs|ts|tsx|cts|mts|vue)"}}
+FETCH_SEED_LINE_FILE = ('    seeds: [{call: {callee: fetch, resolution: [external, unresolved]}, arg: a0, '
+                        'scope: {path: {regex: ".*\\\\.(js|jsx|cjs|mjs|ts|tsx|cts|mts|vue)"}}}]')
+FETCH_SEED_LINE_SPEC = "    seeds: [{call: {callee: fetch, resolution: [external, unresolved]}, arg: a0}]"
 
 
 @pytest.mark.parametrize("pid", REAL_PACKS)
@@ -420,6 +425,10 @@ def test_the_pack_file_is_the_spec_block_plus_status_paper(pid):
         assert body.count(line) == 1
         body.remove(line)
         expected["liftings"] = [{**lf, "ownSite": True} for lf in expected["liftings"]]
+    if pid == "fetch":                   # P1-57a: the seed's file gate, one key on the spec's seeds line
+        assert body.count(FETCH_SEED_LINE_FILE) == 1
+        body[body.index(FETCH_SEED_LINE_FILE)] = FETCH_SEED_LINE_SPEC
+        expected["liftings"] = [{**lf, "seeds": [{**s, "scope": FETCH_SEED_SCOPE} for s in lf["seeds"]]} for lf in expected["liftings"]]
     assert "\n".join(body).strip() == without_comment_lines(spec_block_text(pid))
     assert rulepack.load_yaml(text) == expected
 

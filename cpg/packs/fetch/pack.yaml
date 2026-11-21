@@ -1,8 +1,10 @@
 # Paper pack: extracted mechanically from the YAML block of section 3 of
 # docs/plans/connected-code-graph-rule-pack-spec.md (v1.4); the one added line is `status: paper`
 # (no pack runtime or extractor is behind it yet). tests/test_rule_pack_schema.py pins the equality.
-# P1-55: the one further line is `ownSite: true` on `fetch-url` (a wrapper no call edge reaches is a consumer at its own site); the spec block
+# P1-55: a further line is `ownSite: true` on `fetch-url` (a wrapper no call edge reaches is a consumer at its own site); the spec block
 # owes it at the feature's close, and the pin removes exactly that line.
+# P1-57a (D8): the other change is the seed's `scope.path` (same line, one more key): `fetch` is a JavaScript global, so the seed fires only in a JS/TS source file
+# (a Python `self.session.fetch(x)` is no Web API call); the pin restores the spec's seed line.
 packFormat: 1
 id: fetch
 version: 0.1.0
@@ -14,7 +16,7 @@ liftings:
   - id: fetch-url
     role: {kind: http, slot: url}
     ownSite: true
-    seeds: [{call: {callee: fetch, resolution: [external, unresolved]}, arg: a0}]
+    seeds: [{call: {callee: fetch, resolution: [external, unresolved]}, arg: a0, scope: {path: {regex: ".*\\.(js|jsx|cjs|mjs|ts|tsx|cts|mts|vue)"}}}]
     companions: [{role: verb, arg: a1.method, bareDefault: GET, unknown: "*"}]
 rules:
   - id: http-client
