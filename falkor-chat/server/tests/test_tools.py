@@ -371,7 +371,7 @@ def test_post_message_lets_unrelated_service_errors_propagate():
 
 def _row(msg_id, score, text="ctx"):
     return {"msgId": msg_id, "text": text, "role": "user", "score": score,
-            "relatedContext": [], "seedKind": "Message"}
+            "seedKind": "Message"}
 
 
 def _chunk_row(chunk_id, score, text="chunk ctx", document_id="d1"):
@@ -379,7 +379,7 @@ def _chunk_row(chunk_id, score, text="chunk ctx", document_id="d1"):
     tagging (K-050 M5 Stage 5) — no `msgId`/`role` key, `seedKind: 'Chunk'`.
     """
     return {"chunkId": chunk_id, "text": text, "documentId": document_id,
-            "seq": 0, "score": score, "relatedContext": [], "seedKind": "Chunk"}
+            "seq": 0, "score": score, "seedKind": "Chunk"}
 
 
 def test_graphrag_retrieve_embeds_then_applies_tau_cutoff_and_cap():

@@ -1200,9 +1200,8 @@ class Services:
 
         Passes the single service-layer `RAG_QUERY_TIMEOUT_MS` override on both RO
         queries (DESIGN §10). `repository.hybrid_search` (Message seeds, scope
-        traversal, Entity co-occurrence expansion) and `repository.search_chunks`
-        (Chunk seeds, shipped Stage 2 — no scope traversal, no `Entity` expansion:
-        FR-2 doesn't extend `relatedContext` to `Chunk` seeds) are both queried
+        traversal) and `repository.search_chunks` (Chunk seeds, shipped Stage 2 —
+        no scope traversal) are both queried
         with the same `q_vec`/`k`, then **merged app-side** by `score` ascending
         (cosine distance — lower is better) and truncated to `limit`. There is no
         combined-ANN Cypher shape for this (graph-dba's note is scoped to the
@@ -1215,9 +1214,7 @@ class Services:
 
         Each merged item is tagged `seedKind: 'Message'|'Chunk'` (neither repo
         method returns this key) so a caller (`responder.maybe_respond`) can
-        resolve the right id generically. A `Chunk` seed's `relatedContext` is
-        set to `[]` — the same dormant-field convention already used for
-        `Message` seeds pre-extraction.
+        resolve the right id generically.
 
         **Tie-break (undocumented until Pass 5's review NIT):** `list.sort` is
         stable (a documented Python guarantee), and the `Message` pool is
@@ -1258,7 +1255,7 @@ class Services:
         # Message pool concatenated first — see the tie-break note above.
         merged = (
             [{**row, "seedKind": "Message"} for row in msg_hits]
-            + [{**row, "seedKind": "Chunk", "relatedContext": []} for row in chunk_hits]
+            + [{**row, "seedKind": "Chunk"} for row in chunk_hits]
         )
         merged.sort(key=lambda row: row["score"])
         return merged[:limit]

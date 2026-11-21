@@ -157,7 +157,7 @@ def test_chunk_seeded_answer_threads_chunk_id_into_provenance():
     """
     seeds = [
         {"chunkId": "ch1", "text": "chunk text", "documentId": "d1", "seq": 0,
-         "score": 0.05, "seedKind": "Chunk", "relatedContext": []},
+         "score": 0.05, "seedKind": "Chunk"},
     ]
     services = FakeServices(seeds=seeds)
     responder = _responder(services)
@@ -176,7 +176,7 @@ def test_mixed_message_and_chunk_seeds_thread_correct_ids_in_rank_order():
         {"msgId": "s1", "text": "seed one", "role": "user", "score": 0.0,
          "seedKind": "Message"},
         {"chunkId": "ch1", "text": "chunk text", "documentId": "d1", "seq": 0,
-         "score": 0.2, "seedKind": "Chunk", "relatedContext": []},
+         "score": 0.2, "seedKind": "Chunk"},
     ]
     services = FakeServices(seeds=seeds)
     responder = _responder(services)

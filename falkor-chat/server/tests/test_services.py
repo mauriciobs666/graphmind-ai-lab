@@ -2298,7 +2298,7 @@ def test_hybrid_search_applies_rag_timeout_constant():
 
     repo = FakeRepo()
     repo.hybrid_rows = [
-        {"msgId": "m1", "text": "cats", "role": "user", "score": 0.0, "relatedContext": []}
+        {"msgId": "m1", "text": "cats", "role": "user", "score": 0.0}
     ]
     repo.chunk_rows = []
     svc = make_service(repo)
@@ -2344,8 +2344,8 @@ def test_hybrid_search_forwards_channel_scope_to_message_pool_only():
 def test_hybrid_search_merges_message_and_chunk_pools_by_score_ascending():
     repo = FakeRepo()
     repo.hybrid_rows = [
-        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.5, "relatedContext": []},
-        {"msgId": "m2", "text": "m2", "role": "user", "score": 0.1, "relatedContext": []},
+        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.5},
+        {"msgId": "m2", "text": "m2", "role": "user", "score": 0.1},
     ]
     repo.chunk_rows = [
         {"chunkId": "c1", "text": "c1", "documentId": "d1", "seq": 0, "score": 0.3},
@@ -2357,15 +2357,14 @@ def test_hybrid_search_merges_message_and_chunk_pools_by_score_ascending():
     assert [h.get("msgId") or h.get("chunkId") for h in hits] == ["m2", "c1", "m1"]
     assert [h["score"] for h in hits] == [0.1, 0.3, 0.5]
     assert [h["seedKind"] for h in hits] == ["Message", "Chunk", "Message"]
-    # Chunk items get the same dormant relatedContext:[] convention as Message
-    assert hits[1]["relatedContext"] == []
+    assert "relatedContext" not in hits[1]
 
 
 def test_hybrid_search_truncates_merged_results_to_limit():
     repo = FakeRepo()
     repo.hybrid_rows = [
-        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.1, "relatedContext": []},
-        {"msgId": "m2", "text": "m2", "role": "user", "score": 0.4, "relatedContext": []},
+        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.1},
+        {"msgId": "m2", "text": "m2", "role": "user", "score": 0.4},
     ]
     repo.chunk_rows = [
         {"chunkId": "c1", "text": "c1", "documentId": "d1", "seq": 0, "score": 0.2},
@@ -2382,7 +2381,7 @@ def test_hybrid_search_truncates_merged_results_to_limit():
 def test_hybrid_search_fewer_than_limit_combined_results():
     repo = FakeRepo()
     repo.hybrid_rows = [
-        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.1, "relatedContext": []},
+        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.1},
     ]
     repo.chunk_rows = []
     svc = make_service(repo)
@@ -2411,7 +2410,7 @@ def test_hybrid_search_all_chunk_results_when_message_ann_empty():
 def test_hybrid_search_all_message_results_when_chunk_ann_empty():
     repo = FakeRepo()
     repo.hybrid_rows = [
-        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.2, "relatedContext": []},
+        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.2},
     ]
     repo.chunk_rows = []
     svc = make_service(repo)

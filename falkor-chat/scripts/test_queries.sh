@@ -376,7 +376,6 @@ assert_contains "fulltext rows carry threadId" "th1" "$out"
 # verification (real embedding size, wrong-dim quirk, RAM line) lives in the
 # graph-dba deliverable docs/archive/plans/m2-graphrag.md — do not re-encode 1024 here.
 # Score is cosine distance: 0 = identical, ASC = most similar first (DESIGN §7.1).
-# There is NO Entity pipeline in M2 — the §6 Entity expansion must no-op cleanly.
 
 echo ""
 echo "▶ §6 GraphRAG — set embeddings and query"
@@ -416,28 +415,22 @@ else
   FAIL=$((FAIL+1))
 fi
 
-# full §6 hybrid retrieval: vector seed + thread/channel scope + Entity expansion.
+# full §6 hybrid retrieval: vector seed + thread/channel scope.
 # Hand copy of repository.hybrid_search (bounded form, graph-config-defaults-graph.md §3.1);
 # it pins only this copy -- the method's own contract is tests/test_graphrag.py.
-out=$(rq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score MATCH (t:Thread {threadId: seed.threadId}) WITH seed, score, t MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t) CALL { WITH seed OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) WITH DISTINCT related LIMIT 5 RETURN collect(related) AS expanded } RETURN seed.msgId AS msgId, seed.text, seed.role, score, [m IN expanded | m.text] AS relatedContext ORDER BY score ASC, msgId ASC LIMIT 5" 2>&1)
+out=$(rq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score MATCH (t:Thread {threadId: seed.threadId}) WITH seed, score, t MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t) RETURN seed.msgId AS msgId, seed.text, seed.role, score ORDER BY score ASC, msgId ASC LIMIT 5" 2>&1)
 assert_contains "hybrid retrieval: returns results" "m1" "$out"
 assert_contains "§6 hybrid returns seed text" "Hello thread" "$out"
 assert_not_contains "hybrid retrieval: no error" "ERR" "$out"
 
-# Entity expansion no-ops cleanly: there is no Entity pipeline in M2, so
-# relatedContext must be the empty list [] (not an error, not missing).
-assert_contains "§6 Entity expansion no-ops (empty relatedContext [])" "[]" "$out"
-out=$(rq "$WS" "MATCH (e:Entity) RETURN count(e) AS entities")
-assert_contains "§6 Entity graph is empty (no entity pipeline in M2)" "0" "$out"
-
 # PROFILE: the ANN retrieval must anchor on the vector index (ProcedureCall),
 # never a whole-graph scan of Message.
-prof=$(gp "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score MATCH (t:Thread {threadId: seed.threadId}) WITH seed, score, t MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t) CALL { WITH seed OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) WITH DISTINCT related LIMIT 5 RETURN collect(related) AS expanded } RETURN seed.msgId AS msgId, score ORDER BY score ASC, msgId ASC LIMIT 5")
+prof=$(gp "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score MATCH (t:Thread {threadId: seed.threadId}) WITH seed, score, t MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t) RETURN seed.msgId AS msgId, score ORDER BY score ASC, msgId ASC LIMIT 5")
 assert_contains     "§6 ANN retrieval uses the vector index (ProcedureCall)" "ProcedureCall" "$prof"
 assert_not_contains "§6 ANN retrieval has no All Node Scan"                  "All Node Scan" "$prof"
 
 # workspace-wide variant (channel MATCH omitted) still retrieves via the index
-out=$(rq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score MATCH (t:Thread {threadId: seed.threadId}) CALL { WITH seed OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) WITH DISTINCT related LIMIT 5 RETURN collect(related) AS expanded } RETURN seed.msgId AS msgId, score, [m IN expanded | m.text] AS relatedContext ORDER BY score ASC, msgId ASC LIMIT 5" 2>&1)
+out=$(rq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score MATCH (t:Thread {threadId: seed.threadId}) RETURN seed.msgId AS msgId, score ORDER BY score ASC, msgId ASC LIMIT 5" 2>&1)
 assert_contains     "§6 workspace-wide variant returns m1" "m1" "$out"
 assert_not_contains "§6 workspace-wide variant no error"   "ERR" "$out"
 
