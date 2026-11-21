@@ -11,6 +11,7 @@
     "mcp-monitor",
     "model-bench",
     "decision-models",
+    "coordination-graph",
     "skills",
     "repo"
   ],

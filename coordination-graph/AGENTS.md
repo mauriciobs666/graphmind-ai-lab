@@ -3,15 +3,15 @@
 Python 3.12 CLI (`coordgraph`) that mirrors the repo's coordination files (teco ledgers, reviews,
 requirements, `BACKLOG.md` files, agent `kaizen/plan.md`) into FalkorDB and answers read views over
 the mirror. **Files are the truth; the graph is a read-only mirror.** Run instructions and the
-command surface: `README.md`. Design: `claude/docs/plans/coordination-graph.md` and
-`claude/docs/plans/coordination-graph3.md`; delivery record: `docs/HISTORY.md`. Skill for
+command surface: `README.md`. Live spec: `docs/DESIGN.md` (behavior, CLI, guards, hook, KB) and
+`docs/FORMATS.md` (graph schema, source grammars); open items: `docs/BACKLOG.md`; delivery record: `docs/HISTORY.md`. Skill for
 consumers: `skills/coordination-graph/SKILL.md`.
 
 ## What is true now
 
 - **Built:** every subcommand in `README.md`, the shared-instance path (`--confirm`) and the
   post-edit hook (`hooks/post-tool-sync.sh`, `hook-sync`, `retry-failed`). **Loaded:** the shared
-  mirror (S8a step 5, parity ok). **KB:** synced (S8a). **Not done:** registering the hook (the stakeholder applies
+  mirror (S8a step 5, parity ok). **Not done:** registering the hook (the stakeholder applies
   `cobb`'s settings block).
 - **Tests run with this directory as the working directory**, never from the repo root (rootdir
   and `testpaths` would be wrong). Default run is offline (`-m 'not live'`); `live` needs Docker.
@@ -40,7 +40,6 @@ consumers: `skills/coordination-graph/SKILL.md`.
 - **Per-source atomic replace**: one statement per source; a failed replace leaves the previous
   subgraph, and one is skipped when sha256 and `parserVersion` match. `rebuild` forces every
   source, prunes, sweeps orphans and proves parity against a fresh parse, never the graph itself.
-- **The file wins** over a `⚠ drift` row or `Drift:` source.
 - **KB retry**: `kb-sync` re-posts a `failed` document only if unsearchable (the POST supersedes the old
   same-text copy); an embedded one is `degraded`. Bounded by `COORDGRAPH_KB_RETRY_*`.
 - **Fixtures live in `tmp_path`**, never under a `docs/plans/`-shaped path.

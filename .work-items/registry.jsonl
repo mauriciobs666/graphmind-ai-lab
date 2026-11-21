@@ -128,3 +128,13 @@
 {"evid":"a955cfbd0c8a4d46","ts":1795219383570080326,"ev":"new","id":"GAL-F0032","type":"F","parent":null,"home":"falkor-chat","title":"Opportunistic nit — re-slug the K-031 implementation review"}
 {"evid":"3fe1cd06dab34f48","ts":1795219383603653196,"ev":"new","id":"GAL-F0033","type":"F","parent":null,"home":"falkor-chat","title":"DESIGN §13 open questions — resolve as their milestones arrive"}
 {"evid":"f7690a90f3a64645","ts":1795219383637239819,"ev":"new","id":"GAL-F0034","type":"F","parent":null,"home":"falkor-chat","title":"WSL2 memory cap for the 16GB host"}
+{"evid":"bf1ef399b30a4e7b","ts":1795303151623508077,"ev":"new","id":"GAL-F0035","type":"F","parent":null,"home":"coordination-graph","title":"`retry-failed` exits 0 on a guard refusal"}
+{"evid":"2583e94a704d49e2","ts":1795303151657727117,"ev":"new","id":"GAL-F0036","type":"F","parent":null,"home":"coordination-graph","title":"CLI surface for `identity.resolve_need` and `needs_status`"}
+{"evid":"6ce48880e9b94ffd","ts":1795303151692269580,"ev":"new","id":"GAL-F0037","type":"F","parent":null,"home":"coordination-graph","title":"Engine cleanup for KB sections of files dropped from `kb-files.txt`"}
+{"evid":"3b251f5c1d324aa6","ts":1795303151726055081,"ev":"new","id":"GAL-F0038","type":"F","parent":null,"home":"coordination-graph","title":"KB failed-document retry minors"}
+{"evid":"9ff5713e862b40aa","ts":1795303151759121722,"ev":"new","id":"GAL-F0039","type":"F","parent":null,"home":"coordination-graph","title":"`kb-status` does not show retry counts"}
+{"evid":"71b09720efa04f5a","ts":1795303151792776865,"ev":"new","id":"GAL-F0040","type":"F","parent":null,"home":"coordination-graph","title":"Discovery classes a role-suffixed topic slug as a ledger"}
+{"evid":"6dd736082caa44b5","ts":1795303151828416731,"ev":"new","id":"GAL-F0041","type":"F","parent":null,"home":"coordination-graph","title":"Symlinks: CLI discovery follows them, the hook does not"}
+{"evid":"6c601ed794254ac8","ts":1795303151864044744,"ev":"new","id":"GAL-F0042","type":"F","parent":null,"home":"coordination-graph","title":"BOM-unsafe direct text reads"}
+{"evid":"8b4694e6f4894600","ts":1795303151901030820,"ev":"new","id":"GAL-F0043","type":"F","parent":null,"home":"coordination-graph","title":"Hook go-live and the unmeasured real-backend KB round trip"}
+{"evid":"ec6094b7c6134aea","ts":1795303151937538781,"ev":"new","id":"GAL-F0044","type":"F","parent":null,"home":"coordination-graph","title":"Fast-path budget holds only on an idle machine"}
