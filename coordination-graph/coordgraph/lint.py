@@ -16,6 +16,7 @@ from pathlib import Path
 from .config import package_repo_root
 from .discover import discover
 from .history import HistoryIndex, find_id_tokens
+from .parse.ledger import UNKNOWN, parse_ledger
 from .parse.backlog import BacklogDoc, BacklogParseError, Item, parse_backlog
 from .scope import load_legacy_paths
 from .shapes import UNSCOPED, Candidates, Reason, classify, offline_candidates
@@ -112,7 +113,30 @@ def lint_repo(
             findings.extend(_item_findings(item, rules, history, known_refs, candidates, owners, reason))
         findings.extend(_milestone_findings(doc))
         findings.extend(_map_findings(doc, text))
+    findings.extend(_ledger_findings(root, paths))
     return findings
+
+
+def _ledger_findings(root: Path, paths: Iterable[str] | None) -> list[Finding]:
+    """An error per unit whose derived `statusToken` is `unknown` in a ledger not headed archived.
+
+    The token is the parser's (`Unit.status_token`), not re-derived. A ledger with no header
+    Status, or one that is not exactly `archived`, counts as live: only a stated archive exempts.
+    """
+    out: list[Finding] = []
+    for f in discover(root):
+        if f.kind != "ledger" or (paths is not None and f.path not in set(paths)):
+            continue
+        doc = parse_ledger(f.path, (root / f.path).read_bytes())
+        if doc.archived:
+            continue
+        for u in doc.units:
+            if u.status_token == UNKNOWN:
+                out.append(Finding(
+                    f.path, None, "error", "unknown-status",
+                    f"unit {u.unit_key or u.key}: status {u.status_text!r} maps to no teco value "
+                    "(statusToken unknown) in a non-archived ledger"))
+    return out
 
 
 def _item_findings(item: Item, rules, history: HistoryIndex, known_refs: set[str],

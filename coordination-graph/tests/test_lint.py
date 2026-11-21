@@ -214,3 +214,60 @@ def test_item_counts_per_file(repo):
     put(repo, "mcp-monitor/docs/BACKLOG.md", "# B\n\n- **bullet.** no ids\n")
     assert item_counts(repo) == {"docs/BACKLOG.md": 1, "falkor-chat/docs/BACKLOG.md": 2,
                                  "mcp-monitor/docs/BACKLOG.md": 0}
+
+
+# --- ledger `unknown` statusToken (plan S1: "every unknown statusToken in a non-archived ledger") ---
+
+LEDGER = "falkor-chat/docs/plans/x-coordination.md"
+
+
+def ledger(status_line, *cells):
+    rows = "".join(f"| U{i} | {c} |\n" for i, c in enumerate(cells, 1))
+    return f"# L\n\n{status_line}\n\n| Unit | Status |\n|---|---|\n{rows}"
+
+
+ACTIVE = "> **Status:** active · **Owner:** `teco` · **Tracks:** —"
+ARCHIVED = "> **Status:** archived · **Owner:** `teco` · **Tracks:** —"
+
+
+def unit_errors(repo, **kw):
+    return [f for f in lint_repo(repo, **kw) if f.code == "unknown-status"]
+
+
+def test_an_unknown_status_in_an_active_ledger_is_an_error(repo):
+    put(repo, LEDGER, ledger(ACTIVE, "delivered", "mystery"))
+    (f,) = unit_errors(repo)
+    assert (f.severity, f.path) == ("error", LEDGER)
+    assert "U2" in f.message and "mystery" in f.message
+
+
+def test_every_unknown_unit_is_reported_across_tables(repo):
+    text = ledger(ACTIVE, "bogus") + "\n| Unit | Status |\n|---|---|\n| V1 | nonsense |\n"
+    put(repo, LEDGER, text)
+    assert len(unit_errors(repo)) == 2
+
+
+def test_an_unknown_status_in_an_archived_ledger_is_silent(repo):
+    put(repo, LEDGER, ledger(ARCHIVED, "mystery"))
+    assert unit_errors(repo) == []
+
+
+def test_known_statuses_in_an_active_ledger_are_silent(repo):
+    put(repo, LEDGER, ledger(ACTIVE, "queued", "✅ delivered", "in-flight", "done"))
+    assert unit_errors(repo) == []
+
+
+def test_a_ledger_without_a_header_status_counts_as_live(repo):
+    put(repo, LEDGER, ledger("", "mystery"))
+    assert len(unit_errors(repo)) == 1
+
+
+def test_an_odd_header_status_is_not_the_archived_exemption(repo):
+    put(repo, LEDGER, ledger("> **Status:** Archived-ish · **Owner:** `teco`", "mystery"))
+    assert len(unit_errors(repo)) == 1
+
+
+def test_ledger_findings_respect_the_paths_filter(repo):
+    put(repo, LEDGER, ledger(ACTIVE, "mystery"))
+    assert unit_errors(repo, paths=["falkor-chat/docs/BACKLOG.md"]) == []
+    assert len(unit_errors(repo, paths=[LEDGER])) == 1

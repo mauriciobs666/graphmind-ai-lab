@@ -50,7 +50,7 @@ Every store-backed command takes `--graph KEY` (default `COORDGRAPH_KEY`, itself
 
 | Command | What it does |
 |---|---|
-| `lint [--count] [PATH...]` | Check backlog files; `--count` prints items per file instead. |
+| `lint [--count] [PATH...]` | Check backlog files and report every `unknown` unit status in a non-archived ledger; `--count` prints backlog items per file instead. |
 | `migrate (--dry-run \| --apply) [--titles-reviewed] [PATH...]` | One-time backlog layout reformat. `--dry-run` reports and diffs and allocates nothing. `--apply` allocates IDs via `wi new` and rewrites exactly one file (one PATH). |
 | `facts` | List the fact tokens used in `Touches`. |
 | `history-coverage [-v]` | Delivery-heading match rate over every history file. |
