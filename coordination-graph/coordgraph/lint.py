@@ -16,7 +16,7 @@ from pathlib import Path
 from .config import package_repo_root
 from .discover import discover
 from .history import HistoryIndex, find_id_tokens
-from .parse.ledger import UNKNOWN, parse_ledger
+from .parse.ledger import NO_UNITS, UNKNOWN, parse_ledger
 from .parse.backlog import BacklogDoc, BacklogParseError, Item, parse_backlog
 from .scope import load_legacy_paths
 from .shapes import UNSCOPED, Candidates, Reason, classify, offline_candidates
@@ -118,7 +118,7 @@ def lint_repo(
 
 
 def _ledger_findings(root: Path, paths: Iterable[str] | None) -> list[Finding]:
-    """An error per unit whose derived `statusToken` is `unknown` in a ledger not headed archived.
+    """A `no-units` warning for a ledger whose table did not parse, and an error per unit whose derived `statusToken` is `unknown` in a ledger not headed archived.
 
     The token is the parser's (`Unit.status_token`), not re-derived. A ledger with no header
     Status, or one that is not exactly `archived`, counts as live: only a stated archive exempts.
@@ -128,6 +128,7 @@ def _ledger_findings(root: Path, paths: Iterable[str] | None) -> list[Finding]:
         if f.kind != "ledger" or (paths is not None and f.path not in set(paths)):
             continue
         doc = parse_ledger(f.path, (root / f.path).read_bytes())
+        out += [Finding(f.path, None, "warn", "no-units", w) for w in doc.warnings if w.startswith(NO_UNITS)]
         if doc.archived:
             continue
         for u in doc.units:

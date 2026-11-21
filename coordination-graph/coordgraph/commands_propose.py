@@ -73,7 +73,7 @@ def propose_cmd(args) -> int:
         proposal = propose(items, make_resolver(graph, identity, history), args.per_milestone)
     except Exception as exc:  # noqa: BLE001
         return commands_store._fail("propose", exc)
-    print(drift.render_header(report, commands_store._hook_active(cfg), identity.registry_line()))
+    print(drift.render_header(report, commands_store._hook_state(cfg, root), identity.registry_line()))
     print(proposal.render() or "nothing to propose")
     return 0
 

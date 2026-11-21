@@ -91,14 +91,18 @@ Every store-backed command takes `--graph KEY` (default `COORDGRAPH_KEY`, itself
 Every read view (`drift`, `query`, `inflight`, `unit`, `planned`, `propose`) prints it first:
 
 ```
-Synced: <oldest>Z – <newest>Z (<n> sources) · Hook: active|disabled
+Synced: <oldest>Z – <newest>Z (<n> sources) · Hook: registered|not registered|disabled
 Registry: <n> items · last event <date> · <m> unflushed journal events
 Drift: none
 ```
 
 - `Synced` is the oldest and newest sync time over the covered sources. `never` means a source
   has no sync time. `Hook` is `disabled` when `COORDGRAPH_HOOK_DISABLED` is `1/true/yes/on` or
-  `<state dir>/disabled` exists (the kill switch, see "The post-edit hook").
+  `<state dir>/disabled` exists (the kill switch, see "The post-edit hook"); else `registered` when the
+  project's `.claude/settings.json`/`settings.local.json` run `coordination-graph/hooks/post-tool-sync.sh`
+  for both `PostToolUse` and `PostToolUseFailure` with a matcher covering Write, Edit and Bash
+  (`coordgraph/hookreg.py`); else `not registered` (also for unreadable settings). A static reading: it
+  does not prove the hook fires in a given context.
 - `Registry:` is the work-item registry read at query time; `Registry: unavailable -- identities
   compared as written` means identities were not resolved.
 - `Drift: <n> source(s)` is followed by one line per source: state `changed`, `unsynced`, `gone`

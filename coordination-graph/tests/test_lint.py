@@ -271,3 +271,26 @@ def test_ledger_findings_respect_the_paths_filter(repo):
     put(repo, LEDGER, ledger(ACTIVE, "mystery"))
     assert unit_errors(repo, paths=["falkor-chat/docs/BACKLOG.md"]) == []
     assert len(unit_errors(repo, paths=[LEDGER])) == 1
+
+
+def no_unit_findings(repo, **kw):
+    return [f for f in lint_repo(repo, **kw) if f.code == "no-units"]
+
+
+def test_a_ledger_whose_table_does_not_parse_is_a_lint_warning_not_an_error(repo):
+    put(repo, LEDGER, f"# L\n\n{ACTIVE}\n\n| Unit | Status |\n| U1 | queued |\n")
+    (f,) = no_unit_findings(repo)
+    assert (f.severity, f.path) == ("warn", LEDGER)
+    assert [x for x in lint_repo(repo) if x.severity == "error"] == []
+
+
+def test_a_parsed_or_prose_only_ledger_has_no_no_units_warning(repo):
+    put(repo, LEDGER, ledger(ACTIVE, "queued"))
+    put(repo, "falkor-chat/docs/plans/y-coordination.md", f"# L\n\n{ACTIVE}\n\nprose only\n")
+    assert no_unit_findings(repo) == []
+
+
+def test_the_no_units_warning_also_applies_to_an_archived_ledger_and_respects_paths(repo):
+    put(repo, LEDGER, f"# L\n\n{ARCHIVED}\n\n| Unit | Status |\n| U1 | queued |\n")
+    assert len(no_unit_findings(repo)) == 1
+    assert no_unit_findings(repo, paths=["falkor-chat/docs/BACKLOG.md"]) == []

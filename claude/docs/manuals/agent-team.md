@@ -352,7 +352,7 @@ flowchart LR
 **Reading the sync header.** Every answer starts with three lines:
 
 ```
-Synced: <oldest>Z – <newest>Z (<n> sources) · Hook: active|disabled
+Synced: <oldest>Z – <newest>Z (<n> sources) · Hook: registered|not registered|disabled
 Registry: <n> items · last event <date> · <m> unflushed journal events
 Drift: none
 ```
@@ -637,6 +637,7 @@ failing, switch the hook off (above) and ask `teco` to look. A message saying th
 **"refused by the guard"** is a configuration fault, not an outage, and is not retried for about 15
 minutes: fix the setting, or run `sync --all`.
 
-**The header says `Hook: active` but nothing seems to sync automatically.**
-That word only means the kill switch is off. Until you register the settings block, nothing
-fires the hook — use `sync`.
+**The header says `Hook: not registered` and nothing syncs automatically.**
+That is accurate: the settings block is not registered, so nothing fires the hook — use `sync`.
+`registered` only means the settings name the hook for both events; it does not prove the hook fires in
+every context.

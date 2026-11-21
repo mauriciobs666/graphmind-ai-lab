@@ -317,7 +317,7 @@ def test_drift_is_none_right_after_a_sync(repo):
     sync.sync_all(g, parser(repo))
     rep = drift.check(g, parser(repo))
     assert rep.clean and rep.source_count == 3
-    assert drift.render_header(rep, True).splitlines()[-1] == "Drift: none"
+    assert drift.render_header(rep, "registered").splitlines()[-1] == "Drift: none"
 
 
 def test_drift_labels_changed_unsynced_and_gone_and_never_repairs(repo):
@@ -349,7 +349,7 @@ def test_drift_flags_a_source_written_by_an_older_parser_with_unchanged_bytes(re
     rep = drift.check(g, parser(repo))
     assert [(d.path, d.state, d.note) for d in rep.drifts] == [
         (B, "stale-parser", f"parserVersion {PARSER_VERSION - 1}, current {PARSER_VERSION}")]
-    assert not rep.clean and f"  stale-parser\t{B}\t→ file wins; run coordgraph sync\tparserVersion" in drift.render_header(rep, True)
+    assert not rep.clean and f"  stale-parser\t{B}\t→ file wins; run coordgraph sync\tparserVersion" in drift.render_header(rep, "registered")
     sync.sync_all(g, parser(repo))
     assert drift.check(g, parser(repo)).clean
 
@@ -379,15 +379,15 @@ def test_header_shape_hook_state_registry_line_and_row_flags(repo):
     g.sources[B][1]["syncedAt"] = 1_700_000_100_000
     put(repo, L, LEDGER.replace("**queued**", "**accepted**"))
     rep = drift.check(g, parser(repo))
-    text = drift.render_header(rep, False, "Registry: 5 items")
+    text = drift.render_header(rep, "disabled", "Registry: 5 items")
     lines = text.splitlines()
     assert lines[0] == "Synced: 2023-11-14T22:13:20Z – 2023-11-14T22:15:00Z (3 sources) · Hook: disabled"
     assert lines[1] == "Registry: 5 items" and lines[2] == "Drift: 1 source(s)"
     assert lines[3] == f"  changed\t{L}\t→ file wins; run coordgraph sync"
     assert lines[4] == f"    ⚠ drift\t{L}#U2\tchanged"
     assert rep.flagged_rows() == {(L, f"{L}#U2")}
-    assert drift.render_header(drift.check(MemGraph(), parser(repo), [R]), True).startswith(
-        "Synced: never – never (0 sources) · Hook: active")
+    assert drift.render_header(drift.check(MemGraph(), parser(repo), [R]), "not registered").startswith(
+        "Synced: never – never (0 sources) · Hook: not registered")
 
 
 def test_relative_makes_an_absolute_path_repo_relative_and_leaves_a_relative_one_alone(tmp_path):

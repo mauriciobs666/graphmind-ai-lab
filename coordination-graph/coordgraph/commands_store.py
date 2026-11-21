@@ -14,7 +14,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from . import drift, dryrun, store, sync
+from . import drift, dryrun, hookreg, store, sync
 from .config import Config
 from .scope import load_legacy_paths
 
@@ -121,8 +121,8 @@ def rebuild_cmd(args) -> int:
     return 0 if result.ok else 1
 
 
-def _hook_active(cfg: Config) -> bool:
-    return not (cfg.hook_disabled or (cfg.state_dir / "disabled").exists())
+def _hook_state(cfg: Config, root: Path) -> str:
+    return hookreg.hook_status(cfg, root)
 
 
 def _registry_line(root: Path) -> str:
@@ -139,7 +139,7 @@ def drift_cmd(args) -> int:
         report = drift.check(graph, sync.Parser.for_root(root), paths)
     except Exception as exc:  # noqa: BLE001
         return _fail("drift", exc)
-    print(drift.render_header(report, _hook_active(cfg), _registry_line(root)))
+    print(drift.render_header(report, _hook_state(cfg, root), _registry_line(root)))
     return 0 if report.clean else 1
 
 
@@ -152,7 +152,7 @@ def query_cmd(args) -> int:
         result = graph.ro_query(args.cypher)
     except Exception as exc:  # noqa: BLE001 - includes a write attempt, which RO_QUERY refuses
         return _fail("query", exc)
-    print(drift.render_header(report, _hook_active(cfg), _registry_line(root)))
+    print(drift.render_header(report, _hook_state(cfg, root), _registry_line(root)))
     print("\t".join(str(h[1] if isinstance(h, (list, tuple)) else h) for h in result.header))
     for row in result.result_set:
         print("\t".join(str(v) for v in row))

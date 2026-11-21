@@ -87,9 +87,9 @@ def _changed(graph, parser: Parser, path: str) -> SourceDrift:
     return SourceDrift(path, "changed", sorted(out))
 
 
-def render_header(report: DriftReport, hook_active: bool, registry_line: str | None = None) -> str:
+def render_header(report: DriftReport, hook_state: str, registry_line: str | None = None) -> str:
     lines = [f"Synced: {_stamp(report.oldest_ms)} – {_stamp(report.newest_ms)} ({report.source_count} sources)"
-             f" · Hook: {'active' if hook_active else 'disabled'}"]
+             f" · Hook: {hook_state}"]
     if registry_line:
         lines.append(registry_line)
     if report.clean:

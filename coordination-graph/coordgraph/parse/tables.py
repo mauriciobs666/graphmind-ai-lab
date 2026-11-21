@@ -40,6 +40,17 @@ def split_row(line: str) -> list[str]:
     return cells
 
 
+def table_like_lines(text: str) -> int:
+    """How many lines outside fenced code start with a pipe (a table, parsed or not)."""
+    count, in_fence = 0, False
+    for line in text.splitlines():
+        if _FENCE.match(line):
+            in_fence = not in_fence
+        elif not in_fence and line.lstrip().startswith("|"):
+            count += 1
+    return count
+
+
 def find_tables(text: str) -> list[Table]:
     """Every pipe table outside fenced code, in file order."""
     lines = text.splitlines()

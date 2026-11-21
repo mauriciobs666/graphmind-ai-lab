@@ -21,12 +21,13 @@ from dataclasses import dataclass, field
 from ..keys import MAX_KEY_BYTES, norm_value, safe_key
 from .header import tokens
 from .source import SourceDoc, base_fields
-from .tables import find_tables
+from .tables import find_tables, table_like_lines
 
 VOCABULARY = ("queued", "in-flight", "delivered", "gated", "accepted", "abandoned", "paused")
 # Closed alias table, each entry justified by a real cell (graph note section 2.5 step 4).
 ALIASES = {"relayed": "paused", "done": "delivered", "superseded": "abandoned"}
 UNKNOWN = "unknown"
+NO_UNITS = "no units parsed"  # warning prefix; `lint` reports it as `no-units`
 RESOLVING = ("accepted", "abandoned")
 
 _WORD = re.compile(r"[a-z]+(?:-[a-z]+)*")
@@ -263,12 +264,14 @@ def parse_ledger(path: str, raw: bytes, review_paths: set[str] | None = None) ->
     doc = LedgerDoc(**base)
     archived = doc.archived
     seen: dict[str, int] = {}
+    unit_table = False
     cited: set[str] = set()
     resolved: set[str] = set()
     for table in find_tables(text):
         cols = map_columns(table.header)
         if "unit" not in cols:
             continue
+        unit_table = True
         if "status" not in cols:
             doc.warnings.append(f"table {table.idx}: no Status column")
         width = len(table.header)
@@ -346,6 +349,9 @@ def parse_ledger(path: str, raw: bytes, review_paths: set[str] | None = None) ->
                 json.dumps(_norm_cells(cells), ensure_ascii=False).encode("utf-8")
             ).hexdigest()
             doc.units.append(unit)
+    if not unit_table and (pipes := table_like_lines(text)):
+        doc.warnings.append(f"{NO_UNITS}: {pipes} table-like line(s) but no pipe table with a Unit column "
+                            "(a table needs a `|---|` separator row under its header)")
     doc.cited_reviews = sorted(cited)
     doc.resolved_reviews = sorted(resolved)
     return doc

@@ -339,7 +339,7 @@ def render_planned(result: Planned, scope: str, flagged: set[tuple[str, str]], s
 
 def _header(cfg, root: Path, graph, identity) -> tuple[str, set[tuple[str, str]]]:
     report = drift.check(graph, Parser.for_root(root))
-    return (drift.render_header(report, commands_store._hook_active(cfg), identity.registry_line()),
+    return (drift.render_header(report, commands_store._hook_state(cfg, root), identity.registry_line()),
             report.flagged_rows())
 
 

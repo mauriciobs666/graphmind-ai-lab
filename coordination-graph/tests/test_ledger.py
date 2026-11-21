@@ -394,3 +394,48 @@ def test_label_is_empty_exactly_when_the_key_is_and_the_warning_names_the_repeat
     assert [p["unitLabel"] for p in d.unit_props()] == ["(x)", "(x)", ""]
     assert "unit (x)~2: unit label fell back to the key" in d.warnings
     assert sum("label fell back" in w for w in d.warnings) == 2  # the empty-key row gets none
+
+
+# --- S10 D-2 (BOM) and D-4 (zero units despite table-like content) ---------------------------
+
+NO_SEPARATOR = HEADER.format(status="active") + "| Unit | Status |\n| U1 | queued |\n| U2 | queued |\n"
+NO_UNIT_WARNING = "no units parsed"
+
+
+def test_a_utf8_bom_before_the_title_does_not_hide_the_header():
+    text = "﻿" + HEADER.format(status="archived") + COLS + "| U1 | a | b | queued | | | |\n"
+    d = parse_ledger("falkor-chat/docs/plans/x-coordination.md", text.encode("utf-8"))
+    assert d.header is not None and d.header.doc_status == "archived" and d.archived
+
+
+def test_the_bom_does_not_change_the_stored_hash_of_the_bytes():
+    raw = ("﻿" + HEADER.format(status="active")).encode()
+    assert parse_ledger("a/docs/plans/x-coordination.md", raw).sha256 == __import__("hashlib").sha256(raw).hexdigest()
+
+
+def test_a_table_without_a_separator_row_warns_zero_units():
+    d = parse_ledger("falkor-chat/docs/plans/x-coordination.md", NO_SEPARATOR.encode())
+    assert d.units == []
+    (w,) = [w for w in d.warnings if NO_UNIT_WARNING in w]
+    assert "3 table-like" in w  # header row + two data rows
+
+
+def test_prose_only_ledger_is_not_warned():
+    d = parse_ledger("a/docs/plans/x-coordination.md", (HEADER.format(status="active") + "Nothing yet.\n").encode())
+    assert [w for w in d.warnings if NO_UNIT_WARNING in w] == []
+
+
+def test_a_valid_unit_table_with_no_rows_is_not_warned():
+    d = ledger([])
+    assert d.units == [] and [w for w in d.warnings if NO_UNIT_WARNING in w] == []
+
+
+def test_pipes_inside_a_fence_are_not_table_like_content():
+    text = HEADER.format(status="active") + "```\n| a | b |\n| c | d |\n```\n"
+    d = parse_ledger("a/docs/plans/x-coordination.md", text.encode())
+    assert [w for w in d.warnings if NO_UNIT_WARNING in w] == []
+
+
+def test_units_parsed_means_no_warning():
+    d = ledger(["| U1 | a | b | queued | | | |"])
+    assert [w for w in d.warnings if NO_UNIT_WARNING in w] == []

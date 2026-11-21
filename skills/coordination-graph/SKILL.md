@@ -31,13 +31,13 @@ the distiller's/`graph-dba`'s, not yours. Never export `COORDGRAPH_EPHEMERAL_POR
 
 Every subcommand below is built and the shared mirror is loaded. **The post-edit hook is built but
 registering it is the stakeholder's step** (`coordination-graph/docs/hook-settings.md`); until it is,
-nothing mirrors an edit for you, and `Hook: active` in a header only means the kill switch is off,
-not that the hook is registered. Which contexts the hook fires in (main session, foreground and
+nothing mirrors an edit for you, and the header's `Hook:` says so (`registered`, `not registered` or
+`disabled`; only `registered` means settings register both events). Which contexts the hook fires in (main session, foreground and
 background subagents, worktrees, a Bash that writes then fails) is **unverified until S0 runs**.
 
 ## Rules that never bend
 
-1. **Relay the sync header.** Every read view prints one first (`Synced … · Hook: active|disabled`,
+1. **Relay the sync header.** Every read view prints one first (`Synced … · Hook: registered|not registered|disabled`,
    `Registry: …`, `Drift: none|…`). Pass it on with the answer; never strip it.
 2. **A drift flag means quote the file.** A `⚠ drift` row or a `Drift:` source is stale in the
    graph: the file wins; read it, quote that row from the file, and say the graph lagged.

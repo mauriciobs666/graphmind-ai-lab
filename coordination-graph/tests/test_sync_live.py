@@ -223,7 +223,7 @@ def test_parity_catches_a_source_relabelled_and_a_child_relinked_live(synced):
 def test_ac4_a_hand_edit_without_the_hook_is_flagged_row_by_row_and_a_deleted_file_is_gone(synced, capsys):
     root = synced[0]
     code, out = run(capsys, "drift")
-    assert code == 0 and "Drift: none" in out and "(4 sources)" in out and "Hook: active" in out
+    assert code == 0 and "Drift: none" in out and "(4 sources)" in out and "Hook: not registered" in out
     put(root, L, LEDGER.replace("| U2 | coder | **queued** |", "| U2 | coder | **accepted** |"))
     (root / R).unlink()
     code, out = run(capsys, "drift")
@@ -252,6 +252,15 @@ def test_drift_reports_the_disabled_hook_and_the_registry_line(synced, capsys):
     put(root, ".state/disabled", "")
     out = run(capsys, "drift")[1]
     assert "Hook: disabled" in out and out.splitlines()[1].startswith("Registry:")
+
+
+def test_header_reads_registered_once_the_settings_register_both_events(synced, capsys):
+    import json
+    root = synced[0]
+    ent = [{"matcher": "Write|Edit|Bash", "hooks": [{
+        "type": "command", "command": '"${CLAUDE_PROJECT_DIR}"/coordination-graph/hooks/post-tool-sync.sh'}]}]
+    put(root, ".claude/settings.json", json.dumps({"hooks": {"PostToolUse": ent, "PostToolUseFailure": ent}}))
+    assert "Hook: registered" in run(capsys, "drift")[1]
 
 
 def test_query_prints_the_header_flags_drift_and_is_read_only(synced, capsys):

@@ -14,8 +14,9 @@ PARSER_VERSION = 2
 
 
 def decode(raw: bytes) -> str:
-    """UTF-8 with replacement, the decoding `wi`'s own header reader uses."""
-    return raw.decode("utf-8", "replace")
+    """UTF-8 with replacement, the decoding `wi`'s own header reader uses, minus a leading BOM (the header
+    must sit under the title); hashes stay over the raw bytes."""
+    return raw.decode("utf-8", "replace").removeprefix("\ufeff")
 
 
 @dataclass
