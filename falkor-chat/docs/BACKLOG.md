@@ -29,9 +29,11 @@ deferred M2.5 hardening track.
 
 ## Milestones still open
 
+<!-- coordgraph:milestone-map -->
 | Milestone | Reaches ✅ when | Items |
 |---|---|---|
 | **M2.5 — Hardening** ⚪ *(deferred)* | Real auth, transport-level agent path, real-time push | K-016 → K-017, K-018 |
+<!-- /coordgraph:milestone-map -->
 
 Follow-ups filed out of a closed milestone are **not** green-gates for it; they are listed under
 `## Open follow-ups`.
@@ -40,7 +42,9 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### GAL-I02-K0002 — Live-verify the K-102 embed-timeout retry on the MCP ingest path (🔵 proposed — `docs/test-reports/embed-order-swaps-report.md`, 2026-11-20)
+### GAL-I02-K0002 — Live-verify the K-102 embed-timeout retry on the MCP ingest path
+
+- **Status:** 🔵 proposed — `docs/test-reports/embed-order-swaps-report.md`, 2026-11-20
 
 > K-102's `retry_timeouts=True` on `EMBED_CHUNK_RETRY` is covered by unit tests and the diagnosis,
 > but no live run has shown it preventing a failure: the REST A/B measurement saw zero embed
@@ -51,7 +55,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   logged embed retry, or shows the failure still occurs and what blocks the retry.
 - **Owner:** `qa-engineer`.
 
-### GAL-I02-K0003 — A thread-reply resume returns no `error` on a step-budget failure (🔵 proposed — `docs/reviews/step-budget-reporting-impl.md` F3, 2026-11-20)
+### GAL-I02-K0003 — A thread-reply resume returns no `error` on a step-budget failure
+
+- **Status:** 🔵 proposed — `docs/reviews/step-budget-reporting-impl.md` F3, 2026-11-20
 
 > A reply in a thread with a parked run resumes it (`trigger.maybe_trigger` rule 2 →
 > `services.resume_workflow_run`), and that method answers `{runId, status}` with no `error`
@@ -74,7 +80,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   graph's note (with a monkeypatched `_fail_budget` probe note, as the K-096 tests do); a test that
   a drive fault still propagates; a storefront turn test asserting the logged `error`.
 
-### GAL-I02-K0004 — Turn on AOF and a deliberate `maxmemory` for FalkorDB without losing the data (🔵 proposed — split out of K-098, `docs/plans/graph-config-defaults-graph.md` §8)
+### GAL-I02-K0004 — Turn on AOF and a deliberate `maxmemory` for FalkorDB without losing the data
+
+- **Status:** 🔵 proposed — split out of K-098, `docs/plans/graph-config-defaults-graph.md` §8
 
 > DESIGN §10 states "RDB snapshots + AOF" and a deliberate `maxmemory` that never evicts graph
 > keys. `falkordb-dev` runs neither: `appendonly no` (RDB `save 3600 1 300 100 60 10000` only) and
@@ -103,7 +111,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `docs/plans/graph-config-defaults-graph.md` §5 Step 4, every graph's inventory diffing to 0; and
   DESIGN §10's persistence bullet states what shipped (or "AOF off" if declined).
 
-### GAL-I02-K0005 — `quotedId` is written but read back only by `get_message`; surface it on `read_thread` and the §9 reads, plus an MCP read-back (🔵 proposed — `docs/plans/message-quoting.md` §3.5, 2026-11-20)
+### GAL-I02-K0005 — `quotedId` is written but read back only by `get_message`; surface it on `read_thread` and the §9 reads, plus an MCP read-back
+
+- **Status:** 🔵 proposed — `docs/plans/message-quoting.md` §3.5, 2026-11-20
 
 > A post can quote a same-thread message (REST `quotedId`, MCP `send_message` `quoted_id`), and
 > `GET /messages/{mid}` returns it, but `read_thread` and the QUERIES §9.1/§9.2 since-reads carry
@@ -118,7 +128,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   with no added scan.
 - **Owner:** `architect` (plan), then `tdd-engineer`.
 
-### GAL-I02-K0006 — A detached FalkorDB start that aborts on a bad env value is reported as a 30 s timeout (🔵 proposed — `docs/reviews/graph-config-defaults-impl.md` m3, 2026-11-20)
+### GAL-I02-K0006 — A detached FalkorDB start that aborts on a bad env value is reported as a 30 s timeout
+
+- **Status:** 🔵 proposed — `docs/reviews/graph-config-defaults-impl.md` m3, 2026-11-20
 
 > `start_server.sh` (`:173`), `start_demo.sh` (`:221`) and `start_agent_team.sh` (`:195`) start
 > FalkorDB with `start_falkordb.sh -d`. When `config/falkordb.env` holds a value the engine refuses
@@ -134,7 +146,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `docker inspect` reporting the container missing and, separately, not running; a good start under `-d` is unchanged; the
   three callers surface the failure instead of the 30 s timeout.
 
-### GAL-I01-D0002 — Shell harness: `| grep -q` under `pipefail` can false-fail, and `test_queries.sh` masks a bootstrap failure (🔵 proposed, low — surfaced by the SIGPIPE helper fix `8d629cad`, 2026-11-20)
+### GAL-I01-D0002 — Shell harness: `| grep -q` under `pipefail` can false-fail, and `test_queries.sh` masks a bootstrap failure
+
+- **Status:** 🔵 proposed — low — surfaced by the SIGPIPE helper fix `8d629cad`, 2026-11-20
 
 > Under `set -o pipefail`, `printf … | grep -q` can fail even when the pattern matches, because
 > `grep -q` exits on the first match and `printf` takes SIGPIPE on a large enough input. The
@@ -152,7 +166,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `test_queries.sh` change through `docs/reviews/test-queries-sigpipe-evidence/probe.sh` per
   `falkor-chat/REVIEW.md`.
 
-### K-082 — Storefront demo: optional long-conversation KV stress rerun (🔵 proposed — carried from K-066, closed 2026-10-22)
+### K-082 — Storefront demo: optional long-conversation KV stress rerun
+
+- **Status:** 🔵 proposed — carried from K-066, closed 2026-10-22
 
 > The demo runs on `ministral-3-3b` (`-c 8192 --gpu max`) plus the 0.6B embedder, and
 > `start_demo.sh` now ensures exactly that set is resident (`docs/HISTORY.md` 2026-10-22). Two
@@ -167,7 +183,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** TP-007 protocol with `salesperson/scripts/language_salience_probe.py`; residency
   via `salesperson/scripts/qwen_watch.sh` and `lms ps`.
 
-### K-084 — One-off embedder scripts still default to the shared `opencode.json`; custom-identifier listing unverified (🔵 proposed — `docs/reviews/demo-opencode-config.md`, 2026-10-22)
+### K-084 — One-off embedder scripts still default to the shared `opencode.json`; custom-identifier listing unverified
+
+- **Status:** 🔵 proposed — `docs/reviews/demo-opencode-config.md`, 2026-10-22
 
 > `seed_eval_corpus.sh` and `migrate_embeddings.sh` embed through the `lmstudio` baseURL of the
 > shared `opencode.json`, which is unreachable on the usual dev box, so they fail unless
@@ -178,7 +196,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > `--identifier`, on the evidence of one unsaved live probe — re-probe and record the result.
 - **Owner:** stakeholder decision, then `devops`.
 
-### K-100 — A message longer than the embedder's window is embedded by its head only; chunk it rather than cap it (🔵 proposed — `docs/reviews/embedder-context.md` Pass 2 Q5, 2026-10-31)
+### K-100 — A message longer than the embedder's window is embedded by its head only; chunk it rather than cap it
+
+- **Status:** 🔵 proposed — `docs/reviews/embedder-context.md` Pass 2 Q5, 2026-10-31
 
 > Agent/LLM replies write through `Services.post_agent_answer` (responder, workflow `post_message`
 > tool), which K-099's `MAX_TEXT_LEN` cap deliberately does not touch; the responder self-embeds its
@@ -193,7 +213,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > chunker already used for documents is reused.
 - **Owner:** `architect` (design), then an implementer.
 
-### K-103 — `extraction.normalize_name` keeps zero-width characters (U+200B), so names differing only by one don't fuse (🔵 proposed — `docs/reviews/salesperson-cart-product-id2-impl.md` Learnings, `docs/reviews/team-learnings-distillation4-sweep.md` row 13, 2026-11-07)
+### K-103 — `extraction.normalize_name` keeps zero-width characters (U+200B), so names differing only by one don't fuse
+
+- **Status:** 🔵 proposed — `docs/reviews/salesperson-cart-product-id2-impl.md` Learnings, `docs/reviews/team-learnings-distillation4-sweep.md` row 13, 2026-11-07
 
 > `normalize_name` is `_WHITESPACE_RE.sub(" ", name.strip()).casefold()` with `\s+`, and neither
 > `str.strip()` nor `\s` treats U+200B as whitespace. Reproduced offline (`falkor-chat/server`
@@ -206,7 +228,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > stored `nameNormalized` values need a backfill.
 - **Owner:** `architect` (scope), then an implementer.
 
-### K-079 — Storefront fabricated-price detection: remaining RCA fixes F4, F5 (🟡 in-progress — F1/F3 delivered 2026-10-22/23, F2 2026-10-28, `docs/reviews/salesperson-fabricated-prices-rca.md`)
+### K-079 — Storefront fabricated-price detection: remaining RCA fixes F4, F5
+
+- **Status:** 🟡 in-progress — F1/F3 delivered 2026-10-22/23, F2 2026-10-28, `docs/reviews/salesperson-fabricated-prices-rca.md`
 
 > RC-1's direct cause, names and prices returned as separate unlabelled lists, is removed: F2 makes
 > every `query_graph_data` row carry its identity column (`HISTORY.md` 2026-10-28). What remains
@@ -217,7 +241,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > replies with correct amounts.
 - **Owner:** `coder` (F4), `qa-engineer` (F5).
 
-### K-085 — es storefront doubles an item already in the cart when the next message adds a different one (🔵 proposed — `docs/test-reports/salesperson-cart-product-id2-report.md` DEF-3, 2026-10-26)
+### K-085 — es storefront doubles an item already in the cart when the next message adds a different one
+
+- **Status:** 🔵 proposed — `docs/test-reports/salesperson-cart-product-id2-report.md` DEF-3, 2026-10-26
 
 > On "Agrega 1 Wireless Mouse Pro" → "También agrega 1 Portable SSD 1TB", es re-added the mouse in
 > 8/24 conversations (en and pt-BR 0/24). The off-turn guard holds the re-add, which is a slug guessed
@@ -231,7 +257,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > no ids, no def bump, effect unmeasured). The customer does see the doubled quantity.
 - **Owner:** `architect`, then an implementer; live re-measure (C1 + C2) by `qa-engineer`.
 
-### K-088 — A product-type question that reaches `query_graph_data` gets a misleading count (🔵 proposed — `docs/test-reports/salesperson-query-graph-data-report.md` DEF-2 and "DEF-2 counterfactual probe", 2026-10-28)
+### K-088 — A product-type question that reaches `query_graph_data` gets a misleading count
+
+- **Status:** 🔵 proposed — `docs/test-reports/salesperson-query-graph-data-report.md` DEF-2 and "DEF-2 counterfactual probe", 2026-10-28
 
 > **The failure.** On "Vocês têm algum mouse?", the agent sometimes rephrases the question and
 > sends it to `query_graph_data` rather than looking the product up.
@@ -264,7 +292,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Owner:** `architect` (the shape of (a) + (b)), then an implementer; `qa-engineer` for the
   probes and the live re-measure.
 
-### K-089 — Storefront replies mistranslate exact catalog product names (🔵 proposed — `docs/test-reports/salesperson-query-graph-data-report.md` DEF-1, 2026-10-28)
+### K-089 — Storefront replies mistranslate exact catalog product names
+
+- **Status:** 🔵 proposed — `docs/test-reports/salesperson-query-graph-data-report.md` DEF-1, 2026-10-28
 
 > **The failure.** `query_graph_data` returns the exact English names, but the `assistant` step on
 > ministral renders them as different products. "Gaming Mouse Pad XL" becomes
@@ -279,7 +309,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > `refire_probe.py --schedule browse`. The mitigation is untested.
 - **Owner:** `architect` (prompt vs other lever), then an implementer; `qa-engineer` to re-measure.
 
-### K-090 — Two `query_graph_data` shape classes compile but fail at execution and kill the turn (🔵 proposed — `docs/plans/salesperson-query-graph-data.md` §9 R7, `docs/reviews/salesperson-query-graph-data.md` Pass 2, 2026-10-28)
+### K-090 — Two `query_graph_data` shape classes compile but fail at execution and kill the turn
+
+- **Status:** 🔵 proposed — `docs/plans/salesperson-query-graph-data.md` §9 R7, `docs/reviews/salesperson-query-graph-data.md` Pass 2, 2026-10-28
 
 > **The failure.** `querygen.compile()` accepts two shape classes that FalkorDB rejects:
 > - an aggregate with an `order_by` outside `returns` ("ORDER BY cannot reference variables not
@@ -297,7 +329,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > - `compile()` rejects both shapes.
 - **Owner:** `architect` (pick the seam), then `tdd-engineer`.
 
-### K-087 — Side effects of the storefront `Customer:` speaker label: `Assistant:` leaks into replies; the en greeting claims the profile name (🔵 proposed — `docs/test-reports/salesperson-cart-product-id2-report.md` DEF-A/DEF-B, 2026-10-26)
+### K-087 — Side effects of the storefront `Customer:` speaker label: `Assistant:` leaks into replies; the en greeting claims the profile name
+
+- **Status:** 🔵 proposed — `docs/test-reports/salesperson-cart-product-id2-report.md` DEF-A/DEF-B, 2026-10-26
 
 > 266 of 1,125 replies (23.6%) begin with a visible `Assistant:`/`Assistente:`, all on turns 2–4,
 > and none in 2-turn runs, so it grows with history depth. The model likely continues the
@@ -307,14 +341,18 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > slug-shaped; a real name may fare differently.
 - **Owner:** `architect` (transcript rendering), then an implementer.
 
-### K-080 — Model kind `extraction` sits outside `modelconfig.KINDS`, so a workspace override can't reach it (🔵 proposed — `docs/reviews/salesperson-single-model.md` Pass 4 R5, 2026-10-22)
+### K-080 — Model kind `extraction` sits outside `modelconfig.KINDS`, so a workspace override can't reach it
+
+- **Status:** 🔵 proposed — `docs/reviews/salesperson-single-model.md` Pass 4 R5, 2026-10-22
 
 > `IngestionPipeline` resolves kind `extraction`, which is absent from `modelconfig.KINDS` and
 > `_KIND_TO_OVERRIDE_KEY`. `SERVER.md` §1.8's "four closed consumer kinds" is therefore false, and
 > `agentModelOverride`-style workspace overrides do not apply to extraction. Pre-existing.
 - **Owner:** `architect` (add the kind vs. document it as deliberate), then `tdd-engineer`.
 
-### K-081 — NLQ: ministral answers an entity-type question with the `Product` label (`nlq-27`) (🔵 proposed — `docs/test-reports/salesperson-single-model-report.md` Q2, 2026-10-22)
+### K-081 — NLQ: ministral answers an entity-type question with the `Product` label (`nlq-27`)
+
+- **Status:** 🔵 proposed — `docs/test-reports/salesperson-single-model-report.md` Q2, 2026-10-22
 
 > "Can you list all the Product-type entities?" (knowledge_base) should match `Entity {type:'Product'}`;
 > ministral emits `label: "Product"`, gets the catalog, and finds nothing. qwen passes it, so the
@@ -325,7 +363,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > (`docs/plans/salesperson-query-graph-data.md` §4.1).
 - **Owner:** `data-scientist` (whether to fix by prompt), then an implementer.
 
-### K-077 — Language-salience probe harness: classifier false negatives, a blind trial-level table, and untested `run_participant` (🔵 proposed — `docs/reviews/salesperson-language-salience.md` Pass 2, F1–F7, 2026-10-20)
+### K-077 — Language-salience probe harness: classifier false negatives, a blind trial-level table, and untested `run_participant`
+
+- **Status:** 🔵 proposed — `docs/reviews/salesperson-language-salience.md` Pass 2, F1–F7, 2026-10-20
 
 > **Why it exists.** `salesperson/scripts/language_salience_probe.py`, the committed TP-007 harness,
 > was reviewed before the 2026-10-20 rerun and approved with suggestions. Its fixes were deferred so
@@ -352,7 +392,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `unknown` reply, a multi-row reply and a 409/timeout record. Re-run the review's mutants
   (Appendix B) to confirm they are killed.
 
-### K-060 — `salesperson@v5` sometimes silently drops a genuine match when `filter_products` returns a mixed-category result (🟡 in-progress — root-caused at n=75, low base rate, no fix warranted yet, 2026-08-31)
+### K-060 — `salesperson@v5` sometimes silently drops a genuine match when `filter_products` returns a mixed-category result
+
+- **Status:** 🟡 in-progress — root-caused at n=75, low base rate, no fix warranted yet, 2026-08-31
 
 > **Why it exists.** Live-verifying K-057's wording fix (`docs/HISTORY.md` 2026-08-31,
 > `docs/reviews/salesperson-tool-reliability-ml.md` §11) at n=20 found every one of the 4/20
@@ -409,7 +451,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   100% (11/11, CI 74.1-100%, `ml.md` §14.5) — the shipped K-057 fix's inclusive-bound guidance
   holds symmetrically in both price directions.
 
-### K-062 — `salesperson@v5` sometimes states the wrong reason for a correctly-held write call, even though the correct reason was handed back to it (🟡 in-progress — both candidate fix levers evaluated live and rejected (one no-effect, one actively harmful); no fix shipped, closed pending only a re-worded lever (a), 2026-08-31)
+### K-062 — `salesperson@v5` sometimes states the wrong reason for a correctly-held write call, even though the correct reason was handed back to it
+
+- **Status:** 🟡 in-progress — both candidate fix levers evaluated live and rejected (one no-effect, one actively harmful); no fix shipped, closed pending only a re-worded lever (a), 2026-08-31
 
 > **Why it exists.** Originally found at 2/24 (8.3%, Wilson CI 2.3-25.8%) in K-061's diagnosis
 > pass: the model telling the customer an unrelated `add_to_cart` call was held because the
@@ -496,7 +540,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   before shipping — `tdd-engineer`/`coder` → `analyst` gating applies to the implementation once a
   lever earns a positive eval, not before.
 
-### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
+### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant)
+
+- **Status:** 🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3
 
 > **Why it exists.** The two seeded defs use **two different source conventions**, deliberately for
 > the K-024 slice: `access-request@v1`'s spec is imported from `server/falkorchat/proof_defs.py`
@@ -536,7 +582,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   over the def subgraph; if n-3 is implemented, one ordering pin (it must run **last**, like the other
   three invariants) plus the fixture edits it forces.
 
-### K-030 — Allow zero-transition (single-step) workflow defs; guard the `UNWIND` instead of rejecting (🔵 proposed — filed out of K-024 re-gate findings r-1/r-2)
+### K-030 — Allow zero-transition (single-step) workflow defs; guard the `UNWIND` instead of rejecting
+
+- **Status:** 🔵 proposed — filed out of K-024 re-gate findings r-1/r-2
 
 > **Why it exists.** `repository._PUBLISH_CYPHER` ends in a bare `UNWIND $transitions AS tr …
 > RETURN …`. With `$transitions = []` the row stream **collapses** — after the `WorkflowDef`, its
@@ -575,7 +623,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   asserted to succeed *and* to leave a complete subgraph (steps + `START` + the returned row); the
   existing ordering pins for the other publish invariants must stay green.
 
-### K-032 — Materialize the workflow def's **data-dependence overlay** (CPG-style READS/WRITES) for publish-time static analysis (🔵 proposed — from a design conversation, 2026-07-22)
+### K-032 — Materialize the workflow def's **data-dependence overlay** (CPG-style READS/WRITES) for publish-time static analysis
+
+- **Status:** 🔵 proposed — from a design conversation, 2026-07-22
 
 > **The framing (Code Property Graph lens).** The def graph is already a control-flow graph:
 > `(:Step)-[:TRANSITION {guard, order}]->(:Step)` is a guarded CFG, `HAS_STEP` is one-level AST
@@ -638,7 +688,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   publish**; an unreachable step is **rejected at publish**; a step whose reads can't be derived
   carries `READS_UNKNOWN` rather than silently claiming zero reads.
 
-### K-033 — Make `maxSteps` an exact cap (`>` → `>=` in `_drive_loop`) (🔵 proposed — filed out of K-031, stakeholder decision OQ-1 "document now, fix later", 2026-07-24)
+### K-033 — Make `maxSteps` an exact cap (`>` → `>=` in `_drive_loop`)
+
+- **Status:** 🔵 proposed — filed out of K-031, stakeholder decision OQ-1 "document now, fix later", 2026-07-24
 
 > **Why it exists.** `maxSteps` does not mean what its name says. `executor._drive_loop` records a
 > step and *then* checks `rec["stepCount"] > max_steps` — at `executor.py:734` (OUTCOME A, a guard
@@ -693,7 +745,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `waiting`, not fail); re-run `tests/test_process_flow.py` and the `access-request@v1` acceptance
   flow to confirm the `maxSteps: 24` headroom still covers it.
 
-### K-096 — A step-budget failure answers `status: "failed"` with no `error`, and `/input` returns the submitted ctx instead of the graph's (🔵 proposed — `docs/reviews/live-specs.md` Pass 9 claim 2, 2026-10-31)
+### K-096 — A step-budget failure answers `status: "failed"` with no `error`, and `/input` returns the submitted ctx instead of the graph's
+
+- **Status:** 🔵 proposed — `docs/reviews/live-specs.md` Pass 9 claim 2, 2026-10-31
 
 > **Why it exists.** `executor._fail_budget` (`executor.py:1495-1501`) stamps the run `failed` with
 > a `step budget exceeded` note in its graph `ctx` and *returns* `"failed"` without raising, so
@@ -717,7 +771,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   expect `error`, red first; add the `/input` case (a resume that exhausts the budget) asserting
   the response `ctx` equals the graph `ctx`.
 
-### K-097 — Close the R-1 stale-merge window on `/input` with a `ctxVersion` CAS (🔵 proposed — DESIGN §6.2 "Residual window (R-1)"; `docs/reviews/live-specs.md` Pass 8, 2026-10-31)
+### K-097 — Close the R-1 stale-merge window on `/input` with a `ctxVersion` CAS
+
+- **Status:** 🔵 proposed — DESIGN §6.2 "Residual window (R-1)"; `docs/reviews/live-specs.md` Pass 8, 2026-10-31
 
 > **Why it exists.** `submit_workflow_input` reads the run, merges the input into its `ctx`
 > service-side, then writes the merge inside the resume CAS (`repository.resume_run_with_ctx`,
@@ -740,7 +796,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** an interleaving test that injects a second submitter between the read and the
   CAS (and, if the ABA holds, a re-park between them) and asserts the stale writer gets 409.
 
-### K-038 — `refreshRunPanel` has no mutex against overlapping poll-tick/submit-response invocations (🔵 proposed — filed out of K-036's Wave 3+4 analyst re-review gate, `docs/reviews/web-api-coverage-impl.md` Pass 3, findings m6/m7, 2026-07-29)
+### K-038 — `refreshRunPanel` has no mutex against overlapping poll-tick/submit-response invocations
+
+- **Status:** 🔵 proposed — filed out of K-036's Wave 3+4 analyst re-review gate, `docs/reviews/web-api-coverage-impl.md` Pass 3, findings m6/m7, 2026-07-29
 
 > **Why it exists.** Pass 3 fixed M1 (the destructive every-tick `renderWaitingForm` rebuild) and,
 > while deep-tracing the fix per the task's own request, found two narrower, non-blocking races in
@@ -780,7 +838,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   always wins regardless of resolution order (m6); an injected-clock or mocked-response test
   simulating an external round-trip between two ticks, asserting the panel still rebuilds (m7).
 
-### K-040 — `POST /workflow-runs`'s request field is `version`, not `defVersion` — decide whether to rename for consistency (🔵 proposed — found during a `tico` manual-verification pass, 2026-07-31)
+### K-040 — `POST /workflow-runs`'s request field is `version`, not `defVersion` — decide whether to rename for consistency
+
+- **Status:** 🔵 proposed — found during a `tico` manual-verification pass, 2026-07-31
 
 > **Why it exists.** `StartWorkflowRunIn` (`server/falkorchat/schemas.py:198-202`) declares the
 > field as `version`, while the rest of the def/snapshot vocabulary — `WorkflowRun.defVersion`
@@ -812,7 +872,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   new field name (should go red first, confirming the old name is actually gone) plus a negative test
   that the old `version` name is rejected, not silently ignored.
 
-### K-043 — `compose.yaml`/`Dockerfile` never verified against a real `docker build`/`docker compose` (🔵 proposed — filed out of K-042 close, 2026-08-11)
+### K-043 — `compose.yaml`/`Dockerfile` never verified against a real `docker build`/`docker compose`
+
+- **Status:** 🔵 proposed — filed out of K-042 close, 2026-08-11
 
 > **Why it exists.** K-042 Landing 1's L1-5 unit updated `compose.yaml` (the two config-file paths,
 > a read-only bind mount of the shared overlay file, `host.docker.internal:host-gateway`) and
@@ -831,7 +893,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** a live manual run is the test; if it surfaces a defect, file a fix as its own
   follow-up rather than folding it into this item.
 
-### K-072 — Per-request "provider down" short-circuit for REST batch ingestion (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-3 / review Pass 1 m-2, 2026-10-15)
+### K-072 — Per-request "provider down" short-circuit for REST batch ingestion
+
+- **Status:** 🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-3 / review Pass 1 m-2, 2026-10-15
 
 > **Why it exists.** `api.ingest_documents` puts every document's jobs on one sequential
 > `BackgroundTasks` chain. In an outage, the K-067 liveness gate bounds the cost **per document**,
@@ -847,7 +911,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** an offline test with an always-transient fake provider over a multi-document
   batch, asserting one full budget per request, not per document.
 
-### K-073 — Jobs of an already-failed document still make their first provider call, because the liveness gate is read only between attempts (🔵 proposed — filed out of the D-3 review, `docs/reviews/extract-transient-retry2.md` O-1, 2026-10-17)
+### K-073 — Jobs of an already-failed document still make their first provider call, because the liveness gate is read only between attempts
+
+- **Status:** 🔵 proposed — filed out of the D-3 review, `docs/reviews/extract-transient-retry2.md` O-1, 2026-10-17
 
 > **Why it exists.** Once one job fails a document (K-051: one failure fails it), every remaining
 > job of that document still runs attempt 1: `_safe_*` has no status check, and the K-067 liveness
@@ -864,7 +930,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** an offline test where a sibling has already failed the document: the job
   makes no provider call and still reports exactly once.
 
-### K-076 — Entity fuzzy query: symbol-only names make junk suggestions, and `\`-escaped punctuation misses its own name (🔵 proposed — `docs/reviews/fusion-fuzzy-escape.md` Pass 2, P2-1/P2-2, 2026-10-17)
+### K-076 — Entity fuzzy query: symbol-only names make junk suggestions, and `\`-escaped punctuation misses its own name
+
+- **Status:** 🔵 proposed — `docs/reviews/fusion-fuzzy-escape.md` Pass 2, P2-1/P2-2, 2026-10-17
 
 > **Why it exists.** Two minor gaps left by K-068's `fusion._fuzzy_query`, both measured live and
 > deliberately not fixed in that change. (1) A name with no letter or digit but non-ASCII symbols
@@ -882,7 +950,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   for each are in the review's Pass 2.
 - **Risks/RAM:** none — query-construction change only.
 
-### K-091 — `Document.lshBand0..7` are never written, so `find_update_shortlist`'s band signal is dead (🔵 proposed — `docs/reviews/live-specs.md` Pass 10 M2 and Pass 8 claim 3, 2026-10-31)
+### K-091 — `Document.lshBand0..7` are never written, so `find_update_shortlist`'s band signal is dead
+
+- **Status:** 🔵 proposed — `docs/reviews/live-specs.md` Pass 10 M2 and Pass 8 claim 3, 2026-10-31
 
 > **Why it exists.** Suggested-tier update detection unions two lookups in
 > `repository.find_update_shortlist`: an LSH band lookup (`d.lshBand{i} = $band{i}` OR-ed,
@@ -906,7 +976,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** failing test first: ingest a document and assert its bands are stored, then
   assert a near-duplicate ingest shortlists it with the title lookup disabled.
 
-### K-064 — `find_update_shortlist`'s title-fuzzy signal uses implicit-AND token combination, far narrower than its own docstring implies (🔵 proposed — filed out of `document-ingestion2` Stage E QA pass, `docs/test-reports/document-ingestion2-report.md` Defect 2, 2026-09-13)
+### K-064 — `find_update_shortlist`'s title-fuzzy signal uses implicit-AND token combination, far narrower than its own docstring implies
+
+- **Status:** 🔵 proposed — filed out of `document-ingestion2` Stage E QA pass, `docs/test-reports/document-ingestion2-report.md` Defect 2, 2026-09-13
 
 > **Why it exists.** `repository.find_update_shortlist`'s title-fuzzy RediSearch query joins one
 > `%token%` term per title word with a space, which RediSearch combines via implicit AND — a
@@ -958,7 +1030,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   term) should not flood the shortlist — both belong in `test_repository.py` plus a
   `test_queries.sh` addition per the plan's own "every new Cypher shape raises the baseline" rule.
 
-### K-093 — `(:Message)-[:MENTIONS]->(:Entity)` has a reader and no writer (🔵 proposed — `docs/reviews/live-specs.md` Pass 8 claim 2, 2026-10-31)
+### K-093 — `(:Message)-[:MENTIONS]->(:Entity)` has a reader and no writer
+
+- **Status:** 🔵 proposed — `docs/reviews/live-specs.md` Pass 8 claim 2, 2026-10-31
 
 > **Why it exists.** `repository.hybrid_search` (`repository.py:891`) expands every ANN seed through
 > `(seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)` into a `relatedContext` field, but
@@ -978,7 +1052,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Risks/RAM:** building it adds `MENTIONS` edges per message (RAM, DESIGN §11); dropping it
   removes a response field a client might read.
 
-### K-094 — `(:Message)-[:REPLY_TO]->(:Message)` has a reader and no writer (🔵 proposed — `docs/reviews/live-specs.md` Pass 8 claim 2, 2026-10-31)
+### K-094 — `(:Message)-[:REPLY_TO]->(:Message)` has a reader and no writer
+
+- **Status:** 🔵 proposed — `docs/reviews/live-specs.md` Pass 8 claim 2, 2026-10-31
 
 > **Why it exists.** `repository.get_message` (`repository.py:2414`) returns `quotedId` from
 > `OPTIONAL MATCH (m)-[:REPLY_TO]->(quoted:Message)`, but no route, MCP tool or service writes
@@ -994,7 +1070,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Risks/RAM:** one edge per reply. The write joins the §4 message write paths, which must stay one
   `GRAPH.QUERY` each.
 
-### K-095 — `config.AGENT_NAME` is parsed and never read (🔵 proposed — `docs/reviews/live-specs.md` Pass 9 claim 3, 2026-10-31)
+### K-095 — `config.AGENT_NAME` is parsed and never read
+
+- **Status:** 🔵 proposed — `docs/reviews/live-specs.md` Pass 9 claim 3, 2026-10-31
 
 > **Why it exists.** `config.py:87` reads `FALKORCHAT_AGENT_NAME` into `AGENT_NAME`, and nothing in
 > `falkorchat/` reads it. The environment variable itself is live: `scripts/seed_demo.sh:47` reads it
@@ -1009,7 +1087,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Done-condition:** no unread config key; SERVER.md §1.3's row updated at close.
 - **Risks/RAM:** none.
 
-### K-098 — Review the live `GRAPH.CONFIG` defaults before production (🔵 proposed — DESIGN §13; `docs/reviews/live-specs.md` Pass 8 m5, 2026-10-31)
+### K-098 — Review the live `GRAPH.CONFIG` defaults before production
+
+- **Status:** 🔵 proposed — DESIGN §13; `docs/reviews/live-specs.md` Pass 8 m5, 2026-10-31
 
 > **Why it exists.** DESIGN §13 lists a pre-production review of the live `GRAPH.CONFIG` defaults
 > as open and tracked here: `THREAD_COUNT 4`, `OMP_THREAD_COUNT 4`, `CACHE_SIZE 25`,
@@ -1031,8 +1111,10 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 
 Auth + real-time. Not on the M5 path; no scheduled start.
 
-### K-016 — Real auth/tenancy replacing the hardcoded `get_context` seam (🔵 proposed — M2.5, deferred)
+### K-016 — Real auth/tenancy replacing the hardcoded `get_context` seam
 
+- **Status:** 🔵 proposed — M2.5, deferred
+- **Milestone:** M2.5
 - **Owner:** **`architect`** (design pass — designs the auth mechanism *per* the authoritative-identity decision, now
   resolved: the `identity` graph is authoritative/standalone, DESIGN §1.2) → **`tdd-engineer`** (implement the resolved `get_context`).
 - **Inputs/prereqs:** the identity source-of-truth is **decided** (identity graph authoritative/standalone; DESIGN §1.2) —
@@ -1044,8 +1126,10 @@ Auth + real-time. Not on the M5 path; no scheduled start.
 - **Risks/RAM:** `identity` graph nodes (small). First real trust boundary — MCP endpoint is currently unauthenticated (§15.3).
 - **Test strategy:** service/api tests with injected auth contexts; a cross-tenant isolation test.
 
-### K-017 — Transport-level agent-actor path (K-007 QA carry-over) (🔵 proposed — M2.5, deferred · depends on K-016)
+### K-017 — Transport-level agent-actor path (K-007 QA carry-over)
 
+- **Status:** 🔵 proposed — M2.5, deferred · depends on K-016
+- **Milestone:** M2.5
 - **Owner:** `qa-engineer` (+ small `tdd-engineer`/`coder` fold-in if MCP must express an authenticated agent actor).
 - **Scope:** with auth able to express an *agent* principal, drive an external agent authoring over MCP/REST (the M1
   hardcoded seam couldn't) and verify authorship/role/provenance end-to-end.
@@ -1053,8 +1137,10 @@ Auth + real-time. Not on the M5 path; no scheduled start.
   first-class over the transport.
 - **Risks/RAM:** none new. **Test strategy:** black-box over MCP with an agent credential.
 
-### K-018 — Real-time push (Redis Pub/Sub → WebSocket/SSE) (🔵 proposed — M2.5, deferred)
+### K-018 — Real-time push (Redis Pub/Sub → WebSocket/SSE)
 
+- **Status:** 🔵 proposed — M2.5, deferred
+- **Milestone:** M2.5
 - **Owner:** **`architect`** (design: Pub/Sub fan-out topology; resolve the DESIGN §13 Bolt-vs-RESP gateway question
   here since it touches the transport) → **`coder`/`tdd-engineer`**.
 - **Inputs/prereqs:** K-012/K-014 web client (swap polling → push).
@@ -1080,37 +1166,66 @@ Every other plan named by a delivered item now exists; this is what is left.
 
 ## Parking lot / ideas
 
-- Verify the K-009 GitHub Action goes green on first push (path-filtered `.github/workflows/falkor-chat.yml`; FalkorDB
-  service container). Note the CI baseline echoes in its comments (75/92) predate K-007/K-010's 110/126 — the suites
-  themselves are the source of truth. (K-019 fixes the README/DESIGN body numbers; the CI comments are separate.)
-- File upstream FalkorDB issues (K-007 OQ6, recommended to the user): `GRAPH.MEMORY USAGE` under-reports vector-index
-  memory; one-shot instant-timeout anomaly after a long override run.
-- Per-endpoint response schemas (QA, recommended three times now): full-thread / since-reads / search each carry a
-  different field subset (all documented/intentional) — a declared schema per endpoint would make the contract testable
-  and stop accretion. **The repo is deliberately on a mixed convention today.** The three §11 structure/diff routes
-  declare `response_model=` (`WorkflowDefStructureOut` / `WorkflowDiffOut`, `schemas.py`) with exact-key-set contract
-  tests; no pre-existing route does. The non-retrofit is deliberate, not pending — FastAPI's `response_model` *filters*
-  undeclared fields, so a wrong model silently drops a field the web client reads, which makes a bulk retrofit riskier
-  than the accretion it would stop. The §11 routes are the worked precedent for an eventual per-route retrofit.
-- **Opportunistic nit — re-slug the K-031 implementation review** (recorded, **not** scheduled work).
-  It is filed under the slug `k031-structure-read-impl`, while the rest of its family — the plan and
-  the plan review — uses `workflow-def-structure-read`. The filename grammar's family rule (*the same
-  slug across several kinds **is** the family; a downstream document inventing a new slug is a
-  defect*) is therefore broken by one member. Correcting it to `workflow-def-structure-read-impl`
-  spans **four files** as of 2026-08-25 (this backlog, `docs/HISTORY.md`,
-  `docs/plans/m3-followups-coordination.md`, `docs/plans/workflow-republish-semantics.md`) — check
-  with `grep -rln k031-structure-read-impl docs/` rather than trusting that count. Fold it into a
-  change that already opens them; it does not earn a change of its own, and renames in this repo are
-  forward-only by ruling.
-- DESIGN §13 open questions — resolve as their milestones arrive: message/embedding retention
-  under the always-in-RAM constraint, and cross-workspace analytics (app-layer fan-out vs. an
-  `analytics` rollup graph). Both are homed here, not as items, because neither has a trigger or an
-  owner yet; promote one to a `K-` item when a workspace's size or a reporting need forces it. The
-  other two §13 questions have items: the push gateway's transport (K-018) and the `GRAPH.CONFIG`
-  review (K-098).
-- **WSL2 memory cap for the 16GB host** (parked, not applied per user 2026-07-18) — WSL2 runs uncapped at its 8GB
-  default (50% of the 16GB host) with `autoMemoryReclaim` off, overcommitting host RAM alongside Windows-side LM Studio;
-  likely root cause of the recent memory-overload crashes. Parked fix: set `memory=6GB` + `swap=4GB` +
-  `autoMemoryReclaim=gradual` in `C:\Users\<winuser>\.wslconfig` (keep `networkingMode=mirrored`), then `wsl --shutdown`.
-  Full diagnostic + apply procedure: `docs/plans/wsl2-memory-diagnostic.md`. Un-park (apply) if the crashes recur —
-  verdict was confirmed-by-defaults, not reproduced live (FalkorDB was down during the diagnostic).
+### GAL-F0029 — Verify the K-009 GitHub Action goes green on first push
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+The workflow is path-filtered
+(`.github/workflows/falkor-chat.yml`) and uses a FalkorDB service container. Note the CI baseline echoes in its comments (75/92) predate K-007/K-010's 110/126 — the suites
+themselves are the source of truth. (K-019 fixes the README/DESIGN body numbers; the CI comments are separate.)
+
+### GAL-F0030 — File upstream FalkorDB issues (K-007 OQ6, recommended to the user)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+File upstream FalkorDB issues (K-007 OQ6, recommended to the user): `GRAPH.MEMORY USAGE` under-reports vector-index
+memory; one-shot instant-timeout anomaly after a long override run.
+
+### GAL-F0031 — Per-endpoint response schemas (QA, recommended three times now)
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+Per-endpoint response schemas (QA, recommended three times now): full-thread / since-reads / search each carry a
+different field subset (all documented/intentional) — a declared schema per endpoint would make the contract testable
+and stop accretion. **The repo is deliberately on a mixed convention today.** The three §11 structure/diff routes
+declare `response_model=` (`WorkflowDefStructureOut` / `WorkflowDiffOut`, `schemas.py`) with exact-key-set contract
+tests; no pre-existing route does. The non-retrofit is deliberate, not pending — FastAPI's `response_model` *filters*
+undeclared fields, so a wrong model silently drops a field the web client reads, which makes a bulk retrofit riskier
+than the accretion it would stop. The §11 routes are the worked precedent for an eventual per-route retrofit.
+
+### GAL-F0032 — Opportunistic nit — re-slug the K-031 implementation review
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+(recorded, **not** scheduled work).
+It is filed under the slug `k031-structure-read-impl`, while the rest of its family — the plan and
+the plan review — uses `workflow-def-structure-read`. The filename grammar's family rule (*the same
+slug across several kinds **is** the family; a downstream document inventing a new slug is a
+defect*) is therefore broken by one member. Correcting it to `workflow-def-structure-read-impl`
+spans **four files** as of 2026-08-25 (this backlog, `docs/HISTORY.md`,
+`docs/plans/m3-followups-coordination.md`, `docs/plans/workflow-republish-semantics.md`) — check
+with `grep -rln k031-structure-read-impl docs/` rather than trusting that count. Fold it into a
+change that already opens them; it does not earn a change of its own, and renames in this repo are
+forward-only by ruling.
+
+### GAL-F0033 — DESIGN §13 open questions — resolve as their milestones arrive
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+DESIGN §13 open questions — resolve as their milestones arrive: message/embedding retention
+under the always-in-RAM constraint, and cross-workspace analytics (app-layer fan-out vs. an
+`analytics` rollup graph). Both are homed here, not as items, because neither has a trigger or an
+owner yet; promote one to a `K-` item when a workspace's size or a reporting need forces it. The
+other two §13 questions have items: the push gateway's transport (K-018) and the `GRAPH.CONFIG`
+review (K-098).
+
+### GAL-F0034 — WSL2 memory cap for the 16GB host
+
+- **Status:** 🔵 proposed — parking-lot origin; owner confirms status
+
+(parked, not applied per user 2026-07-18) — WSL2 runs uncapped at its 8GB
+default (50% of the 16GB host) with `autoMemoryReclaim` off, overcommitting host RAM alongside Windows-side LM Studio;
+likely root cause of the recent memory-overload crashes. Parked fix: set `memory=6GB` + `swap=4GB` +
+`autoMemoryReclaim=gradual` in `C:\Users\<winuser>\.wslconfig` (keep `networkingMode=mirrored`), then `wsl --shutdown`.
+Full diagnostic + apply procedure: `docs/plans/wsl2-memory-diagnostic.md`. Un-park (apply) if the crashes recur —
+verdict was confirmed-by-defaults, not reproduced live (FalkorDB was down during the diagnostic).

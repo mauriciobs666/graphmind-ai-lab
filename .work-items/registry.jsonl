@@ -122,3 +122,9 @@
 {"evid":"12590fd635be4681","ts":1795217087875798244,"ev":"new","id":"GAL-F0027","type":"F","parent":null,"home":"model-bench","title":"An LM Studio outage met by an item's own call is not re-probed"}
 {"evid":"6fbf2588048c47ab","ts":1795217087916972141,"ev":"new","id":"GAL-F0028","type":"F","parent":null,"home":"model-bench","title":"Defects the live spec recorded"}
 {"evid":"347a96236a7b4ae9","ts":1795217518181038103,"ev":"new","id":"GAL-I01-D0002","type":"D","parent":"GAL-I01","home":"falkor-chat","title":"Shell harness: pipefail grep -q SIGPIPE sites and a masked bootstrap failure in test_queries.sh"}
+{"evid":"51d816a1ca16488d","ts":1795219383471805571,"ev":"new","id":"GAL-F0029","type":"F","parent":null,"home":"falkor-chat","title":"Verify the K-009 GitHub Action goes green on first push"}
+{"evid":"89b55a5c63c3415a","ts":1795219383504312409,"ev":"new","id":"GAL-F0030","type":"F","parent":null,"home":"falkor-chat","title":"File upstream FalkorDB issues (K-007 OQ6, recommended to the user)"}
+{"evid":"2152d49795344e24","ts":1795219383536740422,"ev":"new","id":"GAL-F0031","type":"F","parent":null,"home":"falkor-chat","title":"Per-endpoint response schemas (QA, recommended three times now)"}
+{"evid":"a955cfbd0c8a4d46","ts":1795219383570080326,"ev":"new","id":"GAL-F0032","type":"F","parent":null,"home":"falkor-chat","title":"Opportunistic nit — re-slug the K-031 implementation review"}
+{"evid":"3fe1cd06dab34f48","ts":1795219383603653196,"ev":"new","id":"GAL-F0033","type":"F","parent":null,"home":"falkor-chat","title":"DESIGN §13 open questions — resolve as their milestones arrive"}
+{"evid":"f7690a90f3a64645","ts":1795219383637239819,"ev":"new","id":"GAL-F0034","type":"F","parent":null,"home":"falkor-chat","title":"WSL2 memory cap for the 16GB host"}
