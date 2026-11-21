@@ -7019,3 +7019,7 @@ for this inbox, and the reason the unit was framed routing-first.
 ## 2026-11-21 — coordination-graph S8 hook settings block
 
 Authored `coordination-graph/docs/hook-settings.md` (PostToolUse + PostToolUseFailure block, apply/verify/kill-switch, go-live sequence, S0-unverified contexts). Verified against `code.claude.com/docs/en/hooks` (first ~100k chars; PostToolUse payload sections were truncated by the fetch) and tools-reference (no MultiEdit). Stakeholder applies; no settings file touched.
+
+## 2026-11-21 — hook-settings.md gate fixes (S8 Pass 2)
+
+G1: failed sync --all source is not retried by the hook (sync writes no failure state) — go-live rewritten to re-run until drift clean. G2: kill switch set before registering, removed last (composes with stamp-first). G3: one command form. Added first-run guard-refusal 15-min window.
