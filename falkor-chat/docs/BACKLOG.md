@@ -166,6 +166,17 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `test_queries.sh` change through `docs/reviews/test-queries-sigpipe-evidence/probe.sh` per
   `falkor-chat/REVIEW.md`.
 
+### GAL-I01-D0003 — QUERIES §5's channel-scoped full-text variant walks `HEAD|NEXT*` back to the thread (🔵 proposed, low — `docs/reviews/hybrid-search-bounded.md` close-check sweep, 2026-11-21)
+
+> QUERIES §5 documents a channel-scoped library variant of `search_messages` that inserts
+> `MATCH (t:Thread)-[:HEAD|NEXT*0..]->(m)` after the full-text `YIELD`. That is the walk `d4471e22`
+> removed from `hybrid_search`: its cost grows with each hit's depth in its thread. No code runs it
+> today. `Repository.search_messages` is workspace-wide only, and the `test_queries.sh` §5 cases
+> don't use it. But anyone who builds channel-scoped search from the spec inherits the walk.
+- **Owner:** `graph-dba` (canonical Cypher).
+- **Scope:** rewrite the variant in QUERIES §5 the way QUERIES §6 finds a thread: `MATCH (t:Thread {threadId: m.threadId}) WITH m, score, t MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t)`. Check each variant's plan with EXPLAIN (`falkor-chat/REVIEW.md`), and keep the `threadId` precondition stated. If channel-scoped search should never ship, delete the variant instead.
+- **Done when:** QUERIES §5 carries no `HEAD|NEXT*` walk. If the variant is kept, EXPLAIN on it shows `Node By Index Scan | (t:Thread)`, and a `test_queries.sh` case pins it.
+
 ### K-082 — Storefront demo: optional long-conversation KV stress rerun
 
 - **Status:** 🔵 proposed — carried from K-066, closed 2026-10-22

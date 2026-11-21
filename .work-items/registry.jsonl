@@ -138,3 +138,4 @@
 {"evid":"6c601ed794254ac8","ts":1795303151864044744,"ev":"new","id":"GAL-F0042","type":"F","parent":null,"home":"coordination-graph","title":"BOM-unsafe direct text reads"}
 {"evid":"8b4694e6f4894600","ts":1795303151901030820,"ev":"new","id":"GAL-F0043","type":"F","parent":null,"home":"coordination-graph","title":"Hook go-live and the unmeasured real-backend KB round trip"}
 {"evid":"ec6094b7c6134aea","ts":1795303151937538781,"ev":"new","id":"GAL-F0044","type":"F","parent":null,"home":"coordination-graph","title":"Fast-path budget holds only on an idle machine"}
+{"evid":"9c56385ef8404e4d","ts":1795303390217917950,"ev":"new","id":"GAL-I01-D0003","type":"D","parent":"GAL-I01","home":"falkor-chat","title":"QUERIES §5 channel-scoped full-text variant walks HEAD|NEXT* (thread-depth cost)"}
