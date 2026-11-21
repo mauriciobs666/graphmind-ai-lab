@@ -7015,3 +7015,7 @@ for this inbox, and the reason the unit was framed routing-first.
 - **What:** Initial authoring of the `cobb` agent — expert in agentic development across Claude Code / Claude Agent SDK, Kiro, and OpenCode, with a mandate to web-search official docs when specifics are version-sensitive. Frontmatter `name: cobb`, `model: opus`, routing-oriented `description`.
 - **Why:** User requested a new agent specialized in agentic-development standards used by Claude, Kiro, and OpenCode.
 - **Plan items:** seeded K-001 (re-verify docs), K-002 (porting example), K-003 (broaden tool coverage).
+
+## 2026-11-21 — coordination-graph S8 hook settings block
+
+Authored `coordination-graph/docs/hook-settings.md` (PostToolUse + PostToolUseFailure block, apply/verify/kill-switch, go-live sequence, S0-unverified contexts). Verified against `code.claude.com/docs/en/hooks` (first ~100k chars; PostToolUse payload sections were truncated by the fetch) and tools-reference (no MultiEdit). Stakeholder applies; no settings file touched.
