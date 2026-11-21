@@ -756,57 +756,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `waiting`, not fail); re-run `tests/test_process_flow.py` and the `access-request@v1` acceptance
   flow to confirm the `maxSteps: 24` headroom still covers it.
 
-### K-096 — A step-budget failure answers `status: "failed"` with no `error`, and `/input` returns the submitted ctx instead of the graph's
-
-- **Status:** 🔵 proposed — `docs/reviews/live-specs.md` Pass 9 claim 2, 2026-10-31
-
-> **Why it exists.** `executor._fail_budget` (`executor.py:1495-1501`) stamps the run `failed` with
-> a `step budget exceeded` note in its graph `ctx` and *returns* `"failed"` without raising, so
-> `Services._drive_or_fault` treats it as the clean path: `error` and `fault_ctx` stay `None`.
-> `submit_workflow_input` then answers `{runId, status: "failed", ctx: <submitted merge>}`
-> (`services.py:2437-2441`). The response has no reason and a `ctx` that disagrees with the graph,
-> the exact half-applied state the fault path's own rule exists to prevent (the
-> `_drive_or_fault` docstring; SERVER.md §1.4). `POST /workflow-runs` has the same missing `error`,
-> pinned by `tests/test_process_input.py:686-711`. A caller finds out why only through
-> `GET /workflow-runs/{runId}`. SERVER.md §1.4 and §1.7 document this as current behaviour.
-- **The decision:** keep "budget is not a fault" (no exception; plan m-11) but report it, by having
-  the service read the run back whenever the drive returns `failed` and fill `error` and `ctx` from
-  that read, as the fault path does. Or leave it, and the SERVER.md text stands.
-- **Owner:** `tdd-engineer`. Outside the locked `_drive_loop`: the change is in `services.py`.
-- **Done-condition:** both routes return `error: "step budget exceeded"` and the graph's `ctx` on a
-  budget failure; the pinning test is deliberately rewritten, not deleted; SERVER.md §1.4/§1.7
-  updated at close.
-- **Risks/RAM:** none. One extra `get_run` on a failed drive only. The two REST routes are the
-  only consumers (no MCP tool wraps them); they gain a field and lose nothing.
-- **Test strategy:** flip `test_budget_exhaustion_reaches_the_same_envelope_without_raising` to
-  expect `error`, red first; add the `/input` case (a resume that exhausts the budget) asserting
-  the response `ctx` equals the graph `ctx`.
-
-### K-097 — Close the R-1 stale-merge window on `/input` with a `ctxVersion` CAS
-
-- **Status:** 🔵 proposed — DESIGN §6.2 "Residual window (R-1)"; `docs/reviews/live-specs.md` Pass 8, 2026-10-31
-
-> **Why it exists.** `submit_workflow_input` reads the run, merges the input into its `ctx`
-> service-side, then writes the merge inside the resume CAS (`repository.resume_run_with_ctx`,
-> `repository.py:2929-2957`, QUERIES §12.13). The read is outside the CAS, and the CAS checks only
-> `status = 'waiting'`. DESIGN §6.2 states the residual (R-1): two submitters can merge onto the same
-> base, and the loser's input is reported as a 409, not applied. It names the fix, a `ctxVersion`
-> counter compared and bumped in the same CAS, as unbuilt. Nothing tracked it until now (the
-> archived `m3-process-flow.md` deferred it). The timer sweep is one more submitter on the same
-> CAS (DESIGN §6.2).
-- **Check first:** whether a status-only CAS also admits an ABA. If the winner's drive re-parks the
-  run before a slower submitter's CAS lands, that CAS matches `waiting` again and writes a merge
-  built on the pre-drive `ctx`, dropping what the drive wrote. That would be worse than R-1 as DESIGN
-  §6.2 states it. Not yet verified; a `ctxVersion` CAS closes both.
-- **Owner:** `graph-dba` (the CAS shape and a new `WorkflowRun` property) → `tdd-engineer`. Outside
-  the locked `_drive_loop`.
-- **Done-condition:** a resume whose `ctx` read is stale is refused with nothing written; DESIGN §6.2
-  R-1 and QUERIES §12.13 updated at close.
-- **Risks/RAM:** one integer per `WorkflowRun`; existing runs need a default (`coalesce`) or a
-  backfill.
-- **Test strategy:** an interleaving test that injects a second submitter between the read and the
-  CAS (and, if the ABA holds, a re-park between them) and asserts the stale writer gets 409.
-
 ### K-038 — `refreshRunPanel` has no mutex against overlapping poll-tick/submit-response invocations
 
 - **Status:** 🔵 proposed — filed out of K-036's Wave 3+4 analyst re-review gate, `docs/reviews/web-api-coverage-impl.md` Pass 3, findings m6/m7, 2026-07-29
@@ -961,32 +910,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   for each are in the review's Pass 2.
 - **Risks/RAM:** none — query-construction change only.
 
-### K-091 — `Document.lshBand0..7` are never written, so `find_update_shortlist`'s band signal is dead
-
-- **Status:** 🔵 proposed — `docs/reviews/live-specs.md` Pass 10 M2 and Pass 8 claim 3, 2026-10-31
-
-> **Why it exists.** Suggested-tier update detection unions two lookups in
-> `repository.find_update_shortlist`: an LSH band lookup (`d.lshBand{i} = $band{i}` OR-ed,
-> `repository.py:1985`) and a title-fuzzy lookup. `background._safe_detect_update` computes the new
-> document's bands (`update_detection.minhash_signature`/`lsh_bands`, `background.py:272-273`) and
-> hands them to that read, but nothing stores them: `create_document_with_auto_supersede` writes no
-> band property, and the only writers in the tree are test fixtures (`test_queries.sh:1875-1876`,
-> `tests/test_repository.py::_document_with_lsh`). The band lookup therefore matches nothing, and the
-> narrow title lookup (K-064) is the only candidate source. A live read found 0 of 455 `Document`s in
-> `ws:acme`/`ws:agent-team` with `lshBand0`. The eight `Document.lshBand<i>` indexes
-> (`bootstrap_schema.sh:206-208`) index nothing. QUERIES §14.9 states the defect.
-- **Owner:** `tdd-engineer`, with a `graph-dba` look at the write if it lands in the ingest query.
-- **Scope:** store the bands for every new `Document`, plus a one-off per-workspace backfill. The
-  write site is the one design call. Detection is skipped for an auto-superseded ingest (QUERIES
-  §14.9), so a detection-time write would leave those current documents band-less; the ingest
-  write covers every document.
-- **Done-condition:** every ingested `Document` carries `lshBand0..7`; existing ones are backfilled;
-  a near-duplicate with an unrelated title is suggested through the band signal on a live instance;
-  QUERIES §14.9's defect sentence and K-064's premise are updated at close.
-- **Risks/RAM:** 8 short strings per `Document`, and one entry per band in indexes that exist today.
-- **Test strategy:** failing test first: ingest a document and assert its bands are stored, then
-  assert a near-duplicate ingest shortlists it with the title lookup disabled.
-
 ### K-064 — `find_update_shortlist`'s title-fuzzy signal uses implicit-AND token combination, far narrower than its own docstring implies
 
 - **Status:** 🔵 proposed — filed out of `document-ingestion2` Stage E QA pass, `docs/test-reports/document-ingestion2-report.md` Defect 2, 2026-09-13
@@ -1065,61 +988,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   (`docs/plans/graph-config-defaults-graph.md` §3.1).
 - **Risks/RAM:** building it adds `MENTIONS` edges per message (RAM, DESIGN §11); dropping it
   removes a response field a client might read.
-
-### K-094 — `(:Message)-[:REPLY_TO]->(:Message)` has a reader and no writer
-
-- **Status:** 🔵 proposed — `docs/reviews/live-specs.md` Pass 8 claim 2, 2026-10-31
-
-> **Why it exists.** `repository.get_message` (`repository.py:2414`) returns `quotedId` from
-> `OPTIONAL MATCH (m)-[:REPLY_TO]->(quoted:Message)`, but no route, MCP tool or service writes
-> `REPLY_TO`: no request schema carries a quoted-message id. The only `CREATE (m)-[:REPLY_TO]` is
-> suite seeding (`test_queries.sh:212`), and QUERIES §4 marks its reply write as a library query.
-> So `quotedId` is always `null`. Separate from K-093: this one needs a request field, not a
-> model.
-- **The decision:** add quoting (an optional quoted-message id on the post paths, validated to be in
-  the same thread or workspace) or drop `quotedId` and the edge.
-- **Owner:** `architect` (small) → `tdd-engineer`.
-- **Done-condition:** `quotedId` is either written by a front door and read back, or removed; DESIGN
-  §5.1 and QUERIES §4 updated at close.
-- **Risks/RAM:** one edge per reply. The write joins the §4 message write paths, which must stay one
-  `GRAPH.QUERY` each.
-
-### K-095 — `config.AGENT_NAME` is parsed and never read
-
-- **Status:** 🔵 proposed — `docs/reviews/live-specs.md` Pass 9 claim 3, 2026-10-31
-
-> **Why it exists.** `config.py:87` reads `FALKORCHAT_AGENT_NAME` into `AGENT_NAME`, and nothing in
-> `falkorchat/` reads it. The environment variable itself is live: `scripts/seed_demo.sh:47` reads it
-> directly as the seeded `Agent`'s display name, and `start_server.sh`/`start_demo.sh` pass it
-> there. What is dead is the server-side copy, and the exports to uvicorn
-> (`start_server.sh:242`, `start_demo.sh:369`) and `server/.env.example:43` imply the server uses
-> it. SERVER.md §1.3 states the truth.
-- **Owner:** `coder`.
-- **Scope:** remove `config.AGENT_NAME` and the server-facing mentions (the uvicorn exports and the
-  `.env.example` line), keeping the variable for `seed_demo.sh`; or, if the server should name its
-  agent, read it where the `Agent` is resolved. Removal is the default.
-- **Done-condition:** no unread config key; SERVER.md §1.3's row updated at close.
-- **Risks/RAM:** none.
-
-### K-098 — Review the live `GRAPH.CONFIG` defaults before production
-
-- **Status:** 🔵 proposed — DESIGN §13; `docs/reviews/live-specs.md` Pass 8 m5, 2026-10-31
-
-> **Why it exists.** DESIGN §13 lists a pre-production review of the live `GRAPH.CONFIG` defaults
-> as open and tracked here: `THREAD_COUNT 4`, `OMP_THREAD_COUNT 4`, `CACHE_SIZE 25`,
-> `MAX_QUEUED_QUERIES 25`, `QUERY_MEM_CAPACITY 0` (unlimited) and `ASYNC_DELETE 1`. They are the
-> engine's defaults, never chosen for this workload. Unlimited query memory, for one, lets a single
-> runaway query take the RAM every in-memory workspace graph lives in. DESIGN §10's tuning bullet
-> names the knobs; `TIMEOUT` is already decided there.
-- **Owner:** `graph-dba` (sizing and recommended values) with `devops` (where they are set: compose,
-  `start_falkordb.sh`).
-- **Scope:** a recommended value per key with its reason, measured where it matters
-  (`QUERY_MEM_CAPACITY` against the heaviest GraphRAG read, `THREAD_COUNT` against host cores), and
-  the place it is set. No change to queries or schema.
-- **Done-condition:** each key has a decided value, set in the deployment config; DESIGN §10/§13
-  updated at close.
-- **Risks/RAM:** a too-low `QUERY_MEM_CAPACITY` fails legitimate reads; measure before capping.
-- **Not urgent:** nothing runs in production. Do it before the first production deployment.
 
 ## Deferred — M2.5 hardening track
 
@@ -1229,9 +1097,9 @@ forward-only by ruling.
 DESIGN §13 open questions — resolve as their milestones arrive: message/embedding retention
 under the always-in-RAM constraint, and cross-workspace analytics (app-layer fan-out vs. an
 `analytics` rollup graph). Both are homed here, not as items, because neither has a trigger or an
-owner yet; promote one to a `K-` item when a workspace's size or a reporting need forces it. The
-other two §13 questions have items: the push gateway's transport (K-018) and the `GRAPH.CONFIG`
-review (K-098).
+owner yet; promote one to a `K-` item when a workspace's size or a reporting need forces it. Of the
+other two §13 questions, the push gateway's transport has an item (K-018), and the `GRAPH.CONFIG`
+values are resolved (DESIGN §10; `docs/HISTORY.md` 2026-11-20, K-098).
 
 ### GAL-F0034 — WSL2 memory cap for the 16GB host
 
