@@ -1,6 +1,13 @@
-"""Hook registration detection: the sync header's `Hook:` state (D-1, S10 acceptance)."""
+"""Hook registration detection: the sync header's `Hook:` state (D-1, S10 acceptance).
+
+The cases live in `tests/fixtures/hook-settings-cases.json` (name, settings, optional settings_local, script,
+kill_switch, expected, why): `hookreg` is the authority and the audit checker is aligned to the same table.
+"""
 import json
+import os
+import stat
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -9,138 +16,79 @@ from coordgraph.config import Config
 from coordgraph.hookreg import hook_status
 
 SCRIPT = "coordination-graph/hooks/post-tool-sync.sh"
-PROJECT_CMD = '"${CLAUDE_PROJECT_DIR}"/' + SCRIPT
+CASES = json.loads((Path(__file__).parent / "fixtures" / "hook-settings-cases.json").read_text(encoding="utf-8"))
 
 
-def entry(cmd=PROJECT_CMD, matcher="Write|Edit|Bash"):
-    return {"matcher": matcher, "hooks": [{"type": "command", "command": cmd}]}
+def _fill(value, root):
+    if isinstance(value, str):
+        return value.replace("{ROOT}", str(root))
+    if isinstance(value, list):
+        return [_fill(v, root) for v in value]
+    if isinstance(value, dict):
+        return {k: _fill(v, root) for k, v in value.items()}
+    return value
 
 
-def settings(post=None, fail=None):
-    hooks = {}
-    if post is not None:
-        hooks["PostToolUse"] = post
-    if fail is not None:
-        hooks["PostToolUseFailure"] = fail
-    return {"hooks": hooks}
+def _write(path: Path, content, root):
+    path.write_text(content if isinstance(content, str) else json.dumps(_fill(content, root)), encoding="utf-8")
 
 
-def both(**kw):
-    return settings([entry(**kw)], [entry(**kw)])
+def build(root: Path, case: dict) -> Config:
+    """Materialise one table case under `root` and return the config to ask with."""
+    (root / ".claude").mkdir(exist_ok=True)
+    script = root / SCRIPT
+    mode = case.get("script", "executable")
+    if mode == "directory":
+        script.mkdir(parents=True)
+    elif mode != "missing":
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text("#!/usr/bin/env bash\n")
+        script.chmod(script.stat().st_mode | stat.S_IXUSR if mode == "executable" else 0o644)
+    _write(root / ".claude" / "settings.json", case["settings"], root)
+    if "settings_local" in case:
+        _write(root / ".claude" / "settings.local.json", case["settings_local"], root)
+    cfg = Config.from_env({"COORDGRAPH_REPO_ROOT": str(root), "COORDGRAPH_STATE_DIR": str(root / ".state")})
+    return replace(cfg, hook_disabled=bool(case.get("kill_switch")))
 
 
-@pytest.fixture
-def root(tmp_path):
-    (tmp_path / ".claude").mkdir()
-    return tmp_path
+def test_the_table_is_self_describing_and_unique():
+    names = [c["name"] for c in CASES]
+    assert len(names) == len(set(names)) >= 50
+    for c in CASES:
+        assert c["expected"] in ("registered", "not registered", "disabled") and c["why"] and "settings" in c
 
 
-@pytest.fixture
-def cfg(root):
-    return replace(Config.from_env({"COORDGRAPH_REPO_ROOT": str(root)}), hook_disabled=False)
+@pytest.mark.parametrize("case", CASES, ids=[c["name"] for c in CASES])
+def test_hook_status_matches_the_golden_table(tmp_path, case):
+    assert hook_status(build(tmp_path, case), tmp_path) == case["expected"], case["why"]
 
 
-def put(root, cfg_obj, name="settings.json"):
-    text = cfg_obj if isinstance(cfg_obj, str) else json.dumps(cfg_obj)
-    (root / ".claude" / name).write_text(text)
+def test_no_settings_files_at_all_is_not_registered(tmp_path):
+    cfg = Config.from_env({"COORDGRAPH_REPO_ROOT": str(tmp_path), "COORDGRAPH_STATE_DIR": str(tmp_path / ".state")})
+    assert hook_status(replace(cfg, hook_disabled=False), tmp_path) == "not registered"
 
 
-def test_registered_for_both_events(root, cfg):
-    put(root, both())
-    assert hook_status(cfg, root) == "registered"
-
-
-def test_no_settings_files_is_not_registered(root, cfg):
-    assert hook_status(cfg, root) == "not registered"
-
-
-def test_one_event_only_is_not_registered(root, cfg):
-    put(root, settings([entry()]))
-    assert hook_status(cfg, root) == "not registered"
-    put(root, settings(None, [entry()]))
-    assert hook_status(cfg, root) == "not registered"
-
-
-def test_events_may_come_from_different_settings_files(root, cfg):
-    put(root, settings([entry()]))
-    put(root, settings(None, [entry()]), "settings.local.json")
-    assert hook_status(cfg, root) == "registered"
-
-
-@pytest.mark.parametrize("cmd", [
-    "/other-checkout/" + SCRIPT,
-    PROJECT_CMD + ".bak",
-    "echo " + PROJECT_CMD,
-    "other-dir/hooks/post-tool-sync.sh",
-    '"${CLAUDE_PROJECT_DIR}"/coordination-graph/../elsewhere/hooks/post-tool-sync.sh',
-])
-def test_a_command_that_is_not_this_script_is_not_registered(root, cfg, cmd):
-    put(root, both(cmd=cmd))
-    assert hook_status(cfg, root) == "not registered"
-
-
-@pytest.mark.parametrize("cmd", [
-    PROJECT_CMD,
-    "$CLAUDE_PROJECT_DIR/" + SCRIPT,
-    SCRIPT,
-    "./" + SCRIPT,
-    "bash " + SCRIPT,
-])
-def test_the_documented_and_equivalent_command_forms_are_registered(root, cfg, cmd):
-    put(root, both(cmd=cmd))
-    assert hook_status(cfg, root) == "registered"
-
-
-def test_the_absolute_path_of_this_checkout_is_registered(root, cfg):
-    put(root, both(cmd=str(root / SCRIPT)))
-    assert hook_status(cfg, root) == "registered"
-
-
-@pytest.mark.parametrize("matcher,expected", [
-    ("", "registered"), ("*", "registered"), (".*", "registered"),
-    ("(Write|Edit|Bash)", "registered"), ("^(Write|Edit|Bash)$", "registered"),
-    ("Write|Edit|Bash|Read", "registered"),
-    ("Write|Edit", "not registered"), ("Bash", "not registered"),
-    ("Write | Edit | Bash", "not registered"),
-    ("(unclosed", "not registered"), ("Wri.|Edi.|Bas.", "not registered"),
-])
-def test_matcher_must_cover_write_edit_and_bash(root, cfg, matcher, expected):
-    put(root, both(matcher=matcher))
-    assert hook_status(cfg, root) == expected
-
-
-def test_matcher_tokens_are_unioned_across_entries_of_one_event(root, cfg):
-    ev = [entry(matcher="Write|Edit"), entry(matcher="Bash")]
-    put(root, settings(ev, ev))
-    assert hook_status(cfg, root) == "registered"
-
-
-@pytest.mark.parametrize("text", ["{not json", "", "[]", '{"hooks": []}', '{"hooks": {"PostToolUse": "x"}}',
-                                  '{"hooks": {"PostToolUse": [1], "PostToolUseFailure": [{"hooks": 3}]}}'])
-def test_unreadable_or_garbled_settings_are_not_registered_and_never_raise(root, cfg, text):
-    put(root, text)
-    assert hook_status(cfg, root) == "not registered"
-
-
-def test_a_garbled_file_does_not_hide_a_good_one(root, cfg):
-    put(root, "{garbage")
-    put(root, both(), "settings.local.json")
-    assert hook_status(cfg, root) == "registered"
-
-
-def test_the_kill_switch_overrides_registration(root, cfg):
-    put(root, both())
-    assert hook_status(replace(cfg, hook_disabled=True), root) == "disabled"
-
-
-def test_the_disabled_file_overrides_registration_even_when_unregistered(root, cfg, tmp_path):
-    state = tmp_path / "state"
-    state.mkdir()
-    (state / "disabled").touch()
-    assert hook_status(replace(cfg, state_dir=state), root) == "disabled"
+def test_the_disabled_state_file_overrides_registration(tmp_path):
+    case = next(c for c in CASES if c["name"] == "documented-block-in-settings-json")
+    cfg = build(tmp_path, case)
+    assert hook_status(cfg, tmp_path) == "registered"
+    (tmp_path / ".state").mkdir()
+    (tmp_path / ".state" / "disabled").touch()
+    assert hook_status(cfg, tmp_path) == "disabled"
 
 
 def test_header_prints_the_state_verbatim():
     rep = drift.DriftReport(0, None, None, [])
     for state in ("registered", "not registered", "disabled"):
         assert drift.render_header(rep, state).splitlines()[0].endswith(f" · Hook: {state}")
+
+
+def test_a_symlinked_script_counts_because_it_runs(tmp_path):
+    case = next(c for c in CASES if c["name"] == "documented-block-in-settings-json")
+    cfg = build(tmp_path, case)
+    real = tmp_path / "real.sh"
+    real.write_text("#!/bin/sh\n")
+    real.chmod(0o755)
+    (tmp_path / SCRIPT).unlink()
+    os.symlink(real, tmp_path / SCRIPT)
+    assert hook_status(cfg, tmp_path) == "registered"

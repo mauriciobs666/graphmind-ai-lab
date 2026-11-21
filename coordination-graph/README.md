@@ -101,8 +101,12 @@ Drift: none
   `<state dir>/disabled` exists (the kill switch, see "The post-edit hook"); else `registered` when the
   project's `.claude/settings.json`/`settings.local.json` run `coordination-graph/hooks/post-tool-sync.sh`
   for both `PostToolUse` and `PostToolUseFailure` with a matcher covering Write, Edit and Bash
-  (`coordgraph/hookreg.py`); else `not registered` (also for unreadable settings). A static reading: it
-  does not prove the hook fires in a given context.
+  (`coordgraph/hookreg.py`; the handler must be `type: command` without an `if` filter, run the script by an
+  absolute or `$CLAUDE_PROJECT_DIR` path to an existing executable file, and `disableAllHooks` must not be
+  true; cases in `tests/fixtures/hook-settings-cases.json`); else `not registered` (also for unreadable
+  settings). A static reading of the project's two files: user-scope settings and managed policy
+  (`disableAllHooks`, `allowManagedHooksOnly`) are not readable from here, and it does not prove the hook
+  fires in a given context.
 - `Registry:` is the work-item registry read at query time; `Registry: unavailable -- identities
   compared as written` means identities were not resolved.
 - `Drift: <n> source(s)` is followed by one line per source: state `changed`, `unsynced`, `gone`

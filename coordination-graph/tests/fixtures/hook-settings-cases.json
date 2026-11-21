@@ -1,0 +1,1611 @@
+[
+ {
+  "name": "documented-block-in-settings-json",
+  "expected": "registered",
+  "why": "the exact block of docs/hook-settings.md section 1",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "documented-block-in-settings-local-json",
+  "expected": "registered",
+  "why": "same block in the gitignored local file",
+  "settings": {},
+  "settings_local": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "events-split-across-files",
+  "expected": "registered",
+  "why": "each event needs a registration, not each file",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "settings_local": {
+   "hooks": {
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "no-settings",
+  "expected": "not registered",
+  "why": "nothing registered",
+  "settings": {}
+ },
+ {
+  "name": "post-tool-use-only",
+  "expected": "not registered",
+  "why": "both events are required",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "failure-event-only",
+  "expected": "not registered",
+  "why": "both events are required",
+  "settings": {
+   "hooks": {
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "absolute-path-of-this-checkout",
+  "expected": "registered",
+  "why": "an absolute command resolving to this repo's script",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "{ROOT}/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "{ROOT}/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "project-dir-unquoted",
+  "expected": "registered",
+  "why": "$CLAUDE_PROJECT_DIR without braces or quotes",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "$CLAUDE_PROJECT_DIR/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "$CLAUDE_PROJECT_DIR/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "bash-with-project-dir",
+  "expected": "registered",
+  "why": "bash <script> needs only an existing file",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "bash \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "bash \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "script": "present"
+ },
+ {
+  "name": "direct-form-not-executable",
+  "expected": "not registered",
+  "why": "the direct form needs the executable bit",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "script": "present"
+ },
+ {
+  "name": "script-is-a-directory",
+  "expected": "not registered",
+  "why": "a directory is not a runnable script",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "script": "directory"
+ },
+ {
+  "name": "script-missing",
+  "expected": "not registered",
+  "why": "no script at the path",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "script": "missing"
+ },
+ {
+  "name": "bash-form-script-missing",
+  "expected": "not registered",
+  "why": "bash <missing> cannot run",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "bash \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "bash \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "script": "missing"
+ },
+ {
+  "name": "relative-path",
+  "expected": "not registered",
+  "why": "a relative command resolves against the session cwd, not provably the repo root",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "dot-relative-path",
+  "expected": "not registered",
+  "why": "same, with ./",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "./coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "./coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "bash-relative-path",
+  "expected": "not registered",
+  "why": "bash with a relative script path",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "bash coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "bash coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "bak-suffix",
+  "expected": "not registered",
+  "why": "a different file",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh.bak"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh.bak"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "echo-the-path",
+  "expected": "not registered",
+  "why": "the script is an argument of echo, not run",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "echo \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "echo \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "other-checkout",
+  "expected": "not registered",
+  "why": "another checkout's script",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "/other-checkout/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "/other-checkout/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "dotdot-detour",
+  "expected": "not registered",
+  "why": "a .. detour that ends in another script",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/../elsewhere/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/../elsewhere/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "other-script-dir",
+  "expected": "not registered",
+  "why": "same file name in another directory",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/other-dir/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/other-dir/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "bash-dash-c",
+  "expected": "not registered",
+  "why": "bash -c '<path>' is a shell string, not the script (under-claim by design)",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "bash -c '\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh'"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "bash -c '\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh'"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "sh-dash-c",
+  "expected": "not registered",
+  "why": "sh -c '<path>' (under-claim by design)",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "sh -c '\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh'"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "sh -c '\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh'"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "env-prefix",
+  "expected": "not registered",
+  "why": "FOO=1 <path> (under-claim by design)",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "FOO=1 \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "FOO=1 \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "timeout-prefix",
+  "expected": "not registered",
+  "why": "timeout 50 <path> (under-claim by design)",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "timeout 50 \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "timeout 50 \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "shell-comment",
+  "expected": "not registered",
+  "why": "the path only inside a # comment",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "true # \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "true # \"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "type-http-with-command-key",
+  "expected": "not registered",
+  "why": "command applies to type command only",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "http",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "http",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "type-prompt-with-command-key",
+  "expected": "not registered",
+  "why": "command applies to type command only",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "prompt",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "prompt",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "if-filter",
+  "expected": "not registered",
+  "why": "an `if` rule narrows the handler to some calls",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh",
+        "if": "Bash(git *)"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh",
+        "if": "Bash(git *)"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "disable-all-hooks-project",
+  "expected": "not registered",
+  "why": "disableAllHooks: true switches every hook off",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   },
+   "disableAllHooks": true
+  }
+ },
+ {
+  "name": "disable-all-hooks-local",
+  "expected": "not registered",
+  "why": "disableAllHooks in the local file",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "settings_local": {
+   "disableAllHooks": true
+  }
+ },
+ {
+  "name": "local-false-overrides-project-true",
+  "expected": "registered",
+  "why": "local scope wins over project scope",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   },
+   "disableAllHooks": true
+  },
+  "settings_local": {
+   "disableAllHooks": false
+  }
+ },
+ {
+  "name": "local-true-overrides-project-false",
+  "expected": "not registered",
+  "why": "local scope wins over project scope",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   },
+   "disableAllHooks": false
+  },
+  "settings_local": {
+   "disableAllHooks": true
+  }
+ },
+ {
+  "name": "disable-all-hooks-false",
+  "expected": "registered",
+  "why": "false is not disabled",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   },
+   "disableAllHooks": false
+  }
+ },
+ {
+  "name": "matcher-00-empty",
+  "expected": "registered",
+  "why": "empty matcher matches every tool",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-01-star",
+  "expected": "registered",
+  "why": "* matches every tool",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "*",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "*",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-02-dotstar",
+  "expected": "registered",
+  "why": "regex that matches every tool name",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": ".*",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": ".*",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-03-Write_Edit_Bash",
+  "expected": "registered",
+  "why": "regex alternation",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "(Write|Edit|Bash)",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "(Write|Edit|Bash)",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-04-Write_Edit_Bash",
+  "expected": "registered",
+  "why": "anchored regex alternation",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "^(Write|Edit|Bash)$",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "^(Write|Edit|Bash)$",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-05-Write_Edit_Bash_Read",
+  "expected": "registered",
+  "why": "a superset list",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash|Read",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash|Read",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-06-Write_Edit_Bash",
+  "expected": "registered",
+  "why": "name list with spaces is exact",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write | Edit | Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write | Edit | Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-07-WritecommaEditcommaBash",
+  "expected": "registered",
+  "why": "comma name list is exact",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write,Edit,Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write,Edit,Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-08-Write",
+  "expected": "not registered",
+  "why": "one tool only",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "^Write$",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "^Write$",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-09-Write_Edit",
+  "expected": "not registered",
+  "why": "Bash missing",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-10-Bash",
+  "expected": "not registered",
+  "why": "Write and Edit missing",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-11-Wridot_Edidot_Basdot",
+  "expected": "not registered",
+  "why": "regex judged as a full match of the tool name",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Wri.|Edi.|Bas.",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Wri.|Edi.|Bas.",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matcher-12-unclosed",
+  "expected": "not registered",
+  "why": "invalid regex covers nothing",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "(unclosed",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "(unclosed",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "matchers-unioned-across-entries",
+  "expected": "registered",
+  "why": "tokens of the entries of one event are unioned",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     },
+     {
+      "matcher": "Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     },
+     {
+      "matcher": "Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "list-shaped-hooks",
+  "expected": "not registered",
+  "why": "hooks as a list is not the schema",
+  "settings": {
+   "hooks": []
+  }
+ },
+ {
+  "name": "hooks-event-not-a-list",
+  "expected": "not registered",
+  "why": "event value of the wrong shape",
+  "settings": {
+   "hooks": {
+    "PostToolUse": "x",
+    "PostToolUseFailure": "x"
+   }
+  }
+ },
+ {
+  "name": "entries-wrong-shape",
+  "expected": "not registered",
+  "why": "non-object entries and a non-list inner hooks",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     1
+    ],
+    "PostToolUseFailure": [
+     {
+      "hooks": 3
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "garbled-json",
+  "expected": "not registered",
+  "why": "unreadable settings never over-claim",
+  "settings": "{not json"
+ },
+ {
+  "name": "empty-file",
+  "expected": "not registered",
+  "why": "an empty settings file",
+  "settings": ""
+ },
+ {
+  "name": "json-array-root",
+  "expected": "not registered",
+  "why": "root is not an object",
+  "settings": []
+ },
+ {
+  "name": "garbled-project-good-local",
+  "expected": "registered",
+  "why": "a garbled file does not hide a good one",
+  "settings": "{garbage",
+  "settings_local": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "kill-switch-overrides-registration",
+  "expected": "disabled",
+  "why": "the kill switch wins over a registered hook",
+  "settings": {
+   "hooks": {
+    "PostToolUse": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ],
+    "PostToolUseFailure": [
+     {
+      "matcher": "Write|Edit|Bash",
+      "hooks": [
+       {
+        "type": "command",
+        "command": "\"${CLAUDE_PROJECT_DIR}\"/coordination-graph/hooks/post-tool-sync.sh"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "kill_switch": true
+ },
+ {
+  "name": "kill-switch-without-registration",
+  "expected": "disabled",
+  "why": "the kill switch is reported even when nothing is registered",
+  "settings": {},
+  "kill_switch": true
+ }
+]

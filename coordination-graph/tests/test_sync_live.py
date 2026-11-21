@@ -254,13 +254,28 @@ def test_drift_reports_the_disabled_hook_and_the_registry_line(synced, capsys):
     assert "Hook: disabled" in out and out.splitlines()[1].startswith("Registry:")
 
 
-def test_header_reads_registered_once_the_settings_register_both_events(synced, capsys):
-    import json
-    root = synced[0]
+def _register_hook(root):
+    script = root / "coordination-graph" / "hooks" / "post-tool-sync.sh"
+    script.parent.mkdir(parents=True)
+    script.write_text("#!/usr/bin/env bash\n")
+    script.chmod(0o755)
     ent = [{"matcher": "Write|Edit|Bash", "hooks": [{
         "type": "command", "command": '"${CLAUDE_PROJECT_DIR}"/coordination-graph/hooks/post-tool-sync.sh'}]}]
     put(root, ".claude/settings.json", json.dumps({"hooks": {"PostToolUse": ent, "PostToolUseFailure": ent}}))
-    assert "Hook: registered" in run(capsys, "drift")[1]
+
+
+HEADER_VIEWS = [("drift",), ("query", "RETURN 1"), ("inflight",), ("unit", "x", "U1"), ("planned", "a"),
+                ("propose", "a")]
+
+
+@pytest.mark.parametrize("argv", HEADER_VIEWS, ids=[a[0] for a in HEADER_VIEWS])
+def test_every_view_header_reads_the_settings_under_the_repo_root(synced, capsys, argv):
+    """Each header call site passes the repo root: the settings exist under `root` only."""
+    root = synced[0]
+    assert "Hook: not registered" in run(capsys, *argv)[1]
+    _register_hook(root)
+    code, out = run(capsys, *argv)
+    assert "Hook: registered" in out, (code, out)
 
 
 def test_query_prints_the_header_flags_drift_and_is_read_only(synced, capsys):
