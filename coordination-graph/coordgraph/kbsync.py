@@ -462,7 +462,10 @@ class KbSync:
                 row.pop(name, None)
         if not force and row.get("state") == "synced" and row.get("sectionHash") == section.section_hash \
                 and row.get("mode") == section.mode:
-            return out("unchanged")
+            failed = self._failed_ids(row)  # one read under the lease; `failed` is terminal, so never stale
+            if not failed:
+                return out("unchanged")
+            bad_ids = bad_ids | failed  # a failed document never recovers: re-submit its claim (not `processing`)
         reason = ctx.refusal(key, section)
         if reason:
             return out("refused", reason)
@@ -497,6 +500,12 @@ class KbSync:
         self._swap(key, token, path, section, plan, posted, row)
         ctx.update(key, path, section.heading, [c.claim_hash for c in section.claims])
         return out("synced", f"{len(posted)} new, {len(plan.keep)} kept, {len(plan.remove)} removed")
+
+    def _failed_ids(self, row: dict) -> frozenset[str]:
+        """The section's mapped documents falkor-chat marked `failed` (its terminal status), one batched read."""
+        ids = row.get("documentIds") or []
+        obs = self.observer.observe(ids)
+        return frozenset(i for i in ids if obs.get(i) is not None and obs[i].failed)
 
     def _check_receipt(self, key, token, receipt, claim, row, ctx) -> str | None:
         """The receipt backstop (m8, P4-m1): falkor-chat auto-supersedes a current document with the same
@@ -735,14 +744,14 @@ class KbSync:
         ids, hashes = row.get("documentIds") or [], row.get("claimHashes") or []
         obs = self.observer.observe(ids)
         bad = frozenset(i for i, h in zip(ids, hashes, strict=False)
-                        if obs.get(i) is None or not obs[i].exists or obs[i].hash != h)
+                        if obs.get(i) is None or not obs[i].exists or obs[i].hash != h or obs[i].failed)
         results = [KbOutcome(path, section.heading, "non-current", f"{i} is superseded (currentVersion = false): "
                              "two headings hold one claim; reported, not re-ingested")
                    for i in ids if i not in bad and obs[i].current is False]
         if bad:
             outcome = self.sync_section(path, section, ctx, force=True, bad_ids=bad)
             results.append(KbOutcome(path, section.heading, "re-ingested" if outcome.status == "synced"
-                                     else outcome.status, f"{len(bad)} missing or mismatched id(s): {outcome.detail}"))
+                                     else outcome.status, f"{len(bad)} missing, mismatched or failed id(s): {outcome.detail}"))
         return results
 
 

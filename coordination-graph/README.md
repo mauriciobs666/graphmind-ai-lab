@@ -74,9 +74,9 @@ Every store-backed command takes `--graph KEY` (default `COORDGRAPH_KEY`, itself
 
 | Command | What it does |
 |---|---|
-| `kb-sync [-v] [--detach-finish] [PATH...]` | Mirror the registered KB files (`kb-files.txt`) into `ws:agent-team`, section by section. `--detach-finish` launches a detached `kb-finish` when a section is pending. |
+| `kb-sync [-v] [--detach-finish] [PATH...]` | Mirror the registered KB files (`kb-files.txt`) into `ws:agent-team`, section by section; a section whose mapped document ended `failed` in falkor-chat (a `processing` one is left alone) is re-submitted, new version first, old removed once it is searchable. `--detach-finish` launches a detached `kb-finish` when a section is pending. |
 | `kb-status [--ids ID...]` | Last sync time; stale, pending, unmirrored and duplicate claims. |
-| `kb-reconcile` | Check every mapped KB document against `ws:agent-team`. |
+| `kb-reconcile` | Check every mapped KB document against `ws:agent-team`; a missing, hash-mismatched or `failed` document is re-ingested. |
 | `kb-finish [--once]` | Complete or give up pending sections; loops until settled unless `--once`; one instance at a time (`kb-finish.lock`). |
 
 **Hook (called by `hooks/post-tool-sync.sh`, not by hand; both routine, both take `--graph`/`--confirm`):**

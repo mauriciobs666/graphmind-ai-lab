@@ -265,3 +265,22 @@ def test_the_17_marker_stripped_claims_of_falkordb_reference_are_reingested_by_t
     texts = [r[0] for r in live.observer._rows(
         "UNWIND $ids AS i MATCH (d:Document {documentId: i}) RETURN d.text", {"ids": sorted(created)})]
     assert len(texts) == 17 and all(t[0] in "-*0123456789" for t in texts)  # the list marker is kept
+
+
+def test_a_document_that_ended_failed_is_resubmitted_and_the_new_one_is_searchable_first(live):
+    eng = live.engine()
+    tag = uuid.uuid4().hex[:8]
+    path = f"live/{tag}.md"
+    doc = kb(f"# T\n\n## Fact\n\nRetry {tag} marmot.\n", path)
+    run_sync(eng, doc)
+    key = kbsync.section_key(path, doc.sections[0])
+    [old] = row_of(live, key)["documentIds"]
+    # a failed extract job marks the whole document failed (SERVER.md 1): reproduce it on the scratch graph
+    live.db.select_graph("ws:coordtest").query("MATCH (d:Document {documentId: $id}) SET d.status = 'failed'",
+                                               {"id": old})
+    assert live.observer.observe([old])[old].failed
+    out = run_sync(eng, doc)
+    assert out["Fact"].status == "synced", out["Fact"]
+    [new] = row_of(live, key)["documentIds"]
+    assert new != old and live.observer.observe([new])[new].ready and live.observer.observe([old])[old].exists is False
+    assert run_sync(eng, doc)["Fact"].status == "unchanged"

@@ -517,6 +517,83 @@ def test_a_post_http_error_fails_the_section_and_leaves_the_old_claim():
     assert old in chat.docs and row(mirror, doc, "Alpha")["documentIds"] == [old]
 
 
+# --- a mapped document that ended `failed` is re-submitted ------------------------------------------
+
+def test_sync_resubmits_a_section_whose_mapped_document_is_failed():
+    # rules out: `unchanged` decided from the section hash alone, a permanently failed document never retried
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+    chat.failed.add(old)
+    chat.calls.clear()
+    out, doc = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "synced" and chat.posts() == ["Alpha"] and chat.deletes() == [old]
+    [new] = [d["id"] for d in chat.docs.values() if d["id"] != old]
+    assert row(mirror, doc, "Alpha")["documentIds"] == [new]
+    assert [c[0] for c in chat.calls] == ["post", "delete"]  # append before delete
+
+
+def test_the_failed_document_is_removed_only_once_its_replacement_is_ready():
+    # rules out: deleting the old claim before the new one is submitted and embedded
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+    chat.failed.add(old)
+    seen = []
+    chat.on_delete = lambda i: seen.append((i, [(d["id"], d["status"]) for d in chat.docs.values() if d["id"] != i
+                                                 and d["id"] not in chat.held]))
+    sync(engine, mirror, ONE)
+    assert [i for i, _ in seen] == [old] and len(seen[0][1]) == 1
+
+
+def test_a_processing_document_is_not_retried():
+    # rules out: treating any not-yet-ready status as failed (it would double-submit a document still embedding)
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+    chat.docs[old]["status"] = "processing"
+    chat.calls.clear()
+    out, _ = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "unchanged" and chat.calls == []
+
+
+def test_when_the_resubmission_fails_too_the_old_mapping_stays_and_the_section_is_not_complete():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    old = row(mirror, doc, "Alpha")["documentIds"][0]
+    chat.failed.add(old)
+    chat.during_post = lambda: chat.failed.update(chat.docs)
+    out, doc = sync(engine, mirror, ONE)
+    assert out["Alpha"].status == "failed" and out["Alpha"].incomplete
+    r = row(mirror, doc, "Alpha")
+    assert r["documentIds"] == [old] and r["state"] == "synced" and "pendingDocumentIds" not in r
+    assert chat.deletes() != [old] and old in chat.docs
+
+
+def test_only_the_failed_claim_of_a_split_section_is_resubmitted():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, BULLETS)
+    ids = dict(zip(row(mirror, doc, "Facts")["claimHashes"], row(mirror, doc, "Facts")["documentIds"], strict=True))
+    bad = ids[claim_hash("- two fact")]
+    chat.failed.add(bad)
+    chat.calls.clear()
+    out, doc = sync(engine, mirror, BULLETS)
+    assert out["Facts"].status == "synced" and chat.posts() == ["kb — two fact"] and chat.deletes() == [bad]
+    assert ids[claim_hash("- one fact")] in row(mirror, doc, "Facts")["documentIds"]
+
+
+def test_a_healthy_unchanged_section_costs_one_observation_read_and_no_http():
+    engine, mirror, chat, _ = make_engine()
+    sync(engine, mirror, TWO)
+    reads = []
+    real = chat.observe
+    chat.observe = lambda ids: reads.append(list(ids)) or real(ids)
+    chat.calls.clear()
+    out, _ = sync(engine, mirror, TWO)
+    assert [o.status for o in out.values()] == ["unchanged", "unchanged"]
+    assert len(reads) == 2 and all(len(r) == 1 for r in reads) and chat.calls == []
+
+
 # --- reconcile -------------------------------------------------------------------------------------
 
 def test_reconcile_reingests_a_mapped_document_that_is_gone():
@@ -538,6 +615,26 @@ def test_reconcile_reingests_a_hash_mismatch_and_deletes_the_stale_id():
     chat.docs[old]["hash"] = "0" * 64  # edited behind the mirror's back
     [res] = [o for o in engine.reconcile([doc]) if o.heading == "Alpha"]
     assert res.status == "re-ingested" and old in chat.deletes() and old not in chat.docs
+
+
+def test_reconcile_reingests_a_failed_mapped_document():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, TWO)
+    bad = row(mirror, doc, "Alpha")["documentIds"][0]
+    good = row(mirror, doc, "Beta")["documentIds"][0]
+    chat.failed.add(bad)
+    chat.calls.clear()
+    results = {o.heading: o for o in engine.reconcile([doc])}
+    assert results["Alpha"].status == "re-ingested" and "failed" in results["Alpha"].detail
+    assert chat.posts() == ["Alpha"] and chat.deletes() == [bad] and good in chat.docs and "Beta" not in results
+
+
+def test_reconcile_does_not_reingest_a_processing_document():
+    engine, mirror, chat, _ = make_engine()
+    _, doc = sync(engine, mirror, ONE)
+    chat.docs[row(mirror, doc, "Alpha")["documentIds"][0]]["status"] = "processing"
+    chat.calls.clear()
+    assert [o for o in engine.reconcile([doc]) if o.heading == "Alpha"] == [] and chat.calls == []
 
 
 def test_reconcile_reports_a_non_current_mapped_id_and_does_not_reingest_it():

@@ -40,8 +40,10 @@ consumers: `skills/coordination-graph/SKILL.md`.
 - **Per-source atomic replace**: one statement per source; a failed replace leaves the previous
   subgraph, and one is skipped when sha256 and `parserVersion` match. `rebuild` forces every
   source, prunes, sweeps orphans and proves parity against a fresh parse, never the graph itself.
-- **The file wins.** A `⚠ drift` row or `Drift:` source means the graph lags; quote the file.
-- **Fixtures are built in `tmp_path`**, never under a `docs/plans/`-shaped path (they would be sources).
+- **The file wins** over a `⚠ drift` row or `Drift:` source.
+- **KB retry**: a mapped `failed` document (terminal) is re-submitted by `kb-sync`, flagged by `kb-reconcile`;
+  `processing` never.
+- **Fixtures live in `tmp_path`**, never under a `docs/plans/`-shaped path.
 - **Do not edit the root `AGENTS.md` from here**; `teco` owns it.
 
 ## Conventions
@@ -50,4 +52,4 @@ consumers: `skills/coordination-graph/SKILL.md`.
   config are stdlib only. The venv is this component's own (`setup.sh`), not shared.
 - Configuration is env-overridable through `coordgraph/config.py` (`COORDGRAPH_*`); tests set
   every value and never rely on the ambient environment.
-- Docs follow the root `AGENTS.md` module convention; this file is rewritten, not appended to.
+- Docs follow the root `AGENTS.md` module convention; this file is rewritten in place.
