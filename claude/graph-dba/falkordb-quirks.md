@@ -982,6 +982,20 @@ to the general fact here.
   and 424 ms for the slice form. Same rows, same order of the first n: a seed with no match yields
   `[]` (the subquery still returns one row), and the seed itself counts among its own co-mentioners
   in both forms. Verify: `GRAPH.PROFILE` both forms over a high-fan-in node.
+- **Consecutive `MATCH` clauses are merged into one pattern, and the planner may anchor on the
+  later clause's index; a `WITH` between them pins the earlier anchor** (verified 2026-11-20, same
+  build, throwaway; `graph-dba-r4/plans_and_latency.txt` under
+  `falkor-chat/docs/reviews/graph-config-defaults-evidence/`). After an ANN `CALL … YIELD node AS
+  seed`, `MATCH (t:Thread {threadId: seed.threadId}) MATCH (c:Channel {channelId: $c})-[:HAS_THREAD]->(t)`
+  plans `Node By Index Scan | (c:Channel)` → `Conditional Traverse | (c)->(t:Thread)` → `Filter` on
+  `threadId`, per seed: 1,253 ms at 1M threads in the channel (k=10). Writing
+  `{threadId: seed.threadId}` inside the channel pattern plans the same. Inserting
+  `WITH seed, score, t` between the two clauses plans `Node By Index Scan | (t:Thread)` →
+  `Conditional Traverse | (t)->(c:Channel)` → `Filter`: 2.1 ms, flat from 1k to 1M threads, same
+  rows. Related: an `OPTIONAL MATCH (a)-[]->(e)<-[]-(b)` whose middle node `e` is unreferenced is
+  fused into one `(a)->(b)` traverse that collapses duplicate paths. Once `e` is projected or
+  filtered, the plan splits into two traverses and duplicates appear unless `DISTINCT`
+  (`graph-dba-r4/distinct_probe.txt`). Verify: `GRAPH.EXPLAIN` both forms.
 
 ## Ops, config & tooling
 

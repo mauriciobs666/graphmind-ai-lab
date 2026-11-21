@@ -1,0 +1,11 @@
+Labels added: 4
+e unreferenced, DISTINCT : [S, R] Cached execution: 0 Query internal execution time: 0.533778 milliseconds
+    Optional Conditional Traverse | (seed)->(related:Message)
+e unreferenced, no DISTINCT: [S, R] Cached execution: 0 Query internal execution time: 0.422070 milliseconds
+    Optional Conditional Traverse | (seed)->(related:Message)
+e filtered, DISTINCT : [S, R] Cached execution: 0 Query internal execution time: 0.475944 milliseconds
+    Conditional Traverse | (e)->(related:Message)
+    Conditional Traverse | (seed)->(e:Entity)
+e filtered, no DISTINCT: [S, R, S, R] Cached execution: 0 Query internal execution time: 0.438151 milliseconds
+    Conditional Traverse | (e)->(related:Message)
+    Conditional Traverse | (seed)->(e:Entity)

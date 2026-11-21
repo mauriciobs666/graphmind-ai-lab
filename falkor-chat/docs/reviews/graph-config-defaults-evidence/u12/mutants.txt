@@ -1,0 +1,101 @@
+## M0 current unbounded form (walk + collect[..5], score-only order)
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  4 failed, 534 passed in 1.93s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_finds_the_seed_thread_by_index_not_by_walk[None]
+    tests/test_graphrag.py::test_hybrid_search_finds_the_seed_thread_by_index_not_by_walk[c1]
+    tests/test_graphrag.py::test_hybrid_search_stops_traversing_a_hub_after_five_per_seed[None]
+    tests/test_graphrag.py::test_hybrid_search_stops_traversing_a_hub_after_five_per_seed[c1]
+## M1 rejected alt: anchor+tie kept, collect(DISTINCT)[..5] instead of subquery
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  2 failed, 536 passed in 1.97s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_stops_traversing_a_hub_after_five_per_seed[None]
+    tests/test_graphrag.py::test_hybrid_search_stops_traversing_a_hub_after_five_per_seed[c1]
+## M2 LIMIT 5 -> 6
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  4 failed, 534 passed in 1.95s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_caps_related_context_at_five_from_a_hub
+    tests/test_graphrag.py::test_hybrid_search_expands_each_seed_from_its_own_entities
+    tests/test_graphrag.py::test_hybrid_search_stops_traversing_a_hub_after_five_per_seed[None]
+    tests/test_graphrag.py::test_hybrid_search_stops_traversing_a_hub_after_five_per_seed[c1]
+## M3 LIMIT 5 -> 4
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  2 failed, 536 passed in 1.99s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_caps_related_context_at_five_from_a_hub
+    tests/test_graphrag.py::test_hybrid_search_expands_each_seed_from_its_own_entities
+## M4 DISTINCT dropped in subquery (equivalent on this build: m4_distinct_probe.txt)
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  538 passed in 1.87s
+  SURVIVED
+## M5 tie-break dropped
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  1 failed, 537 passed in 1.90s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_breaks_exact_score_ties_by_msg_id_asc
+## M6 tie-break msgId DESC
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  1 failed, 537 passed in 1.92s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_breaks_exact_score_ties_by_msg_id_asc
+## M7 tie-break on text
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  1 failed, 537 passed in 2.04s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_breaks_exact_score_ties_by_msg_id_asc
+## M8 per-seed scoping: LIMIT 5 global, outside any subquery
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  1 failed, 537 passed in 1.96s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_expands_each_seed_from_its_own_entities
+## M9 per-seed scoping: subquery does not import seed
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  3 failed, 535 passed in 1.95s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_expands_each_seed_from_its_own_entities
+    tests/test_graphrag.py::test_hybrid_search_finds_the_seed_thread_by_index_not_by_walk[None]
+    tests/test_graphrag.py::test_hybrid_search_finds_the_seed_thread_by_index_not_by_walk[c1]
+## M10 thread anchor dropped (any Thread)
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  3 failed, 535 passed in 1.99s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_channel_scoped_excludes_other_channels
+    tests/test_graphrag.py::test_hybrid_search_finds_the_seed_thread_by_index_not_by_walk[None]
+    tests/test_graphrag.py::test_hybrid_search_finds_the_seed_thread_by_index_not_by_walk[c1]
+## M11 thread anchor on wrong key (msgId)
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  11 failed, 527 passed in 2.04s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_breaks_exact_score_ties_by_msg_id_asc
+    tests/test_graphrag.py::test_hybrid_search_caps_related_context_at_five_from_a_hub
+    tests/test_graphrag.py::test_hybrid_search_channel_scoped_excludes_other_channels
+    tests/test_graphrag.py::test_hybrid_search_expands_each_seed_from_its_own_entities
+    tests/test_graphrag.py::test_hybrid_search_lists_a_message_sharing_two_entities_once
+    tests/test_graphrag.py::test_hybrid_search_ranks_by_cosine_distance_asc
+    tests/test_graphrag.py::test_hybrid_search_related_context_is_empty_list
+    tests/test_graphrag.py::test_hybrid_search_returns_seed_text_and_role
+    tests/test_graphrag.py::test_hybrid_search_workspace_wide_spans_channels
+    tests/test_graphrag.py::test_set_embedding_writes_and_message_is_ann_retrievable
+    tests/test_tools.py::test_graphrag_retrieve_returns_near_seed_live
+## M12 thread anchor reverted to the walk (expansion bounded)
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  2 failed, 536 passed in 1.87s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_finds_the_seed_thread_by_index_not_by_walk[None]
+    tests/test_graphrag.py::test_hybrid_search_finds_the_seed_thread_by_index_not_by_walk[c1]
+## M13 thread anchor as MATCH+WHERE (equivalent: identical plan, m13_equivalence_explain.txt)
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  538 passed in 1.89s
+  SURVIVED
+## M14 seed excluded from its own related
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  1 failed, 537 passed in 1.98s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_lists_a_message_sharing_two_entities_once
+## M15 scoped WITH barrier removed (F1: planner anchors on Channel)
+  imported: /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/reviews/graph-config-defaults-evidence/u12/mut/falkorchat/repository.py
+  1 failed, 537 passed in 1.89s
+  KILLED by:
+    tests/test_graphrag.py::test_hybrid_search_finds_the_seed_thread_by_index_not_by_walk[c1]

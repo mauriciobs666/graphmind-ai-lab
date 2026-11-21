@@ -1,0 +1,30 @@
+== shipped
+Results
+    Limit
+        Sort
+            Project
+                Apply
+                    Node By Index Scan | (t:Thread)
+                        ProcedureCall
+                    Aggregate
+                        Limit
+                            Distinct
+                                Project
+                                    Optional Conditional Traverse | (seed)->(related:Message)
+                                        Project
+                                            Argument
+== M13
+Results
+    Limit
+        Sort
+            Project
+                Apply
+                    Node By Index Scan | (t:Thread)
+                        ProcedureCall
+                    Aggregate
+                        Limit
+                            Distinct
+                                Project
+                                    Optional Conditional Traverse | (seed)->(related:Message)
+                                        Project
+                                            Argument

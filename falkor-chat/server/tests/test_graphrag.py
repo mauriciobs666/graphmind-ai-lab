@@ -168,6 +168,199 @@ def test_hybrid_search_workspace_wide_spans_channels(repo):
     assert {"m1", "mA"} <= set(ids)
 
 
+# ── hybrid_search: bounded Entity expansion (graph-config-defaults-graph.md §3.1) ──
+#
+# No `Message-[:MENTIONS]->Entity` writer exists yet (K-093), so these fixtures
+# write the edges raw. Only seeds get embeddings: a co-mentioning message with
+# an embedding would also come back as a seed.
+
+
+def _mention(conn, *, entity_id, msg_ids):
+    """Test-only raw write: `msg_ids` each `-[:MENTIONS]->` Entity `entity_id`."""
+    db.workspace_graph(conn, WS).query(
+        "MERGE (e:Entity {entityId: $entityId}) "
+        "WITH e UNWIND $msgIds AS mid "
+        "MATCH (m:Message {msgId: mid}) CREATE (m)-[:MENTIONS]->(e)",
+        {"entityId": entity_id, "msgIds": msg_ids},
+    )
+
+
+def _seed_hub_thread(
+    repo, conn, *, thread_id, prefix, n_mentioners, vec, channel_id="c1",
+):
+    """One thread: seed `{prefix}-seed` (embedded at `vec`) then `n_mentioners`
+    unembedded messages, all mentioning Entity `{prefix}-hub`. Returns the
+    texts of every message mentioning the hub (the seed's own included)."""
+    messages = [(f"{prefix}-seed", f"{prefix} seed", vec)] + [
+        (f"{prefix}-r{i:02d}", f"{prefix} related {i}", None)
+        for i in range(n_mentioners)
+    ]
+    _seed_thread_partly_embedded(
+        repo, channel_id=channel_id, thread_id=thread_id, messages=messages
+    )
+    _mention(conn, entity_id=f"{prefix}-hub", msg_ids=[m[0] for m in messages])
+    return {text for _mid, text, _vec in messages}
+
+
+def _seed_thread_partly_embedded(repo, *, channel_id, thread_id, messages):
+    """`_seed_thread`, but a `None` vector leaves that message unembedded."""
+    repo.ensure_user(WS, user_id="u1")
+    repo.create_channel(WS, channel_id=channel_id, name=channel_id, created_at=1)
+    repo.create_thread(
+        WS, channel_id=channel_id, thread_id=thread_id, title="t", created_at=1
+    )
+    for i, (msg_id, text, vec) in enumerate(messages):
+        write = repo.post_first_message if i == 0 else repo.post_subsequent_message
+        write(
+            WS, thread_id=thread_id, msg_id=msg_id, author_id="u1",
+            text=text, role="user", created_at=10 + i,
+        )
+        if vec is not None:
+            repo.set_embedding(
+                WS, msg_id=msg_id, embedding=vec, expected_dim=TEST_EMBEDDING_DIM
+            )
+
+
+def _sent_hybrid_query(repo, monkeypatch, **kwargs):
+    """Run the real `hybrid_search` and return the (cypher, params) it sent."""
+    sent: list[tuple[str, dict]] = []
+    real_graph = repo._graph
+
+    class _Recording:
+        def __init__(self, graph):
+            self._g = graph
+
+        def ro_query(self, q, params=None, timeout=None):
+            sent.append((q, params))
+            return self._g.ro_query(q, params, timeout=timeout)
+
+    monkeypatch.setattr(repo, "_graph", lambda ws: _Recording(real_graph(ws)))
+    repo.hybrid_search(WS, **kwargs)
+    [(cypher, params)] = sent
+    return cypher, params
+
+
+def test_hybrid_search_caps_related_context_at_five_from_a_hub(repo, conn):
+    hub_texts = _seed_hub_thread(
+        repo, conn, thread_id="t1", prefix="a", n_mentioners=8, vec=_pad([1.0]),
+    )
+
+    [row] = repo.hybrid_search(WS, q_vec=_pad([1.0]), k=4, limit=5)
+
+    assert row["msgId"] == "a-seed"
+    assert len(row["relatedContext"]) == 5
+    assert len(set(row["relatedContext"])) == 5
+    assert set(row["relatedContext"]) <= hub_texts
+
+
+def test_hybrid_search_expands_each_seed_from_its_own_entities(repo, conn):
+    a_texts = _seed_hub_thread(
+        repo, conn, thread_id="t1", prefix="a", n_mentioners=6, vec=_pad([1.0]),
+    )
+    b_texts = _seed_hub_thread(
+        repo, conn, thread_id="t2", prefix="b", n_mentioners=6, vec=_pad([0.9, 0.1]),
+        channel_id="c2",
+    )
+
+    rows = repo.hybrid_search(WS, q_vec=_pad([1.0]), k=4, limit=5)
+    by_id = {r["msgId"]: r["relatedContext"] for r in rows}
+
+    assert sorted(by_id) == ["a-seed", "b-seed"]
+    assert len(by_id["a-seed"]) == 5 and set(by_id["a-seed"]) <= a_texts
+    assert len(by_id["b-seed"]) == 5 and set(by_id["b-seed"]) <= b_texts
+
+
+def test_hybrid_search_lists_a_message_sharing_two_entities_once(repo, conn):
+    # `r` co-mentions the seed through two entities: two traversal paths, one
+    # related message. The seed itself counts among its own related (§3.1,
+    # unchanged on purpose until K-093 decides otherwise).
+    _seed_thread_partly_embedded(
+        repo, channel_id="c1", thread_id="t1",
+        messages=[("s", "the seed", _pad([1.0])), ("r", "the other", None)],
+    )
+    _mention(conn, entity_id="e1", msg_ids=["s", "r"])
+    _mention(conn, entity_id="e2", msg_ids=["s", "r"])
+
+    [row] = repo.hybrid_search(WS, q_vec=_pad([1.0]), k=4, limit=5)
+
+    assert sorted(row["relatedContext"]) == ["the other", "the seed"]
+
+
+def test_hybrid_search_breaks_exact_score_ties_by_msg_id_asc(repo):
+    # Three seeds at the identical vector, posted in reverse id order and with
+    # texts sorting opposite to their ids, so neither insertion order, ANN order
+    # nor a tie-break on another column coincides with msgId order.
+    _seed_thread(
+        repo, channel_id="c1", thread_id="t1",
+        messages=[
+            ("m-c", "alpha", _pad([1.0])),
+            ("m-b", "beta", _pad([1.0])),
+            ("m-a", "gamma", _pad([1.0])),
+        ],
+    )
+
+    rows = repo.hybrid_search(WS, q_vec=_pad([1.0]), k=4, limit=5)
+
+    assert [r["msgId"] for r in rows] == ["m-a", "m-b", "m-c"]
+
+
+@pytest.mark.parametrize("channel_id", [None, "c1"])
+def test_hybrid_search_finds_the_seed_thread_by_index_not_by_walk(
+    repo, conn, monkeypatch, channel_id,
+):
+    """§3.1: the seed's thread is found by its `threadId` index, not by walking
+    `HEAD|NEXT*0..` back from the seed (cost grows with the seed's depth). Scoped,
+    a `WITH` barrier keeps the planner from folding the anchor into the channel
+    pattern and starting from the Channel instead, which walks every thread in
+    the channel per seed (docs/reviews/hybrid-search-bounded.md F1). EXPLAINs
+    the exact text + params the method sends."""
+    _seed_hub_thread(
+        repo, conn, thread_id="t1", prefix="a", n_mentioners=1, vec=_pad([1.0]),
+    )
+    cypher, params = _sent_hybrid_query(
+        repo, monkeypatch, q_vec=_pad([1.0]), k=4, limit=5, channel_id=channel_id,
+    )
+
+    plan = db.workspace_graph(conn, WS).explain(cypher, params).plan
+
+    assert any("Node By Index Scan | (t:Thread)" in line for line in plan), plan
+    assert not any("Node By Index Scan | (c:Channel)" in line for line in plan), plan
+    assert not any("Variable Length" in line for line in plan), plan
+    assert not any("Label Scan" in line for line in plan), plan
+
+
+@pytest.mark.parametrize("channel_id", [None, "c1"])
+def test_hybrid_search_stops_traversing_a_hub_after_five_per_seed(
+    repo, conn, monkeypatch, channel_id,
+):
+    """§3.1: the expansion's memory must not grow with an entity's fan-in.
+    PROFILE (a read; ws:test only) over the exact text the method sends: the
+    traverse into `related` yields at most 5 records per seed, not one per
+    co-mentioning message. Collecting every match then slicing `[..5]` gives
+    the same rows and fails here."""
+    _seed_hub_thread(
+        repo, conn, thread_id="t1", prefix="a", n_mentioners=40, vec=_pad([1.0]),
+    )
+    cypher, params = _sent_hybrid_query(
+        repo, monkeypatch, q_vec=_pad([1.0]), k=4, limit=5, channel_id=channel_id,
+    )
+
+    plan = db.workspace_graph(conn, WS).profile(cypher, params).plan
+
+    traverse = [str(op) for op in _plan_ops(plan) if "(related:Message)" in str(op)]
+    assert traverse, plan
+    produced = [int(_records_produced(line)) for line in traverse]
+    assert max(produced) <= 5, traverse
+
+
+def _plan_ops(plan):
+    return plan if isinstance(plan, list) else str(plan).splitlines()
+
+
+def _records_produced(line: str) -> str:
+    return line.split("Records produced:")[1].split(",")[0].strip()
+
+
 # ── read_index_dimension (K-042 Landing 2, FR-19) ───────────────────────────────
 #
 # `-graph.md` §3.2's `CALL db.indexes()` introspection, live against `ws:test`

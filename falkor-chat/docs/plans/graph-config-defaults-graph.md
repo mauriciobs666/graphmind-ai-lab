@@ -2,6 +2,8 @@
 
 > **Status:** active · **Owner:** `graph-dba` · **Tracks:** K-098
 
+> 2026-11-20 revision: §3.1's scoped variant gains a `WITH` barrier, and its plan and `DISTINCT` claims are corrected (`docs/reviews/hybrid-search-bounded.md` F1, F2).
+
 ## 1. Scope and how it was measured
 
 This note gives each `GRAPH.CONFIG` key that K-098 names (`falkor-chat/docs/BACKLOG.md` `### K-098`)
@@ -88,17 +90,19 @@ measurement therefore ran on synthetic graphs in throwaway containers.
 the smallest `QUERY_MEM_CAPACITY` at which it still succeeds. The tracked amount is deterministic,
 with three repeats identical to the KiB (`measure_parts.jsonl`).
 
-The coverage graph `ws:cov` (`graph-dba-r2/build_cov.py`) varies every axis the read depends on:
+The coverage graph `ws:cov` (`graph-dba-r2/build_cov.py`, plus `build_tpc.py` for threads per
+channel) varies every axis the read depends on:
 - k ∈ {1, 5, 10};
 - entity fan-in of 100 / 1k / 10k / 100k;
 - 1 mention per seed vs 10 mentions × 10k;
 - depth ~20 / 5k / 10k / 100k;
 - seeds clustered in one thread vs spread over 10;
-- the scoped vs unscoped variant.
+- the scoped vs unscoped variant;
+- threads per channel of 1k / 10k / 100k / 1M, scoped to the seeds' channel and to a decoy one.
 
 Each scenario's 10 seeds are near-duplicate embeddings, so the ANN returns all of them. Results are
-in `graph-dba-r2/coverage.jsonl`. The table shows k=10 unscoped; every scenario scales linearly
-from k=1 to k=10 in the expansion term, and the scoped variant gives the same numbers.
+in `graph-dba-r2/coverage.jsonl`, and for the §3.1 text below in `graph-dba-r4/coverage.jsonl`. The
+table shows k=10 unscoped; every scenario scales linearly from k=1 to k=10 in the expansion term.
 
 | Scenario (10 seeds) | Current query: min. cap / latency | Bounded rewrite (below): min. cap / latency |
 |---|---|---|
@@ -138,7 +142,7 @@ product feeding `count(*)`) allocate nothing and are left to `TIMEOUT`.
 the cap was rejected. The current query's memory is k × fan-in with no ceiling: a cap sized for
 today's worst case (83 MiB) is overtaken by the next workspace that is larger or more entity-dense.
 Its latency also fails the 5 s RAG timeout long before memory matters. The bounded rewrite needs
-576 KiB in every scenario above. 64 MiB is then over 14× the heaviest legitimate query measured
+576 KiB unscoped and 640 KiB scoped in every scenario. 64 MiB is then over 14× the heaviest legitimate query measured
 (`create_document`, 4.5 MiB) and still stops runaways early.
 
 Worst-case query memory in flight is `THREAD_COUNT` × 64 MiB, which is 512 MiB at 8 threads. It
@@ -160,7 +164,8 @@ text, both variants:
 ```
 CALL db.idx.vector.queryNodes('Message', 'embedding', $k, vecf32($qVec)) YIELD node AS seed, score
 MATCH (t:Thread {threadId: seed.threadId})
-[MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t)]      -- scoped variant only
+[WITH seed, score, t
+ MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t)]      -- scoped variant only
 CALL { WITH seed
        OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)
        WITH DISTINCT related LIMIT 5
@@ -170,12 +175,24 @@ RETURN seed.msgId AS msgId, seed.text AS text, seed.role AS role,
 ORDER BY score ASC, msgId ASC
 LIMIT $limit
 ```
-- **Why each part.** The `threadId` anchor plans as `Node By Index Scan | (t:Thread)` in place of
-  the walk. The subquery's `DISTINCT … LIMIT 5` stops the traversal early: `GRAPH.PROFILE` shows 50
-  records for 10 seeds on a 100k-fan-in entity (`graph-dba-r2/profile_v2_redis.txt`). `msgId ASC`
-  makes ties deterministic; the order of tied scores is unspecified today.
-- **Equivalence, verified per scenario** (`graph-dba-r2/equivalence.jsonl`). The rewrite returns the
-  same seed set, the same scores, and the same `related` list per seed, in the same order. The only
+- **Why each part.** The `threadId` anchor replaces the walk. Unscoped, it plans as
+  `Node By Index Scan | (t:Thread)`. Scoped, the `WITH` barrier keeps that anchor: the plan is
+  `Node By Index Scan | (t:Thread)` → `Conditional Traverse | (t)->(c:Channel)` → `Filter`. Without
+  the barrier, the planner merges the two `MATCH`es, anchors on `Node By Index Scan | (c:Channel)`
+  and filters every thread in the channel for every seed. At k=10 that took 1,253 ms at 1M threads
+  per channel, against 2.1 ms with the barrier. Moving `{threadId: seed.threadId}` into the channel
+  pattern plans the same way as no barrier (`graph-dba-r4/plans_and_latency.txt`). The subquery's
+  `LIMIT 5` stops the traversal early: `GRAPH.PROFILE` shows 50 records for 10 seeds on a
+  100k-fan-in entity (`graph-dba-r2/profile_v2_redis.txt`). Its `DISTINCT` is redundant on this
+  text, because while `e` is unreferenced the planner fuses the two hops into one
+  `(seed)->(related:Message)` traverse. Once the subquery references `e`, which is K-093's
+  filtering decision, the hops split and `DISTINCT` becomes load-bearing: without it, a message
+  sharing two entities with the seed is listed twice (`graph-dba-r4/distinct_probe.txt`). So
+  K-093's writer re-runs the drop-`DISTINCT` mutant against its own text. `msgId ASC` makes ties
+  deterministic; the order of tied scores is unspecified today.
+- **Equivalence, verified per scenario and k, both variants** (`graph-dba-r4/coverage.jsonl`, all
+  72 records). The rewrite returns the same seed set, the same scores, and the same `related` list
+  per seed, in the same order, as the current query re-sorted by `(score, msgId)`. The only
   difference is the order among exactly tied scores. The current query is deterministic against
   itself; it is the plan change that reorders the ties.
 - **Precondition.** The rewrite finds a seed's thread by `threadId`, not by reachability. A message
@@ -186,8 +203,12 @@ LIMIT $limit
   since it mentions the shared entity (`graph-dba-r2/callsubquery_check.txt`). Whether to exclude it
   belongs to K-093's contract decision.
 - **Done-condition.** `test_queries.sh` and the server suite stay green. A fixture test pins
-  equivalence on a hub-mentioning thread. `graph-dba` re-runs `graph-dba-r2/coverage.py` against the
-  shipped text and confirms the bound.
+  equivalence on a hub-mentioning thread. The scoped EXPLAIN test asserts
+  `Node By Index Scan | (t:Thread)` and the absence of `Node By Index Scan | (c:Channel)`.
+  `graph-dba` re-runs `graph-dba-r2/coverage.py` against the shipped text and confirms the bound;
+  against this text (form `v3_note_corrected`, `graph-dba-r4/coverage_summary.txt`), the scoped
+  variant stays at 1.5–2.5 ms from 1k to 1M threads per channel, against 1,267 ms for the text
+  without the barrier.
 
 ### 3.2 `THREAD_COUNT` — **`FALKORDB_THREAD_COUNT`, set per deployment** (8 on this box), was 8 by auto-detection
 

@@ -1245,8 +1245,9 @@ class Services:
         # under-fill `chunk_hits` whenever superseded chunks rank first in the
         # ANN pool. `msg_hits` above needs no such treatment — `repository.
         # hybrid_search`'s `Thread`/`Channel` scope matches are required, not
-        # optional, but (a) the `Thread` match holds for any message reachable
-        # via this codebase's self-guarding HEAD/NEXT write paths, and (b) a
+        # optional, but (a) the `Thread` match holds for any message carrying a
+        # `threadId` (every write path stamps it; `backfill_thread_ids.sh` for
+        # older data), and (b) a
         # channel-scoped match narrowing to fewer results is the caller's own
         # intended scope, not a staleness exclusion — so neither currently has
         # this under-fill shape.
@@ -1512,8 +1513,9 @@ class Services:
         separate `limit`" shape, the idiom `repository.hybrid_search` itself
         uses for its own scope join: that join's `Thread`/`Channel` matches
         are required, not optional, but (a) the `Thread` match holds for any
-        message reachable via this codebase's self-guarding HEAD/NEXT write
-        paths, and (b) a channel-scoped match narrowing to fewer results is
+        message carrying a `threadId` (every write path stamps it;
+        `backfill_thread_ids.sh` for older data), and (b) a channel-scoped
+        match narrowing to fewer results is
         the caller's own intended scope, not a staleness exclusion — so
         neither currently has this under-fill risk to over-fetch against.
 

@@ -1,0 +1,91 @@
+## EXPLAIN v2 unscoped
+    Results
+        Limit
+            Sort
+                Project
+                    Apply
+                        Node By Index Scan | (t:Thread)
+                            ProcedureCall
+                        Aggregate
+                            Limit
+                                Distinct
+                                    Project
+                                        Optional Conditional Traverse | (seed)->(related:Message)
+                                            Project
+                                                Argument
+## EXPLAIN v2 scoped
+    Results
+        Limit
+            Sort
+                Project
+                    Apply
+                        Filter
+                            Conditional Traverse | (c)->(t:Thread)
+                                Node By Index Scan | (c:Channel)
+                                    ProcedureCall
+                        Aggregate
+                            Limit
+                                Distinct
+                                    Project
+                                        Optional Conditional Traverse | (seed)->(related:Message)
+                                            Project
+                                                Argument
+## EXPLAIN v3 unscoped
+    Results
+        Limit
+            Sort
+                Project
+                    Apply
+                        Node By Index Scan | (t:Thread)
+                            ProcedureCall
+                        Aggregate
+                            Limit
+                                Distinct
+                                    Project
+                                        Optional Conditional Traverse | (seed)->(related:Message)
+                                            Project
+                                                Argument
+## EXPLAIN v3 scoped
+    Results
+        Limit
+            Sort
+                Project
+                    Apply
+                        Filter
+                            Conditional Traverse | (t)->(c:Channel)
+                                Project
+                                    Node By Index Scan | (t:Thread)
+                                        ProcedureCall
+                        Aggregate
+                            Limit
+                                Distinct
+                                    Project
+                                        Optional Conditional Traverse | (seed)->(related:Message)
+                                            Project
+                                                Argument
+## EXPLAIN folded-anchor scoped
+    Results
+        Limit
+            Sort
+                Project
+                    Apply
+                        Filter
+                            Conditional Traverse | (c)->(t:Thread)
+                                Node By Index Scan | (c:Channel)
+                                    ProcedureCall
+                        Aggregate
+                            Limit
+                                Distinct
+                                    Project
+                                        Optional Conditional Traverse | (seed)->(related:Message)
+                                            Project
+                                                Argument
+## scoped latency (median of 5, ms) and rows, k=10
+{"threads": "1k", "channel": "tpc1k", "v2_ms": 3.4, "v3_ms": 2.1, "folded_ms": 3.2, "rows": 10, "v3_equals_v2": true}
+{"threads": "1k", "channel": "c1", "v2_ms": 5.1, "v3_ms": 1.4, "folded_ms": 5.0, "rows": 0, "v3_equals_v2": true}
+{"threads": "10k", "channel": "tpc10k", "v2_ms": 17.5, "v3_ms": 2.1, "folded_ms": 17.5, "rows": 10, "v3_equals_v2": true}
+{"threads": "10k", "channel": "c1", "v2_ms": 4.8, "v3_ms": 1.5, "folded_ms": 5.0, "rows": 0, "v3_equals_v2": true}
+{"threads": "100k", "channel": "tpc100k", "v2_ms": 136.0, "v3_ms": 2.2, "folded_ms": 135.2, "rows": 10, "v3_equals_v2": true}
+{"threads": "100k", "channel": "c1", "v2_ms": 5.0, "v3_ms": 1.6, "folded_ms": 4.9, "rows": 0, "v3_equals_v2": true}
+{"threads": "1M", "channel": "tpc1M", "v2_ms": 1252.6, "v3_ms": 2.1, "folded_ms": 1259.9, "rows": 10, "v3_equals_v2": true}
+{"threads": "1M", "channel": "c1", "v2_ms": 5.6, "v3_ms": 1.7, "folded_ms": 5.4, "rows": 0, "v3_equals_v2": true}

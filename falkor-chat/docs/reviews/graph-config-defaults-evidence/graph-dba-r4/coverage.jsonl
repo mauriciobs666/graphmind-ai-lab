@@ -1,0 +1,144 @@
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 1.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 1.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 1.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "light: spread, short, 1 mention fan-in~10", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 1.9, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100, spread short", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 1.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100, spread short", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100, spread short", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 1.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100, spread short", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 1.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100, spread short", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "fan-in 100, spread short", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 2.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 1.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 1.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 1k, spread short", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 3.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 2.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 4.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 10k, spread short", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 3.9, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 10.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 9.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 41.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 40.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 85.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 77.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "channel": "c1", "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 14.3, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "channel": "c1", "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 11.3, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "channel": "c1", "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 46.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "channel": "c1", "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 41.3, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "channel": "c1", "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 89.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "fan-in 100k, spread short", "scoped": true, "channel": "c1", "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 84.6, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 12.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 11.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 46.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 46.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 89.9, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "10 mentions x 10k, spread short", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 92.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 1.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 1.9, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 1.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "depth 10k clustered, no hub", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 1.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 1.9, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 2.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 2.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 100k clustered, no hub", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 1.9, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 1.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 1.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "depth 5k spread x10 threads, no hub", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 10.3, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 10.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 45.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 42.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 83.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 82.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "channel": "c1", "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 14.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "channel": "c1", "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 11.5, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "channel": "c1", "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 61.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "channel": "c1", "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 57.4, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "channel": "c1", "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 108.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "worst: depth 100k clustered + fan-in 100k", "scoped": true, "channel": "c1", "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 92.7, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 1.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.5, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "threads per channel 1k", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "tpc1k", "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 2.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "tpc1k", "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.5, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "tpc1k", "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 2.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "tpc1k", "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 1.8, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "tpc1k", "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 3.2, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "tpc1k", "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 2.2, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "c1", "k": 1, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 2.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "c1", "k": 1, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.4, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "c1", "k": 5, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 4.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "c1", "k": 5, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.6, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "c1", "k": 10, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 5.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1k", "scoped": true, "channel": "c1", "k": 10, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.5, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 2.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 3.3, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 1.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "tpc10k", "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 4.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "tpc10k", "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.9, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "tpc10k", "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 7.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "tpc10k", "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 1.9, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "tpc10k", "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 19.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "tpc10k", "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 2.3, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "c1", "k": 1, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 2.3, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "c1", "k": 1, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.4, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "c1", "k": 5, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 3.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "c1", "k": 5, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.8, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "c1", "k": 10, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 5.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 10k", "scoped": true, "channel": "c1", "k": 10, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.5, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 1.9, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 3.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 1.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 3.2, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "threads per channel 100k", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 2.2, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "tpc100k", "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 54.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "tpc100k", "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.7, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "tpc100k", "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 76.4, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "tpc100k", "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 2.1, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "tpc100k", "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 138.0, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "tpc100k", "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 2.3, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "c1", "k": 1, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 2.7, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "c1", "k": 1, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.6, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "c1", "k": 5, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 3.9, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "c1", "k": 5, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.5, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "c1", "k": 10, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 6.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 100k", "scoped": true, "channel": "c1", "k": 10, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.8, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": false, "channel": null, "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 1.5, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": false, "channel": null, "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": false, "channel": null, "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 2.0, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": false, "channel": null, "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 1.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": false, "channel": null, "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 2.4, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "threads per channel 1M", "scoped": false, "channel": null, "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 2.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "tpc1M", "k": 1, "form": "v2_bound+anchor", "rows": 1, "uncapped_ms": 272.3, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "tpc1M", "k": 1, "form": "v3_note_corrected", "rows": 1, "uncapped_ms": 1.9, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "tpc1M", "k": 5, "form": "v2_bound+anchor", "rows": 5, "uncapped_ms": 632.1, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "tpc1M", "k": 5, "form": "v3_note_corrected", "rows": 5, "uncapped_ms": 2.4, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "tpc1M", "k": 10, "form": "v2_bound+anchor", "rows": 10, "uncapped_ms": 1267.3, "min_cap_kib": 576, "same_as_current": false}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "tpc1M", "k": 10, "form": "v3_note_corrected", "rows": 10, "uncapped_ms": 2.5, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "c1", "k": 1, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 2.6, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "c1", "k": 1, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.6, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "c1", "k": 5, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 3.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "c1", "k": 5, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.6, "min_cap_kib": 640, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "c1", "k": 10, "form": "v2_bound+anchor", "rows": 0, "uncapped_ms": 5.8, "min_cap_kib": 576, "same_as_current": true}
+{"scenario": "threads per channel 1M", "scoped": true, "channel": "c1", "k": 10, "form": "v3_note_corrected", "rows": 0, "uncapped_ms": 1.8, "min_cap_kib": 640, "same_as_current": true}

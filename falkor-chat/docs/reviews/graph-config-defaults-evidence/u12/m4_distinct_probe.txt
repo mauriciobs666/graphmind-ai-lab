@@ -1,0 +1,5 @@
+'WITH DISTINCT related LIMIT 5'     -> [[['r', 's']]]
+   plan: Results / Project / Apply / Node By Index Scan | (seed:Message) / Aggregate / Limit / Distinct / Project / Optional Conditional Traverse | (seed)->(related:Message) / Project / Argument
+'WITH related LIMIT 5'              -> [[['r', 's']]]
+   plan: Results / Project / Apply / Node By Index Scan | (seed:Message) / Aggregate / Limit / Project / Optional Conditional Traverse | (seed)->(related:Message) / Project / Argument
+raw rows with e projected: [['r', 'e2'], ['s', 'e2'], ['r', 'e1'], ['s', 'e1']]

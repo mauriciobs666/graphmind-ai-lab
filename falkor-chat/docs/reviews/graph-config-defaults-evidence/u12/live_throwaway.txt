@@ -1,0 +1,29 @@
+container: /u12-hybrid falkordb/falkordb:v4.18.11
+built ws:u12: depth 100000, hub fan-in 100020, 20 seeds, 1s
+
+== unscoped
+  shipped method text @64MiB: 10 rows, relatedContext sizes [5, 5, 5, 5, 5, 5, 5, 5, 5, 5], latency ms x5 [15.5, 16.9, 18.2, 18.1, 15.3]
+  shipped method text min cap: 560 KiB
+  pre-U12 text (M0) @64MiB: FAILED: Query's mem consumption exceeded capacity
+  pre-U12 text (M0) min cap: 83.2 MiB
+  pre-U12 text uncapped latency: 8631 ms
+  same seed set and scores as pre-U12: True; same per-seed relatedContext: True; shipped order == pre-U12 re-sorted by (score,msgId): True
+
+== scoped c1 (clustered deep seeds)
+  shipped method text @64MiB: 6 rows, relatedContext sizes [5, 5, 5, 5, 5, 5], latency ms x5 [12.1, 11.0, 13.4, 12.4, 13.2]
+  shipped method text min cap: 576 KiB
+  pre-U12 text (M0) @64MiB: passed in 7930 ms
+  pre-U12 text (M0) min cap: 55.9 MiB
+  pre-U12 text uncapped latency: 7778 ms
+  same seed set and scores as pre-U12: True; same per-seed relatedContext: True; shipped order == pre-U12 re-sorted by (score,msgId): True
+
+== scoped c2 (spread seeds)
+  shipped method text @64MiB: 4 rows, relatedContext sizes [5, 5, 5, 5], latency ms x5 [10.2, 10.8, 9.9, 10.2, 9.3]
+  shipped method text min cap: 576 KiB
+  pre-U12 text (M0) @64MiB: passed in 7854 ms
+  pre-U12 text (M0) min cap: 42.3 MiB
+  pre-U12 text uncapped latency: 6888 ms
+  same seed set and scores as pre-U12: True; same per-seed relatedContext: True; shipped order == pre-U12 re-sorted by (score,msgId): True
+
+QUERY_MEM_CAPACITY reset to 0 on the throwaway
+container removed

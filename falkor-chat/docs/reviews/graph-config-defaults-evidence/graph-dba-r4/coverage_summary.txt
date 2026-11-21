@@ -1,0 +1,27 @@
+records 144 | same_as_current false: [('fan-in 100, spread short', False, None, 10, 'v2_bound+anchor'), ('depth 10k clustered, no hub', False, None, 5, 'v2_bound+anchor'), ('depth 10k clustered, no hub', False, None, 10, 'v2_bound+anchor'), ('depth 5k spread x10 threads, no hub', False, None, 10, 'v2_bound+anchor'), ('threads per channel 1k', False, None, 10, 'v2_bound+anchor'), ('threads per channel 1k', True, 'tpc1k', 10, 'v2_bound+anchor'), ('threads per channel 100k', False, None, 10, 'v2_bound+anchor'), ('threads per channel 100k', True, 'tpc100k', 10, 'v2_bound+anchor'), ('threads per channel 1M', False, None, 10, 'v2_bound+anchor'), ('threads per channel 1M', True, 'tpc1M', 10, 'v2_bound+anchor')]
+max min_cap_kib per form: {'v2_bound+anchor': 576, 'v3_note_corrected': 640}
+scenario                                      scope      k | v2 ms / KiB | v3 ms / KiB | rows
+light: spread, short, 1 mention fan-in~10     unscoped   10 |      2.1 / 576 |    1.9 / 576 | 10
+fan-in 100, spread short                      unscoped   10 |      2.0 / 576 |    2.7 / 576 | 10
+fan-in 1k, spread short                       unscoped   10 |      2.1 / 576 |    2.1 / 576 | 10
+fan-in 10k, spread short                      unscoped   10 |      4.2 / 576 |    3.9 / 576 | 10
+fan-in 100k, spread short                     unscoped   10 |     85.7 / 576 |   77.8 / 576 | 10
+fan-in 100k, spread short                     c1         10 |     89.5 / 576 |   84.6 / 640 | 10
+10 mentions x 10k, spread short               unscoped   10 |     89.9 / 576 |   92.8 / 576 | 10
+depth 10k clustered, no hub                   unscoped   10 |      2.0 / 576 |    1.7 / 576 | 10
+depth 100k clustered, no hub                  unscoped   10 |      2.6 / 576 |    1.9 / 576 | 10
+depth 5k spread x10 threads, no hub           unscoped   10 |      2.0 / 576 |    2.0 / 576 | 10
+worst: depth 100k clustered + fan-in 100k     unscoped   10 |     83.2 / 576 |   82.1 / 576 | 10
+worst: depth 100k clustered + fan-in 100k     c1         10 |    108.5 / 576 |   92.7 / 640 | 10
+threads per channel 1k                        unscoped   10 |      2.5 / 576 |    2.1 / 576 | 10
+threads per channel 1k                        tpc1k      10 |      3.2 / 576 |    2.2 / 640 | 10
+threads per channel 1k                        c1         10 |      5.5 / 576 |    1.5 / 640 | 0
+threads per channel 10k                       unscoped   10 |      2.8 / 576 |    2.1 / 576 | 10
+threads per channel 10k                       tpc10k     10 |     19.7 / 576 |    2.3 / 640 | 10
+threads per channel 10k                       c1         10 |      5.6 / 576 |    1.5 / 640 | 0
+threads per channel 100k                      unscoped   10 |      3.2 / 576 |    2.2 / 576 | 10
+threads per channel 100k                      tpc100k    10 |    138.0 / 576 |    2.3 / 640 | 10
+threads per channel 100k                      c1         10 |      6.0 / 576 |    1.8 / 640 | 0
+threads per channel 1M                        unscoped   10 |      2.4 / 576 |    2.1 / 576 | 10
+threads per channel 1M                        tpc1M      10 |   1267.3 / 576 |    2.5 / 640 | 10
+threads per channel 1M                        c1         10 |      5.8 / 576 |    1.8 / 640 | 0

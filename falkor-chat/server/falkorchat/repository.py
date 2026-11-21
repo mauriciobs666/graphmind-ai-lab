@@ -913,10 +913,26 @@ class Repository:
         parameter, same as the SET.
 
         `score` is **cosine distance** (0 = identical); rows come back already
-        `ORDER BY score ASC` (most similar first) — do not re-sort. `relatedContext`
-        is `[]` in M2: the Entity co-occurrence expansion (`MENTIONS`→`Entity`, §6 —
-        distinct from `MENTIONS_MEMBER`) is present but dormant until an extraction
-        pipeline lands, so it no-ops cleanly. Passed through unchanged.
+        `ORDER BY score ASC, msgId ASC` (most similar first; `msgId` makes exact
+        ties deterministic) — do not re-sort. `relatedContext` is `[]` until an
+        extraction pipeline writes `MENTIONS`→`Entity` (§6 — distinct from
+        `MENTIONS_MEMBER`; K-093), so the expansion no-ops cleanly today.
+
+        Bounded by construction (`docs/plans/graph-config-defaults-graph.md` §3.1):
+        in both variants the seed's thread is found by its `threadId` index, never
+        by walking `HEAD|NEXT*0..` back from the seed (cost ∝ thread depth). The
+        scoped variant's `WITH seed, score, t` barrier is load-bearing: without
+        it the planner folds the anchor into the channel pattern, starts from the
+        Channel and walks every thread in it per seed (cost ∝ threads in the
+        channel; `docs/reviews/hybrid-search-bounded.md` F1). The per-seed
+        `CALL { … WITH DISTINCT related LIMIT 5 … }` stops traversing an entity
+        after 5 co-mentioning messages instead of collecting its whole fan-in and
+        slicing — the unbounded form exceeds `QUERY_MEM_CAPACITY` on a hub entity.
+        On this text `DISTINCT` is redundant (the planner fuses the two hops while
+        `e` is unreferenced, collapsing duplicate paths), but it becomes
+        load-bearing once the subquery references `e` (e.g. a K-093 filter). Precondition: every Message carries a `threadId` that agrees
+        with its chain (`backfill_thread_ids.sh` for pre-K-007 data); one without
+        drops out. The seed itself counts among its own related messages.
 
         `timeout` (ms) is a per-query client override for long GraphRAG reads
         (DESIGN §10 / K-007 posture) — the service supplies it, not this layer.
@@ -927,16 +943,19 @@ class Repository:
         cypher = (
             "CALL db.idx.vector.queryNodes('Message', 'embedding', $k, vecf32($qVec)) "
             "YIELD node AS seed, score "
-            "MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed) "
+            "MATCH (t:Thread {threadId: seed.threadId}) "
             + (
+                "WITH seed, score, t "
                 "MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t) "
                 if scoped else ""
             )
-            + "OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) "
-            "WITH seed, score, collect(DISTINCT related)[..5] AS expanded "
+            + "CALL { WITH seed "
+            "OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) "
+            "WITH DISTINCT related LIMIT 5 "
+            "RETURN collect(related) AS expanded } "
             "RETURN seed.msgId AS msgId, seed.text AS text, seed.role AS role, "
             "score, [m IN expanded | m.text] AS relatedContext "
-            "ORDER BY score ASC "
+            "ORDER BY score ASC, msgId ASC "
             "LIMIT $limit"
         )
         params: dict[str, Any] = {"qVec": list(q_vec), "k": k, "limit": limit}
