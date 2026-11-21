@@ -1,6 +1,6 @@
 # model-bench defects (five fixes) — Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** GAL-F0028 (defects the live spec recorded)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** GAL-F0028 (defects the live spec recorded)
 
 **Scope.** `git show 3aafd1bb`: `model-bench/modelbench/{cli,runner}.py`, `tests/test_cli.py`, `tests/test_runner_decisions.py`. Baseline: decisions in `model-bench/docs/plans/model-bench-defects-coordination.md`; root and `model-bench/REVIEW.md` applied. Not looked at: DESIGN/FORMATS/README/manual edits (a later unit owns them; stale statements are only listed, F5).
 

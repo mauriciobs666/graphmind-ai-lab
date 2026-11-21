@@ -12,7 +12,7 @@ real catalog/knowledge_base blocks.
 Pass C (this file's second half, items 6-8): the three-gate `score_item` tests; `aggregate` over a
 synthetic fixture spanning all seven shapes plus the unanswerable bucket; `validate --pack
 packs/nlq-structured-query --strict` (via `packs.validate_pack` directly, the same pre-existing
-`cli.py` `NotImplementedError` deferral the sibling pack's own test works around).
+`cli.py` `--strict` refusal (exit 2, "not implemented") the sibling pack's own test works around).
 """
 
 from __future__ import annotations
@@ -771,7 +771,7 @@ class TestAggregate:
 
 # ==================================================================================================
 # Pass C, item 8: `validate --pack packs/nlq-structured-query --strict` — via `packs.validate_pack`
-# directly, the same pre-existing `cli.py` `NotImplementedError` deferral the sibling pack's own
+# directly, the same `cli.py` `--strict` refusal (exit 2, "not implemented") the sibling pack's own
 # test (`test_scoring_classification.py`) works around
 # ==================================================================================================
 

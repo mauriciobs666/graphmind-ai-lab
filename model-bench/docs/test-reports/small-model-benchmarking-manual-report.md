@@ -109,3 +109,27 @@ No defect found in: the changed `run --reference` text, the two-arm verdict rule
 ## Verdict
 
 PASS with minor documentation findings: every walkthrough step ran as described; 0 high, 0 medium, 3 low (D-1, D-2, D-3), 1 informational/unverified (D-4).
+
+## 2026-11-20 re-walk: `run` flags / `--reference`, step 7 plain `compare`, exit-code FAQ
+
+> Scope: the uncommitted manual diff (`run` flags/`--reference`, step 7 plain `compare`, exit-code FAQ incl. `validate --strict`, exit 3 and exit 5 entries). Offline only: no LM Studio call, no model run. Fixtures: stored `guard-judge-understanding` run records copied into scratch roots under `--root`; the real `results/`/`reports/` were not written (`run` and `validate` take no write path in these cases). CPG: not applicable — documentation walk of a CLI, no code-level analysis.
+
+| Case | Command (scratch root via `--root`) | Observed | Manual says | Result |
+|---|---|---|---|---|
+| a | `run --pack guard-judge-understanding --model x --reference x` | `error: unrecognized arguments: --reference x`, exit 2 | usage error, exit `2` | PASS |
+| b | `validate --pack guard-judge-understanding --strict` | one line `validate --strict: not implemented (its semantics are undecided, runner-spec §9); run \`validate\` without --strict`, exit 2, no traceback | exit `2`, one-line "not implemented" message | PASS |
+| c | `compare --pack guard-judge-understanding` (16 models stored) | exit 2, `compare without --models needs exactly two arms and found 16 (...); --models a,b selects which arms to compare`; scratch `reports/` still empty | exit `2`, nothing written, told to use `--models a,b` | PASS |
+| d | 2 models (gemma-3-4b, qwen2.5-3b-instruct; 2 stored runs each) | exit 0; arms table has 8 rows per model (one block per model); verdicts compare `google/gemma-3-4b` and `qwen2.5-3b-instruct`; one report written | one row per model, newest run, verdict names both | PASS |
+| e | gemma-3-4b with 2 runs (09-11, 09-20) + qwen2.5-3b-instruct with 1 | exit 0; gemma rows appear once; speed p50 552 = the 09-20 run (the 09-11 run is 835); verdict is gemma vs qwen2.5, not gemma vs itself | one row per model, newest run, not model-vs-itself | PASS |
+| f0 | 0 stored runs | exit 0, report written; Verdicts: `fewer than two arms were selected ... a comparison needs two stored runs for this pack` | exit `0`, verdict says "fewer than two arms were selected" | PASS |
+| f1 | 1 stored run | same as f0, with one arm in Arms/Speed; exit 0 | same | PASS |
+| g | `compare --models google/gemma-3-4b,qwen2.5-3b-instruct` | exit 0, report written, same verdicts as d | still works | PASS |
+| g2 | `compare --models a,b` (unstored) | exit 2, `no stored run for 'a', 'b' in this pack ...`, nothing written | model with no stored run: exit `2`, nothing written | PASS |
+| h | `rank --reference qwen2.5-3b-instruct` | exit 0, ranked report written | still accepted | PASS |
+| h2 | `rank --reference nope` | exit 2, `reference model 'nope' has no stored, consistent run for this pack and session` | exit `2` | PASS |
+
+Not run (needs LM Studio or a faulty one): exit 3 for "answering badly when `run` first reads its state" and the exit-5 "end-of-run model list unreadable" entry (the passage that dropped the `results/transcripts/<runId>.jsonl` remark); the traceback-free behavior of those is therefore unverified here. The "newest decided by file name" caveat was exercised only on tool-named files (the hand-renamed case was not run).
+
+Defects: none. No manual-versus-tool mismatch found in the cases above.
+
+Verdict: PASS (11 of 11 runnable cases; 2 manual claims not runnable offline).

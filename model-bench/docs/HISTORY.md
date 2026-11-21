@@ -2,6 +2,25 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-20 — five recorded defects fixed (GAL-F0028)
+
+**What:** `run --reference` removed (usage error, exit 2; `rank --reference` stays); the exit-5
+`residentModelsAtEnd` message no longer names a transcript path; plain `compare` collapses to the newest
+run per arm and refuses more than two arms (exit 2); `validate --strict` refuses cleanly (exit 2);
+every LM Studio read between the probe and the first item, including `LMStudioCallFailed`, is an exit-3
+refusal, not a traceback. Code `3aafd1bb`, `6c7dda13`, `f9773ffb` (`tdd-engineer`). Spec sections
+`docs/DESIGN.md` §2.2, §2.3, §2.8, §2.9 updated; manual updated (`tico`); BACKLOG item rewritten to the
+residuals (file-name-order "newest", dead `RunConfig.referenceKey`, `--negative-control` over more than
+two arms).
+
+**Checked:** `analyst` `docs/reviews/model-bench-defects.md` (Pass 3 approve with suggestions) and
+`docs/reviews/model-bench-defects-impl.md` (approve with suggestions, findings fixed);
+`docs/reviews/small-model-benchmarking-manual.md` Pass 3 and `qa-engineer` re-walk in
+`docs/test-reports/small-model-benchmarking-manual-report.md`. Suite 3674 passed, 5 deselected, 2 xfailed.
+Stakeholder rulings: `compare` refuses only above two arms; repeat runs collapse to the newest; the
+widened exit-3 refusal. Not exercised live: a real LM Studio timeout at the start-of-run reads (fake
+servers and stubs only).
+
 ## 2026-11-20 — user manual updated for decision points
 
 **What:** `docs/manuals/small-model-benchmarking.md` (`tico`): new Walkthrough 9 (decision-point packs,

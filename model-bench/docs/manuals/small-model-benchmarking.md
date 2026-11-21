@@ -116,8 +116,8 @@ the pack, talking to your live LM Studio, and — if it succeeds — stores the 
 - `--session <id>` — tag this run so you can pull it back out later with `--session` on `compare`.
 - `--candidate <id>` — instead of `--model`, run a **candidate** (a small decision model plus its
   policy) on a decision-point pack; see step 9. Give exactly one of `--model` or `--candidate`.
-- `--reference <key>` — accepted for compatibility but **ignored by `run`**: nothing records it.
-  The comparison against a named reference model is done later, with `rank --reference` (step 7a).
+- There is no `--reference` flag on `run` (passing one is a usage error, exit `2`). Comparing
+  against a named reference model is done later, with `rank --reference` (step 7a).
 - `--warmup <n>` — extra throwaway calls before the timed ones, if you want the model "warmed up"
   first.
 - `--first-call-timeout <s>` / `--request-timeout <s>` — how long to wait for the first (warm-up)
@@ -139,12 +139,12 @@ for m in "${MODELS[@]}"; do
   ./run.sh run --pack tool-caller-shop-assistant --model "$m" --session batch-20260918 || \
     echo "!! $m failed operationally, continuing"
 done
-./run.sh compare --pack tool-caller-shop-assistant --session batch-20260918
+./run.sh rank --pack tool-caller-shop-assistant --session batch-20260918
 ```
 
-That final `compare` lists all three models in its arms table, but its verdict covers only the first
-two by file-name order; for the whole field use `./run.sh rank --pack tool-caller-shop-assistant
---session batch-20260918`. The `|| echo ...` matters: a `run` only exits non-zero for an operational reason (see
+That final `rank` puts every model of the batch in one table. To compare just two of them
+instead, use `./run.sh compare --pack tool-caller-shop-assistant --session batch-20260918
+--models a,b` (plain `compare` over three models is a usage error, exit `2`). The `|| echo ...` matters: a `run` only exits non-zero for an operational reason (see
 Troubleshooting), never a bad score, but that's still enough to stop a loop that isn't guarded
 against it. Every model in the loop needs to be the right type for the pack (see the table in step
 3), and each run is a full live pass through the pack, so N models costs roughly N× one pack's
@@ -166,16 +166,18 @@ Before running a model again, check whether it already has a stored result:
 
 This reads the stored runs for that pack, renders a markdown report to both `reports/` and your
 screen, and never overwrites an earlier same-day report for the same pack (it appends a sequence
-number instead). Each model you name uses its **newest** stored run, and a model with no stored
-run is a usage error (exit `2`, nothing written). Leave off `--models` and every valid stored run
-of the pack becomes an arm, in file-name order (alphabetical by model key, then start time); use
+number instead). Each model you name uses its **newest** stored run (the newest within that session, if you pass `--session`), and a model with no stored
+run is a usage error (exit `2`, nothing written). Leave off `--models` and each model with stored
+runs for the pack becomes one arm, using its newest run (within the session, if you pass `--session`); the arms table has one row per model. Use
 `--session <id>` to compare only runs you tagged together in step 5.
 
-**The verdict covers only two arms.** If more than two arms are in play, the arms table lists all of
-them, but the verdict section compares only the **first two** (by the order you gave in `--models`,
-or by file-name order if you left it off). To compare a different pair, name them with `--models`;
-to see the whole field at once, use `rank` (step 7a). (A decision-point pack works differently —
-see step 9.)
+**`compare` is for two arms.** Without `--models`, if more than two models have stored runs,
+`compare` stops with a usage error (exit `2`, nothing written) telling you to name the pair with
+`--models a,b`. With zero or one model it still prints a report, whose verdict section says "fewer
+than two arms were selected". To see the whole field at once, use `rank` (step 7a). (A
+decision-point pack works differently — see step 9.)
+
+If you rename or copy run files by hand, `compare` may pick an older run than you expect.
 
 ```mermaid
 sequenceDiagram
@@ -446,7 +448,7 @@ one alike (see Walkthrough 7a). `rank` does not work on decision-point packs.
 **What are all the exit codes?** `0` — ran and reported, whatever the scores (a `compare`/`rank`
 that finds every stored record invalid still exits `0`; that's a report, not a failure). `2` — bad
 arguments/usage (including a `rank --reference` naming a model with no stored result, or a
-malformed `--footprints` file). `3` — LM Studio unreachable, or didn't answer within
+malformed `--footprints` file). `3` — LM Studio unreachable, giving a bad or timed-out answer when `run` first reads its state, or not answering within
 `--first-call-timeout`; on a decision-point pack also a failed explicit model load, a model of the
 arm no longer loaded after the warm-ups, or the decision model's settings unreadable. `4` — an
 invalid pack, an environment requirement the model doesn't meet, or (for `tool-caller`) a
@@ -455,8 +457,8 @@ candidate (unreadable or mismatched candidate file or fit list, wrong role, the 
 missing or not `decision`-type, a hand-off model that isn't a chat model or, on the guard, isn't
 the incumbent), leakage, or a `--request-timeout` other than 180. `5` — `host.json` missing or
 stale, or LM Studio's loaded-model list couldn't be read at the end of the run. Nothing here is
-score-driven — see Overview. (`validate --strict` is not implemented yet: it crashes with a
-Python traceback and exit `1` — run `validate` without it.)
+score-driven — see Overview. (`validate --strict` is not available: it stops with exit `2` and a
+one-line "not implemented" message — run `validate` without it.)
 
 **How do I view a report after it's written?** You don't need to hunt for it — `compare` prints
 the same markdown to your screen as it runs. The saved copy is plain text at
@@ -465,7 +467,9 @@ re-run never overwrites an earlier report); open it in any markdown viewer or ed
 Pass `--out <path>` on `compare` if you'd rather it land somewhere else entirely.
 
 **"LM Studio unreachable" / exit code 3.** LM Studio isn't running, isn't answering its
-`/api/v0/models` catalog endpoint, or didn't respond to the warm-up call in time. Start LM Studio
+`/api/v0/models` catalog endpoint, gave a bad or timed-out answer when `run` first checked its
+state, or didn't respond to the warm-up call in time. In each case `run` stops with exit `3` and a
+plain message, never a Python traceback. Start LM Studio
 (or load the model) and try again; if it's slow to warm up, raise `--first-call-timeout`.
 
 **"Invalid pack" / exit code 4.** Usually means the model you picked doesn't match what the pack
@@ -478,8 +482,7 @@ nothing is silently lost.
 attested this host yet, or something about your LM Studio setup changed since you last did. If
 `attest` doesn't fix it, the cause may be LM Studio's loaded-model list not being readable at the
 end of the run; in that case the finished run is **not stored**, so once LM Studio is responsive
-you must redo the whole run. A known quirk: the message for this case
-mentions a `results/transcripts/<runId>.jsonl` file that the tool never writes — ignore it.
+you must redo the whole run.
 
 **My decision-point `compare` was refused with exit 2 — what do I fix?** The message names the
 cause; it's one of the cases listed in step 9 (most often a missing `--session` or `--models`, a
@@ -488,8 +491,7 @@ the command and rerun.
 
 **A decision-point run failed or came out `assumed` on a busy machine.** A shared or busy LM Studio
 can evict or reload the decision model mid-run, degrading a replicate to `assumed`, and a slow
-catalog response can give exit `3`, or occasionally a Python traceback with exit `1`; either way
-nothing is stored. Close other LM Studio users and re-run.
+catalog response can give exit `3`; either way nothing is stored. Close other LM Studio users and re-run.
 
 **Why is every bar `not assessable`?** The reason is printed in parentheses. The common ones: fewer
 than 200 scored items; only one fresh-load replicate (run the candidate again after unloading its

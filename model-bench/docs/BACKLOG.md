@@ -212,16 +212,14 @@ on a malformed 200 body too, though re-probing that case is harmless. **Unruled,
 `architect`:** the decisions/handoff kept failures and the multi-turn `tool-caller` turn.
 
 
-### GAL-F0028 — Defects the live spec recorded
+### GAL-F0028 — Residual limits of `compare`'s arm selection and `RunConfig.referenceKey`
 
 - **Status:** 🔵 proposed — defaulted; owner confirms status
 
-Current behavior, each stated in the live spec (`docs/DESIGN.md`) until fixed.
-
-- `run --reference` is accepted and ignored; nothing stores it.
-- The exit-5 message names `results/transcripts/<runId>.jsonl`, which no run writes.
-- A plain `compare` (no `--models`) pairs the first two arms by file-name order, not the newest.
-- `validate --strict` raises `NotImplementedError` (exit 1 with a traceback) instead of refusing.
-- A timeout from LM Studio during `run`'s start-of-run residency check or catalog read (`residency()`, `catalog()`) raises `LMStudioUnreachable`, which `cli` does not catch: a traceback with exit 1 where the other probes exit 3 (analyst Pass 2, `model-bench/docs/reviews/small-model-benchmarking-manual.md`, read from code, not reproduced).
-
-Done when a defect is fixed or removed, with the spec section updated in the same change.
+- "Newest run" (`compare --models` and plain `compare`) is the last run in file-name order, not the
+  greatest `fingerprint.startedAt`, so a hand-named run id can select an older run and change the
+  verdict silently (analyst R2, `docs/reviews/model-bench-defects.md`). A fix picks the greatest
+  `startedAt` per key (ties: file-name order) in both `_select_arms` branches (`--models` and plain).
+- `RunConfig.referenceKey` is dead data: `run` has no `--reference`, `cli` always passes `None`,
+  and about eight test sites still construct it (analyst F6); removing it touches those tests.
+- `compare --negative-control` over more than two arms takes the first record without a refusal.

@@ -99,17 +99,12 @@ The CLI is `python -m modelbench` (`modelbench/__main__.py` → `cli.main`), lau
 |---|---|
 | `0` | The tool ran and reported, **whatever the scores**. A `compare` that finds every stored record invalid prints `INVALID RESULTS EXCLUDED` and still exits `0`. |
 | `2` | Bad arguments or usage (§2.3–§2.9 name each case). |
-| `3` | LM Studio unreachable; reachable without its native `/api/v0` catalog; the warm-up failing or not answering within `--first-call-timeout`; the embedder's corpus embed failed before any item; a failed between-item residency probe that the re-probe confirms is an outage; on a decision-point pack also a failed explicit load, a model of the arm not resident after the warm-ups, or the decision model's instance config unreadable. |
+| `3` | LM Studio unreachable; reachable without its native `/api/v0` catalog; the warm-up failing or not answering within `--first-call-timeout`; the embedder's corpus embed failed before any item; a failed between-item residency probe that the re-probe confirms is an outage; on a decision-point pack also a failed explicit load, a model of the arm not resident after the warm-ups, or the decision model's instance config unreadable; `run`'s start-of-run `residency()`/`catalog()` reads, the item-1 baseline `residency()` and the `loadedContextLength` `catalog()` read failing (unreachable, timeout, a non-200 or malformed body). |
 | `4` | Invalid pack: a `validate` failure, a pack load error, an unmet `environment.requires`, a `callSurface` the catalog `type` contradicts, a tool-calling ineligible model, a candidate refusal (§7), an off-pin `--request-timeout` on a decision-point pack; or, **after the record is already stored**, a `tool-caller` conversation censored by a tool-dispatch failure. |
 | `5` | Fingerprint incomplete, or `host.json` absent, invalid or stale; or `residentModelsAtEnd` not capturable after three retries. |
 
-There is no score-driven exit code. An uncaught exception exits `1`: §2.8 names one shipped
-case, and a timeout on `run`'s start-of-run `residency()`/`catalog()` read (§3.2 step 4) is
-another — it raises `LMStudioUnreachable` (§4.2), which `run`'s CLI handler does not catch, so it
-is a traceback with exit `1`, unlike the probe and warm-up failures that exit `3`.
-
-The exit-`5` message for an uncapturable `residentModelsAtEnd` says the transcript is retained at
-`results/transcripts/<runId>.jsonl`, a file no run writes (§3.8).
+There is no score-driven exit code. An LM Studio failure on any of `run`'s reads between the
+probe and the first item (§3.2 steps 4, 8 and 9) is a refusal with exit `3`, never a traceback.
 
 ### 2.3 `compare`
 
@@ -126,9 +121,18 @@ history (`load_history`, keyed on the manifest's `packId`), renders the markdown
 - **Arm selection, non-decision-point pack.** `--session` keeps the runs whose top-level
   `sessionId` matches. `--models` names arm keys in order; each key resolves to its **newest**
   stored run (`RunResult.armKey`: the candidate id on a candidate run, else the model key); a
-  key with no stored run is a usage error (exit `2`, nothing written). Without `--models`, every
-  valid run of the pack is an arm, in file-name order (run ids sort by arm key, then start time).
-  The verdict compares the **first two** arms; the arms table lists all of them.
+  key with no stored run is a usage error (exit `2`, nothing written). The verdict compares the
+  **first two** arms and the arms table lists all of them, so `--models a,b,c` tables three and
+  pairs `a` with `b`. Without `--models`, the valid runs of the pack collapse to one arm per
+  `armKey`, its newest run (the `--models` rule), ordered by each key's first appearance in
+  file-name order.
+  More than two distinct arms is a usage error (exit `2`, one stderr line naming `--models`,
+  nothing written); with zero or one arm the report still prints its "fewer than two arms"
+  verdict and exits `0`. `--negative-control` is exempt. Each arm appears once in the arms table
+  (its newest run).
+  "Newest" is the last run in file-name order, which is start order only for harness-written run
+  ids (`<packId>-<armKey>-<UTC start stamp>`); a hand-named run id can select an older run, under
+  `--models` too.
 - **`--negative-control`** duplicates the first selected record as both arms, so `b = c = 0` by
   construction. It is a wiring smoke check, the report opens with a banner saying so, and it is
   refused (exit `2`) on a decision-point pack.
@@ -194,14 +198,13 @@ validate --pack <path> [--strict]
 
 Structural pack integrity with **no LM Studio connection** (§5.2). Prints
 `<packId> <packVersion> (<role>): valid` and exits `0`, or prints each problem on stderr and
-exits `4`; an unloadable pack exits `4`. `--strict` is accepted but unimplemented: it raises
-`NotImplementedError`, an uncaught exception (traceback, exit `1`), rather than silently doing
-nothing.
+exits `4`; an unloadable pack exits `4`. `--strict` is accepted but unimplemented: it exits `2`
+with one stderr line, "not implemented", and no traceback, rather than silently doing nothing.
 
 ### 2.9 `run`
 
 ```
-run --pack <id> (--model <key> | --candidate <id>) [--session <id>] [--reference <key>]
+run --pack <id> (--model <key> | --candidate <id>) [--session <id>]
     [--warmup <n>] [--first-call-timeout <s>] [--request-timeout <s>]
 ```
 
@@ -213,8 +216,8 @@ has no URL flag), runs `run_pack` (§3), stores the record, prints `stored: <pat
 one; `--first-call-timeout` defaults to 300 s; `--request-timeout` defaults to 120 s on a
 non-decision-point pack, and a value other than 180 on a decision-point pack is refused with exit
 `4` (§3.6). `--session` is recorded as the run's `sessionId`, which `compare` and `rank` filter on.
-`--reference` is accepted and ignored by `run`: nothing records it (the reference key that
-matters is `rank --reference`).
+`run` has no `--reference` flag (passing it is an argparse usage error, exit `2`); the reference
+key is `rank --reference` (§2.4).
 
 After the record is stored, on a pack whose scorer defines a `deterministic_arm` (the
 `embedder` pack's BM25 arm) a second record is stored and `stored (deterministic arm): <path>`

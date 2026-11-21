@@ -86,3 +86,33 @@ Checks requested:
 `runner.run_pack` step 2 (`probe()`, catalog budget 10 s) and the between-item residency re-probe refuse with exit 3. But step 3 (`lmstudio.residency()`) and step 3a (`lmstudio.catalog()`, `lmstudio.py:622-629`) are not wrapped; they raise `LMStudioUnreachable`, which is not a `RunRefused`, and `cli._cmd_run`/`main` catch only `RunRefused`. A catalog/residency timeout *after* a successful probe therefore ends as an uncaught traceback, exit `1` (not run live; from reading the two call sites and `main`). Manual fix: say "can give exit `3`, or occasionally a Python traceback with exit `1`; either way nothing is stored — re-run". The unhandled path itself is a code gap (owner: `coder`/`tdd-engineer`, wrap steps 3/3a in the exit-3 refusal); not a manual defect.
 
 Verdict Pass 2: **approve with suggestions** — the manual may be accepted. Counts open: major 0, minor 1 (m5), nit 2 (n1 diagram not rendered, n2 pre-existing).
+
+## Pass 3 (2026-11-20)
+
+Scope: the uncommitted manual diff (20 insertions, 17 deletions) for the five behaviour changes, against `modelbench/cli.py`, `runner.py` and `DESIGN.md` §2.2, §2.3, §2.8, §2.9 (working tree). Source and manual not edited; no contact with the real LM Studio (a local fake HTTP server and a copied-fixture root in the scratchpad). Root and `model-bench/REVIEW.md` applied. CPG: considered, not relevant — manual claim check against the CLI.
+
+Verdict: **approve with suggestions** — no blocker, no major.
+
+Claims, each executed:
+- `run --reference y` → argparse "unrecognized arguments", exit 2; `run --help` lists no `--reference`. Verified. `rank --reference` untouched (manual lines 219, 236, 445, 451).
+- `validate --strict` → one-line "not implemented ... run `validate` without --strict", exit 2. Verified.
+- Plain `compare`, scratch root with real run files: 3 models → exit 2, message names `--models a,b`, no report written (`reports/` empty). 2 models where one has two runs → exit 0, one row per model; qwen shows 23/30, which is the 2026-09-19 run (the older run has 15) — newest wins. 1 model and 0 models → exit 0, report says "fewer than two arms were selected". Verified.
+- Start-of-run read failures: fake server answering the probe, then HTTP 500 (and separately a non-JSON 200 body) → `run` exit 3, plain one-line message, nothing stored (0 files in `results/runs`). Verified. A timeout case was not run; `lmstudio._raw_get` folding timeouts to unreachable is taken from Pass 2's reading plus `runner.py:371-409` docstrings.
+- Exit-5 message: `grep transcripts modelbench` finds no message mentioning a transcript path; the quirk sentence removal is correct.
+- Pass 2 m5 (traceback after slow catalog): disposition **fixed in code and manual** — manual now says exit 3 only; DESIGN §2.2 agrees (steps 3/3a/7/8/9 wrapped, `_start_of_run_read`).
+
+Unfiltered sweep of the whole manual (`--reference`, `traceback`, `transcript`, `first two`, `strict`, `exit 1`, `fewer than two`, `newest`, `now`, `no longer`, `fixed`, `yet`): no passage left false. `first two`, `transcript`, `exit 1`, "not implemented yet" no longer occur. Remaining hits are consistent: line 336 "fewer than two arms" (decision-point report, still true), lines 70/74/91/454 (`no longer`/`right now`, generic prose and pre-existing), line 295 "now eject" (an instruction, not history). Mermaid blocks: 4 before, 4 after, byte-identical (checked against `git show HEAD:`). No internal architecture added; the new history-style words are absent.
+
+### m1 (minor, verified by reading `cli._select_arms`) — "newest" is newest within the session
+
+With `--session`, runs are filtered to the session before the newest-per-model pick (`cli.py:231-254`). Manual lines 169-171 say each model uses "its newest stored run" and only separately mention `--session`. Fix: "its newest stored run (within the session, if you gave `--session`)".
+
+### m2 (minor) — the exit-3 FAQ sentence is long and the "newest" aside leaks implementation
+
+Line 180-181 ("decided by the run files' names ... renamed a run file by hand") describes storage layout; the user-facing fact is that hand-renamed or copied run files can make `compare` pick an older run. Keep the warning, cut the mechanism: "If you rename or copy run files by hand, `compare` may pick an older run." Also line 452-453 grew past the wrapped width (cosmetic).
+
+### n1 (nit) — exit-3 summary, wording
+
+"answering badly when `run` first reads its state" is vague against the FAQ's "gave a bad or timed-out answer when `run` first checked its state"; use the FAQ wording in both.
+
+Growth-stops: the diff's net growth is new scope (the >2-model refusal, the 0/1-arm report, the newest-run rule) offset by deletions of the obsolete quirk notes; no rework growth or restated history found. Counts open: blocker 0 · major 0 · minor 2 · nit 1 (plus Pass 2 n2, pre-existing).
