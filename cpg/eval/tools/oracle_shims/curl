@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Runtime-oracle PATH shim for curl (P1-47; -p1-ml.md §6.5): records the PARENT script (file grain) from
+# /proc/$PPID/cmdline plus the method and URL, then runs the real curl unchanged. A parent that is not a script
+# file under ORACLE_ROOT is logged with script null (counted unattributed by the scorer).
+set -u
+self_dir="$(cd "$(dirname "$0")" && pwd)"
+real="$(PATH="${PATH//$self_dir:/}" command -v curl)"
+if [ -n "${ORACLE_LOG:-}" ]; then
+  python3 - "$PPID" "$@" <<'PY' 2>/dev/null || true
+import json, os, sys
+ppid, args = sys.argv[1], sys.argv[2:]
+root = os.path.realpath(os.environ.get("ORACLE_ROOT", "/nonexistent"))
+script = None
+try:
+    parts = open(f"/proc/{ppid}/cmdline", "rb").read().split(b"\0")
+    cwd = os.readlink(f"/proc/{ppid}/cwd")
+    for a in [p.decode(errors="replace") for p in parts[1:] if p]:
+        if a.startswith("-"):
+            continue
+        p = os.path.realpath(a if os.path.isabs(a) else os.path.join(cwd, a))
+        if os.path.isfile(p) and p.startswith(root + os.sep):
+            script = os.path.relpath(p, root)
+        break
+except Exception:
+    pass
+method, urls, i = None, [], 0
+while i < len(args):
+    a = args[i]
+    if a in ("-X", "--request") and i + 1 < len(args):
+        method = args[i + 1].upper(); i += 1
+    elif a.startswith("http://") or a.startswith("https://"):
+        urls.append(a)
+    elif a in ("-d", "--data", "--data-raw", "--data-binary", "-F", "--form") and method is None:
+        method = "POST"
+    i += 1
+from urllib.parse import urlsplit
+for u in urls:
+    s = urlsplit(u)
+    row = {"src": "sh", "method": method or "GET", "host": s.hostname, "port": s.port,
+           "path": s.path + ("?" + s.query if s.query else ""), "frame": {"file": script, "func": None} if script else None,
+           "cls": "app"}
+    with open(os.environ["ORACLE_LOG"], "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
+PY
+fi
+exec "$real" "$@"
