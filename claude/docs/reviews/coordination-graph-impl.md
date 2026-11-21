@@ -400,3 +400,38 @@ Root `REVIEW.md`, *Always check* (source: B1; fakes modelled the supersede but n
 
 ### Open question
 Is extraction (entity graph) required for the KB claims, or is an embedded-but-`failed` document acceptable as is? B1's cheapest fix depends on the answer; if extraction matters, falkor-chat needs a re-extract/repair path rather than a re-POST.
+
+## KB failed-retry Pass 2
+
+**Scope.** Commit `74aee5ae` from a fresh `git archive HEAD` copy (throwaway `git init`). Executed: full offline suite, 9 scripted probes on the repo's `FakeMirror`/`FakeChat`, 6 plumbing mutants. Nothing run against shared stores. CPG: considered, not relevant — one module read directly.
+
+**Verdict: approve with suggestions** for the live run, under the precautions below. No blocker.
+
+### Dispositions
+- **B1 fixed (executed).** An embedded-but-failed document is `degraded`, not re-posted, and the section stays complete (P1: status `degraded`, `incomplete=False`, no POST, `searchable` stays 1). `reconcile` delegates to the same rule (P9; test `…stays_searchable_through_every_run…[reconcile]`). An unsearchable failed document is retried; a second failure leaves it unsearchable, which is no worse than before (P2).
+- **M1 fixed (executed).** `retryCount` is incremented under the lease (`RETRY`) before the POST, kept by `GIVE_UP`, cleared by `SWAP` (P3: synced gives `None/None`). Backoff 30 min then 60 min (P2b/c/d), limit 3 (P2e/f: attempt 3 runs, the fourth is held, no POST). Per-run cap 4 of 6 failed sections (P5: 4 posts, S4/S5 `failed`/incomplete). Held, capped and limit-reached results are `failed`, so `incomplete` and the file is not stamped.
+- **M2 fixed.** New tests assert searchability (`FakeChat.searchable`) over the run kinds, not only the row. Mutants: `*1000` dropped, `retry_max`/`retry_run_cap` cross-wired, status observe emptied, `2**(count-1)`→`2**count`, degraded/retry split removed — each turned a test red (6/6 killed), the plumbing ones in `test_kb_cli.py`. Source restored and diffed.
+- **Offline suite:** 1148 passed, 88 deselected, matches the delegate.
+
+### Cross-checks between the fixes
+- **Backoff vs the 15-min `kb-finish` cap:** `lastRetryAt` is set at attempt start; first wait is 30 min > 15, so an attempt always settles (finish gives up at <=15 min) before the next is due. A `pending` retry is not re-counted (`_sync_locked` returns `pending` first; P4: `pending`, incomplete, count 1).
+- **`reconcile` vs the per-run cap:** same engine instance shares `_run_retries` (P5: after 4 retries, `reconcile` posts 0 and reports S4/S5 `failed`). Each CLI process is a new run, so the cap is per process.
+- **`kb-status` extra read:** one batched `observe` over every mapped id; `degraded` is non-clean-exempt, `failed-doc` is not (mutant M4 caught).
+- **Unsearchable-but-held reports incomplete:** yes (P2b, P2f, P4).
+
+### New findings
+- **m1 — minor (executed, P6).** `RETRY` and `_run_retries` are spent before `ctx.refusal`. A refused section burns an attempt (count 1, no POST). Move the refusal check ahead of the `RETRY` write.
+- **m2 — minor (inferred).** The retry test is a snapshot: a `failed` doc with `embedded < chunks` can still have in-flight embed jobs (the liveness gate only stops retry sleeps, not running jobs). On a saturated embedder a doc that would have landed is superseded. Mitigated by the 30-min backoff only for the second attempt; the first read can race. Acceptable for the 3-attempt bound; note it.
+- **m3 — minor (executed, P7).** `ready` ignores `current`: an embedded-but-failed document that is already non-current reads `degraded`, though invisible. `reconcile` also reports non-current separately; low likelihood.
+- **m4 — minor (read of `commands_hook._sync_kb`).** A limit-reached or backed-off section returns `failed`, the file is never stamped, so once the S8 hook is registered each edit to that KB file reports "not synced" (exit 2) until the section is edited. Cost is one read, no POST; hook backoff applies. Operator-visible, not a loop against LM Studio.
+
+### Live precondition and the run
+Taking graph-dba's observation as given (all 33 failed documents fully embedded and current; not re-checked, I may not query the shared graph): every mapped failed document reads `degraded`, so a live `kb-sync`/`kb-reconcile` re-posts none of them (P1). The 17 unmirrored claims have no section row, so they take the ordinary first-ingest path (POST, wait `kb_budget_s`, `pending` to `kb-finish`); no retry cap applies to new ingests, they are serial per section. One pre-existing hazard remains (S6 receipt backstop, not this commit): if an unmirrored claim's normalised text equals a current document from another producer, the POST already retires that document, `_check_receipt` then reports and aborts, and the victim stays superseded.
+
+**Operator precautions.** (1) Before the live run, read-only: for each of the 17 claims, check no current `Document` shares its `textNormalizedHash` (`BY_HASH` shape); if one does, run `kb-reconcile` first (it adopts by hash rather than posting) or skip that claim. (2) LM Studio idle and `ws:agent-team` `processing = 0`. (3) One file at a time, `-v`, no `--detach-finish`, no hook registration. (4) Expect `degraded` lines and exit 2 from `kb-reconcile` for the 33; that is informational. (5) After: per claim, current-document count >= before; `kb-status` `failed-doc` lines mean an unsearchable document is backing off (`COORDGRAPH_KB_RETRY_*`), do not loop.
+
+### Process remark (HISTORY.md line lost)
+Warranted, brief. The delegate rewrote a shared append-only log in place (the commit message admits the loss), destroying another agent's uncommitted line; git cannot recover it, only its author can. Rule for the coordinator: when two agents may touch one log in the same tree, delegates append with `Edit` on the tail (never `Write` the whole file) and `git diff` the file before committing to see only their own hunk; the coordinator serialises HISTORY.md writers. I propose no `REVIEW.md` line (a reviewer cannot enforce it after the fact); it is a `teco` brief rule.
+
+### Proposed REVIEW.md lines
+None new beyond the Pass 1 proposal, which this revision satisfies (the `searchable >= 1` assertion is now pinned).
