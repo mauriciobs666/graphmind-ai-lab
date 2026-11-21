@@ -88,7 +88,7 @@ demotes it). Decision D13 (stakeholder, Q-F): P1 builds this pack. No pack seeds
 
 **Done when:** (1) the fixture rows `LNK-08`, `LNK-11`, `LNK-13`, `LNK-14`, `LNK-37`, `TW-2`, `AC6-EX-4` and `DF-3`'s `requeue`
 item are asserted at P1 in the forms the key rule below gives; (2) on the dev gold `cpg/eval/dev/ac5-http.jsonl`, each of the 8 items whose impacted element is a Python script has a `CONSUMES http`
-linking to the gold provider, at any status, by the path below; the count is reported, a miss is reported with its cause and
+linking to the gold provider, at any status (a `Link` ON the gold `keyNorm` whose provider is the gold chain's provider symbol, by `qname`: line spans are not compared, they drift with unrelated edits (K-094), the eval harness matches on anchor and impacted ids, and a `CONSUMES` edge carrying the exact gold key is not the test, since a consumer's partial `{?}` key differs from the provider's `{}`), by the path below; the count is reported, a miss is reported with its cause and
 never tuned past; dev items only, no held-out file read (the exposure path-set rule, `-p1-ml.md`). Paths (the wrapper calls
 are bare same-module calls, kept by 5d's `refsTo` rule, so `callers_of` carries them):
 `falkor-chat/scripts/load_append.py::{main,_worker}` call `httpx.Client(...)` methods directly: seeded at the call, which is its
@@ -580,7 +580,7 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
   providers (stakeholder, Q-NC5 A: P1-17's rule stands; NC-5 narrows to LNK-12, bound, and LNK-20; the P1-36 report carries the count of
   unbound `mcp_tool`/`http` links whose key has providers in more than one unit, a line `teco` adds to `-p1-gates.md` P1-36).
 - *Rows that need no fixture edit.* LNK-14's base is a config value no Binder input reads: `possible`/`partial-key` (P1-49 rule 3).
-  LNK-08 and TW-2: the observed forms of P1-49. LNK-18 and AC6-EX-2 move to P2 (stakeholder, Q-CENSUS A): the P1 census is **87**, the AC-6 example-config floor at P1 holds 2 instances (EX-1, EX-4); both are filed as P2 backlog items (owner `architect`) in the close list of `docs/plans/connected-code-graph-p1.md`.
+  LNK-08 and TW-2: the observed forms of P1-49. LNK-18 and AC6-EX-2 move to P2 (stakeholder, Q-CENSUS A): the P1 census is **87**, the AC-6 example-config floor at P1 counts instances that emit the reason (live: AC6-EX-4 only; AC6-EX-1 is open, P1-56); both are filed as P2 backlog items (owner `architect`) in the close list of `docs/plans/connected-code-graph-p1.md`.
 - **53a (`qa-engineer`):** (1) the pin, authored red against the unmodified fixtures, two tiers. *Offline tier (no Joern, no store):*
   the real config and shell extractors over `fx-svc`/`fx-job`, plus synthetic provider/consumer facts in the style of
   `tests/linker_bind_helpers.py` (a mention `mcp__fx-svc-exec__list_orders`, a loopback `:8000` consumer, a `:8200/mcp` mcp_tool
@@ -607,7 +607,7 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
   gains `BOUND_BY` ord 0 and 1; LNK-02 and LNK-06 go `key-match` to `binding-confirmed`; LNK-12 loses its `job` provider link and its `svc`
   link becomes `binding-confirmed`. Any other changed row stops the unit. Must not regress: LNK-13/14/15/22, AC6-EX-1/4, `UNIT_FLOORS` (68, 67), the walk rows.
 - **53c (`tdd-engineer`, serial after 53b **and after P1-54**, which fixes the env-read recognition 53c's EX-4 depends on and probes which `peer.py` shape carries a flow edge; it regenerates the same pinned SHAs and family counts):** the AC-6 example-config floor at P1
-  (2: AC6-EX-1, AC6-EX-4) counts instances whose P1 form carries the `example-config` reason, not manifest rows gated P1. EX-4 does not
+  (AC6-EX-1, AC6-EX-4; see P1-56 for EX-1) counts instances whose P1 form carries the `example-config` reason, not manifest rows gated P1. EX-4 does not
   today: `fx-svc/clients/peer.py` reads `os.environ["FX_PEER_BASE"]`, and `bind.py` reads only `environ.get`/`getenv` (`_ENV_READS`), so
   its link is `possible`/`partial-key`. Edit `peer.py` to `os.environ.get("FX_PEER_BASE", "")` **and** `deploy/compose.example.yaml`'s `FX_PEER_BASE` to `http://api:8000`:
   `example-config` is the reason of a link whose only binding chain runs through a file with `role: example` (the chain is weakened,
@@ -657,6 +657,58 @@ bundle (no receiver field in these records).
   was tested with hand-built records and the unit gate and P1T-09 read those tests green. A Binder or pack predicate that reads a bundle
   record shape needs one test whose input is a record extracted from a real build, and a census assertion that the predicate matches at
   least one real record. The earlier step that should have caught it: P1-17 dispatch 2 and its analyst gate.
+
+## P1-55 · a wholly unknown URL is keyless; the `fetch` pack's own site — `tdd-engineer`
+
+Cause: live QA pass `docs/test-reports/connected-code-graph-p1-report.md` D3, D4 (D5 is an instrument gap, below). A defect against
+contracted behaviour (P1-17 behaviour (3): a fully unknown key with no binding is one `possible` link per provider of the kind).
+**Basis.** `f"{get_base()}/{ROUTES[name]}"` (AC6-URL-1) is `\x01/\x01`: URL-like by the marker-run rule, so P1-49 rule 2 drops the
+origin and the consumer is `GET /{?}`, `possible`/`partial-key`, linking to nothing; `fetch(base + path)` (AC6-URL-2, `\x01\x01`) is
+the same key once the wrapper is a consumer. A key whose path holds no literal segment names nothing: it is unknown as a whole, not
+partial. Observed on the proving repository's stored bundles: 72 keyed `http` consumer facts, one with such a key
+(`decision-models/decisionmodels/lmstudio.py:366`, `GET /{?}`, a call to the external LM Studio); the `fetch` lifting with `ownSite`
+forced on changes nothing there (45 leaf sites both ways), so the pack setting is inert on the proving repository.
+**Decision.** (1) `ccg/packrt/run.py:_one` (http): when the normalized consumer key has at least one `{?}` segment and no literal
+segment (the root `/` alone stays a key), the fact is keyless: `key` none, `possible`, reason `runtime-built`, so the linker's
+`unknown-key` fan-out applies. The predicate lives in `ccg/packrt/httpkey.py` beside `is_url_like`. (2) `packs/fetch/pack.yaml`
+`liftings[fetch-url].ownSite: true`: a wrapper no call edge reaches is a consumer at its own site (AC6-URL-2's `go`); `s14a`
+conformance must stay equal. Cost, stated: the one proving-repository site above becomes a keyless consumer (an `unknown-key`
+fan-out to every `http` provider, the P1-36 trade-off); AC-5 recall is unaffected. Rejected: leaving `GET /{?}` (AC-6 asks that an
+address built at runtime be shown as possible; a consumer that links to nothing is shown nowhere).
+- **Files:** `ccg/packrt/run.py`, `ccg/packrt/httpkey.py`, `packs/fetch/pack.yaml`, `tests/test_packrt_run.py` (or the file holding the
+  `_one` tests), `tests/test_httpkey_*.py`.
+- **Steps:** (1) red: a reference table over key shapes (`/{?}`, `/{?}/{?}`, `/`, `/a/{?}`, `/{?}a`, origin unknown or known, query-only,
+  verb `*`) and the `ownSite` on/off pair over `fetch_chain()`-style records; (2) the predicate and the `_one` rule; (3) the pack
+  setting, then the before/after.
+- **Done when:** the table green; `tests/slice/test_packrt_conformance.py` and `test_linker_conformance.py` unchanged; acceptance
+  report on the proving repository's stored bundles: providers, mounts and every `confirmed` consumer equal, the changed consumers
+  listed (expected: `lmstudio.py:366` only), the AC-5 8-script count unchanged at 8 of 8; the live fixture build: `call_named` is a
+  keyless `possible`/`runtime-built` consumer with `unknown-key` Links, `dyn.ts::go` the same (its P1 form is
+  `runtime-built`/`unknown-key`: `binding-narrowed` needs the environment binding, P2). Must not regress: LNK-11/13/14/15/17, KN rows.
+  Gate `analyst`; `packrt/` is hashed: lands before the `ac5-gate-1` record.
+- **Rows (owner `qa-engineer`, in the manifests and test plans):** AC6-URL-2 gets `p1Form` `runtime-built`/`unknown-key`; AC6-URL-1
+  unchanged; AC6-URL-3 unchanged: its edge reason is the linker's keyless consumer (`runtime-built`), which the QA instrument read from
+  the lifted fact instead of the `CONSUMES` edge (D5: no defect; the census asserts it on the `build_rows` edge).
+  LNK-10's consumer locator becomes `web:app/src/api/index.ts::query` (D6: the extractor names the nested object method by its last
+  segment, and the Link and its ordered `LIFTED_VIA` entries are right; qualified naming is a P2 extractor item); the P1T-06 locator
+  rule says so. A committed census driver for the Link-level rows (the QA scratch instrument) belongs to P1-41 dispatch B.
+
+## P1-56 · AC-6 instances the P1 contract cannot show: AC6-EX-1 and AC6-PM-3 — pending Q-AC6
+
+Cause: QA report D1, D2. **AC6-EX-1** (`.mcp.example.json`, kind `launch`, expected `possible`/`example-config`): no P1 element can carry
+it. `example-config` is the reason of a `Link`/`VIA` whose only binding chain runs through a `role: example` file; a `launch` row is
+not a stored `Link` at P1 (P1-53) and `LAUNCHES` has no status or reason (`-p1-graph.md` G8); the launch-target export is P2
+(P1-17 ruling). The earlier count of EX-1 toward the floor read a ledger claim the live build does not bear out. **AC6-PM-3** (a
+Python triple-quoted `SYSTEM_PROMPT` naming `list_orders`): the P1 prompt-mention extractor is Markdown-only (P1-12, P1-44); no step
+plans a Python string-constant mention. Both rows were gated P1 without a mechanism.
+**Probe, dispatchable now (`tdd-engineer`, no fixture or engine edit):** (1) EX-1 reshaped as an `mcp_tool` example: a second
+`.mcp.example.json` server entry with a `url` (`http://localhost:8200/mcp`) and a Python consumer in `fx-svc` (the `fastmcp` `tool-call`
+rule, `streamablehttp_client` or the config URL source) bound only through that example entry: does the fixture build give a Link
+`possible`/`example-config` (port 8200 is `svc`'s after 53b)? (2) PM-3 reshaped as a Markdown list item in a prompt file: does the
+extractor emit the mention and the linker the `possible`/`prompt-mention` Link, as PM-1 and PM-2 do? Report both with the observed Links.
+**Then, per the stakeholder's answer to Q-AC6 (returned to `teco`, not decided here):** the chosen reshaping is a fixture and manifest
+edit (`tdd-engineer`: the new file content, pinned SHAs and family counts regenerated, serial after 53c; `qa-engineer`: manifest and
+test-plan row text; the P1T-12 and P1T-25 text), with the pin's Link tier asserting the row.
 
 ## P1-17 · linker — `tdd-engineer`
 
