@@ -45,12 +45,29 @@ def _has_loc(h: dict) -> bool:
     return isinstance(h.get("path"), str) and bool(h["path"]) and isinstance(h.get("line"), int) and not isinstance(h["line"], bool) and h["line"] >= 1
 
 
-def ac18_violations(doc: dict, label: str, counts: dict | None = None) -> list[str]:
+def _source_violations(tag: str, where: str, h: dict, source) -> list[str]:
+    """The located hop ``h`` against the fixture tree: its file exists in its repository, its line is within the file, and a call-site hop's line holds the callee's name.
+    ``source(repo, path)`` returns the file's lines, or None when the file is not in the tree."""
+    lines = source(h.get("repo"), h["path"])
+    if lines is None:
+        return [f"{tag}: {where} names {h.get('repo')}:{h['path']}, which is not in the fixture tree"]
+    if h["line"] > len(lines):
+        return [f"{tag}: {where} line {h['line']} is past the end of {h['path']} ({len(lines)} lines)"]
+    name = h.get("calleeName") if h.get("kind") == "CallSite" else None
+    if name:
+        tail = name.replace("::", ".").rsplit(".", 1)[-1]
+        if tail not in lines[h["line"] - 1]:
+            return [f"{tag}: {where} (CallSite) line {h['line']} of {h['path']} does not contain the callee {tail!r}: {lines[h['line'] - 1].strip()[:80]!r}"]
+    return []
+
+
+def ac18_violations(doc: dict, label: str, counts: dict | None = None, source=None) -> list[str]:
     """Every item (and every folded group member) of ``doc`` shows its full chain with file and line at each step.
 
     A hop that is a code element (`Symbol`, `CallSite`, `ConfigEntry`) carries `path` and `line`; a `Link` hop carries `lifted` entries each with `path` and `line` (the sites the
     link was lifted through), or, when it has none (the contract-point walk's `ON` hop, the `BOUND_BY` hop to a config entry), an adjacent code-element hop that does; a `ContractPoint` hop is a key, not a code location, and must carry its `keyNorm`.
-    The chain starts at a resolved anchor of the request and ends at the item's subject. ``counts`` (when given) accumulates the hop kinds seen."""
+    The chain starts at a resolved anchor of the request and ends at the item's subject. ``counts`` (when given) accumulates the hop kinds seen.
+    ``source`` (when given, see :func:`_source_violations`) also checks every located hop and lifted entry against the fixture tree: the file exists, the line is in it, a call site's line names its callee."""
     bad = []
     interp = doc["interpretation"]
     anchors = {a.get("symbolId") or a.get("cpId") or a.get("entryId") for a in interp.get("request", {}).get("anchors", [])}
@@ -76,12 +93,16 @@ def ac18_violations(doc: dict, label: str, counts: dict | None = None) -> list[s
             if kind in LOCATED:
                 if not _has_loc(h):
                     bad.append(f"{tag}: hop {i} ({kind}) has no file and line: path={h.get('path')!r} line={h.get('line')!r}")
+                elif source:
+                    bad += _source_violations(tag, f"hop {i}", h, source)
             elif kind == "Link":
                 lifted = h.get("lifted") or []
                 if lifted:
                     for l in lifted:
                         if not _has_loc(l):
                             bad.append(f"{tag}: hop {i} (Link) lifted entry {l.get('ord')} has no file and line")
+                        elif source:
+                            bad += _source_violations(tag, f"hop {i} (Link) lifted entry {l.get('ord')}", {**l, "kind": "lifted"}, source)
                 else:
                     near = [chain[j] for j in (i - 1, i + 1) if 0 <= j < len(chain) and chain[j]["kind"] in LOCATED]
                     if not any(_has_loc(c) for c in near):

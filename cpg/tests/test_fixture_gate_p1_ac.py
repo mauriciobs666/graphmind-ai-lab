@@ -19,6 +19,7 @@ import subprocess
 from types import SimpleNamespace
 
 import pytest
+from redis.exceptions import NoPermissionError
 
 import fixture_gate_p1_ac_helpers as AC
 import fixture_gate_p1_helpers as H
@@ -239,23 +240,33 @@ def test_ac17_a_dts_a_pyi_and_a_vendored_file_answer_not_found_never_a_symbol(st
 def test_ac17_the_other_groups_are_not_built_at_p1_observed(steady, creds):
     """AC-17 names four groups (file+line, branch, queue name, stack trace); P1 closes the code location and the contract point only (plan §12). Recorded: what the other two ask shapes answer."""
     c = make_client(steady, plain=True)
-    seen = {}
+    seen, viol = {}, []
     for label, q in (("stack trace", "impact Traceback (most recent call last):\n  File \"core/flow.py\", line 17, in apply_discount"), ("branch", "impact branch feature/x")):
         try:
             d = c.ask(question=q)
             seen[label] = f"answered: {d['interpretation']['status']}"
-        except common.ClientError as exc:
+            viol.append(f"{label}: answered ({d['interpretation']['status']}), expected a typed NotBuilt at P1")
+        except common.NotBuilt as exc:
             seen[label] = f"{type(exc).__name__}: {str(exc)[:100]}"
-    _rec("AC-17/other-groups", "not built at P1", seen=seen)
+        except Exception as exc:  # noqa: BLE001
+            seen[label] = f"{type(exc).__name__}: {str(exc)[:100]}"
+            viol.append(f"{label}: {seen[label]}, expected NotBuilt")
+    _rec("AC-17/other-groups", "fail" if viol else "not built at P1", seen=seen, violations=viol)
+    assert not viol, "\n".join(viol)
 
 
 # ---- AC-18 ------------------------------------------------------------------------------------------------------------------------------
 @pytest.mark.live
-def test_ac18_every_item_of_every_answer_shows_its_chain_with_file_and_line(docs):
+def test_ac18_every_item_of_every_answer_shows_its_chain_with_file_and_line(steady, docs):
     viol, counts, n_items = [], {}, 0
+    root = steady.env.tmp / "root-steady"                  # the materialized fixture tree the store was built from (`steady` fixture)
+
+    def source(repo, path):
+        f = root / repo / path
+        return f.read_text().splitlines() if repo and f.is_file() else None
     for name in REQUESTS:
         d = _doc(docs, name)
-        viol += AC.ac18_violations(d, name, counts)
+        viol += AC.ac18_violations(d, name, counts, source=source)
         n_items += len(d["items"]) + sum(len(g["members"]) for g in d["groups"])
     _rec("AC-18", "fail" if viol else "pass", answers=len(REQUESTS), items=n_items, hop_kinds=counts, violations=viol[:20])
     assert n_items > 0 and not viol, "\n".join(viol[:20])
@@ -530,11 +541,18 @@ def test_ac16_mutants_a_recipe_missing_or_altered_read_turns_the_raw_leg_red(ste
 
 
 # ---- AC-21 ------------------------------------------------------------------------------------------------------------------------------
-def _refused(call) -> tuple[bool, str]:
+def _refused(call, via: str = "direct") -> tuple[bool, str]:
+    """(refused for the access-control reason, text). ``via`` "direct": the raw credential's own driver call must raise ``NoPermissionError`` saying "no permissions" (an ACL refusal);
+    "raw_query": the client must raise the typed ``RawRefused``. Any other exception (an unknown key, a typo, a timeout, a bad password) is NOT a refusal, and is reported as such."""
     try:
         call()
-    except Exception as exc:  # noqa: BLE001 - the database's refusal arrives as whatever the driver raises
-        return True, f"{type(exc).__name__}: {str(exc)[:120]}"
+    except Exception as exc:  # noqa: BLE001 - classified below, never swallowed
+        text = f"{type(exc).__name__}: {str(exc)[:120]}"
+        if via == "raw_query":
+            right = isinstance(exc, common.RawRefused)
+        else:
+            right = isinstance(exc, NoPermissionError) and "no permissions" in str(exc).lower()
+        return (True, text) if right else (False, f"failed for another reason: {text}")
     return False, "accepted"
 
 
@@ -563,7 +581,7 @@ def ac21_probe(env, system, store) -> dict:
     out["FLUSHALL"] = _refused(lambda: raw_db.execute_command("FLUSHALL"))
     c = Client(system, host=HOST, port=env.port)
     for label, q in writes.items():
-        out[f"raw_query {label}"] = _refused(lambda q=q: c.raw_query(q))
+        out[f"raw_query {label}"] = _refused(lambda q=q: c.raw_query(q), via="raw_query")
     return out
 
 
@@ -679,6 +697,51 @@ def test_ac18_checker_mutants():
     link = _item()
     link["chain"].insert(2, {"kind": "Link", "id": "l1", "edgeType": "TO", "dir": "<-", "lifted": [{"ord": 0, "siteId": "c1", "path": "a.py"}]})
     assert AC.ac18_violations(_doc_of(link), "l")        # a lifted entry without a line
+
+
+def test_ac18_checker_verifies_the_located_hops_against_the_source_tree():
+    tree = {("r", "b.py"): ["x = 1", "def g():", "    pass"], ("r", "a.py"): ["a", "b", "def f():", "    x", "    g(1)", "    y"]}
+    source = lambda repo, path: tree.get((repo, path))        # noqa: E731
+    item = _item()
+    for h in item["chain"]:
+        h["repo"] = "r"
+    item["chain"][1]["calleeName"] = "g"
+    good = _doc_of(item)
+    assert AC.ac18_violations(good, "g", source=source) == []
+    mutants = {
+        "path not in the tree": lambda it: it["chain"][1].update(path="nonexistent/zzz.py"),
+        "line past the end of the file": lambda it: it["chain"][1].update(line=99999),
+        "call site's line does not name the callee": lambda it: it["chain"][1].update(line=4),
+        "callee renamed": lambda it: it["chain"][1].update(calleeName="h"),
+        "wrong repository": lambda it: it["chain"][0].update(repo="other"),
+    }
+    for what, mutate in mutants.items():
+        d = copy.deepcopy(good)
+        mutate(d["items"][0])
+        assert AC.ac18_violations(d, what, source=source), what
+    d = copy.deepcopy(good)
+    d["items"][0]["chain"][1]["line"] = 99999
+    assert AC.ac18_violations(d, "presence only") == []            # the unsourced check is presence only: this is what the new check adds
+    link = copy.deepcopy(good)
+    link["items"][0]["chain"].insert(2, {"kind": "Link", "id": "l1", "edgeType": "TO", "dir": "<-", "lifted": [{"ord": 0, "siteId": "c1", "repo": "r", "path": "a.py", "line": 4}]})
+    assert AC.ac18_violations(link, "l", source=source) == []
+    link["items"][0]["chain"][2]["lifted"][0]["line"] = 99999
+    assert AC.ac18_violations(link, "l", source=source)
+
+
+def test_ac21_a_refusal_counts_only_for_the_access_control_reason():
+    def raises(exc):
+        def call():
+            raise exc
+        return call
+    assert _refused(raises(NoPermissionError("this user has no permissions to run the 'graph.query' command"))) == (True, "NoPermissionError: this user has no permissions to run the 'graph.query' command")
+    for other in (ValueError("no permissions"), KeyError("unknown key"), TimeoutError("timed out"), NoPermissionError("something else")):
+        ok, text = _refused(raises(other))
+        assert not ok and "another reason" in text, other
+    assert _refused(lambda: None) == (False, "accepted")
+    assert _refused(raises(common.RawRefused("read-only")), via="raw_query")[0]
+    assert not _refused(raises(common.StoreError("timed out")), via="raw_query")[0]
+    assert not _refused(raises(NoPermissionError("no permissions")), via="raw_query")[0]
 
 
 def test_ac25_checker_mutants():
