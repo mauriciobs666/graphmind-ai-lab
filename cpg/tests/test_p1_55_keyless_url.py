@@ -26,6 +26,7 @@ TABLE = [
     (f"/{U}", True),
     (f"/{U}/{U}", True),                   # two unknown segments: still nothing literal
     (f"/{U}a", True),                      # a segment holding a marker is `{?}` whole
+    (f"/a{U}", True),                      # "/api" + X: masked whole by step 8a
     (f"{U}/{U}?x=1", True),
     (f"GET {U}/{U}", True),
     (f"* {U}/{U}", True),                  # any-method verb
@@ -38,6 +39,10 @@ TABLE = [
     (f"/a/{U}", False),                    # a literal segment: partial-key stays a key
     (f"/{U}/a", False),
     (f"/api/{U}/{U}", False),
+    ("/{id}", False),                      # a route parameter is a known (masked) segment, not an unknown one
+    ("/{id}/{id}", False),
+    (f"/{{id}}/{U}", False),               # `{}` beside `{?}` stays a key: the address is partly known (plan P1-55 ruling M1)
+    (f"/{U}/{{id}}", False),
     ("/api/x", False),
     (f"https://{U}/a", False),
 ]

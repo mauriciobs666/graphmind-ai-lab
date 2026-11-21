@@ -161,6 +161,7 @@ class _Run:
             key = parts.key
             if unresolved and (parts.unresolved_in_path or parts.origin_dropped):
                 status, reason = "possible", "partial-key"
+            # the CONSUMES guard is intent for a future partial provider slot; unreachable today (a provider with an unresolved piece is dropped above)
             if edge == "CONSUMES" and names_no_literal_segment(key):     # P1-55: no literal segment names nothing: unknown as a whole
                 key, status, reason = None, "possible", "runtime-built"
         if item and item["status"] != "confirmed" and status == "confirmed":

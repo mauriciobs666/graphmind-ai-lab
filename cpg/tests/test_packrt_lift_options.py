@@ -180,7 +180,8 @@ def test_a_rule_scope_still_means_the_leaf_sites_file_and_is_independent_of_the_
 # off is the old behaviour
 # ---------------------------------------------------------------------------------------------------------------------
 
-def test_with_all_three_words_off_or_absent_the_fetch_pack_gives_the_same_facts():
+def test_an_absent_lifting_word_gives_the_same_facts_as_the_word_off_in_an_own_site_less_pack():
+    """`fetch_with()` is the fetch pack minus `ownSite`: leaving `ownSite`/`urlLike` absent equals setting them off."""
     for recs in (fetch_chain(), fetch_chain(init=True), without_caller("/own/x"), with_caller("timeout")):
         a = run(recs, fetch_with())
         b = run(recs, fetch_with(own=False, url_like=False))

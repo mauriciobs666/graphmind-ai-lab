@@ -207,5 +207,5 @@
    "use": "eb54631ae0b54ed9b6ba5f1e480b4ba4"
   }
  ],
- "source": "real extractor output (ccg.build over this repository); regenerate with tests/data/p1_55_unknown_url_regen.py"
+ "source": "real extractor output (ccg.build over this repository, builtCommit 24cdff79dc87377c06e8330d4159c9eba4c85ad2); regenerate with tests/data/p1_55_unknown_url_regen.py"
 }

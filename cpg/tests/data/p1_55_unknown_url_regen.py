@@ -9,6 +9,10 @@ bundles, ``.ccg-work/bundles/graphmind-ai-lab``). The bundle read is the one tha
 site is the ``urllib.request.Request(f"{self._base_url}{_MODELS_ROUTE}", method="GET")`` callsite in ``LMStudioClient.residency`` (line 366), whose
 URL valueSet is ``template [unknown, unknown]``. Kept: the file, the owning symbol, the ``urllib`` imports of the file, that callsite and its
 ``valueSet`` and ``data`` records. Nothing is hand-edited.
+
+The build commit of the bundle read (its ``<unitId>.state.json`` ``builtCommit``, also the snapshot in the bundle's file name) is written into the
+JSON's ``source`` string, so the golden names the extractor build it came from. The golden's records were taken from the bundle
+``ea820cc0544a4a41667e670a78a36443`` at ``builtCommit`` ``24cdff79dc87377c06e8330d4159c9eba4c85ad2``.
 """
 import glob
 import json
@@ -33,7 +37,9 @@ def main(bundles_dir: str, out_path: str) -> None:
         keep += [r for r in recs if r["type"] == "import" and r["fileId"] == fid]
         keep += [r for r in recs if r["type"] == "valueSet" and r["callSiteId"] == site["id"]]
         keep += [r for r in recs if r["type"] == "data" and site["id"] in (r["use"], r["def"])]
-        json.dump({"source": "real extractor output (ccg.build over this repository); regenerate with tests/data/p1_55_unknown_url_regen.py",
+        state = json.load(open(f.replace(".bundle.jsonl", "").rsplit(".", 1)[0] + ".state.json"))
+        json.dump({"source": f"real extractor output (ccg.build over this repository, builtCommit {state['builtCommit']}); "
+                             "regenerate with tests/data/p1_55_unknown_url_regen.py",
                    "records": keep}, open(out_path, "w"), indent=1, sort_keys=True)
         return
     raise SystemExit("no bundle carries " + PATH)
