@@ -940,6 +940,7 @@ rows:
   keyNorm: GET /legacy/fee
   status: possible
   reason: target-not-mapped
+  note: binds through svc:deploy/compose.yaml @services.legacy (build.context); provider locator is the symbol that exists only when the unit is built; P1 form is the Link to unit:svc-legacy (P1-57 D12)
   gate: P1
   serves:
   - LNK
@@ -958,6 +959,7 @@ rows:
   keyNorm: GET /tools/run
   status: possible
   reason: target-not-mapped
+  note: binds through svc:deploy/compose.yaml @services.tools (build.context); provider locator is the symbol that exists only when the unit is built; P1 form is the Link to unit:svc-tools (P1-57 D12)
   gate: P1
   serves:
   - LNK
@@ -1113,7 +1115,7 @@ rows:
     qname: plugins/loader.py::load_plugin
   status: possible
   reason: dynamic-import
-  gate: P1
+  gate: P2
   shape: dynamic import
   serves:
   - AC-6
@@ -1131,7 +1133,7 @@ rows:
     qname: plugins/loader.py::load_legacy
   status: possible
   reason: dynamic-import
-  gate: P1
+  gate: P2
   shape: dynamic import
   serves:
   - AC-6
@@ -1348,7 +1350,7 @@ rows:
     qname: plugins/loader.py::load_audit
   status: confirmed
   reason: key-match
-  gate: P1
+  gate: P2
   serves:
   - TW
   stratum: fixture-dev
@@ -1933,7 +1935,8 @@ rows:
   item: rules = cast(Rules, PremiumRules()); rules.fee(x) resolves to Rules.fee
   status: possible
   reason: resolution-unverified
-  gate: P1
+  gate: P2
+  # gate P2 (P1-57 D14): the frontend resolves no planted call on a Joern-only build; returns with indexer adoption (P2-5)
   serves:
   - P3-1
   stratum: fixture-dev

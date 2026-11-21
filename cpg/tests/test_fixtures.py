@@ -961,7 +961,7 @@ def plan_figures():
     return {"prefix": prefix, "gate": gates, "shapes": shapes}
 
 
-AC6_GROUP_GATE = {"AC6-URL": "P1", "AC6-DYN": "P1", "AC6-EX": "P1", "AC6-PM": "P1", "AC6-TOP": "P2", "AC6-QL": "P3"}
+AC6_GROUP_GATE = {"AC6-URL": "P1", "AC6-DYN": "P2", "AC6-EX": "P1", "AC6-PM": "P1", "AC6-TOP": "P2", "AC6-QL": "P3"}
 #: instances / shapes the floor asks of a group at its gate: 3, except `AC6-EX` at P1, which holds 2 (EX-1, EX-4) since AC6-EX-2 moved to P2
 #: (Q-CENSUS A, `docs/plans/connected-code-graph-p1-linking.md` P1-53; the shortfall is the stakeholder's).
 AC6_GROUP_FLOOR = {"AC6-EX": 2}
@@ -993,9 +993,9 @@ def census_violations(manifests):
         have = tuple(sum(1 for g in got if GATES.index(g) <= i) for i in range(3))
         if have != (p1, p2, p3):
             bad.append(f"shape {shape}: by P1/P2/P3 {have} != plan {(p1, p2, p3)}")
-        if shape == "version skew":
+        if shape in ("version skew", "dynamic import"):        # both gate P2 (skew: library linking; dynamic import: P1-57 Q-DYN B)
             if have[0] != 0 and p1 == 0:
-                bad.append("skew reads non-zero before P2")
+                bad.append(f"{shape} reads non-zero before P2")
         elif have[0] < 3:
             bad.append(f"shape {shape}: floor 3 at P1 not met ({have[0]})")
         del key
