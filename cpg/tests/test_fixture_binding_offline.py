@@ -89,7 +89,7 @@ MUTANTS = {
     "delete fx-job/deploy/compose.dev.yaml": ({"fx-job/deploy/compose.dev.yaml": None}, "LNK-16: no link from the loopback :8000 consumer", None),
 }
 
-#: the files P1-56b adds to `fx-svc` (the example `url` entry's file and the two prompt files): read at the head when tracked, for `p56_file_violations`.
+#: the files P1-56b adds to `fx-svc` (the example `url` entry's file and the two prompt files): read at the head when tracked, for `p56_entry_violations` and `p56_prompt_violations`.
 P56_FILES = (".mcp.json", ".mcp.example.json", ".claude/agents/orders.md", ".claude/agents/remote.md")
 LOOPBACK = {"localhost", "127.0.0.1", "::1", "[::1]"}
 
@@ -534,7 +534,6 @@ def p56_entry_violations(w: World, manifests) -> list[str]:
     from urllib.parse import urlparse
     bad: list[str] = []
     aux = next(a for a in row_locators(manifests, "AC6-EX-1", "aux") if a.get("keyPath"))
-    tool = row_locators(manifests, "AC6-EX-1", "provider")[0]["qname"].split("::")[-1]
     server = aux["keyPath"].split(".")[1]
     # (1) the example url entry
     recs = [r for r, rp in w.records.values() if r.get("type") == "configEntry" and rp == aux["repo"] and r.get("path") == aux["path"] and r.get("keyPath") == aux["keyPath"]]
@@ -696,7 +695,7 @@ def test_the_fixtures_carry_the_prompt_files_of_ac6_ex_1_and_pm_3(base_root, man
 
 @pytest.fixture(scope="module")
 def p56_root(base_root, tmp_path_factory):
-    """The control: the fixtures plus the three 56b files, whatever the committed fixtures hold (the edits overwrite them)."""
+    """The control: the committed fixtures plus the three 56b files (the edits overwrite those three only: the rest, `.mcp.json` included, is the committed tree, so a regression there shows here too)."""
     return edited_root(base_root, tmp_path_factory.mktemp("fx-p56") / "root", p56_edits(base_root))
 
 

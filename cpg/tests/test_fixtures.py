@@ -599,7 +599,10 @@ def resolve_ts(text, qname):
     start = next((i + 1 for i, ln in enumerate(lines) if decl.match(ln)), None)
     if start is None and len(parts) == 1:
         # the extractor names a nested object-literal method by its last segment (P1-55 D6: LNK-10's `query` inside `api = { search: { query: () => ... } }`)
-        member = re.compile(rf"^\s*(?:async\s+)?{head}\s*(?::\s*(?:async\s*)?(?:\(|function\b|[A-Za-z_$][\w$]*\s*=>)|\()")
+        # a definition shape only: `name: (..) =>`, `name: function`, `name: x =>`, or a method `name(..) {` (never a call statement or a keyword block)
+        member = re.compile(rf"^\s*(?:async\s+)?(?!(?:if|for|while|switch|catch|return|function|new)\b){head}\s*"
+                            rf"(?::\s*(?:async\s*)?(?:\([^)]*\)\s*(?::[^=]+)?=>|function\b|[A-Za-z_$][\w$]*\s*=>)"
+                            rf"|\([^)]*\)\s*(?::\s*[\w<>\[\]|. ]+)?\s*\{{\s*$)")
         hit = next((i + 1 for i, ln in enumerate(lines) if member.match(ln)), None)
         return (hit, _brace_end(lines, hit)) if hit else None
     if start is None:
@@ -884,6 +887,12 @@ def test_tp002_resolvers_distinguish_overloads_and_nested_members():
     py = "class C:\n    def m(self):\n        pass\n\nX = 1\n"
     ts = "export const api = {\n  search: {\n    query: () => request(1),\n  },\n};\n"     # a nested object method resolves by its last segment (LNK-10)
     assert resolve_ts(ts, "query") and resolve_ts(ts, "api.search.query")
+    for ok in ("query: async () => 1,", "query: function() {},", "query: foo => 1,", "query(x) {", "async query(x: string): Promise<void> {"):
+        assert resolve_ts(f"const o = {{\n  {ok}\n}};\n", "query"), ok
+    for call in ("request(1);", "query(1);", "query (y)", "query(() => {", "query: (1),", "query: foo,"):   # a call statement, a callback opening, a value: not a definition
+        assert resolve_ts(f"function a() {{\n  {call}\n}}\n", "query") is None, call
+    assert resolve_ts("function a() {\n  request(1);\n}\n", "request") is None and resolve_ts("if (x) {\n}\n", "if") is None
+    assert resolve_ts("export function Health() {\n  useEffect(() => {\n  });\n}\n", "useEffect") is None
     assert resolve_ts(ts, "queryy") is None and resolve_ts("const x = { quer: 1 };\n", "query") is None and resolve_ts("// query: () => 1\n", "query") is None
     assert resolve_python(py, "C.m") == (2, 3) and resolve_python(py, "X") == (5, 5) and resolve_python(py, "C.n") is None
     assert resolve_keypath("a:\n  b.c:\n    d: 1\n", "x.yaml", "a.b.c.d") and not resolve_keypath("a: 1\n", "x.yaml", "a.b")
@@ -927,6 +936,7 @@ def census(manifests):
             g["confirmed"] += status == "confirmed"
             bg = g["by_gate"].setdefault(gate, {"n": 0, "shapes": set()})      # the floor reads the group's OWN gate
             bg["n"] += 1
+            bg["example"] = bg.get("example", 0) + (merged_attr(h, "reason") == "example-config")   # rows carrying the reason, not only rows of the group at the gate
             bg["shapes"].add(merged_attr(h, "item") or merged_attr(h, "shape_syntax"))
     fig["positives"] = len([r for r in held if r not in NEGATIVES])
     fig["df"] = sorted(merged_attr(held[r], "dist") or merged_attr(held[r], "distance") for r in held if r.split("-")[0] == "DF")
@@ -955,8 +965,9 @@ AC6_GROUP_GATE = {"AC6-URL": "P1", "AC6-DYN": "P1", "AC6-EX": "P1", "AC6-PM": "P
 #: instances / shapes the floor asks of a group at its gate: 3, except `AC6-EX` at P1, which holds 2 (EX-1, EX-4) since AC6-EX-2 moved to P2
 #: (Q-CENSUS A, `docs/plans/connected-code-graph-p1-linking.md` P1-53; the shortfall is the stakeholder's).
 AC6_GROUP_FLOOR = {"AC6-EX": 2}
-#: the one kind x status cell with no row at P1 (fixtures plan §7): a `launch` row is a Binder outcome, not a stored `Link`, so `launch` x `possible`
-#: (AC6-EX-1 before it became an `mcp_tool` Link, P1-56) returns with P2's launch-target export.
+#: the one kind x status cell with no row (fixtures plan §7): a `launch` row is a Binder outcome, not a stored `Link`, so `launch` x `possible`
+#: (AC6-EX-1 before it became an `mcp_tool` Link, P1-56) has none. The scan is over rows at EVERY gate, so a `launch`/`possible` row at any gate turns the
+#: census red: P2's launch-target export removes this constant in the same edit that adds the row.
 P1_CELLS_WITHOUT_A_ROW = {("launch", "possible")}
 
 
@@ -996,9 +1007,11 @@ def census_violations(manifests):
             bad.append(f"{grp}: floor {floor} instances / {floor} shapes at {gate} not met: {(bg['n'], len(bg['shapes']))}")
         elif g["confirmed"]:
             bad.append(f"{grp}: an AC-6 row is confirmed")
+        if grp == "AC6-EX" and bg.get("example", 0) < floor:        # the floor counts instances that EMIT the reason (P1-56): EX-1 and EX-4
+            bad.append(f"{grp}: {bg.get('example', 0)} rows at {gate} carry reason example-config, floor {floor}")
     cells = {(k, s) for k in TEN_KINDS for s in ("confirmed", "possible")} - P1_CELLS_WITHOUT_A_ROW
     if fig["cells"] != cells:
-        bad.append(f"kind x status cells missing: {sorted(cells - fig['cells'])}")
+        bad.append(f"kind x status cells missing: {sorted(cells - fig['cells'])}, unexpected: {sorted(fig['cells'] - cells)}")
     if len(fig["df"]) < 3 or 1 not in fig["df"] or 2 not in fig["df"]:
         bad.append(f"AC-25 data-flow distances {fig['df']}")
     return bad
@@ -1025,6 +1038,21 @@ def test_tp004_ac6_floor_is_read_per_gate_not_per_prefix(manifests):
     row_by_id(bad["fx-svc"], "AC6-EX-2")["gate"] = "P1"
     row_by_id(bad["fx-web"], "AC6-EX-2")["gate"] = "P1"
     assert not any(x.startswith("AC6-EX") for x in census_violations(bad) if "floor" in x)
+
+
+def test_tp004_the_example_config_floor_counts_the_reason_and_the_launch_possible_cell_is_planted(manifests):
+    """M3/M4 of `docs/reviews/connected-code-graph-p1-56-impl.md`: EX-1's or EX-4's reason changed turns the floor red (it counts rows carrying
+    `example-config`, not only P1 rows of the group); a `launch`/`possible` row at any gate (here P2) turns the cell scan red."""
+    for rid, repo in (("AC6-EX-1", "fx-svc"), ("AC6-EX-4", "fx-svc")):
+        bad = copy.deepcopy(manifests)
+        row_by_id(bad[repo], rid)["reason"] = "partial-key"
+        assert any(x.startswith("AC6-EX: 1 rows at P1 carry reason example-config") for x in census_violations(bad)), rid
+    bad = copy.deepcopy(manifests)
+    row = copy.deepcopy(row_by_id(bad["fx-svc"], "AC6-EX-1"))
+    row.update(id="LNK-99", kind="launch", gate="P2")
+    bad["fx-svc"]["rows"].append(row)
+    v = census_violations(bad)
+    assert any("unexpected: [('launch', 'possible')]" in x for x in v), v
 
 
 def test_tp004_planted_failing_inputs(manifests):
