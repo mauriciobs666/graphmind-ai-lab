@@ -25,7 +25,7 @@ from ccg.packrt import run_packs
 from ccg.refresh import DEFAULT_PACKS
 from ccg.rulepack import load_pack
 from ccg.staleness import local_head
-from test_fixture_binding_offline import CPG, M, SYSTEM_YAML, World, link_violations, locator_str
+from test_fixture_binding_offline import CPG, M, SYSTEM_YAML, World, link_violations, locator_str, p56_link_violations
 
 SYSTEM = "fixture-binding-live"
 
@@ -90,6 +90,13 @@ def test_the_fixture_build_links_the_binding_rows_as_the_manifests_say(fixture_b
     """LNK-45 (`possible`/`prompt-mention` with its two-entry chain), LNK-16 (`port-shared`), LNK-19 (unbound, both `reindex` providers), and
     LNK-12, 02, 06 (`binding-confirmed`, each to exactly its `svc` provider)."""
     assert link_violations(fixture_build, manifests) == []
+
+
+@pytest.mark.live
+def test_the_fixture_build_links_ac6_ex_1_and_pm_3_as_the_manifests_say(fixture_build, manifests):
+    """P1-56: AC6-PM-3 (`orders.md`, `possible`/`prompt-mention`) and AC6-EX-1 (`remote.md`, `possible`/`example-config`, `BOUND_BY` ord 0 the example
+    `url` entry), each on its own consumer symbol to exactly `svc:mcp/server.py::list_orders`. Red until P1-56b adds the fixture files."""
+    assert p56_link_violations(fixture_build, manifests) == []
 
 
 @pytest.mark.live

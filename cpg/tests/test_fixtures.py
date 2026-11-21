@@ -149,8 +149,8 @@ PINNED_SHAS = {
         "branches": {},
     },
     'fx-svc': {
-        "commits": {'H0': '1053d8d330a51f3b6d083be87bacf5e42be1a9dd', 'H1': 'c35ce89de94ff8c690219b1860f75ae0413379e9', 'H2': 'e46349215ff15b22cf881b0ecf045962cb68a8df', 'H3': '8579bfd8a74ad7d665977883dfec47414547799c', 'H4': '6c012f5584b7abd0099c8804495613b7e253013c'},
-        "branches": {'ov-svc': '1ddc67348f3b85b1e341d900d6962477ceada47e', 'tf-mid': 'cda257b31129f735374dee4d26a07eaf45f81742', 'tf-sink': '7c15a3d8adc01d101e38baf7caa81f1e19a17bfa', 'tf-src': '1b9ef0420b17398d74f326ecbca2bdf32bcff76c'},
+        "commits": {'H0': 'ceb46f81db7462d4363a9ce791ffbce4e9305a0a', 'H1': 'f0d226fb3ac898ddf68ca223f7d509cbdb656751', 'H2': '95b3c30f2b2e6cf69a6e7041dac9361a5f0e6ba2', 'H3': '0421b0e66b1742f6f41917f9783b1c3193499c89', 'H4': '30f8bcb7b44ec5a202ab034682c3c8a7cf54fd85'},
+        "branches": {'ov-svc': 'e671d5a6526a944613993be6efaf6b0bb35fc836', 'tf-mid': '93d65fca7e6552d9d05423fe5a1ed0f9d17767bd', 'tf-sink': '1679ec5a8ff7310e6e66e880fb93f2abc6f1d154', 'tf-src': '51e23071fbe152d82c29d48be72aaeeaee355215'},
     },
     'fx-web': {
         "commits": {'H0': '83926b1ce6a603de66e276a666bccdf5714d53ad', 'H1': '26ecd3c6e93ab35ad0744f905a89115688850b3e'},
@@ -597,6 +597,11 @@ def resolve_ts(text, qname):
                       rf"(?:function\*?\s+{head}\b|(?:const|let|var)\s+{head}\b|class\s+{head}\b|interface\s+{head}\b|"
                       rf"type\s+{head}\b|enum\s+{head}\b)")
     start = next((i + 1 for i, ln in enumerate(lines) if decl.match(ln)), None)
+    if start is None and len(parts) == 1:
+        # the extractor names a nested object-literal method by its last segment (P1-55 D6: LNK-10's `query` inside `api = { search: { query: () => ... } }`)
+        member = re.compile(rf"^\s*(?:async\s+)?{head}\s*(?::\s*(?:async\s*)?(?:\(|function\b|[A-Za-z_$][\w$]*\s*=>)|\()")
+        hit = next((i + 1 for i, ln in enumerate(lines) if member.match(ln)), None)
+        return (hit, _brace_end(lines, hit)) if hit else None
     if start is None:
         return None
     end = _brace_end(lines, start)
@@ -877,6 +882,9 @@ def test_tp002_resolvers_distinguish_overloads_and_nested_members():
     assert resolve_java(java, "A.f(String)") is None
     assert resolve_java(java, "A.K") is not None and resolve_java(java, "A.Z") is None
     py = "class C:\n    def m(self):\n        pass\n\nX = 1\n"
+    ts = "export const api = {\n  search: {\n    query: () => request(1),\n  },\n};\n"     # a nested object method resolves by its last segment (LNK-10)
+    assert resolve_ts(ts, "query") and resolve_ts(ts, "api.search.query")
+    assert resolve_ts(ts, "queryy") is None and resolve_ts("const x = { quer: 1 };\n", "query") is None and resolve_ts("// query: () => 1\n", "query") is None
     assert resolve_python(py, "C.m") == (2, 3) and resolve_python(py, "X") == (5, 5) and resolve_python(py, "C.n") is None
     assert resolve_keypath("a:\n  b.c:\n    d: 1\n", "x.yaml", "a.b.c.d") and not resolve_keypath("a: 1\n", "x.yaml", "a.b")
 
@@ -947,6 +955,9 @@ AC6_GROUP_GATE = {"AC6-URL": "P1", "AC6-DYN": "P1", "AC6-EX": "P1", "AC6-PM": "P
 #: instances / shapes the floor asks of a group at its gate: 3, except `AC6-EX` at P1, which holds 2 (EX-1, EX-4) since AC6-EX-2 moved to P2
 #: (Q-CENSUS A, `docs/plans/connected-code-graph-p1-linking.md` P1-53; the shortfall is the stakeholder's).
 AC6_GROUP_FLOOR = {"AC6-EX": 2}
+#: the one kind x status cell with no row at P1 (fixtures plan §7): a `launch` row is a Binder outcome, not a stored `Link`, so `launch` x `possible`
+#: (AC6-EX-1 before it became an `mcp_tool` Link, P1-56) returns with P2's launch-target export.
+P1_CELLS_WITHOUT_A_ROW = {("launch", "possible")}
 
 
 def census_violations(manifests):
@@ -985,7 +996,7 @@ def census_violations(manifests):
             bad.append(f"{grp}: floor {floor} instances / {floor} shapes at {gate} not met: {(bg['n'], len(bg['shapes']))}")
         elif g["confirmed"]:
             bad.append(f"{grp}: an AC-6 row is confirmed")
-    cells = {(k, s) for k in TEN_KINDS for s in ("confirmed", "possible")}
+    cells = {(k, s) for k in TEN_KINDS for s in ("confirmed", "possible")} - P1_CELLS_WITHOUT_A_ROW
     if fig["cells"] != cells:
         bad.append(f"kind x status cells missing: {sorted(cells - fig['cells'])}")
     if len(fig["df"]) < 3 or 1 not in fig["df"] or 2 not in fig["df"]:
@@ -2325,8 +2336,8 @@ def p1_form_plan_rows():
     out = {}
     for ln in text.splitlines():
         cells = [c.strip() for c in ln.strip().strip("|").split("|")]
-        if ln.startswith("|") and re.match(r"^(DF|CD|RV|LNK|TW|AC6-EX)-\d", cells[0]):
-            for rid in re.findall(r"(?:DF|CD|RV|LNK|TW|AC6-EX)-\d+", cells[0]):
+        if ln.startswith("|") and re.match(r"^(DF|CD|RV|LNK|TW|AC6-EX|AC6-URL)-\d", cells[0]):
+            for rid in re.findall(r"(?:DF|CD|RV|LNK|TW|AC6-EX|AC6-URL)-\d+", cells[0]):
                 out[rid] = cells[1]
     return out
 
@@ -2506,6 +2517,9 @@ def pm_md_violations(manifests, tree=None, globs_manifest=None, tools=None):
             if globs.classify(path) != "prompt-md":
                 bad.append(f"{r['id']}: {path} classifies {globs.classify(path)}, not prompt-md")
                 continue
+            if not (tree / repo / path).is_file():
+                bad.append(f"{r['id']}: {path} is not in the fixture tree")
+                continue
             data = (tree / repo / path).read_bytes()
             want_line = [i for i, ln in enumerate(data.decode().splitlines(), 1) if tool in ln]
             ex = extract_markdown(path, data, repo_id=repo, unit_id="svc", globs=globs,
@@ -2519,7 +2533,7 @@ def pm_md_violations(manifests, tree=None, globs_manifest=None, tools=None):
 
 def test_ac6_pm_markdown_rows_classify_prompt_md_and_yield_their_mention(manifests):
     assert pm_md_violations(manifests) == []
-    assert sum(1 for r in manifests["fx-svc"]["rows"] if r["id"].startswith("AC6-PM-") and r["consumer"][0]["path"].endswith(".md")) == 2
+    assert sum(1 for r in manifests["fx-svc"]["rows"] if r["id"].startswith("AC6-PM-") and r["consumer"][0]["path"].endswith(".md")) == 3
 
 
 def test_ac6_pm_planted_failures_turn_it_red(manifests, tmp_path):
@@ -2536,10 +2550,10 @@ def test_ac6_pm_planted_failures_turn_it_red(manifests, tmp_path):
     row_by_id(bad["fx-svc"], "AC6-PM-1")["consumer"][0]["path"] = ".claude/agents/tools.md"
     assert any(x.startswith("AC6-PM-1") for x in pm_md_violations(bad))
     # an emptied known_tools set: no call site at all
-    assert len(pm_md_violations(manifests, tools=())) == 2
+    assert len(pm_md_violations(manifests, tools=())) == 3
     # a manifest whose globs lack `.claude/agents/**/*.md`: the files classify `doc`
     m = yaml.safe_load((M.SYSTEM / "system.yaml").read_text())
     m["promptBearingMarkdown"]["include"] = ["claude/**/*.md"]
     alt = tmp_path / "system.yaml"
     alt.write_text(yaml.safe_dump(m))
-    assert len(pm_md_violations(manifests, globs_manifest=alt)) == 2
+    assert len(pm_md_violations(manifests, globs_manifest=alt)) == 3

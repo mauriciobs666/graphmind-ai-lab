@@ -89,6 +89,10 @@ MUTANTS = {
     "delete fx-job/deploy/compose.dev.yaml": ({"fx-job/deploy/compose.dev.yaml": None}, "LNK-16: no link from the loopback :8000 consumer", None),
 }
 
+#: the files P1-56b adds to `fx-svc` (the example `url` entry's file and the two prompt files): read at the head when tracked, for `p56_file_violations`.
+P56_FILES = (".mcp.json", ".mcp.example.json", ".claude/agents/orders.md", ".claude/agents/remote.md")
+LOOPBACK = {"localhost", "127.0.0.1", "::1", "[::1]"}
+
 REPO_ROWS = ("LNK-45", "LNK-16", "LNK-19", "LNK-12", "LNK-02", "LNK-06", "AC6-EX-4")
 
 
@@ -212,7 +216,8 @@ def build_world(root: Path, work: Path, manifests) -> World:
     texts = {}
     for repo in ("fx-svc", "fx-job"):
         for rel in tracked[repo]:
-            if rel.endswith("Dockerfile") or rel.endswith(".sh") or rel in ("clients/peer.py", "deploy/compose.yaml", "deploy/compose.example.yaml"):
+            if rel.endswith("Dockerfile") or rel.endswith(".sh") or rel in ("clients/peer.py", "deploy/compose.yaml", "deploy/compose.example.yaml") \
+                    or rel in P56_FILES:
                 texts[(repo, rel)] = _git(repos[repo], "show", f"{heads[repo]}:{rel}")
 
     # code units: header + the file records of their tracked files; the symbols the rows name are added below
@@ -519,6 +524,96 @@ def link_violations(w: World, manifests) -> list[str]:
     return bad
 
 
+def p56_entry_violations(w: World, manifests) -> list[str]:
+    """P1-56 (offline, no Joern): the example `url` entry of AC6-EX-1, and (`p56_prompt_violations`) the two prompt files the rows name. Every expectation comes from the manifest rows (the aux
+    locator's server name and keyPath, the providers' last qname segment), never from a fixture constant: (1) the example `url` entry exists as a
+    real `configEntry` of the example file (`example: true`, the keyPath of the aux locator) and its URL, parsed from the file text, names loopback
+    port 8200; (2) `remote.md` mentions the tool only as `mcp__<server>__<tool>` (its one tool mention, so the Link's reason is not set by a neighbouring
+    mention); (3) `orders.md` carries the one plain list item naming the tool."""
+    import json
+    from urllib.parse import urlparse
+    bad: list[str] = []
+    aux = next(a for a in row_locators(manifests, "AC6-EX-1", "aux") if a.get("keyPath"))
+    tool = row_locators(manifests, "AC6-EX-1", "provider")[0]["qname"].split("::")[-1]
+    server = aux["keyPath"].split(".")[1]
+    # (1) the example url entry
+    recs = [r for r, rp in w.records.values() if r.get("type") == "configEntry" and rp == aux["repo"] and r.get("path") == aux["path"] and r.get("keyPath") == aux["keyPath"]]
+    if len(recs) != 1:
+        bad.append(f"AC6-EX-1: {len(recs)} configEntry records at {aux['repo']}:{aux['path']} @{aux['keyPath']}, expected 1 (the example url entry)")
+    elif recs[0].get("example") is not True:
+        bad.append(f"AC6-EX-1: the configEntry at {aux['path']} @{aux['keyPath']} has example={recs[0].get('example')!r}, expected True (File.role = example)")
+    text = w.texts.get((aux["repo"], aux["path"]))
+    if text is not None:
+        entry = json.loads(text).get("mcpServers", {}).get(server, {})
+        url = urlparse(entry.get("url", ""))
+        if url.hostname is None or (url.hostname not in LOOPBACK) or url.port != 8200:
+            bad.append(f"AC6-EX-1: {aux['path']} mcpServers.{server}.url is {entry.get('url')!r}, expected a loopback URL on port 8200")
+        if (aux["repo"], ".mcp.json") in w.texts and server in json.loads(w.texts[(aux["repo"], ".mcp.json")]).get("mcpServers", {}):
+            bad.append(f"AC6-EX-1: server {server} is also in the primary .mcp.json (it must be bound only by the example config)")
+    return bad
+
+
+def p56_prompt_violations(w: World, manifests) -> list[str]:
+    bad: list[str] = []
+    tool = row_locators(manifests, "AC6-EX-1", "provider")[0]["qname"].split("::")[-1]
+    server = next(a for a in row_locators(manifests, "AC6-EX-1", "aux") if a.get("keyPath"))["keyPath"].split(".")[1]
+    # (2) remote.md: the example mention is the file's only tool mention
+    remote = w.texts.get(("fx-svc", ".claude/agents/remote.md"))
+    if remote is None:
+        bad.append("AC6-EX-1: fx-svc/.claude/agents/remote.md is not tracked")
+    else:
+        mentions = re.findall(r"mcp__[\w-]+?__\w+", remote)
+        if mentions != [f"mcp__{server}__{tool}"]:
+            bad.append(f"AC6-EX-1: remote.md mentions {mentions}, expected exactly [mcp__{server}__{tool}]")
+        plain = len(re.findall(rf"\b{re.escape(tool)}\b", re.sub(r"mcp__[\w-]+?__\w+", "", remote)))   # `\b` does not split `__list_orders`
+        if plain != 0:
+            bad.append(f"AC6-EX-1: remote.md has {plain} plain mentions of {tool} besides the example mention, expected 0 (a neighbouring mention would set the Link's reason)")
+    # (3) orders.md: one Markdown list item naming the tool
+    orders = w.texts.get(("fx-svc", ".claude/agents/orders.md"))
+    if orders is None:
+        bad.append("AC6-PM-3: fx-svc/.claude/agents/orders.md is not tracked")
+    else:
+        items = [ln for ln in orders.splitlines() if re.match(r"^\s*[-*+]\s", ln) and re.search(rf"\b{re.escape(tool)}\b", ln)]
+        named = len(re.findall(rf"\b{re.escape(tool)}\b", orders))
+        if len(items) != 1 or named != 1:
+            bad.append(f"AC6-PM-3: orders.md has {len(items)} list items naming {tool} and {named} mentions, expected one of each")
+    return bad
+
+
+def p56_link_violations(w: World, manifests) -> list[str]:
+    """P1-56 (Link tier, over a fixture build): AC6-PM-3 and AC6-EX-1, each Link on its own consumer symbol, to exactly the manifest's provider, with
+    the manifest's status and reason (never `confirmed`); EX-1's `BOUND_BY` ord 0 is the example `url` entry (the manifest aux locator)."""
+    bad: list[str] = []
+    for rid in ("AC6-PM-3", "AC6-EX-1"):
+        form = merged_row(manifests, rid)
+        c = loc_of_row(manifests, rid, "consumer")[0]
+        want_p = loc_of_row(manifests, rid, "provider") or [locator_str(t["repo"], t["path"], t["qname"]) for t in row_locators_true(manifests, rid)]
+        ls = links_from(w, c)
+        if provider_locs(w, ls) != sorted(want_p):
+            bad.append(f"{rid}: links from {c} go to {provider_locs(w, ls)}, expected exactly {sorted(want_p)}")
+        for l in ls:
+            if (l.status, l.reason) != (form["status"], form["reason"]):
+                bad.append(f"{rid}: link to {w.loc_of.get(l.provider)} is {l.status}/{l.reason}, manifest row says {form['status']}/{form['reason']}")
+        if rid == "AC6-EX-1":
+            aux = next(a for a in row_locators(manifests, rid, "aux") if a.get("keyPath"))
+            for l in ls:
+                got = chain_of(w, l)
+                if not got or got[0][0] != 0:
+                    bad.append(f"{rid}: link to {w.loc_of.get(l.provider)} has no BOUND_BY ord 0 (the example url entry {aux['path']} @{aux['keyPath']})")
+                elif not entry_matches(got[0][1], aux["repo"], aux["path"], aux["keyPath"], got[0][2]):
+                    o, r, rp = got[0]
+                    bad.append(f"{rid}: BOUND_BY ord 0 is {rp}:{r.get('path')} {r.get('service') or r.get('keyPath')}, expected {aux['repo']}:{aux['path']} @{aux['keyPath']}")
+    return bad
+
+
+def row_locators_true(manifests, rid: str) -> list[dict]:
+    """The `trueTarget` locators of a row (PM rows carry no `provider`)."""
+    out = []
+    for r in M.holders(manifests)[rid].values():
+        out += [{"repo": t["repoId"], "path": t["path"], "qname": t["qname"].split("::", 1)[-1]} for t in r.get("trueTarget", [])]
+    return out
+
+
 def violations(w: World, manifests) -> list[str]:
     return launch_violations(w) + chain_violations(w) + link_violations(w, manifests)
 
@@ -573,3 +668,116 @@ def test_edited_root_sub_is_idempotent_only_for_conforming_edits(tmp_path):
     with pytest.raises(AssertionError, match="not found"):
         edited_root(base, tmp_path / "strict", edits)
     assert (edited_root(base, tmp_path / "lenient", edits, idempotent=True) / "r" / "f.txt").read_text() == "already-new\n"
+
+
+# ---- P1-56a: AC6-EX-1 and AC6-PM-3 -------------------------------------------------------------------------------------------------------
+#: the fixture edits P1-56b makes (plan P1-56 "Final shapes"), as text; the control below proves the pins accept exactly this tree.
+REMOTE_MD = "# Remote orders\n\nTo list orders over the remote server, call the `mcp__fx-svc-remote__list_orders` tool.\n"
+ORDERS_MD = "# Orders\n\n- Use list_orders to see what a customer has bought.\n"
+
+
+def p56_edits(base: Path) -> dict:
+    import json
+    doc = json.loads((base / "fx-svc" / ".mcp.example.json").read_text())
+    doc["mcpServers"]["fx-svc-remote"] = {"url": "http://localhost:8200/mcp"}
+    return {"fx-svc/.mcp.example.json": json.dumps(doc, indent=2) + "\n", "fx-svc/.claude/agents/remote.md": REMOTE_MD,
+            "fx-svc/.claude/agents/orders.md": ORDERS_MD}
+
+
+def test_the_fixtures_carry_the_example_url_entry_ac6_ex_1_binds_through(base_root, manifests, tmp_path):
+    """Red until P1-56b adds the `fx-svc-remote` `url` entry (loopback 8200, `example: true`) to `fx-svc/.mcp.example.json`."""
+    assert p56_entry_violations(build_world(base_root, tmp_path, manifests), manifests) == []
+
+
+def test_the_fixtures_carry_the_prompt_files_of_ac6_ex_1_and_pm_3(base_root, manifests, tmp_path):
+    """Red until P1-56b adds `fx-svc/.claude/agents/remote.md` (the one example mention) and `orders.md` (the one plain list item)."""
+    assert p56_prompt_violations(build_world(base_root, tmp_path, manifests), manifests) == []
+
+
+@pytest.fixture(scope="module")
+def p56_root(base_root, tmp_path_factory):
+    """The control: the fixtures plus the three 56b files, whatever the committed fixtures hold (the edits overwrite them)."""
+    return edited_root(base_root, tmp_path_factory.mktemp("fx-p56") / "root", p56_edits(base_root))
+
+
+def test_the_p56_pins_accept_the_tree_the_plan_prescribes(p56_root, manifests, tmp_path):
+    w = build_world(p56_root, tmp_path, manifests)
+    assert p56_entry_violations(w, manifests) + p56_prompt_violations(w, manifests) == []
+
+
+def _p56_mutants():
+    import json
+    def example(fn):
+        def edit(base):
+            doc = json.loads((base / "fx-svc" / ".mcp.example.json").read_text())
+            fn(doc["mcpServers"])
+            return {"fx-svc/.mcp.example.json": json.dumps(doc) + "\n"}
+        return edit
+    return {
+        "no url entry": (example(lambda m: m.pop("fx-svc-remote")), "0 configEntry records", p56_entry_violations),
+        "url on port 8201": (example(lambda m: m["fx-svc-remote"].update(url="http://localhost:8201/mcp")), "expected a loopback URL on port 8200", p56_entry_violations),
+        "url not loopback": (example(lambda m: m["fx-svc-remote"].update(url="http://example.org:8200/mcp")), "expected a loopback URL on port 8200", p56_entry_violations),
+        "server also in the primary .mcp.json": (lambda base: {"fx-svc/.mcp.json": json.dumps({"mcpServers": {"fx-svc-remote": {"url": "http://localhost:8200/mcp"}}}) + "\n"},
+                                                 "also in the primary .mcp.json", p56_entry_violations),
+        "remote.md with a neighbouring plain mention": (lambda base: {"fx-svc/.claude/agents/remote.md": REMOTE_MD + "- Use list_orders too.\n"},
+                                                         "has 1 plain mentions of list_orders", p56_prompt_violations),
+        "remote.md naming another server": (lambda base: {"fx-svc/.claude/agents/remote.md": REMOTE_MD.replace("fx-svc-remote", "fx-svc-exec")},
+                                             "remote.md mentions", p56_prompt_violations),
+        "orders.md as prose, not a list item": (lambda base: {"fx-svc/.claude/agents/orders.md": "# Orders\n\nUse list_orders to see what a customer has bought.\n"},
+                                                 "0 list items naming list_orders", p56_prompt_violations),
+        "orders.md deleted": (lambda base: {"fx-svc/.claude/agents/orders.md": None}, "orders.md is not tracked", p56_prompt_violations),
+    }
+
+
+@pytest.mark.parametrize("name", sorted(_p56_mutants()))
+def test_each_mutant_of_the_p56_tree_turns_its_pin_red_with_its_own_message(name, p56_root, manifests, tmp_path):
+    edit, message, check = _p56_mutants()[name]
+    root = edited_root(p56_root, tmp_path / "root", edit(p56_root))
+    got = check(build_world(root, tmp_path / "w", manifests), manifests)
+    assert any(message in v for v in got), (name, got)
+
+
+# the Link tier over a synthetic build: the live tier runs `p56_link_violations` over the real one; these are its positive control and mutants
+def _fake_world(manifests, *, status="possible", reason="example-config", providers=None, chain="example", consumer_loc=None):
+    from types import SimpleNamespace as NS
+    aux = next(a for a in row_locators(manifests, "AC6-EX-1", "aux") if a.get("keyPath"))
+    prov_loc = loc_of_row(manifests, "AC6-EX-1", "provider")[0]
+    cons_loc = loc_of_row(manifests, "AC6-EX-1", "consumer")[0]
+    records = {"e-ex": ({"type": "configEntry", "path": aux["path"], "keyPath": aux["keyPath"], "example": True}, aux["repo"]),
+               "e-mcp": ({"type": "configEntry", "path": ".mcp.json", "keyPath": "mcpServers.fx-svc.command"}, aux["repo"])}
+    loc_of = {"S-prov": prov_loc, "S-cons": consumer_loc or cons_loc, "S-other": "svc:mcp/server.py::get_item"}
+    ev = {"example": [{"edge": "BOUND_BY", "ord": 0, "entryId": "e-ex"}], "wrong": [{"edge": "BOUND_BY", "ord": 0, "entryId": "e-mcp"}],
+          "none": [], "late": [{"edge": "BOUND_BY", "ord": 1, "entryId": "e-ex"}]}[chain]
+    links = [NS(consumer="S-cons", provider=p, status=status, reason=reason, evidence=ev, to_unit=None) for p in (["S-prov"] if providers is None else providers)]
+    # AC6-PM-3's link rides the same fake: consumer and provider from its manifest row
+    pm_c, pm_p = loc_of_row(manifests, "AC6-PM-3", "consumer")[0], loc_of_row(manifests, "AC6-PM-3", "provider") or [locator_str(**{"repo": t["repo"], "path": t["path"], "qname": t["qname"]}) for t in row_locators_true(manifests, "AC6-PM-3")]
+    loc_of["S-pm-c"], loc_of["S-pm-p"] = pm_c, pm_p[0]
+    links.append(NS(consumer="S-pm-c", provider="S-pm-p", status="possible", reason="prompt-mention", evidence=[], to_unit=None))
+    return World(Path("."), [], links, None, None, records, {}, loc_of, {}, {}, {}, {})
+
+
+def test_the_p56_link_pin_accepts_a_conforming_synthetic_build(manifests):
+    assert p56_link_violations(_fake_world(manifests), manifests) == []
+
+
+@pytest.mark.parametrize("kw, message", [
+    ({"status": "confirmed", "reason": "binding-confirmed"}, "AC6-EX-1: link to svc:mcp/server.py::list_orders is confirmed/binding-confirmed"),
+    ({"reason": "prompt-mention"}, "is possible/prompt-mention, manifest row says possible/example-config"),
+    ({"providers": ["S-prov", "S-other"]}, "AC6-EX-1: links from svc:.claude/agents/remote.md::<document> go to"),
+    ({"providers": []}, "AC6-EX-1: links from svc:.claude/agents/remote.md::<document> go to []"),
+    ({"chain": "none"}, "has no BOUND_BY ord 0"),
+    ({"chain": "late"}, "has no BOUND_BY ord 0"),
+    ({"chain": "wrong"}, "BOUND_BY ord 0 is fx-svc:.mcp.json"),
+    ({"consumer_loc": "svc:.claude/agents/agent.md::<document>"}, "AC6-EX-1: links from svc:.claude/agents/remote.md::<document> go to []"),
+])
+def test_each_mutant_of_the_synthetic_build_turns_the_p56_link_pin_red(kw, message, manifests):
+    assert any(message in v for v in p56_link_violations(_fake_world(manifests, **kw), manifests)), p56_link_violations(_fake_world(manifests, **kw), manifests)
+
+
+def test_a_pm_3_link_mutant_turns_the_p56_link_pin_red(manifests):
+    w = _fake_world(manifests)
+    w.links[-1].status, w.links[-1].reason = "confirmed", "key-match"
+    assert any(v.startswith("AC6-PM-3: link to svc:mcp/server.py::list_orders is confirmed/key-match") for v in p56_link_violations(w, manifests))
+    w = _fake_world(manifests)
+    w.links.pop()
+    assert any(v.startswith("AC6-PM-3: links from svc:.claude/agents/orders.md::<document> go to []") for v in p56_link_violations(w, manifests))

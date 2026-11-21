@@ -253,7 +253,7 @@ rows:
   provider:
   - fx-svc:api/search.py::build_router.search
   consumer:
-  - fx-web:app/src/api/index.ts::api.search.query
+  - fx-web:app/src/api/index.ts::query
   refs:
   - fx-web:app/src/api/client.ts::request
 - id: LNK-11

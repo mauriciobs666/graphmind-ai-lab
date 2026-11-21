@@ -3,6 +3,9 @@
     "fx-svc": {
       "command": "scripts/run-mcp.sh",
       "args": ["--port", "8200"]
+    },
+    "fx-svc-remote": {
+      "url": "http://localhost:8200/mcp"
     }
   }
 }

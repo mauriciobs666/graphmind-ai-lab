@@ -386,7 +386,7 @@ rows:
   consumer:
   - repoId: fx-web
     path: app/src/api/index.ts
-    qname: app/src/api/index.ts::api.search.query
+    qname: app/src/api/index.ts::query
   aux:
   - repoId: fx-web
     path: app/src/api/client.ts
@@ -1138,23 +1138,33 @@ rows:
   stratum: fixture-dev
   whyUnprovable: the suffix is a parameter
 - id: AC6-EX-1
-  kind: launch
-  item: .mcp.example.json server entry for fx-svc (File.role = example)
+  kind: mcp_tool
+  item: 'prompt mention mcp__fx-svc-remote__list_orders in .claude/agents/remote.md (the only tool mention of the file); the server fx-svc-remote has no entry in .mcp.json, only the example url entry http://localhost:8200/mcp in .mcp.example.json (File.role = example), loopback 8200 being unit svc'
+  provider:
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::list_orders
   consumer:
   - repoId: fx-svc
+    path: .claude/agents/remote.md
+    qname: .claude/agents/remote.md::<document>
+  aux:
+  - repoId: fx-svc
     path: .mcp.example.json
-    keyPath: mcpServers.fx-svc
+    keyPath: mcpServers.fx-svc-remote.url
+  keyNorm: list_orders
   status: possible
   reason: example-config
   gate: P1
+  shape: example config
   serves:
   - AC-6
   stratum: fixture-dev
-  whyUnprovable: 'the file is an example, not the deployed config. True: unit svc'
+  whyUnprovable: 'the only binding of the server is an example config; BOUND_BY ord 0 is its url entry. True: svc:mcp/server.py::list_orders'
   trueTarget:
   - repoId: fx-svc
-    rootPath: .
-    lang: python
+    path: mcp/server.py
+    qname: mcp/server.py::list_orders
 - id: AC6-EX-2
   kind: http
   item: VITE_REPORTS_BASE set only in deploy/compose.example.yaml; consumer of GET /api/reports/{}
@@ -1267,11 +1277,11 @@ rows:
     qname: mcp/server.py::reindex
 - id: AC6-PM-3
   kind: mcp_tool
-  item: Python triple-quoted SYSTEM_PROMPT naming list_orders
+  item: 'Markdown list item: "- Use list_orders to see what a customer has bought." in .claude/agents/orders.md'
   consumer:
   - repoId: fx-svc
-    path: prompts/system.py
-    qname: prompts/system.py::<module>
+    path: .claude/agents/orders.md
+    qname: .claude/agents/orders.md::<document>
   status: possible
   reason: prompt-mention
   gate: P1

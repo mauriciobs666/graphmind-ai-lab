@@ -491,7 +491,7 @@ def test_the_proving_systems_prompt_globs_equal_the_eval_manifests_block():
 def test_the_fixture_systems_block_classifies_its_prompt_files_prompt_md_and_its_docs_doc():
     g = mf.load_manifest(FIXTURE_YAML).prompt_markdown
     assert g is not None
-    for p in (".claude/agents/agent.md", ".claude/agents/tools.md", ".claude/agents/exec.md"):
+    for p in (".claude/agents/agent.md", ".claude/agents/tools.md", ".claude/agents/exec.md", ".claude/agents/orders.md", ".claude/agents/remote.md"):
         assert g.classify(p) == "prompt-md"
     assert g.classify("docs/README.md") == "doc" and g.classify("README.md") == "doc"
 
@@ -514,9 +514,9 @@ def test_the_manifest_and_load_globs_agree_on_the_fixture_prompt_files():
     assert (a.include, a.exclude) == (b.include, b.exclude)
     tree = FIXTURE_YAML.parent / "fx-svc"
     mds = sorted(str(p.relative_to(tree)) for p in tree.rglob("*.md"))
-    assert len(mds) == 4 and [x for x in mds if b.classify(x) == "prompt-md"] == [x for x in mds if a.classify(x) == "prompt-md"]
+    assert len(mds) == 6 and [x for x in mds if b.classify(x) == "prompt-md"] == [x for x in mds if a.classify(x) == "prompt-md"]
     assert [x for x in mds if a.classify(x) == "prompt-md"] == [
-        ".claude/agents/agent.md", ".claude/agents/exec.md", ".claude/agents/tools.md"]
+        ".claude/agents/agent.md", ".claude/agents/exec.md", ".claude/agents/orders.md", ".claude/agents/remote.md", ".claude/agents/tools.md"]
 
 
 @pytest.mark.parametrize("secret", ["SECRET-GLOB-VALUE/../x", "S3CR3T\x00", "S3CR3T[a]", "/S3CR3T"])

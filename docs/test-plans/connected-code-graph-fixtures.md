@@ -1,6 +1,8 @@
 # Connected code graph — fixture system test plan (S35)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.10 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.11 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
+
+*2026-11-20 (v1.11, P1-56a; `docs/plans/connected-code-graph-p1-linking.md` P1-55, P1-56): AC6-EX-1 is an `mcp_tool` Link through the example `url` entry (`remote.md` mention, `possible`/`example-config`), AC6-PM-3 a Markdown list item in `orders.md`, AC6-URL-2 has a P1 form (`runtime-built`/`unknown-key`), LNK-10's consumer locator is `web:app/src/api/index.ts::query`, and the `launch`×`possible` cell has no row at P1 (§7).*
 
 *2026-11-20 (v1.10, P1-53a; D3 `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.md`): the rows conform to the P1 binding contract: LNK-45 is `possible`/`prompt-mention` with a `BOUND_BY` chain (`.mcp.json` entry, then `scripts/Dockerfile` command entry), LNK-21/45 run `run-mcp.sh` to `scripts/Dockerfile` (the Dockerfile hop, not `python -m`), LNK-21/22 are Binder outcomes rather than stored Links, LNK-02/06 are `binding-confirmed` (P1-52), LNK-16 names `fx-job/deploy/compose.dev.yaml`, LNK-19 is unbound to both `reindex` providers (Q-NC5 A), the P1 forms of the Python-client rows are manifest `p1Form`s, and LNK-18 and AC6-EX-2 move to P2 (Q-CENSUS A): 134 rows, P1 87 · P2 18, the AC-6 example-config floor at P1 is 2 (EX-1, EX-4).*
 
@@ -154,7 +156,7 @@ answer must contain.
 | LNK-08 | http | `GET /api/items/{}`, Python f-string `f"{BASE}/items/{ITEM_ID}"`; `BASE` (ends `/api`) and `ITEM_ID = 42` are module constants | P `svc:api/items.py::build_router.read_item` (factory-built router, route `/{item_id}`, mounted at `/api/items` by `API_PREFIX + "/items"`: mount composition) · C `job:job/run_report.py::fetch_item` | c | key-match | P1 | template literal | LNK |
 | LNK-38 | http | `GET /api/items/{}`, TS template `` `${API_PREFIX}/items/${RELATED_ID}` `` with `RELATED_ID = 7` constant | P `svc:api/items.py::build_router.read_item` · C `web:app/src/ui/Related.tsx::Related` | c | key-match | P1 | template literal | LNK |
 | LNK-09 | topic | `kafka:orders.shipped`, name `f"{PREFIX}.shipped"` with a constant prefix | P `svc:bus/producer.py::publish_shipped` · C `web:app/src/bus/consumer.ts::onOrderShipped` | c | key-match | P2 | template literal | LNK |
-| LNK-10 | http | `GET /api/search`, TS wrapper `request()` reached by a two-level field path `api.search.query` (AC-1 lifting chain) | P `svc:api/search.py::build_router.search` · C `web:app/src/api/index.ts::api.search.query` (wrapper `web:app/src/api/client.ts::request`) | c | key-match | P1 | client wrapper | LNK |
+| LNK-10 | http | `GET /api/search`, TS wrapper `request()` reached by a two-level field path `api.search.query` (AC-1 lifting chain) | P `svc:api/search.py::build_router.search` · C `web:app/src/api/index.ts::query` (the extractor names the nested object method by its last segment; wrapper `web:app/src/api/client.ts::request`) | c | key-match | P1 | client wrapper | LNK |
 | LNK-11 | http | `POST /api/v1/orders`, Python wrapper `ApiClient.post` | P `svc:api/orders.py::build_router.create_order` · C `job:job/run_report.py::requeue` (wrapper `job:job/api_client.py::ApiClient.post`) | c | key-match | P1 | client wrapper | LNK |
 | LNK-12 | mcp_tool | `reindex`, TS `callTool(name)` wrapper | P `svc:mcp/server.py::reindex` · C `web:app/src/ui/Admin.tsx::onReindex` (wrapper `web:app/src/mcp/client.ts::callTool`) | c | binding-confirmed | P1 | client wrapper | LNK |
 | LNK-13 | http | `GET /api/items/{}` (constant `DEFAULT_ITEM = 1`); base URL is `VITE_API_BASE`, set by Compose service `web` to service `api` (Env/Compose binding, **P2**: the consumer's variable name is in no bundle record at P1, Q-ENV) | P `svc:api/items.py::build_router.read_item` · C `web:app/src/api/items.ts::getDefaultItem` | c | key-match (P2: binding-confirmed) | P1 | config-bound base URL | LNK |
@@ -233,13 +235,13 @@ are given so the extractor's side is checkable too.
 | AC6-DYN-1 | library_api | Python `importlib.import_module(name)` | `name` comes from a config value absent from the repository. True: `svc:plugins/audit.py` | C `svc:plugins/loader.py::load_plugin` | p | dynamic-import | P1 | dynamic import | AC-6 |
 | AC6-DYN-2 | library_api | Python `__import__("plugins." + name)` | the suffix is a parameter | C `svc:plugins/loader.py::load_legacy` | p | dynamic-import | P1 | dynamic import | AC-6 |
 | AC6-DYN-3 | library_api | TS ``await import(`./plugins/${name}`)`` | `name` is a prop | C `web:app/src/plugins/load.ts::loadPlugin` | p | dynamic-import | P1 | dynamic import | AC-6 |
-| AC6-EX-1 | launch | `.mcp.example.json` server entry for `fx-svc` (`File.role = example`) | the file is an example, not the deployed config. True: unit `svc` | C `svc:.mcp.example.json @mcpServers.fx-svc` | p | example-config | P1 | | AC-6 |
+| AC6-EX-1 | mcp_tool | prompt mention `mcp__fx-svc-remote__list_orders` in `.claude/agents/remote.md` (the file's only tool mention); `fx-svc-remote` has no `.mcp.json` entry, only the `url` entry `http://localhost:8200/mcp` in `.mcp.example.json` (`File.role = example`; loopback 8200 is unit `svc`) | the only binding of the server is an example config. True: `svc:mcp/server.py::list_orders` | P `svc:mcp/server.py::list_orders` · C `svc:.claude/agents/remote.md::<document>` (`BOUND_BY` ord 0 `svc:.mcp.example.json @mcpServers.fx-svc-remote.url`) | p | example-config | P1 | example config | AC-6 |
 | AC6-EX-2 | http | `VITE_REPORTS_BASE` set **only** in `deploy/compose.example.yaml`; consumer of `GET /api/reports/{}` | the only binding is an example config. True: `svc:api/reports.py::build_router.report_view` | P `svc:api/reports.py::build_router.report_view` · C `web:app/src/ui/Reports.tsx::Reports` | p | example-config | **P2** | | AC-6 |
 | AC6-EX-3 | env_var | `FX_DB_URL` set **only** in `svc:.env.example`, read in `db/orders.py::connect` | the only writer is an example file. **Gate P3**: `env_var` is a P3 kind | C `svc:db/orders.py::connect` | p | example-config | P3 | | AC-6 |
 | AC6-EX-4 | http | `FX_PEER_BASE` set **only** in `svc` of `deploy/compose.example.yaml` (value `http://api:8000`, `api` a service the primary `deploy/compose.yaml` declares); `clients/peer.py::peer_health` does `requests.get(os.environ.get("FX_PEER_BASE", "") + "/api/health")` | the only binding of the Python consumer is an example config. True: `svc:api/health.py::build_router.health` | P `svc:api/health.py::build_router.health` · C `svc:clients/peer.py::peer_health` | p | example-config | P1 | | AC-6 |
 | AC6-PM-1 | mcp_tool | Markdown **prose**: "call the `get_item` tool" in `.claude/agents/agent.md` | a prompt names a tool; it does not call it. True: `get_item` | C `svc:.claude/agents/agent.md::<document>` | p | prompt-mention | P1 | prompt mention | AC-6 |
 | AC6-PM-2 | mcp_tool | Markdown **table cell**: `| reindex | rebuilds the index |` in `.claude/agents/tools.md` | same | C `svc:.claude/agents/tools.md::<document>` | p | prompt-mention | P1 | prompt mention | AC-6 |
-| AC6-PM-3 | mcp_tool | Python triple-quoted `SYSTEM_PROMPT` naming `list_orders` | same | C `svc:prompts/system.py::<module>` | p | prompt-mention | P1 | prompt mention | AC-6 |
+| AC6-PM-3 | mcp_tool | Markdown list item `- Use list_orders to see what a customer has bought.` in `.claude/agents/orders.md` (a separate file: a document's `Link` to a provider is one per consumer symbol, so a second mention in `agent.md` or `tools.md` would share PM-1's or PM-2's) | same | C `svc:.claude/agents/orders.md::<document>` | p | prompt-mention | P1 | prompt mention | AC-6 |
 | AC6-TOP-1 | topic | name from an env var `os.environ["ORDERS_TOPIC"]`, set in no file of the repository | the value is absent. True: `kafka:orders.created` | C `svc:bus/producer.py::publish_dynamic` | p | config-derived | P2 | | AC-6 |
 | AC6-TOP-2 | topic | name from a config-file key `config.bus.topic` (JSON); the key is in no file of the repository | the key is not set. True: `kafka:orders.created` | C `web:app/src/bus/consumer.ts::onConfigured` | p | config-derived | P2 | | AC-6 |
 | AC6-TOP-3 | topic | name from a Java system property `System.getProperty("bus.topic")` | set at launch outside the repository. True: none knowable | C `fx-lib:pricing/src/main/java/com/acme/fxlib/bus/FxBus.java::FxBus.subscribeConfigured(String)` | p | config-derived | P2 | | AC-6 |
@@ -343,6 +345,7 @@ that the data-dependency model does not plant), and **not listed** (`listed: fal
 | RV-2 | `svc:db/orders.py::load_rate` (d2) `possible` / `flow-unavailable:python`; extra `svc:core/rules.py::audit` (d1) `confirmed` / `resolved-call`; others as above | `audit(o)` is a call with an unused result: a data-dependency model omits it, the call-based walk lists it |
 | RV-3 | `svc:api/orders.py::build_router.create_order` (d1) `confirmed` / `resolved-call`; `svc:core/flow.py::apply_discount` (d2) `confirmed` / `resolved-call`; extras `svc:db/repo.py::Repo.save` (d2) `possible` / `name-match`, `svc:db/repo.py::SqlRepo.save` (d2) `possible` / `name-match`, `svc:db/repo.py::MemRepo.save` (d2) `possible` / `name-match` | the subject is `OrderTotal.place`, the owner of the `fetch` site (the enclosing `OrderTotal` owns only `useState`, so no `Link` is reached from it); `base_price` (d3) is not planted; the extras are `create_order`'s `repo.save(o)` name-matched |
 | LNK-11, LNK-13, LNK-14, LNK-15 | `possible` / `partial-key` | the Python (and Vite) consumers of these rows read a base the P1 key rule does not know (a wrapper's `self.base + path`, `os.environ`, a config value: `-p1-linking.md` P1-49 rules 3 and 4), so the consumer is a `possible`/`partial-key` fact and the `Link` to the planted provider is `possible`/`partial-key` (observed on the fixture build, 2026-11-20, over the real stored bundles); the flag-true (P2, Q-ENV) form is the row's own status and reason |
+| AC6-URL-2 | `possible` / `runtime-built / unknown-key` | `fetch(base + path)` is `\x01\x01`, a key with no literal segment, so the consumer is keyless (`-p1-linking.md` P1-55); the `binding-narrowed` of the row needs the environment binding, P2 |
 | LNK-08 | consumer key `GET /items/{?}` `possible` / `partial-key`, no `Link` | the pack does not join the module constant `BASE` (`/api`) into the key (P2, with the environment binding), so the key matches no provider (P1-51a (4)) |
 | TW-2 | consumer key `GET /health` `possible` / `partial-key`, no `Link` | the same `BASE` constant (`/api`) is not joined |
 
@@ -491,7 +494,7 @@ TP-004 recomputes every figure from the manifests.
 |---|---|---|---|---|
 | AC-6, runtime-built URL (P1) | 3 inst., 3 shapes | 3 | floor | AC6-URL-1..3 |
 | AC-6, dynamic import (P1) | 3 / 3 | 3 | floor | AC6-DYN-1..3 |
-| AC-6, example config (P1) | 3 / 3 (P1 holds 2 / 2) | 2 at P1, 3 with AC6-EX-2 at P2 | floor, read per gate: AC6-EX-3 is `env_var`, gate P3, and AC6-EX-2 (Vite variable) moved to P2 (Q-CENSUS A: its consumer binds only through `import.meta.env`, which leaves no trace, so no P1 path reaches the example config), so the P1 floor holds 2 instances (the stakeholder accepted the shortfall; AC6-EX-2 is a P2 backlog item, owner `architect`). `TP-004` reads the floor per group (2 for `AC6-EX` at P1) | AC6-EX-1, 4 at P1 (EX-2 at P2, EX-3 at P3) |
+| AC-6, example config (P1) | 3 / 3 (P1 holds 2 / 2) | 2 at P1, 3 with AC6-EX-2 at P2 | floor, read per gate: AC6-EX-3 is `env_var`, gate P3, and AC6-EX-2 (Vite variable) moved to P2 (Q-CENSUS A: its consumer binds only through `import.meta.env`, which leaves no trace, so no P1 path reaches the example config), so the P1 floor holds 2 instances (the stakeholder accepted the shortfall; AC6-EX-2 is a P2 backlog item, owner `architect`). `TP-004` reads the floor per group (2 for `AC6-EX` at P1) | AC6-EX-1 (`mcp_tool`), 4 (`http`) at P1 (EX-2 at P2, EX-3 at P3) |
 | AC-6, prompt mention (P1) | 3 / 3 | 3 | floor | AC6-PM-1..3 (prose, table cell, Python string) |
 | AC-6, topic from config (P2) | 3 / 3 | 3 | floor | AC6-TOP-1..3 |
 | AC-6, query/label built at runtime (P3; decision 2) | >= 3 shapes | 3 | floor | AC6-QL-1..3 |
@@ -499,7 +502,7 @@ TP-004 recomputes every figure from the manifests.
 | AC-25 control-dependency effects | >= 3, one guarding a call in another function | 4 | 3 for the floor (CD-2, CD-3 guard calls in other functions); +1 companion (CD-4), same reason | CD-1..4 |
 | AC-25 reverse | >= 3 planted functions with a known list | 3 | floor | RV-1..3 |
 | Difficulty shapes (10) | >= 3 each | see below | floor | LNK, AC6 |
-| Link kind x status | >= 1 each | 20 of 20 cells | 10 kinds x 2 statuses (§7) | LNK, AC6, B1 |
+| Link kind x status | >= 1 each | 19 of 20 cells (`launch` x `possible` has no row at P1, §7) | 10 kinds x 2 statuses (§7) | LNK, AC6, B1 |
 
 **Difficulty shapes, instances by earliest gate** (cumulative; a shape reads as n = 3 only from the gate that holds
 3 of its rows). Runtime-built key, dynamic import and prompt mention are the AC-6 rows themselves (no double
@@ -545,14 +548,14 @@ shape. Counts without a §12.2 floor follow §4.7 and the proposal: P3-1 (2, one
 
 ## 7. Link-kind x status matrix and reason-code coverage
 
-Every kind x status cell has at least one row; every `possible` row carries its expected reason.
+Every kind x status cell has at least one row, except `launch` x `possible` at P1 (a `launch` row is a Binder outcome, not a stored `Link`, at P1; P2 re-adds the row with the launch-target export); every `possible` row carries its expected reason.
 
 | Kind | confirmed | possible |
 |---|---|---|
 | http | LNK-01, 04, 07, 08, 10, 11, 13, 14, 15, 36, 37, 38; KN-1..4; TW-2 (LNK-18 at P2) | LNK-16 (port-shared), 17 (partial-key), 42, 43 (target-not-mapped); KN-5; AC6-URL-1..3; AC6-EX-4 (AC6-EX-2 at P2) |
-| mcp_tool | LNK-02, 06, 12 | LNK-45, AC6-PM-1..3 (prompt-mention) |
+| mcp_tool | LNK-02, 06, 12 | LNK-45, AC6-PM-1..3 (prompt-mention); AC6-EX-1 (example-config) |
 | script -> tool | LNK-19 | LNK-20 (shell-dynamic) |
-| launch chain | LNK-21, 22 (LNK-45 is its `mcp_tool` Link through the `bash -c exec` form) | AC6-EX-1 (example-config) |
+| launch chain | LNK-21, 22 (LNK-45 is its `mcp_tool` Link through the `bash -c exec` form) | none at P1 (AC6-EX-1 is its `mcp_tool` Link through an example `url` entry, listed under `mcp_tool`) |
 | rpc | LNK-23 | LNK-32 (runtime-built / unknown-key) |
 | topic (Kafka, in-house bus) | LNK-05, 09 (Kafka), 24 (in-house) | AC6-TOP-1..3 (config-derived) |
 | library_api | LNK-25, 41; TW-1 | LNK-33..35 (name-only-provider, skew) |
