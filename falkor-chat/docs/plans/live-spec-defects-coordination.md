@@ -1,6 +1,6 @@
 # Live-spec defects K-091, K-093..K-098 — coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-091, K-093, K-094, K-095, K-096, K-097, K-098
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-091, K-093, K-094, K-095, K-096, K-097, K-098
 
 Goal: work the seven open items the live-specs review filed (`docs/BACKLOG.md`, each item's own
 body is its brief: owner, done-condition, test strategy). K-092 is already closed
@@ -30,6 +30,7 @@ Sequencing: implementer units run one at a time — they share `repository.py`/`
 | C3 K-097 close: DESIGN §6.2, QUERIES §12 | `tdd-engineer` | `a35b78e4b204f8e10` | accepted (`89306a90`; close `79aeadd8`) | `docs/DESIGN.md`, `docs/QUERIES.md` | `analyst` `a0052887e4da8f4a4` (close check) → approve w/ suggestions | — |
 | C4 K-098 close: DESIGN §9/§10/§13, QUERIES §18.7, SERVER §1.5 | `graph-dba` | `a4c4436f264289eb8` | accepted (closed `e2f42594`) | live spec + backlog item | `analyst` `a41507a63d6beefa4` (close check) → Pass 1 needs changes, Pass 2 approve (`docs/reviews/graph-config-defaults-impl.md` `## Close check`) | check 218k / 41 |
 | C5 U12 close: QUERIES §6, DESIGN §8; P2-m1 K-093 clause; P2-m2 note | `graph-dba` | `aa6e341f374b40da4` | accepted (U12 closed) | live spec + backlog + note + HISTORY | `analyst` `a68eb72ff880d9934` (close check) → Pass 1 needs changes (C1/C2), Pass 2 approve | 131k / 3 |
+| R1 rollout B+C (restart `:8200`, K-091 backfill `--apply`); A skipped | `devops` | `a9fbd49a8d527ee53` | accepted | report | teco re-ran the dry run (0 in all 7 workspaces), `/health` 200, pid 228102 started after `d4471e22` → verified | 81k / 9 |
 | C4m K-098 manual `docs/manuals/operations.md` | `tico` | `a77e91699aa4e5616` | accepted | manual | skipped (trivial; `teco` ran `ps`/`logs` without `--env-file`: rc 1 each) | 58k / 5 |
 
 Documentation impact (for each item's close, not its build unit): the DESIGN/SERVER/QUERIES
@@ -67,6 +68,7 @@ milestone close (human applies); `server/.env.example` and start scripts for K-0
 - 2026-11-20: U12 gate needs changes (F1). teco decided to amend now rather than accept the latency term (a measured one-clause fix, within the unit's purpose). graph-dba `a4c4436f264289eb8` amends note §3.1 and adds a coverage threads-per-channel axis (throwaway); tdd `a65b5e6619529c62f` applies F1–F3 and owns ws:test.
 - 2026-11-20: graph-dba amended note §3.1 in place (WITH barrier on the scoped variant only, confirmed on its own throwaway; r4 coverage: 1M threads/channel 1,267 ms → 2.5 ms, 72/72 v3 records equivalent). Deviation: the note was already approved (Pass 3), so collision rule 5 called for a successor; teco's brief asked for in-place. Flagged to the stakeholder rather than churned.
 - 2026-11-21: U12 closed. The close check needed changes on C1 (the cap bounds memory, not latency) and C2 (`Message.threadId` decides visibility). Both were fixed and Pass 2 approves. One `falkor-chat/REVIEW.md` line was applied verbatim (non-narrowing). HISTORY's 83.2 MiB / 13.4 s was checked against note §3.1:116. The stale K-098 HISTORY follow-up line is left as a dated record.
+- 2026-11-21: the stakeholder chose for an agent to run runbook B+C and to skip A (falkordb-dev keeps its current config until its next restart). This is an explicit one-off approval for the `:8200` restart and the backfill `--apply`. Dispatched devops `a9fbd49a8d527ee53`.
 
 ## Pause checkpoint — 2026-11-20 (stakeholder: credit limit)
 
@@ -141,8 +143,8 @@ serving a workspace on the new code at once, never a mix of old and new.
 `agent-name-removal-impl`, `document-lsh-bands-impl`, `graph-config-defaults`,
 `graph-config-defaults-impl`, `hybrid-search-bounded`, `message-quoting`, `message-quoting-impl`,
 `step-budget-reporting-impl`, `workflow-input-cas`, `workflow-input-cas-impl`. None of these items
-had a requirements document; each was briefed by its BACKLOG body. This ledger stays `active`
-until the stakeholder has run `## Rollout runbook`.
+had a requirements document; each was briefed by its BACKLOG body. Rollout B+C was run by R1 on 2026-11-21; A was skipped by the stakeholder (the config goes live at
+`falkordb-dev`'s next `start_falkordb.sh` restart).
 
 **Closeout list for the human to apply** (each item checked as present in `docs/HISTORY.md`
 first). Delete these delivered items from `docs/BACKLOG.md`: K-096 (`:748`), K-097 (`:774`),
