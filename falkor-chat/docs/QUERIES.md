@@ -488,25 +488,50 @@ in a single read-only query (`hybrid_search`, `GRAPH.RO_QUERY`).
 // $qVec      = the query embedding as a float list (same dim as the vector index)
 // $k         = number of ANN neighbors to seed from (default 10)
 // $channelId = present only in the channel-scoped variant; the workspace-wide
-//              variant drops the `MATCH (c:Channel …)` line
+//              variant drops the `WITH seed, score, t` + `MATCH (c:Channel …)` pair
 // score      = cosine distance: 0 = identical, lower = more similar → ORDER BY score ASC
 
 CALL db.idx.vector.queryNodes('Message', 'embedding', $k, vecf32($qVec))
 YIELD node AS seed, score
-MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed)
+MATCH (t:Thread {threadId: seed.threadId})
+WITH seed, score, t
 MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t)
-OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)
-WITH seed, score, collect(DISTINCT related)[..5] AS expanded
+CALL { WITH seed
+       OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)
+       WITH DISTINCT related LIMIT 5
+       RETURN collect(related) AS expanded }
 RETURN seed.msgId AS msgId, seed.text AS text, seed.role AS role, score,
        [m IN expanded | m.text] AS relatedContext
-ORDER BY score ASC
+ORDER BY score ASC, msgId ASC
 LIMIT $limit
 ```
 
-*Rows come back most-similar first — do not re-sort. ANN recall is approximate: kNN may return
-fewer than `$k` seeds. Nothing writes `(:Message)-[:MENTIONS]->(:Entity)`, so `relatedContext`
-is `[]` and the expansion no-ops. The service may pass a per-query `timeout` (ms). Document
-chunks are searched separately (§14.3).*
+*Rows come back most-similar first, exact score ties by `msgId` ascending — do not re-sort. ANN
+recall is approximate: kNN may return fewer than `$k` seeds. The service may pass a per-query
+`timeout` (ms). Document chunks are searched separately (§14.3).*
+
+- **Thread by index, precondition `threadId`.** The seed's thread is looked up by its `threadId`
+  (`Node By Index Scan | (t:Thread)`), never walked back along `HEAD|NEXT`, so the cost does not
+  grow with thread depth. A message without a `threadId`, or one whose `threadId` disagrees with
+  its chain, drops out; `scripts/backfill_thread_ids.sh` (§4.x) stamps older data.
+- **The scoped `WITH seed, score, t` barrier is load-bearing.** Without it the planner merges the
+  two `MATCH`es, anchors on `Node By Index Scan | (c:Channel)` and filters every thread in the
+  channel for every seed, a cost that grows with threads per channel. With it, the plan stays
+  `Node By Index Scan | (t:Thread)` → `Conditional Traverse | (t)->(c:Channel)` → `Filter`.
+  Moving `{threadId: seed.threadId}` into the channel pattern does not help: it plans like no
+  barrier.
+- **Expansion bounded at 5 per seed — in memory, not in time.** The per-seed `CALL { … LIMIT 5 }`
+  emits at most 5 distinct co-mentioning messages per seed and never collects an entity's whole
+  fan-in, so the query's tracked memory does not grow with a hub entity's mention count. The
+  traverse's execution time still does, linearly: about 85 ms per 1M mentions at k=10
+  (`docs/reviews/hybrid-search-bounded.md` Close check). The seed itself mentions the shared
+  entity, so it counts among its own related messages.
+- **`DISTINCT` is redundant on this text, load-bearing once `e` is referenced.** While the subquery
+  leaves `e` unreferenced the planner fuses the two hops into one `(seed)->(related:Message)`
+  traverse, which already collapses duplicate paths. A subquery that projects or filters `e` splits
+  the hops, and without `DISTINCT` a message sharing two entities with the seed is listed twice.
+- **Dormant today.** Nothing writes `(:Message)-[:MENTIONS]->(:Entity)`, so `relatedContext` is
+  `[]` and the expansion no-ops.
 
 ### Set a message embedding (async, after posting)
 ```cypher

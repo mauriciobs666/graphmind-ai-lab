@@ -52,7 +52,7 @@ links there and does not re-explain. `AGENTS.md` carries only a terse pointer in
 | **Vector score is cosine *distance*** (0 = identical) → `ORDER BY score ASC` | Most-similar-first ranking | §7.1, §8 |
 | **`status` as a property, not a label** | Avoids re-labeling churn on state changes; index it for "all running" reads | §6.2 |
 | **`ctx` / `input` / `output` are flat/serialised strings** | FalkorDB stores scalars + scalar lists only — no nested maps; never query inside them | §6.2 |
-| **`Message.threadId` denormalized inline, unindexed** | Nav metadata for QUERIES §9.2/§5 rows; HEAD/NEXT walk stays canonical; unindexed saves RAM/write cost | §5.1 |
+| **`Message.threadId` denormalized inline, unindexed** | Nav metadata for QUERIES §9.2/§5 rows and hybrid-read thread key (§8: a message without it is invisible to that read); HEAD/NEXT walk stays canonical; unindexed saves RAM/write cost | §5.1 |
 | **Guarded-CREATE write paths** (`FOREACH`+`CASE` per path) with an always-returned status row; **no MERGE on `Message`** | Retry replay is a no-op (`dupMsg`); first-post race refused (`hadHead`); uniqueness constraint is the backstop | §5.3, §9 |
 | **Composite `(createdAt, msgId)` keyset cursor** (`ReadCursor.lastReadAt`/`lastReadMsgId`) | Timestamp alone is not a total order — same-ms ties skipped rows; cursor reads are lossless | QUERIES §9.1/§9.3 |
 | **Member ids are namespace-unique across `User`/`Agent`**; `ensure_user`/`ensure_agent` are guarded-CREATE queries returning `(created, existed, collided)`; cross-label collision refuses (`MemberIdCollisionError`) | A shadow node with the other label's id eclipses it in every `coalesce` lookup | QUERIES §2/§7 |
@@ -272,8 +272,10 @@ Everything below lives in `ws:{workspaceId}` unless marked `reference`.
   never trusted from the caller.
 - `Message.threadId` — **denormalized, deliberately unindexed** navigation metadata: lets QUERIES
   §9.2/§5 result rows point back to their thread without a traversal; QUERIES §9.1's HEAD/NEXT walk stays the
-  canonical thread read. It may be `null` on a message written before the property existed;
-  `scripts/backfill_thread_ids.sh` stamps such rows.
+  canonical thread read. It is also the key §8's Message hybrid read finds the seed's thread by,
+  so a message without it, or with one disagreeing with its chain, is invisible to that read. It
+  may be `null` on a message written before the property existed; `scripts/backfill_thread_ids.sh`
+  stamps such rows.
 - `Message.toolsUsed` — the tools (other than `post_message`) the producing workflow step
   successfully dispatched, stamped
   when the step's `PRODUCED` edge is linked (§6.2). An audit property only: no prompt ever reads it.
@@ -320,8 +322,8 @@ Everything below lives in `ws:{workspaceId}` unless marked `reference`.
   count — eliminating the Channel supernode risk entirely. Channel-level time queries use the
   `Message.createdAt` and `Thread.updatedAt` range indexes, not edge traversal.
 - **`Message.embedding` inline as `vecf32`** rather than a separate `Embedding` node: a single
-  query seeds with `db.idx.vector.queryNodes` then traverses from the seed (thread scope, entity
-  co-occurrence) — hybrid retrieval in one round trip (§8).
+  query seeds with `db.idx.vector.queryNodes` then reaches the seed's thread scope (by
+  `threadId`) and entity co-occurrence — hybrid retrieval in one round trip (§8).
 - **`Message.role` as a property, not derived from `POSTED_BY` label**: lets the app filter by
   role (`WHERE m.role = 'assistant'`) without an extra hop.
 - **AI as `Agent` author, not a magic flag**: assistant messages share one timeline with human
@@ -877,10 +879,12 @@ traversal — read-only queries, routable to a replica.
 > **Canonical Cypher: `docs/QUERIES.md` §6 (messages) and §14.3 (chunks).** This section describes
 > the read paths' *shape* only, so the two never drift.
 
-- **Message hybrid read** — an ANN seed over `Message.embedding`, then traversal: the seed's
-  thread (`HEAD|NEXT*`), optionally scoped to one channel, plus an entity co-occurrence expansion
-  (`MENTIONS` → `Entity` ← `MENTIONS`) that returns nothing today because no write path creates
-  `MENTIONS` (§5.1).
+- **Message hybrid read** — an ANN seed over `Message.embedding`, then the seed's thread looked
+  up by its `threadId` index (never walked along `HEAD|NEXT`), optionally scoped to one channel by
+  a `Thread → Channel` hop, plus a bounded entity co-occurrence expansion (`MENTIONS` → `Entity` ←
+  `MENTIONS`), so neither thread depth nor threads per channel grows its cost, and an entity's
+  fan-in does not grow its memory (latency grows linearly with fan-in — QUERIES §6). The expansion
+  returns nothing today because no write path creates `MENTIONS` (§5.1).
 - **Chunk read** — an ANN seed over `Chunk.embedding` with no scope traversal, filtered after the
   ANN step to `documentCurrent = true` (a superseded version's chunks never surface by default).
   The filter runs on the `k` ANN rows, so a caller wanting `limit` results over-fetches via `k`.
@@ -888,7 +892,8 @@ traversal — read-only queries, routable to a replica.
   neighbors*. An AI answer records its seeds as `EMITTED {score, rank}` edges to the `Message` or
   `Chunk` it used (§5.1).
 - **Score is cosine distance** (live-verified: identical vectors → score `0`). Order `ASC` to
-  rank most-similar first. ANN is approximate: a read may return fewer than `k` rows.
+  rank most-similar first; the Message read breaks exact ties by `msgId ASC`, so its order is
+  deterministic. ANN is approximate: a read may return fewer than `k` rows.
 - Served via `GRAPH.RO_QUERY` with the service-layer `RAG_QUERY_TIMEOUT_MS` (5000 ms) override
   (§10) → can hit read replicas (mind replica lag for just-posted messages; route "include my
   last message" reads to the primary).

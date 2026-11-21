@@ -1034,7 +1034,7 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 
 - **Status:** 🔵 proposed — `docs/reviews/live-specs.md` Pass 8 claim 2, 2026-10-31
 
-> **Why it exists.** `repository.hybrid_search` (`repository.py:891`) expands every ANN seed through
+> **Why it exists.** `Repository.hybrid_search` (`server/falkorchat/repository.py`) expands every ANN seed through
 > `(seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)` into a `relatedContext` field, but
 > nothing in `server/`, `scripts/` or `web/` creates `MENTIONS`. Entity extraction runs over
 > document chunks only (`ABOUT`, Chunk→Entity). So `relatedContext` is always empty, and every
@@ -1042,13 +1042,16 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > dormant.
 - **The decision:** build the writer (entity extraction over messages: per-message LLM calls and
   entity fan-out RAM, so a `data-scientist` and `graph-dba` call first), or drop the expansion and
-  the edge from the schema and the response. Either is a change to a live-spec contract. Building
-  it is blocked by K-098's bounded-`hybrid_search` query unit
-  (`docs/plans/graph-config-defaults-graph.md` §3.1): under the 64 MiB `QUERY_MEM_CAPACITY` the
-  current expansion fails at k × fan-in ≈ 950k.
+  the edge from the schema and the response. Either is a change to a live-spec contract. Nothing
+  blocks building it: the read already caps the expansion at 5 related messages per seed, so a
+  writer's entity fan-in does not grow the read's memory under the 64 MiB `QUERY_MEM_CAPACITY`
+  (`docs/plans/graph-config-defaults-graph.md` §3.1); its latency grows linearly with fan-in
+  (about 85 ms per 1M mentions at k=10; `docs/reviews/hybrid-search-bounded.md` Close check).
 - **Owner:** `architect` for the decision; then `tdd-engineer`.
 - **Done-condition:** `relatedContext` is either populated from real `MENTIONS` edges or removed,
-  with DESIGN §5.1/§8 and QUERIES §6 updated at close.
+  with DESIGN §5.1/§8 and QUERIES §6 updated at close; if the expansion's subquery references `e`,
+  the writer re-runs the drop-`DISTINCT` mutant against its own subquery text
+  (`docs/plans/graph-config-defaults-graph.md` §3.1).
 - **Risks/RAM:** building it adds `MENTIONS` edges per message (RAM, DESIGN §11); dropping it
   removes a response field a client might read.
 

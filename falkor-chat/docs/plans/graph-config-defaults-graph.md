@@ -179,11 +179,13 @@ LIMIT $limit
   `Node By Index Scan | (t:Thread)`. Scoped, the `WITH` barrier keeps that anchor: the plan is
   `Node By Index Scan | (t:Thread)` → `Conditional Traverse | (t)->(c:Channel)` → `Filter`. Without
   the barrier, the planner merges the two `MATCH`es, anchors on `Node By Index Scan | (c:Channel)`
-  and filters every thread in the channel for every seed. At k=10 that took 1,253 ms at 1M threads
-  per channel, against 2.1 ms with the barrier. Moving `{threadId: seed.threadId}` into the channel
-  pattern plans the same way as no barrier (`graph-dba-r4/plans_and_latency.txt`). The subquery's
-  `LIMIT 5` stops the traversal early: `GRAPH.PROFILE` shows 50 records for 10 seeds on a
-  100k-fan-in entity (`graph-dba-r2/profile_v2_redis.txt`). Its `DISTINCT` is redundant on this
+  and filters every thread in the channel for every seed. At k=10 and 1M threads per channel that took
+  1,252.6 ms against 2.1 ms with the barrier (median of 5, `graph-dba-r4/plans_and_latency.txt`).
+  Moving `{threadId: seed.threadId}` into the channel pattern plans the same way as no barrier
+  (same file). The subquery's
+  `LIMIT 5` caps the traverse's output, so memory stays flat: `GRAPH.PROFILE` shows 50 records for
+  10 seeds on a 100k-fan-in entity (`graph-dba-r2/profile_v2_redis.txt`). Its time still grows
+  linearly with fan-in (`graph-dba-r4/coverage_summary.txt`). Its `DISTINCT` is redundant on this
   text, because while `e` is unreferenced the planner fuses the two hops into one
   `(seed)->(related:Message)` traverse. Once the subquery references `e`, which is K-093's
   filtering decision, the hops split and `DISTINCT` becomes load-bearing: without it, a message
@@ -205,10 +207,8 @@ LIMIT $limit
 - **Done-condition.** `test_queries.sh` and the server suite stay green. A fixture test pins
   equivalence on a hub-mentioning thread. The scoped EXPLAIN test asserts
   `Node By Index Scan | (t:Thread)` and the absence of `Node By Index Scan | (c:Channel)`.
-  `graph-dba` re-runs `graph-dba-r2/coverage.py` against the shipped text and confirms the bound;
-  against this text (form `v3_note_corrected`, `graph-dba-r4/coverage_summary.txt`), the scoped
-  variant stays at 1.5–2.5 ms from 1k to 1M threads per channel, against 1,267 ms for the text
-  without the barrier.
+  `graph-dba` re-runs `graph-dba-r2/coverage.py` against the shipped text (form
+  `v3_note_corrected`, `graph-dba-r4/coverage_summary.txt`) and confirms the bound.
 
 ### 3.2 `THREAD_COUNT` — **`FALKORDB_THREAD_COUNT`, set per deployment** (8 on this box), was 8 by auto-detection
 

@@ -5,6 +5,45 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-21 — U12 closed: `hybrid_search`'s Message read bounded (thread by `threadId` index, 5 related per seed, `msgId` tie-break)
+
+- **Cause.** K-098's note `docs/plans/graph-config-defaults-graph.md` §3.1 found two unbounded
+  terms in `Repository.hybrid_search`. The `HEAD|NEXT*0..` walk back to the seed's thread grew
+  with thread depth, and the `MENTIONS` expansion collected every co-mentioning message before
+  keeping 5. On synthetic graphs the worst case needed 83.2 MiB and 13.4 s, past the 64 MiB
+  `QUERY_MEM_CAPACITY` K-098 sets, so the bounded query was a prerequisite of K-093's writer.
+- **What (commit `d4471e22`, `tdd-engineer`; §3.1 revised by `graph-dba` in the same commit).**
+  - The seed's thread is found with `MATCH (t:Thread {threadId: seed.threadId})`. The scoped
+    variant puts a `WITH seed, score, t` barrier before the channel `MATCH`. Without it the planner
+    anchors on the Channel index and filters every thread in the channel for every seed.
+  - The expansion is a per-seed `CALL { … WITH DISTINCT related LIMIT 5 … }`. Its memory stays
+    flat in fan-in, while its time still grows linearly with fan-in.
+  - Ordering is `score ASC, msgId ASC`, so exact score ties come back in a fixed order.
+  - New EXPLAIN/PROFILE and fixture tests in `server/tests/test_graphrag.py` run the text the
+    method actually sends. The `test_queries.sh` §6 copies and the `services.py` caller comments
+    follow the `threadId` precondition.
+- **Precondition.** A message with no `threadId`, or one that disagrees with its chain, is
+  invisible to the read. `scripts/backfill_thread_ids.sh` stamps older data.
+- **Not live yet.** The code takes effect when the servers restart, in part B of
+  `docs/plans/live-spec-defects-coordination.md` `## Rollout runbook`.
+- **Verified.** At gate time `teco`'s solo run gave 3797 passed and queries 495/495. Gate:
+  `docs/reviews/hybrid-search-bounded.md`. Pass 1 needed changes (F1: the scoped variant cost grew
+  with threads per channel, fixed by the barrier). Pass 2 approved with suggestions (P2-m1, P2-m2).
+- **Live spec updated** (`graph-dba`):
+  - QUERIES §6: the shipped Cypher and its notes;
+  - DESIGN §1.2: the `Message.threadId` register row;
+  - DESIGN §5: the `Message.threadId` and `Message.embedding` bullets;
+  - DESIGN §8: the Message hybrid read and score bullets.
+
+  Checked by the review's `## Close check`. Pass 1 needed changes (C1: the bound covers memory,
+  not latency; C2: `Message.threadId` now decides whether a message is visible to the read). Both
+  were fixed, and Pass 2 approves. The note's §3.1 done-condition was trimmed to its checks
+  (P2-m2).
+- **BACKLOG K-093.** The blocker is removed, and the item states that the read's latency grows
+  linearly with fan-in. Its done-condition now says to re-run the drop-`DISTINCT` mutant if the
+  subquery references `e` (P2-m1). Its code cite is now the symbol `Repository.hybrid_search`.
+- **REVIEW.md.** The F1 line is applied verbatim to `falkor-chat/REVIEW.md` `## Always check`.
+
 ## 2026-11-20 — K-098 closed: `GRAPH.CONFIG` values decided and set in a per-deployment `config/falkordb.env`
 
 - **Cause.** DESIGN §13 listed a pre-production review of the live `GRAPH.CONFIG` defaults as
