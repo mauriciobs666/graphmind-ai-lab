@@ -88,17 +88,25 @@ def h(tmp_path):
     return hook
 
 
-def test_nothing_changed_is_exit_0_with_no_call_and_fast(h):
-    # structure pins "no Python"; the latency bound uses the BEST of 20 runs, which CPU load cannot inflate the
-    # way it inflates a maximum (REVIEW.md timing rule). The recorded figures live in the README.
-    h.put(L, mtime=time.time() - 500)
-    times = []
-    for _ in range(20):
-        r = h.run()
+def best_vs_baseline(run, n=20):
+    """Best-of-n of `run` and of the kill-switched hook (bash start-up alone), interleaved in one loop: CPU load
+    inflates both sides alike, so only a ratio is meaningful (an absolute wall time fails under oversubscription)."""
+    base, real = [], []
+    for _ in range(n):
+        base.append(run(COORDGRAPH_HOOK_DISABLED="1").elapsed)
+        r = run()
         assert r.returncode == 0 and r.stdout == "" and r.stderr == ""
-        times.append(r.elapsed)
+        real.append(r.elapsed)
+    return min(base), min(real)
+
+
+def test_nothing_changed_is_exit_0_with_no_call_and_cheap_against_a_bare_bash_start(h):
+    # structure pins "no Python"; the cost of the pruned `find` is judged against the same-run baseline. The
+    # absolute figures (and the < 50 ms target) are measurements recorded in the README, not assertions.
+    h.put(L, mtime=time.time() - 500)
+    base, real = best_vs_baseline(h.run)
     assert h.calls() == []
-    assert min(times) < 0.05, times
+    assert real < 6 * base + 0.03, (base, real)
 
 
 def test_a_large_payload_does_not_slow_the_no_change_path(h):

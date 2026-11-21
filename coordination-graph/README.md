@@ -177,9 +177,11 @@ fires it. Where it fires (S0 probe, FR-4) is not recorded here.
   the CLI stubbed, other work running on the machine), by size of the `PostToolUse` payload on
   stdin: 1 KB median 12.9 ms, 30 KB 12.6, 300 KB 15.9, 2 MB 32.7. The payload is read with `cat`:
   the earlier `read -r -d ''` took a pipe a byte at a time and cost 12.0, 16.1, 95.9 and 535.1 ms
-  at the same sizes. The tests pin the structure (no CLI call) and a relative bound (a 300 KB payload
-  within 8x the best small call plus 20 ms) rather than a wall time, which CPU load inflates; the
-  no-change test asserts the best of 20 calls is under 50 ms. If a busier tree misses 50 ms, the
+  at the same sizes. The tests pin the structure (no CLI call) and relative bounds, never a wall time, which CPU
+  load inflates (a best-of-20 absolute 50 ms still failed under 3x oversubscription): the no-change
+  call's best of 20 within 6x the same-loop best of a kill-switched call plus 30 ms, and a 300 KB
+  payload within 8x the best small call plus 20 ms. The 50 ms target is a recorded measurement.
+  If a busier tree misses 50 ms, the
   plan's recorded fallback is a `find` restricted to the directories that hold sources (§R2).
 - **A changed mirrored file** (coordination glob set or KB registry) runs `hook-sync` in the
   foreground under `timeout 50`. It pings FalkorDB (1 s), and for a changed KB file also falkor-chat
@@ -194,8 +196,9 @@ fires it. Where it fires (S0 probe, FR-4) is not recorded here.
   exits 2 naming up to 20 files (then "and N more") and queues them all in `failed.pending`.
   **A guard refusal is not an outage:** `hook-sync` exits 2 with "refused by the guard: <reason>"
   (also written to `hook.log`), queues nothing and promises no retry (for instance
-  `COORDGRAPH_EPHEMERAL_PORT` exported in the hook's environment); a first run asks again after 15
-  minutes, not one. Edits refused meanwhile are healed by `coordgraph sync <file>` or `sync --all`.
+  `COORDGRAPH_EPHEMERAL_PORT` exported in the hook's environment); a first run's refusal sets `retry-due` 15
+  minutes ahead: until then edits are neither mirrored nor warned about, and a configuration fix
+  takes up to 15 minutes to take effect (delete `.state/retry-due` to retry at once). Edits refused meanwhile are healed by `coordgraph sync <file>` or `sync --all`.
   The guard runs before the FalkorDB ping, so a refused run sends nothing to the listener.
 - **Failure state** in `$COORDGRAPH_STATE_DIR` (default `coordination-graph/.state/`):
   `failed.json` (per repo-relative path: `sha256`, `error`, `attempts`, `nextRetryAt`), `failed.pending`

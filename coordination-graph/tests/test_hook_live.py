@@ -29,7 +29,7 @@ from tests.fixtures.live import (  # noqa: F401  (session fixtures)
     free_port,
     scratch_falkor_chat,
 )
-from tests.test_hook_script import Hook
+from tests.test_hook_script import Hook, best_vs_baseline
 
 pytestmark = pytest.mark.live
 
@@ -101,16 +101,12 @@ def test_ac3_an_edit_is_in_the_graph_when_the_hook_returns(lv, event):
     assert lv.source(L) == (sha(p), 2)
 
 
-def test_a_call_that_changed_nothing_starts_no_python_and_is_fast(lv):
+def test_a_call_that_changed_nothing_starts_no_python_and_is_cheap_against_a_bare_bash_start(lv):
     lv.put(L, LEDGER)
     assert lv.run().returncode == 0
     n = len(lv.calls())
-    times = []
-    for _ in range(20):
-        r = lv.run()
-        assert r.returncode == 0 and r.stderr == ""
-        times.append(r.elapsed)
-    assert len(lv.calls()) == n and min(times) < 0.05, times  # best of 20: load-proof
+    base, real = best_vs_baseline(lv.run)
+    assert len(lv.calls()) == n and real < 6 * base + 0.03, (base, real)
 
 
 def test_an_outage_warns_on_every_edit_stays_silent_otherwise_and_the_retry_heals_it(tmp_path):
