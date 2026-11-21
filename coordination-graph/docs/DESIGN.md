@@ -273,8 +273,9 @@ PATH arguments may be absolute (made repo-relative) or repo-relative.
 | `hook-sync` | synced, or nothing to do | | a file failed or is pending, or the guard refused |
 | `retry-failed` | always | | |
 
-A failure prints one line to stderr (`<command>: <reason>`), never a traceback; a view over an
-absent mirror adds `(no synced mirror: run `coordgraph bootstrap` and `coordgraph sync`)`.
+A failure prints one line to stderr (`<command>: <reason>`), never a traceback; `inflight`, `unit` and `planned` over an
+absent mirror add `(no synced mirror: run `coordgraph bootstrap` and `coordgraph sync`)`; `propose`, `drift` and
+`query` print the server's own error.
 
 ## 6. Views and `propose`
 

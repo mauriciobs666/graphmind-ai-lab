@@ -91,3 +91,13 @@ embedder has not been measured. These are operator steps, not code.
 The hook's no-change path is about 20 ms on an idle machine and about 105 ms median under eight
 busy CPU loops, against a 50 ms target stated without a load condition. What remains: state the
 condition in `README.md`, or restrict the `find` to the source directories.
+
+### GAL-F0045 — Test doubles forward `ro_query` to `query` and accept writes
+
+- **Status:** 🔵 proposed — defaulted; owner confirms status
+
+`MemGraph.ro_query` (and the `ProposeGraph` and `ReadOnly` wrappers) forward to `query`, so a view that
+issued a write through `ro_query` would pass the offline tests; production is safe because the server
+rejects writes on `RO_QUERY`. What remains: make `MemGraph.ro_query` reject write statements, with a test.
+Also: `propose`, `drift` and `query` on an absent mirror print the server's raw error rather than the
+`no synced mirror` hint that `inflight`, `unit` and `planned` give.
