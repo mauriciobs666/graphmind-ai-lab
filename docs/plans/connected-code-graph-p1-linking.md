@@ -689,8 +689,7 @@ address built at runtime be shown as possible; a consumer that links to nothing 
   `runtime-built`/`unknown-key`: `binding-narrowed` needs the environment binding, P2). Must not regress: LNK-11/13/14/15/17, KN rows.
   Gate `analyst`; `packrt/` is hashed: lands before the `ac5-gate-1` record.
 - **Rows (owner `qa-engineer`, in the manifests and test plans):** AC6-URL-2 gets `p1Form` `runtime-built`/`unknown-key`; AC6-URL-1
-  unchanged; AC6-URL-3 unchanged: its edge reason is the linker's keyless consumer (`runtime-built`), which the QA instrument read from
-  the lifted fact instead of the `CONSUMES` edge (D5: no defect; the census asserts it on the `build_rows` edge).
+  unchanged; AC6-URL-3's P1 form is Link-level only (`forward(...args)` leaves no value to key, so it has no `CONSUMES` fact; P1-57, D11).
   LNK-10's consumer locator becomes `web:app/src/api/index.ts::query` (D6: the extractor names the nested object method by its last
   segment, and the Link and its ordered `LIFTED_VIA` entries are right; qualified naming is a P2 extractor item); the P1T-06 locator
   rule says so. A committed census driver for the Link-level rows (the QA scratch instrument) belongs to P1-41 dispatch B.
@@ -739,6 +738,120 @@ Python triple-quoted prompt) has no extractor: the P1 mention extractor is Markd
 prompt mentions (the original AC6-PM-3 shape); a way for a code consumer to bind a config URL (a server name for a code consumer, or a
 unit-scoped config URL rule) and the launch-target export with a reason on `LAUNCHES` (the original AC6-EX-1 `launch` shape and a Python
 example-config consumer).
+
+## P1-57 · P1-41 dispatch B defects D8-D14 — `tdd-engineer` (57a, 57d), `qa-engineer` (57c, 57e)
+
+Cause: `docs/test-reports/connected-code-graph-p1-report.md` section "P1-41 dispatch B" (76 of 87 rows green, 11 red). Each defect was
+re-verified against the tree, the manifests and the extractors; the driver's claims were checked, not taken. Verdicts, one home here:
+**D8** engine, fix (57a). **D12** the fixture carrier cannot reach the P1 mechanism, fix the carrier (57d, rows 57c); no new mechanism.
+**D9, D11, D13** manifest wrong (57c). **D14** precondition cannot hold, rows re-gated P2 (57c). **D10** a plan gap: no step builds
+the emission; a stakeholder question (end of this section). **O-1** no change.
+
+**D8: the `fetch` pack's seed fires on any `fetch` callee.** Verified: `packs/fetch/pack.yaml` seeds `call: {callee: fetch, resolution:
+[external, unresolved]}`; `ccg/packrt/match.py:clause_hit` compares `calleeName` only, the last identifier (bundle spec3 §5.6), so
+`self.session.fetch(item_id)` in `fx-svc/state/stores.py` is the seed, and P1-55's keyless rule (a URL with no literal segment) turns it from a
+latent `GET /{?}` that linked to nothing into 12 `unknown-key` Links. `fetch` is a JavaScript global; no Python callee of that name is the
+Web API. **Decision:** the seed carries a positive file gate, `scope: {path: {regex: ".*\\.(js|jsx|cjs|mjs|ts|tsx|cts|mts|vue)"}}`
+(`match.py:scope_ok` already evaluates `path`; the schema's `scope.path` is a matcher). Rejected: a receiver test (the callsite record
+has no receiver, adding one is a bundle change); `notPath: **/*.py` (a shell or other-language `fetch` command would still seed).
+A TypeScript `store.fetch(id)` stays a known false positive of the pack (the same receiver blindness), reported, not fixed here.
+- **57a files:** `packs/fetch/pack.yaml`, `tests/test_rule_pack_schema.py` (`SPEC_PLUS_LINES`: the pin removes both extra lines, `ownSite` and
+  the `scope`), `tests/test_p1_55_keyless_url.py` (or a new `tests/test_pack_fetch_scope.py`), `tests/test_rule_pack_leaf_mutation.py` (the
+  new `scope` leaf killed by a runtime test named in `GATE`).
+- **Steps:** (1) red (and `ccg.rulepack` accepts the regex under its RE2-subset guard): the same `fetch(<values>)` record in a `.ts`, `.tsx`, `.js` file seeds and in a `.py`, `.sh`, `.md` file does not; a
+  `.py` file's `x.fetch(y)` makes no fact and no lifted leaf; (2) the pack line and the pin; (3) before/after on the proving repository's
+  stored bundles: every `confirmed` consumer equal, the changed consumers listed (expected: none from a `.ts`/`.tsx` file, any Python `fetch`
+  site removed), the AC-5 8-script count unchanged at 8 of 8, `tests/slice/test_packrt_conformance.py` and `test_linker_conformance.py` unchanged.
+- **Done when:** the table green; on the live fixture build `svc:state/stores.py::DbStore.load` has no consumer fact and no Link, the
+  closed-world sweep (definition B) reports 0 unplanted Links, `dyn.ts::go` and `forward` keep their keyless Links. Gate `analyst`;
+  `packs/` is hashed, so it lands before the `ac5-gate-1` record.
+
+**D12: `target-not-mapped` needs a binding chain, and LNK-42/43's carrier has none.** Verified: `ccg/linker/link.py:link` writes the
+provider-less Link only when `Binding.unmapped` is set, and `ccg/linker/bind.py:_service_chains` sets it only for a Compose service whose
+`build.context` names a never-built unit (or a launch chain, or an out-of-manifest mount). `legacy_fee` and `run_tool`
+(`fx-svc/api/orders.py`) fetch the bare paths `/legacy/fee` and `/tools/run`: no host, no port, no env read, and `fx-svc/deploy/compose.yaml`
+declares no service for either unit, so no chain exists and a never-built unit has no provider fact to key-match. The same rule is why
+AB-4's LNK-15 clause waits for P2 (P1-17 binding decision (f)). **Decision:** give each carrier a binding through the P1 contract, no new mechanism, no census or floor change:
+`fx-svc/deploy/compose.yaml` gains `legacy` (`build: {context: ../legacy}`, `ports: ["8010:8010"]`) and `tools` (`build: {context:
+../tools}`, `ports: ["8020:8020"]`); `fx-svc/api/orders.py` fetches `http://legacy:8010/legacy/fee` and `http://tools:8020/tools/run` (a
+module constant or a literal; port values distinct from 8000, 8200, 8300 so no `port-shared` row moves). The chain is URL host -> Compose
+service -> `build.context` -> the unit; in SC-STEADY the unit is not built, so the Link is `possible`/`target-not-mapped`, `TO_UNIT` to the
+unit; in a world with every unit built the same chain narrows to the provider (`confirmed`/`binding-confirmed`), and in AB-1 the kept
+bundle's provider is linked as before. **AC-9b's reach at P1 (disclosed, not new):** crossings into a never-built unit are flagged when a
+binding chain reaches it; an unbound consumer (a hostless path, an environment read) is not (AB-4's LNK-15 shape, P2). The stakeholder
+may still ask for the wider rule (a consumer key matching no provider while a never-built unit exists links to that unit: a new Link
+semantic with false alarms and new floors); it is not built here.
+- **57d files (after 57c):** `fixtures/system1/fx-svc/deploy/compose.yaml`, `fixtures/system1/fx-svc/api/orders.py`, `tests/test_fixtures.py`
+  (the `fx-svc` entries of `PINNED_SHAS`: all five commits and four branches change), `tests/test_fixture_binding_live.py` (the Link tier gains
+  LNK-42/43 in the all-built world: `confirmed`/`binding-confirmed`, `BOUND_BY` ord 0 the URL entry).
+- **Steps:** (1) probe on the live fixture build first (stop rule: if the Link in a store with `svc-legacy` and `svc-tools` failed is not
+  `possible`/`target-not-mapped` with `TO_UNIT`, stop and return to the architect; do not tune the linker); (2) the two edits, SHAs
+  regenerated; (3) the pin green. `UNIT_FLOORS` and the unit counters do not move (a service is not a unit, no callable is added).
+- **Done when:** the link multiset of the fixture build differs only by the two bound Links; LNK-42/43 and AB-2 green in the driver;
+  `tests/test_fixtures.py` green. Gate `analyst`; `cpg/fixtures/**` is hashed, so it lands before the `ac5-gate-1` record.
+
+**D9, D11, D13, D14: rows (57c, `qa-engineer`).** Row text each carries, in the manifests (`expected/fx-web.yaml`, `fx-svc.yaml`, `cross.yaml`)
+and the two test plans (`docs/test-plans/connected-code-graph-fixtures.md`, `docs/test-plans/connected-code-graph-p1.md`):
+- **DF-3 `p1Form`** (D9): `requeue` is `possible`/`partial-key` at d2, not `flow-unavailable:python` (its Link is LNK-11's, `partial-key` since
+  P1-49; `-answer-spec2.md` §5 gives `flow-unavailable:<lang>` only to a hop whose own edge is `confirmed`). `extras` gain
+  `svc:clients/jobs.py::call_named` and `web:app/src/api/dyn.ts::go`, each d2 `possible`/`unknown-key`: keyless consumers fan out to every
+  `http` provider including `create_order` (P1-55's accepted trade-off; `forward` is already listed that way). `DbStore.load` stays unplanted
+  (57a removes it). Re-derive the whole list against the live answer after 57a.
+- **AC6-URL-3 `p1Form`** (D11): `possible`/`unknown-key` at Link level from `dyn.ts::forward`; it has **no** `CONSUMES` fact: `forward(...args)`
+  leaves no value to key, `ccg/packrt/run.py:_emit_edge` emits nothing for an empty slot, and the linker reads the lifted leaf
+  (`_unknown_lifted`, P1-16 hand-off (a)). The `runtime-built` fact reason is URL-1's and URL-2's, not URL-3's.
+- **SK-10 `off`** (D13): `{outcome: listed, reason: frontend-ignore, file_record: false}` (`on` unchanged). `jssrc2cpg` 4.0.579's default file
+  filter `(conf|test|spec|[.-]min|\.d)\.(js|jsx|cjs|mjs|xsjs|xsjslib|ts|tsx)$` has no left boundary on `test`, so `latest.ts` (any name ending
+  `test.ts`, `spec.ts`, `conf.ts`) is ignored by the frontend (verified with `javap -v` on `AstGenRunner$` in the toolchain image); the P1-08
+  fallback lists it honestly. The decoy's purpose still holds: the reason is `frontend-ignore`, never `test`. SK-11 (`e2e-helper.ts`) is unchanged.
+- **MR-PY, MR-TS gate `P2`** (D14): the frontend resolves neither planted call (only `CALLS_NAME` candidates), so TP-015's precondition cannot
+  hold on a Joern-only build; the P1 engine behaviour (a resolved site's other candidates `possible`/`resolution-unverified`, folded) is
+  covered by `tests/test_engine_group.py`, `test_engine_bfs_rows.py` and `test_engine_answer.py`. The rows return when an indexer (P2-5, `-p1-extraction.md` P1-15's
+  merge) is provisioned for the fixture build and a shape that resolves to Y is observed (stop rule: the first dispatch there probes it).
+  Census: the P1 rows are **85** (87 less these two), 134 distinct ids unchanged; P1-41's "87" is re-read as the census at that time.
+- **LNK-42/43** (D12): `note` names the binding (`svc:deploy/compose.yaml @services.legacy` / `.tools`, `build.context`), the provider locator
+  stays the symbol that exists only when the unit is built, and the P1 form is the Link to `unit:<svc-legacy|svc-tools>`; fixtures plan §4.7,
+  §8 (AB-2's "its link is LNK-43") and the carrier sentence say so; AB-4's LNK-15 clause stays P3/P2.
+Files (five): `expected/fx-web.yaml` (DF-3, AC6-URL-3, SK-10, MR-TS), `expected/fx-svc.yaml` (MR-PY, LNK-42/43), `expected/cross.yaml` (LNK-42/43), and the two test plans. Done: `tests/test_fixtures.py`
+and the driver's offline tests green with the new census; rows red only where the engine or fixture unit above is pending.
+
+**O-1 (no change).** The failure of `svc-legacy` is forced by the scenario runner (the fixtures plan §8: a manifest `buildFailure` marker; "a
+tolerant frontend skips unparsable files and would not fail a build on them"), not by `legacy/broken.py`; the real extractor must not
+fail a unit on one unparsable file, or one bad file would unmap a whole unit. The driver's `refresh(build=...)` injection is the designed
+mechanism. 57e records it in the report's scenario preamble.
+
+**57e (`qa-engineer`, dispatch C, after 57a, 57c, 57d and the D10 outcome):** `tests/test_fixture_gate_p1.py`, `tests/fixture_gate_p1_helpers.py`,
+the report. Steps: (1) update the row-set offline test's constants (distinct ids, P1 census, raw entries) and the means (URL-3 asserts
+the Links and the absence of a `CONSUMES` fact; MR rows removed; LNK-42/43's expected provider is the unit anchor as the store writes it, which
+the first live run settles: the helper compares `unit:<rootPath>`, the linker's anchor is `unit:<hex unit id>`); (2) one live run of the
+tier on a throwaway store; (3) the mutation spot-check on one of the new forms. Done: every remaining row green, or red with a defect id
+and an owner; the closed-world sweep (definitions A and B) at 0 unplanted.
+
+**Order and parallelism.** Wave 1 in parallel (disjoint files): **57a** (`packs/`, pack tests) and **57c** (manifests, test plans).
+Wave 2: **57d** (fixture tree and pins; after 57c, which owns the manifest rows it must satisfy; it shares `tests/test_fixtures.py` with no
+wave-1 unit). Wave 3: **57e** (shares the driver files with nothing; needs 57a, 57c, 57d). The D10 outcome, when answered, is one more
+`qa-engineer` row-text unit that must follow 57c (shared manifests and plans). **Gate effect on P1-41/P1-42:** D8 and D12 block the gate
+(a false-positive Link set and an AC-9b row); D9, D11, D13, D14 are row corrections that block only their own rows; D10 blocks AC-6's
+dynamic-import floor until answered, and may instead be reported "not met" if the stakeholder takes option B.
+
+**Open stakeholder question Q-DYN (D10; the plan's decision, not the architect's).** The P1 plan has no step that emits a dynamic-import
+fact: the pack runtime reads only the nine default packs, none emits `library_api`; the normalizer sets `dynamic` true for TypeScript
+`import()` only (`normalize/javascript.py`) and always false for Python (`normalize/python.py`); bundle spec3 §1.5 says "the assembler emits
+`possible`/`dynamic-import`" and no assembler step (P1-18) does. Link-kind `library_api` is P2 (fixtures plan §4.7), so even an emitted fact
+reaches no Link at P1: `build_rows` drops a keyless `CONSUMES` (`consumer-key-none`), and an impact answer lists nothing for it. AC6-DYN-1..3
+and TW-1 are P1 rows and the AC-6 floor for the kind is 3. Options:
+- **A, fact-level pack (size S, one `tdd-engineer` dispatch):** a new `dynamic-import` pack (rules on the callees `import_module`,
+  `__import__` and TypeScript `import` with a non-constant first argument; emit `CONSUMES library_api` keyless, `possible`/`dynamic-import`),
+  added to `DEFAULT_PACKS` and `tests/test_refresh.py`, leaf-harness and pin work as P1-55, pinned counts re-derived. AC6-DYN-1..3 pass at the
+  fact level only; TW-1 becomes "the literal call yields no dynamic-import fact" (a confirmed `library_api` consumer needs the P2 key shape,
+  fixtures plan OI-3). Nothing shows in an answer.
+- **A+, answer-visible (size L, graph and answer changes):** A plus a stored keyless `library_api` consumer edge and an answer row; touches the
+  graph model (`-p1-graph.md`), the assembler and `-answer-spec2.md`. Not recommended at P1: the display needs P2's library linking to mean anything.
+- **B, defer (recommended):** AC6-DYN-1..3 and TW-1 gate P2 with the `library_api` link kind (P2 backlog item, owner `architect`: the
+  consumer-key shape, the `dynamic-import` emission, Python `dynamic` detection, the answer row); AC-6's P1 report states dynamic import "not
+  met at P1" (AC-6 closes at the P2 exit by the 2026-11-01 ruling regardless); the P1 census is **81**; fixtures plan §6 floor for the kind is 0 at P1.
+Recommendation B: A buys a fact no reader consumes, and the plan's own AC-6 closure is at P2. Take A if the stakeholder wants the P1 gate
+to evidence all four kinds at the fact level.
 
 ## P1-17 · linker — `tdd-engineer`
 
@@ -826,7 +939,7 @@ example-config consumer).
   callers; **mention call sites have this consumer:** the linker binds only tool mentions (an `mcp__<server>__<tool>` name, or a
   bare name the extractor matched against `known_tools`, P1-44) to providers of that tool, **stripping a leading `./` from a callee
   name before matching** (the extractor keeps names as written, spec3 §5.6); script and command mentions (about 94% of the
-  corpus's 1,868) are inert in P1: no link, they stay `CallSite` nodes. Test: `./x.sh` and `x.sh` match one provider; a script mention makes no link; (8) a link into a unit never built is `possible`/`target-not-mapped`; (9) O-9, the `-p1-graph.md` §2 rule for every link kind: a
+  corpus's 1,868) are inert in P1: no link, they stay `CallSite` nodes. Test: `./x.sh` and `x.sh` match one provider; a script mention makes no link; (8) a link into a unit never built is `possible`/`target-not-mapped`, **reached only through a binding chain** (URL host -> Compose service -> `build.context`, a launch chain, or an out-of-manifest mount): a never-built unit has no provider fact, so an unbound consumer (a hostless path, an environment read) gets no such Link (P1-57, D12); (9) O-9, the `-p1-graph.md` §2 rule for every link kind: a
   `VIA`'s reason is `binding-confirmed` iff the `VIA` is `confirmed` and the link has a `BOUND_BY` edge with that site's
   `siteId` (a confirmed unbound site keeps `key-match`; a `possible` site keeps its own reason), and `Link.reason` is
   `binding-confirmed` iff some confirmed site is; mutants: dropping the `siteId` condition, deriving the `Link` reason
