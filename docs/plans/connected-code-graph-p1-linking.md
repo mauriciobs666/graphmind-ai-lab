@@ -669,15 +669,17 @@ partial. Observed on the proving repository's stored bundles: 72 keyed `http` co
 (`decision-models/decisionmodels/lmstudio.py:366`, `GET /{?}`, a call to the external LM Studio); the `fetch` lifting with `ownSite`
 forced on changes nothing there (45 leaf sites both ways), so the pack setting is inert on the proving repository.
 **Decision.** (1) `ccg/packrt/run.py:_one` (http): when the normalized consumer key has at least one `{?}` segment and no literal
-segment (the root `/` alone stays a key), the fact is keyless: `key` none, `possible`, reason `runtime-built`, so the linker's
-`unknown-key` fan-out applies. The predicate lives in `ccg/packrt/httpkey.py` beside `is_url_like`. (2) `packs/fetch/pack.yaml`
+segment (the root `/` alone stays a key; so does any path with a literal segment or a `{}` segment: `{}` is a known literal masked by step
+8a, e.g. `/42/{?}`, so the address is partly known, which behaviour (3)'s "fully unknown key" excludes), the fact is keyless: `key` none, `possible`, reason `runtime-built`, so the linker's
+`unknown-key` fan-out applies. The predicate lives in `ccg/packrt/httpkey.py` beside `is_url_like`. The rule applies to `CONSUMES` only: the `edge == "CONSUMES"` guard in `_one` stays as stated intent (a provider with an unresolved piece is dropped earlier, so the guard is not reachable today and is not pinned by a test; a comment says so). (2) `packs/fetch/pack.yaml`
 `liftings[fetch-url].ownSite: true`: a wrapper no call edge reaches is a consumer at its own site (AC6-URL-2's `go`); `s14a`
 conformance must stay equal. Cost, stated: the one proving-repository site above becomes a keyless consumer (an `unknown-key`
 fan-out to every `http` provider, the P1-36 trade-off); AC-5 recall is unaffected. Rejected: leaving `GET /{?}` (AC-6 asks that an
 address built at runtime be shown as possible; a consumer that links to nothing is shown nowhere).
 - **Files:** `ccg/packrt/run.py`, `ccg/packrt/httpkey.py`, `packs/fetch/pack.yaml`, `tests/test_packrt_run.py` (or the file holding the
   `_one` tests), `tests/test_httpkey_*.py`.
-- **Steps:** (1) red: a reference table over key shapes (`/{?}`, `/{?}/{?}`, `/`, `/a/{?}`, `/{?}a`, origin unknown or known, query-only,
+- **Steps:** (1) red: a reference table over key shapes (`/{?}`, `/{?}/{?}` keyless; `/`, `/a/{?}`, `/{}`, `/{}/{?}`, `/{?}/{}` keys; `/{?}a` and
+  `/a\x01` keyless, masked whole by 8a; origin unknown or known, query-only,
   verb `*`) and the `ownSite` on/off pair over `fetch_chain()`-style records; (2) the predicate and the `_one` rule; (3) the pack
   setting, then the before/after.
 - **Done when:** the table green; `tests/slice/test_packrt_conformance.py` and `test_linker_conformance.py` unchanged; acceptance
