@@ -12,63 +12,60 @@ engineering** (Claude Code and OpenCode artifacts).
 - `falkor-chat/` — Hybrid chat system (humans + AI) where **FalkorDB is the single store for
   everything**: chat history, workspace/reference data, workflow definitions and execution
   traces. GraphRAG (in-graph vector + traversal) and graph-state-machine workflows. Design and
-  query library are locked and live-verified. Milestone status is authoritative in
-  `falkor-chat/docs/BACKLOG.md`.
+  query library are locked and live-verified; milestone status: `falkor-chat/docs/BACKLOG.md`.
 - `salesperson/` — Business-facing, mobile-first storefront SPA (React + Vite + TypeScript,
   `i18next` in English/Brazilian Portuguese/Spanish) for the workflow-engine-backed `salesperson`
   agent hosted by `falkor-chat/`'s server: a pure static bundle, served at `/shop` on that same
-  FastAPI process (one process, one port, no CORS). Delivered per `docs/requirements/salesperson-ui.md` /
-  `docs/plans/salesperson-ui.md`; delivery record, the defect-fix wave, and open items are in
-  `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`.
+  FastAPI process (one process, one port, no CORS). Per `docs/requirements/salesperson-ui.md` /
+  `docs/plans/salesperson-ui.md`; record and open items: `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`.
 - `opencode/` — Personal OpenCode configuration. **`agents/tank/`** is the one live agent: a
   headless, local-model DevOps variant that runs a read-only health/hygiene check by default and
   can bring up/tear down one Docker-Compose environment it itself started
-  (`opencode/agents/tank/README.md`). The manual
-  covering local LM Studio setup, `opencode/docs/manuals/local-llm.md`, is what `tank` builds on.
+  (`opencode/agents/tank/README.md`); it builds on the LM Studio manual `opencode/docs/manuals/local-llm.md`.
 - `cpg/` — Code-Property-Graph component code home: durable CPG reload artifacts
   (`.cpg-artifacts/`, gitignored) for the Joern-built graphs (`cpg_<component>`) loaded into
   FalkorDB, and the connected-code-graph (`ccg`) contracts, schemas, sandbox, fixtures and eval data
   (`cpg/README.md`). The MCP server is **not** here — it's the top-level `cypher-mcp/`, generic rather than
   CPG-specific. **Root `docs/HISTORY.md`/`docs/BACKLOG.md` are this component's own** (their own
-  headers say so) despite living at the repo root where they look like a project-wide log — a
+  headers say so) though they sit at the repo root — a
   delivery entry or backlog item for any other component belongs in that component's own `docs/`
   tree instead (or, for one with none of its own, e.g. `salesperson/`, the tree of the component
   that hosts it — see that Structure bullet above).
 - `cypher-mcp/` — the **`cypher` MCP server** (stdio, Python): the single read-only tool
   `mcp__cypher__query(graph, cypher)` over FalkorDB, generic (not `cpg_*`-only). **Runs
-  containerized** via `cypher-mcp/docker-run.sh` (built by `build.sh`); image tag is a **content
-  hash of the build inputs**, so a stale image is unrepresentable, and it reaches FalkorDB over the
-  host's published port rather than the shared `falkordb-dev` container. **Host venv retained**
+  containerized** via `cypher-mcp/docker-run.sh` (built by `build.sh`; image tag = **content hash of
+  the build inputs**), reaching FalkorDB over the host's published port, not the shared `falkordb-dev`. **Host venv retained**
   (`setup.sh`/`run.sh`) as the fast test loop and fallback. Repo-root `.mcp.json` wiring is
-  **Claude-Code-only** — OpenCode/Kiro wire MCP their own way, neither wired yet (backlog C-310).
+  **Claude-Code-only**; OpenCode/Kiro are not wired yet (backlog C-310).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
   history). Every agent's raw capture writes into one shared `ws:agent-team` workspace
   (falkor-chat), so one query reaches every agent's raw learnings; `cobb` distills it. The former
   `kaizen_team` FalkorDB graph is retired and deleted. `claude/AGENTS.md` carries the agent
   context, incl. the raw-capture write shape; `claude/CLAUDE.md` is a `@AGENTS.md` import stub.
+- `coordination-graph/` — `coordgraph` CLI mirroring the coordination files (teco ledgers, reviews,
+  requirements, `BACKLOG.md`, agent `kaizen/plan.md`, registered KB files) into a FalkorDB `coordination`
+  graph: read views (in flight, unit status, planned, milestone proposal), a post-edit hook (registration is the stakeholder's), KB freshness.
+  Files are the truth.
 - `kiro/` — A checked-in Kiro CLI agent (`falkor-chat-demo`) connecting to `falkor-chat`'s MCP
-  server as a client, restricted to `send_message`/`read_messages`, demoing Kiro-to-falkor-chat MCP
-  connectivity; plus a broader, still-Draft multi-agent Kiro vision in `kiro/DESIGN.md`.
+  server as a client, restricted to `send_message`/`read_messages`, demoing that
+  connectivity; plus a broader, still-Draft multi-agent vision in `kiro/DESIGN.md`.
 - `mcp-monitor/` — Standalone, generic MCP tool-result watcher: polls a configured MCP tool on an
   interval, matches its result against a regex, and launches a command on match — its own MCP
-  *client*, Python 3.12 + `mcp` SDK, TOML config, one `asyncio.Task` per watch. Driven by
-  auto-waking a headless agent CLI on an `@mention` in a `falkor-chat` thread (zero
-  falkor-chat-side changes needed); also proven generic against a fake MCP server.
+  *client*, Python 3.12 + `mcp` SDK, TOML config, one `asyncio.Task` per watch. Wakes a headless
+  agent CLI on an `@mention` in a `falkor-chat` thread (no falkor-chat-side change); also proven generic.
 - `model-bench/` — Standalone, human-started harness for benchmarking **small local LLMs** against
   LM Studio: one model × one versioned task pack per run, stored with a full environment
   fingerprint, compared only within a role. Python 3.12, **zero runtime dependencies**; no CI hook,
   no pass/fail gate, no leaderboard, no runtime read outside `model-bench/` (golden data copied in
   and versioned here). **Delivered and closed (S0–S8)**, plus the three typed-decision-point packs
-  (guard, join-in, message type). Live spec: `model-bench/docs/DESIGN.md`, `FORMATS.md`. Requirements/plan live at the **repo root**, not `model-bench/docs/`; working
-  state is in `model-bench/AGENTS.md`, delivery record in `model-bench/docs/HISTORY.md`.
+  (guard, join-in, message type). Live spec: `model-bench/docs/DESIGN.md`, `FORMATS.md`. Requirements/plan live at the **repo root**; working
+  state: `model-bench/AGENTS.md`, record: `model-bench/docs/HISTORY.md`.
 - `decision-models/` — Synthetic, labelled datasets and fitted candidates for `model-bench/` (`docs/requirements/typed-decision-models.md`).
 - `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard) for
   cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` + `agent-standards` (cobb's
   machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern CPG→FalkorDB pipeline),
   `cpg-analysis` (the consumer side), `work-items` (work-item IDs + the `wi` CLI; live spec
-  `skills/work-items/docs/SPEC.md`), `python-web-quirks` (live-verified asyncio/Starlette/
-  FastAPI/pydantic gotchas, incl. test-harness ones, for `coder`/`tdd-engineer`/`architect`/
-  `analyst`/`qa-engineer`). OpenCode-only skills go in `opencode/skills/` (currently empty). Format ports across Claude Code/OpenCode/
+  `skills/work-items/docs/SPEC.md`), `python-web-quirks` (live-verified Python web/async/test-harness gotchas for the implementers and reviewers). OpenCode-only skills go in `opencode/skills/` (currently empty). Format ports across Claude Code/OpenCode/
   Kiro; tool-gating & activation behavior do not — verify per tool.
 
 ## Component docs (read before working in a component)
@@ -81,6 +78,7 @@ engineering** (Claude Code and OpenCode artifacts).
 | `cpg/` | `cpg/README.md` · `docs/HISTORY.md` · `docs/BACKLOG.md` · `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
 | `cypher-mcp/` | `cypher-mcp/README.md` |
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` |
+| `coordination-graph/` | `coordination-graph/README.md` · `coordination-graph/AGENTS.md` · `skills/coordination-graph/SKILL.md` |
 | `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` |
 | `mcp-monitor/` | `mcp-monitor/README.md` · `mcp-monitor/AGENTS.md` |
 | `model-bench/` | `model-bench/README.md` · `model-bench/AGENTS.md` · live spec: `model-bench/docs/DESIGN.md` (design), `model-bench/docs/FORMATS.md` (formats) · `docs/requirements/small-model-benchmarking.md` · `docs/plans/small-model-benchmarking.md` |
@@ -181,8 +179,8 @@ engineering** (Claude Code and OpenCode artifacts).
     exception is a fact that is a **live constraint on the system** rather than a record of work
     (an interface limit, a rejected option with a reversal trigger), which belongs to the design
     surface that owns it — the component's live spec, or the requirements doc for
-    a scope decision. Backlogs are headed for the graph, the way team kaizen already is; keeping
-    finished work out of them is what makes that move a migration rather than a cleanup.
+    a scope decision. Backlogs are mirrored in the coordination graph (`coordination-graph/`; the file stays
+    the source) and headed there; history stays a file (`HISTORY.md`), so finished work stays out of them.
   - **An open item is rewritten, not appended to.** Revisiting one produces a *replacement* body:
     fold what you learned into it so the item reads as one present-tense statement of what is true
     now and what remains — **never a dated `Update:` clause stacked under the previous one.** After

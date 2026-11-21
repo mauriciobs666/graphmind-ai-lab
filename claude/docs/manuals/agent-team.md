@@ -20,7 +20,8 @@ through three things:
 2. **A fixed set of document kinds.** Every step of a feature leaves a document behind, and the
    next agent is handed that document's **path**, never a retelling of it.
 3. **Three layers of tracking.** A backlog for what's next, a coordination ledger for what's in
-   flight, and a history log for what's done.
+   flight, and a history log for what's done — plus a read-only index over them
+   (`coordgraph`) that answers "what's in flight / waiting on me / planned next" in one command.
 
 ### Who's on the team
 
@@ -316,6 +317,150 @@ is checked against `HISTORY.md` first.
 A useful one-liner to see where every plan in a component stands:
 `grep -m1 -H 'Status:' docs/plans/*.md`.
 
+### Asking "what's going on?" across the whole repo
+
+Reading ledgers and backlogs one by one gets slow. A tool called **`coordgraph`** keeps a
+read-only copy (a *mirror*) of all of them — ledgers, reviews, requirements, every component's
+backlog, each agent's `kaizen/plan.md` — and answers the common questions in one command. **The
+files stay the truth**: the mirror is never edited by hand, and where the two disagree, the file wins.
+
+**First time only:** run `coordination-graph/setup.sh` once (it creates the tool's own Python
+environment; `coordgraph.sh` stops and tells you to do this if it is missing). Then run it from
+the repo root. Add `--confirm coordination` to each command (it is the "yes, I mean the
+shared copy" switch); `export COORDGRAPH_SHARED_CONFIRM=coordination` once per terminal does the same.
+
+| You want to know | Run |
+|---|---|
+| What is in flight — open coordinations, verdicts, requirements | `coordination-graph/coordgraph.sh inflight --confirm coordination` |
+| **What is waiting on me** — questions paused units have asked you | `coordination-graph/coordgraph.sh inflight --waiting --confirm coordination` |
+| One piece of work: each unit's status, agent, deliverable, open question | `coordination-graph/coordgraph.sh unit <ledger-slug> [U3] --confirm coordination` |
+| What is planned next for a component or agent | `coordination-graph/coordgraph.sh planned <component> --confirm coordination` (add `--all` to include deferred and rejected items) |
+| A suggested grouping of that backlog into milestones | `coordination-graph/coordgraph.sh propose <component> --confirm coordination` (add `--per-milestone N`; default 6 items each) |
+
+`unit` also accepts a work-item ID instead of a slug. `propose` is **only a suggestion**: it
+changes nothing; accepting a milestone plan is still a decision you take with `teco`. A lookup that
+finds nothing exits non-zero rather than printing an empty answer.
+
+```mermaid
+flowchart LR
+    F["Ledgers, backlogs,<br/>reviews, requirements<br/>(the files = truth)"] -->|"sync"| G[("Read-only mirror")]
+    G --> V["inflight · unit ·<br/>planned · propose"]
+    V --> Y["Your answer,<br/>under a sync header"]
+    F -.->|"edited since last sync"| D["drift: the header says so —<br/>read the file instead"]
+```
+
+**Reading the sync header.** Every answer starts with three lines:
+
+```
+Synced: <oldest>Z – <newest>Z (<n> sources) · Hook: active|disabled
+Registry: <n> items · last event <date> · <m> unflushed journal events
+Drift: none
+```
+
+- **Synced** — how old the copy is (oldest to newest source). `never` means some file has not been
+  copied at all.
+- **Drift** — files that changed after they were copied. Each is listed with a state (`changed`,
+  `unsynced`, `gone`, or `stale-parser`) and "file wins". An answer row marked `⚠ drift` comes
+  from a file that moved since the copy: **do not trust that row; open the file.** Anything not
+  flagged is current. `coordgraph drift` prints just this check and exits non-zero when it finds any.
+- **Registry** — only matters if it says `unavailable`: then work-item IDs were compared as
+  written, not resolved, so the same item under two spellings may show twice.
+- **Hook** — see below. `active` does **not** by itself mean the hook is installed; it means it
+  has not been switched off.
+
+**Bringing the copy up to date.** `coordination-graph/coordgraph.sh sync --changed --confirm coordination`
+copies every file that changed; `sync <path>` copies one; `sync --all` also drops entries for files
+that no longer exist. Run `drift` afterwards: it should say `Drift: none`. Agents can run these
+too; you rarely need to.
+
+**The post-edit hook (optional, set up by you).** Once registered, the hook copies a ledger, backlog
+or other covered file into the mirror right after an agent edits it, so the answers above stay
+current without anyone remembering to run `sync`. It is **not registered yet**: it takes one
+paste of a settings block, which only you apply by hand
+(`coordination-graph/docs/hook-settings.md` has the block and the go-live steps). Whether it fires
+inside every kind of agent session (background subagents, worktrees) has not been checked yet; where
+it is silent you fall back to the header and `sync` by hand — nothing breaks.
+
+- **Before it is registered:** everything above works; the copy is only as fresh as the last
+  `sync`, and `Drift:` tells you how stale.
+- **After it is registered:** a quiet edit costs a few milliseconds. If an edited file could not be
+  copied (database down, say), the agent is told "this update is not complete" and should say so
+  to you; every further edit repeats that warning, and failed files are retried automatically with
+  growing delays. Anything it misses (an edit made outside Claude Code, a deleted file) shows up
+  as drift.
+- **Turn it off, instantly:** `touch coordination-graph/.state/disabled` (or set
+  `COORDGRAPH_HOOK_DISABLED=1`); the header then reads `Hook: disabled`. `rm` the file to turn it
+  back on — edits made meanwhile are copied on the next hook call, or at once with `sync --all`.
+  To remove it for good, delete the two `hooks` entries from the settings file.
+
+```mermaid
+flowchart TD
+    E["An agent edits a covered file"] --> H{"Hook registered<br/>and not disabled?"}
+    H -->|no| N["Nothing happens —<br/>drift shows until you run sync"]
+    H -->|yes| S["File is copied to the mirror"]
+    S -->|ok| Q["Answers are current"]
+    S -->|"could not copy"| W["Agent is warned and tells you,<br/>automatic retry later"]
+```
+
+**What the answers look like** (trimmed; the sync header comes first each time):
+
+```
+$ coordgraph unit coordination-graph
+claude/docs/plans/coordination-graph-coordination.md · docStatus: active
+  U4 Independent review of U2+U3
+    status: gated
+    agent: a4a42445657f6f008
+    deliverable: `claude/docs/reviews/coordination-graph.md` (Pass 1)
+  ...one block per unit; "agent: —" means none was recorded
+
+$ coordgraph inflight --waiting
+Waiting on the stakeholder (1)
+  <component>  <ledger path>  <unit>  asked 2026-11-20  <the question>
+
+$ coordgraph planned falkor-chat
+Backlog falkor-chat/docs/BACKLOG.md	(48 items)
+Planned (proposed / in progress) (48)
+  GAL-I02-K0002	🔵 proposed	-	-	<title>	falkor-chat/docs/BACKLOG.md
+  falkor-chat:K-079	🟡 in-progress	-	-	<title>	falkor-chat/docs/BACKLOG.md
+
+$ coordgraph propose falkor-chat
+Milestone M2.5 (approved, as recorded)
+    falkor-chat:K-016  <title>  [falkor-chat/docs/BACKLOG.md]
+Carried — in progress:
+  falkor-chat:K-079  <title>  [...]
+Not plannable yet:
+  falkor-chat:K-082  <title>  [...] — missing Priority, Depends on, Touches
+```
+
+- **`unit`** with only the ledger slug lists every unit; add a unit label (`U4`) for one. A label
+  the ledger does not have prints "no unit matches ..." and exits 1 (for example `unit
+  coordination-graph S9` finds nothing: that ledger's units are labelled `U<n>`).
+- **`inflight --waiting`** has one row per question a paused unit has put to you: component,
+  ledger, unit, `asked <date>` (or `asked unknown`), then the question. Rows are separated by tabs.
+  When nothing is waiting it prints `(none)`. (The example above shows the row format; no question
+  was waiting when this was written.)
+- **`planned`** gives one line per open item: its ID (older items look like `falkor-chat:K-079`,
+  newer ones like `GAL-I02-K0002`), 🔵 proposed or 🟡 in progress, **Priority**, **Milestone**
+  (each `-` when the backlog item records none), the title, and the backlog file.
+- **`propose`** groups items into milestones already approved ("as recorded"), items carried
+  because they are in progress, and **"Not plannable yet"**: items whose backlog entry lacks a
+  Priority, a Depends-on, or a Touches line, so the tool can't rank them. Today most of
+  `falkor-chat`'s open items land there; filling in those three fields on an item is what lets a
+  future `propose` slot it into a milestone.
+
+**Learnings store.** `coordination-graph/coordgraph.sh kb-status --confirm coordination` reports
+how far the shared learnings store (`ws:agent-team`) has caught up with the registered
+knowledge-base files. The copy is loaded: the command prints `KB mirror: last sync <time>` and then one row per
+flagged section. A row looks like
+`degraded  <file> § <section>  <document id>: extraction failed, still searchable`:
+
+- **`degraded`** — informational. The store couldn't extract entities from that section, but the text
+  is still found by searches. Nothing to do.
+- **`failed-doc`** — act on it: that section is **not** searchable. Ask the knowledge-base maintainer, `cobb`, to re-run the KB sync, which retries it.
+- Other flags (`stale`, `pending`, `unmirrored`, duplicate claims) mean the store is behind the
+  files; the same sync catches it up (also `cobb`'s). The command exits 0 when the only rows are `degraded`, so
+  they do not count as a problem.
+
 ## Technical documentation vs. user documentation
 
 | | Technical (engineering) docs | User manuals |
@@ -472,5 +617,26 @@ The server started after Claude Code had already tried to connect. Run `/mcp` an
 `falkor-chat-agent-team`.
 
 **Where do I find out what's still open for a component?**
-Its `docs/BACKLOG.md`. For something in flight, the matching `docs/plans/<slug>-coordination.md`.
-For what already shipped, `docs/HISTORY.md`.
+Its `docs/BACKLOG.md`, or `coordgraph planned <component>` for the same list with the sync header.
+For something in flight, the matching `docs/plans/<slug>-coordination.md`, or `coordgraph inflight`
+across all of them. For what already shipped, `docs/HISTORY.md`.
+
+**`inflight --waiting` says nothing is waiting, but I think an agent asked me something.**
+Check the header's `Drift:` list first: if that ledger is listed, the copy is stale. Open the
+ledger itself and look for a `paused` row — the file is the truth.
+
+**A command says "refused" or can't reach the database.**
+Add `--confirm coordination` (or set `COORDGRAPH_SHARED_CONFIRM=coordination`); without it the tool
+only talks to a throwaway test database. If it is still unreachable, FalkorDB is down: ask `teco`
+or `devops` to bring it up. Views and `sync` do not work until it is.
+
+**An agent told me "this update is not complete" after editing a ledger (hook registered).**
+The edit is safe in the file; only the mirror copy failed. Run `coordgraph sync <that file>
+--confirm coordination`, then `coordgraph drift`. The hook also retries on its own; if it keeps
+failing, switch the hook off (above) and ask `teco` to look. A message saying the hook was
+**"refused by the guard"** is a configuration fault, not an outage, and is not retried for about 15
+minutes: fix the setting, or run `sync --all`.
+
+**The header says `Hook: active` but nothing seems to sync automatically.**
+That word only means the kill switch is off. Until you register the settings block, nothing
+fires the hook — use `sync`.

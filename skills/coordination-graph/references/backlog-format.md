@@ -41,7 +41,7 @@ parses as "same backlog" but is ambiguous to `wi`; do not write it. A ref is sat
 is open in some backlog (then it is a blocker) or a delivery-shaped history heading names it.
 `lint` errors `unresolvable-dependency` on a ref that is neither: fix the ID, drop the ref, or add the
 delivery heading. (Today the CLI's `lint` compares IDs as written; the registry-backed join, so a
-dependency written under an old name matches a renamed item, is planned with the views.)
+dependency written under an old name matches a renamed item, is resolved at read time by the views.)
 
 ## Delivery-heading convention
 
@@ -68,7 +68,7 @@ Existing deliveries are not backfilled; fix one when `lint` first flags a depend
 
 When the first item of milestone `Mx` turns `🟡`, append `— started YYYY-MM-DD` to `Milestone` on
 **every** open item of `Mx` in the same edit. The marker survives delivery, so a half-delivered
-milestone still counts as started (`propose`, planned S7b, never inserts a milestone ahead of a started one).
+milestone still counts as started (`propose`, never inserts a milestone ahead of a started one).
 `lint` errors `milestone-started` if items of one milestone disagree on `started`, or a `🟡` item's
 milestone lacks it.
 
@@ -77,7 +77,7 @@ milestone lacks it.
 `<repo-root path>#<symbol-or-anchor>` (`falkor-chat/server/falkorchat/repository.py#list_documents`,
 `falkor-chat/docs/QUERIES.md#ingest-job-order`) or `mcp:<tool>.<field>`; compared lower-cased. Mode is
 mandatory: `(changes)` if the item alters it, `(relies)` if it only depends on it. Two items overlap
-(and `propose`, planned S7b, never schedules them in parallel) when they share a path/glob (conservatively), a `graph:` key,
+(and `propose`, never schedules them in parallel) when they share a path/glob (conservatively), a `graph:` key,
 or a fact token unless both sides are `(relies)`. Run `coordgraph facts --like <x>` first and reuse an
 existing token; never invent a spelling variant. Touching an item means a substantive content edit;
 filling all three facts (`Priority`, `Depends on`, `Touches`) on a new item is the duty, backfilling

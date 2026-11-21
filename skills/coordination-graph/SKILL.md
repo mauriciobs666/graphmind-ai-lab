@@ -2,66 +2,75 @@
 name: coordination-graph
 description: >-
   How to read and write the coordination graph: the FalkorDB mirror of the repo's coordination
-  files (teco ledgers, reviews, requirements, component BACKLOG.md files, agent kaizen plan.md),
-  queried through the `coordgraph` CLI, plus the item format, delivery-heading and milestone
-  conventions the mirror depends on. Use when asked what is in flight, waiting on the stakeholder,
-  blocked or planned for a component/agent, for a milestone proposal, for the status of a ledger
-  unit (by slug, work-item ID or label); when resuming a coordination; when writing or editing a
-  backlog item, `Depends on`/`Touches`/`Milestone` field, a ledger `Item`/`Needs` column, or a
-  history heading that delivers an item; or when a hook reports a mirror sync failure.
+  files (teco ledgers, reviews, requirements, component BACKLOG.md files, agent kaizen plan.md,
+  registered KB files), queried through the `coordgraph` CLI, plus the item format,
+  delivery-heading and milestone conventions it depends on. Use when asked what is in flight,
+  waiting on the stakeholder, blocked or planned for a component/agent, for a milestone proposal,
+  for a ledger unit's status (slug, work-item ID or label); when resuming a coordination; after
+  `search_documents` (kb-status); when writing or editing a backlog item, `Depends on`/`Touches`/
+  `Milestone` field, a ledger `Item`/`Needs` column, or a history heading that delivers an item;
+  or when a hook reports a mirror sync failure or none appears after a mirrored-file edit.
 ---
 
 # coordination-graph — views, item format, conventions
 
 The graph is a **read-only mirror**: files are the truth, a hook mirrors every edit, and the
-views read the mirror. Never write to the graph; edit the file. Live design:
-`claude/docs/plans/coordination-graph.md` (+ `-graph.md`, `coordination-graph3.md`).
+views read the mirror. Never write to the graph; edit the file. Design:
+`claude/docs/plans/coordination-graph.md` (+ `coordination-graph3.md`); component:
+`coordination-graph/README.md`.
 
-**Entry point.** `coordination-graph/coordgraph.sh <sub>` (run from anywhere). Bare
-`coordgraph <sub>` below abbreviates exactly that path. It needs the component venv
-(`coordination-graph/setup.sh`); with none it exits 1 naming the fix.
+**Entry point**, from the repo root: `coordination-graph/coordgraph.sh <sub>`. Bare `coordgraph <sub>`
+below abbreviates that. It needs the component venv (`coordination-graph/setup.sh`); with none it
+exits 1 naming the fix, and the equivalent is `PYTHONPATH=coordination-graph
+cypher-mcp/.venv/bin/python -m coordgraph <sub>`. **Shared instance:** a store-backed command needs
+`--confirm coordination`, or the standing `COORDGRAPH_SHARED_CONFIRM=coordination` for routine ones
+(views, `drift`, `sync`, `kb-status`); `bootstrap`, `rebuild`, `kb-reconcile` need the flag and are
+the distiller's/`graph-dba`'s, not yours. Never export `COORDGRAPH_EPHEMERAL_PORT`.
 
-## Build status — read before trusting a recipe
+## Status — read before trusting a recipe
 
-- **Built (offline, no store):** `lint`, `migrate`, `facts`, `history-coverage`.
-- **Planned, not built:** the store and the views (S3 `bootstrap`/`sync`/`rebuild`/`drift`/`query`; S7a
-  `inflight`/`unit`/`planned`; S7b `propose`), KB freshness (S6 `kb-*`), the post-edit hook
-  (S8). Until S7a lands, answer "what is in flight / status of unit X" by reading the ledger file;
-  this skill's rules about the sync header, drift and hook failures take effect when the views ship.
-  When a planned subcommand errors as unknown, that is why, not a fault.
+Every subcommand below is built and the shared mirror is loaded. **The post-edit hook is built but
+registering it is the stakeholder's step** (`coordination-graph/docs/hook-settings.md`); until it is,
+nothing mirrors an edit for you, and `Hook: active` in a header only means the kill switch is off,
+not that the hook is registered. Which contexts the hook fires in (main session, foreground and
+background subagents, worktrees, a Bash that writes then fails) is **unverified until S0 runs**.
 
 ## Rules that never bend
 
 1. **Relay the sync header.** Every read view prints one first (`Synced … · Hook: active|disabled`,
-   `Drift: none|…`, `Registry: …`). Pass it on with the answer; never strip it.
+   `Registry: …`, `Drift: none|…`). Pass it on with the answer; never strip it.
 2. **A drift flag means quote the file.** A `⚠ drift` row or a `Drift:` source is stale in the
-   graph: the file wins; read it and quote that row from the file, and say the graph lagged.
-3. **A hook exit 2 means the edit is not done.** The file is written but its mirror sync failed or
-   is pending: say so in the same turn, name the file and the reason the hook printed, do not call
-   the update complete. The hook retries by itself; `coordgraph sync <file>` forces it. *(Hook is
-   planned, S8; the rule binds from the day it is registered.)*
-4. **A proposal never takes effect without explicit stakeholder approval.** `propose` writes
-   nothing; relay it for approval. Only after the stakeholder approves each placement in
-   conversation do you record `Milestone` on the items, by a normal file edit. An agent that
-   *requests* a proposal (`teco`) relays it and never applies it.
+   graph: the file wins; read it, quote that row from the file, and say the graph lagged.
+3. **Never call a mirrored-file edit complete on silence.** After you edit a mirrored file (ledger,
+   backlog, review, requirements, `plan.md`, registered KB file): if the hook reports exit 2, the
+   file is written but not mirrored — say so in the same turn, name the file and the printed
+   reason, and do not call the update done (the hook retries; `coordgraph sync <file>` forces it).
+   **If no hook report appears** — the hook is unregistered, or you are in a context where it may not
+   fire — run `coordgraph sync <file>` yourself after the edit, and `coordgraph drift <file>` when
+   unsure; a non-zero exit is reported the same way. Do this for every such edit until the hook is
+   registered and S0 has cleared your context.
+4. **A proposal never takes effect without explicit stakeholder approval.** `propose` is a pure
+   planner that writes nothing; relay it for approval. Only after the stakeholder approves each
+   placement in conversation do you record `Milestone` on the items, by a normal file edit. An agent
+   that *requests* a proposal (`teco`) relays it and never applies it.
 5. **Never guess an identity or a unit.** Report `ambiguous`/`unknown`/`unminted` with the
    reason printed; do not pick a candidate.
 
 ## The commands
 
-| Question | Recipe | State |
-|---|---|---|
-| What is in flight / waiting on the stakeholder / open "needs changes" / unpicked requirements | `coordgraph inflight [--waiting]` | planned (S7a) |
-| One unit's status, owner, deliverable, question | `coordgraph unit <ledger-slug\|ID> [<unit>]` | planned (S7a) |
-| What is planned for a component or agent | `coordgraph planned <component\|agent> [--all]` | planned (S7a) |
-| Propose milestones for a backlog | `coordgraph propose <component\|agent> [--per-milestone N]` | planned (S7b; overlap rules and never inserting ahead of a started milestone are its behaviour, unbuilt) |
-| Anything else (ad-hoc Cypher) | `coordgraph query '<cypher>' [--covers PATH…]` — not raw `mcp__cypher__query`, so the sync header and drift flag still apply; until built, read the files | planned (S3) |
-| Is the mirror current / force a sync | `coordgraph drift [PATH…]`, `coordgraph sync <PATH…>\|--changed\|--all`, `rebuild` | planned (S3) |
-| Backlog format check | `coordgraph lint [--count] [PATH…]` (exit 1 on errors) | built |
-| Fact tokens in use (reuse, never reinvent) | `coordgraph facts [--like X]` | built |
-| One-time reformat of a backlog | `coordgraph migrate --dry-run [PATH…]`; `--apply PATH --titles-reviewed` (S4 only, plan §4 S4: `--dry-run` that file first; the owner fixes flagged titles before `--apply`, which refuses without `--titles-reviewed`; one file per run and per commit, stage `.work-items/registry.jsonl` with it; mints IDs via `wi new` — IDs are permanent) | built |
-| Delivery-heading match rate | `coordgraph history-coverage [-v]` | built |
-| KB mirror staleness of a search hit | `coordgraph kb-status --ids <documentIds>` | planned (S6) |
+| Question | Recipe |
+|---|---|
+| What is in flight / waiting on the stakeholder / open "needs changes" / unpicked requirements | `coordgraph inflight [--waiting]` |
+| One unit's status, owner, deliverable, question | `coordgraph unit <ledger-slug\|ID> [<unit>]` |
+| What is planned for a component or agent | `coordgraph planned <component\|agent> [--all]` |
+| Propose milestones for a backlog | `coordgraph propose <component\|agent> [--per-milestone N]` (read-only) |
+| Anything else (ad-hoc Cypher) | `coordgraph query '<cypher>' [--covers PATH…]` — not raw `mcp__cypher__query`, so the header and drift flag still apply |
+| Is the mirror current / force a sync | `coordgraph drift [PATH…]` (exit 1 = drift); `coordgraph sync <PATH…>\|--changed\|--all` |
+| Backlog format check | `coordgraph lint [--count] [PATH…]` (exit 1 on errors) |
+| Fact tokens in use (reuse, never reinvent) | `coordgraph facts [--like X]` |
+| One-time reformat of a backlog | `coordgraph migrate --dry-run [PATH…]`; `--apply PATH --titles-reviewed` (S4 only: `--dry-run` that file first; the owner fixes flagged titles before `--apply`; one file per run and per commit, stage `.work-items/registry.jsonl` with it; mints permanent IDs via `wi new`) |
+| Delivery-heading match rate | `coordgraph history-coverage [-v]` |
+| KB staleness of a search hit | `coordgraph kb-status --ids <documentIds>` (see `skills/agent-kb-retrieval/SKILL.md`) |
 
 `unit` and `inflight` accept a feature ID, alias or task ID as well as a ledger slug. The ledger
 slug is the file name minus `-coordination` (`connected-code-graph`, not
@@ -113,7 +122,8 @@ convention and the milestone `started` convention: `references/backlog-format.md
 
 ## Ledger edits
 
-Once the hook is registered (S8), a ledger edit is only done when it reports no failure (rule 3). Optional ledger columns
-`Item` (the unit's task ID) and `Needs` (comma-separated IDs, `<ledger-slug>:<unit>`, a local unit
-label, or `none`); `Status` cells use teco's seven words (`queued`, `in-flight`, `delivered`,
-`gated`, `accepted`, `abandoned`, `paused`) — anything else reads `unknown` and is a cell to fix.
+A ledger edit is done when rule 3 is satisfied (no failure reported, or your own `sync` exited 0).
+Optional ledger columns `Item` (the unit's task ID) and `Needs` (comma-separated IDs,
+`<ledger-slug>:<unit>`, a local unit label, or `none`); `Status` cells use teco's seven words
+(`queued`, `in-flight`, `delivered`, `gated`, `accepted`, `abandoned`, `paused`) — anything else
+reads `unknown`, which `lint` reports as an error in a non-archived ledger: fix the cell.

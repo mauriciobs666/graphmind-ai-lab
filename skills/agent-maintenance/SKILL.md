@@ -65,7 +65,11 @@ Example (per-agent folders): `~/.claude/agents/cobb/kaizen/plan.md` and `.../his
 2. **Modifying:** before editing, check `plan.md` for relevant items; after
    editing, append a dated `history.md` entry (*what* changed and *why*), and
    update the status of any plan items you advanced — move delivered ones out of
-   the active items into `history.md`.
+   the active items into `history.md`. The entry delivering an item has a heading carrying
+   `<ID> delivered` or `<ID> closed` (several IDs slash-joined, no spaces: `K-070/K-071 delivered`),
+   or the coordination graph cannot see the delivery; any later `Depends on` ref to it then
+   fails `coordgraph lint`. Edits to `plan.md`/`history.md` are mirrored files: a hook failure
+   report, or no report, follows `skills/coordination-graph/SKILL.md` rule 3.
 3. **Reviewing (no change):** record new ideas in `plan.md` even if not implemented now.
 4. **Always** read existing kaizen files first — don't duplicate items, and
    respect prior decisions (including things explicitly rejected/deferred).
@@ -572,206 +576,41 @@ distills — on request, and folded into every certification pass (§4):
    (`CYPHER_MCP_CURATOR_AGENTS`) those Cypher shapes ran under. The graph is
    deleted (`claude/docs/plans/kaizen-team-retirement-coordination.md`); the
    Origin note at the end of this section is the historical record.
-5. **Sync `ws:agent-team` after a KB `.md` file edit** (Track 2 Stage 9,
-   `claude/docs/plans/agent-knowledge-base-strategy.md` §4.5/§5, closing item
-   c). Fires whenever step 3 routes a promotion to "An on-demand knowledge
-   base" and the corresponding `<agent>/<topic>.md` file is actually edited —
-   and, more generally, whenever *any* later edit to an already-migrated KB
-   `.md` file changes a claim's stored text (a content-loss fix, a stale-fact
-   correction, a re-split), not only a fresh promotion. **The file edit stays
-   the authoring act; this is a follow-on sync step, never a replacement for
-   it** (plan §4.5).
-
-   **Claim → current `documentId` tracking: reuse
-   `claude/cobb/scripts/kb-claim-manifest.json`.** Same file → `##`-heading →
-   `claims[]` → `{title, documentId, verified}` structure Stage 6's migration
-   built and deliberately kept on disk past its own close for exactly this —
-   its own `_comment` names Stage 9 as the intended consumer, and
-   `claude/cobb/scripts/check_content_loss.py` already treats this same file
-   as the canonical per-heading manifest shape — reusing it here keeps one
-   manifest as the single source of truth for both the fidelity checker and
-   this sync step, rather than two structures that can drift apart. Chosen
-   over a `list_documents`+title-match scan (the plan's other named option,
-   closing item c) because the manifest already exists, is already keyed on
-   the same axis an edit is made along (file + heading), and needs no live
-   MCP round-trip just to find the id to delete — fall back to a
-   `list_documents` scan only if the manifest and the live corpus are ever
-   found to have drifted apart (missing/stale entry, orphaned id).
-
-   **Every write below must survive a mid-sequence failure without silently
-   losing a claim.** `delete_document` is a hard delete — if `ingest_document`
-   then fails (this exact backend has failed transiently 31 times over Stage
-   6's own migration, ledger rows U1/U3b/U3c), a claim can vanish from
-   `ws:agent-team` with nothing recording it happened unless the manifest is
-   marked *before* the pair runs, not only after. For each claim touched by
-   the edit, look up its manifest entry by file path + heading (or, within a
-   heading that holds several split-sibling claims, by the claim's recorded
-   `title` in the manifest):
-   - **Decide the claim's title once, before any write, and record it.**
-     Build it from the `"<family-slug> — <claim-title>"` convention Stage 6
-     used for a split sibling, or the plain heading text for a claim that
-     was never split. If it would exceed 200 characters (the
-     `ingest_document` bound; a longer title is refused), shorten
-     `<claim-title>`, never the family slug. That one string is the claim's
-     **recorded title**: it goes into the manifest entry's `title` in the
-     same write that sets `verified: "pending"` (below), it is the `title=`
-     of the `ingest_document` call, and it is what the orphan sweep matches.
-     Never rebuild it from the convention after that write — a shortened
-     title is not reproducible.
-   - **Existing claim, text changed** — first, in one manifest write, set
-     the entry's `title` to the recorded title and its `verified` field to
-     the string `"pending"` (leaving its `documentId` field untouched, still
-     pointing at the *old* id) — this is the in-flight marker a later pass
-     checks for, below. Only then run `delete_document(documentId)` (the old
-     id), then `ingest_document(text=<new claim text>, title=<the recorded
-     title, as now written in the manifest>, produced_by='cobb')`
-     against `ws:agent-team`. Overwrite the manifest entry's `documentId`
-     with the new id, but leave `verified` at `"pending"` — the final flip to
-     `true` happens only in the last bullet below, after a byte-exact check,
-     never write `true` before that check runs.
-   - **New claim** (a heading, or a new split sibling, that never existed
-     before) — no prior id, so skip the delete: decide the recorded title
-     first (above), `ingest_document` directly with it, then add a fresh
-     entry to the manifest under its file/heading with that same `title` and
-     `verified: "pending"` until the last bullet below confirms it.
-   - **Claim removed** (a heading deleted or merged away, nothing replaces
-     it) — `delete_document(documentId)` and remove that entry from the
-     manifest; no matching `ingest_document`.
-   - **Verify, then flip `verified: true`** — `get_document(newId)` and
-     confirm the text returned is byte-exact against what now sits in the
-     `.md` file, the same discipline Stage 6 used throughout. Don't leave a
-     manifest entry pointing at an id nobody has confirmed round-trips.
-   - **A `"pending"` entry found at the *start* of a fresh distillation
-     pass is not an unfinished-but-harmless leftover — it is a sign a prior
-     cycle was interrupted somewhere in the sequence above, and a bare
-     `None`-check cannot tell which interruption point it was at (a
-     non-`None` result comes back both when the cycle truly completed and
-     only its manifest flip was left undone, *and* when it was interrupted
-     right after writing `"pending"` but before `delete_document` ever ran —
-     in the second case `documentId` is still the *old* id, and
-     `get_document` on it returns the real, non-`None`, but stale
-     pre-edit document).** Apply the same check the "Verify, then flip"
-     bullet above already uses, not a new one: call `get_document(documentId)`
-     on the entry's current id, then compare what comes back against the
-     claim's *current* text in the `.md` file. A non-`None` result that
-     matches byte-exact is safe to flip straight to `verified: true`. A
-     non-`None` result that doesn't match means the interruption landed
-     before `delete_document` ever ran — the old document genuinely still
-     exists — so re-run the whole "Existing claim, text changed" sequence
-     above unchanged; its own `delete_document(documentId)` call will
-     succeed as written, since the id it's deleting is still live.
-   - **A `None` result is ambiguous between two different prior states, and
-     only one of them is safe to `ingest_document` straight into.** Either
-     (a) the interruption landed at or before `delete_document`, so the old
-     document is gone (or the delete itself is what's mid-flight) and no new
-     document exists anywhere for this claim yet — safe to proceed — or (b)
-     `ingest_document` already succeeded and only the manifest's own
-     `documentId`-overwrite write was left undone (the third interruption
-     point Stage 9's Pass 3 review flagged): a *new* document already exists
-     in `ws:agent-team`, just untracked by the manifest, and blindly
-     re-running the full sequence would `ingest_document` a **second**,
-     equally untracked document for the same claim, orphaning the first.
-     **Never re-run `delete_document` in either case** — it raises
-     `DocumentNotFoundError` on an id that doesn't exist
-     (`falkor-chat/docs/plans/document-ingestion2.md` FR-4; not a safe no-op
-     to call again), and this same `get_document(documentId)` call already
-     proved the old id is gone. Distinguish (a) from (b) with one narrow
-     sweep before doing anything else — but the sweep is only trustworthy if
-     it can see the whole live corpus, so confirm that *first*, every time,
-     rather than trusting a large `limit` constant to still hold:
-     `mcp__cypher__query(graph='ws:agent-team', cypher="MATCH (d:Document
-     {currentVersion: true}) RETURN count(d)")` (a plain read, no `agent`
-     needed — reads are unrestricted on this MCP server too). **The count
-     must sit comfortably under the `limit` you're about to pass
-     `list_documents` — if it doesn't, the sweep is inconclusive: stop here
-     and escalate to the distiller running this pass instead of trusting
-     either "Found" outcome below.** This check isn't optional bookkeeping —
-     `list_documents` returns the corpus **oldest-first, with no
-     server-side ordering override**
-     (`falkor-chat/server/falkorchat/repository.py`'s `ORDER BY
-     d.createdAt` ascending, confirmed by `falkor-chat/server/falkorchat/
-     mcp.py`'s own docstring), and the orphan this sweep hunts for was, by
-     construction, just created — one of the *newest* documents in the
-     corpus. Once the live count exceeds `limit`, the scan silently returns
-     the wrong end of the corpus, always misses the target, and a "Found
-     none" coming out of that state is indistinguishable from a genuine
-     one — proceeding on it re-triggers the exact orphaning this whole step
-     exists to prevent. Only once the count is confirmed comfortably under
-     `limit`, run `list_documents(current_only=True, limit=<the same,
-     count-confirmed value, e.g. 1000>)`, scanned client-side (this tool has
-     no server-side title filter) for a document whose `title` exactly
-     matches the manifest entry's recorded `title` — never one rebuilt from
-     the convention: that `title` was written in the same write as
-     `"pending"`, before the interrupted `ingest_document` ran, so it is
-     exactly the title that call used, shortened or not — and whose
-     `documentId` isn't the
-     manifest's stale tracked id. **Found one** → a case-(b) orphan
-     *candidate*, not yet confirmed — **verify before writing anything to
-     the manifest**, the same byte-exact discipline the "pending-entry-
-     found-at-start" bullet above uses, just run here against the found id
-     instead of the manifest's own tracked id: `get_document(found_id)`,
-     compared against the claim's current text in the `.md` file. A
-     **match** confirms this really is case (b)'s orphan — only now write
-     the manifest, in one shot: overwrite `documentId` with `found_id` and
-     flip `verified: true` directly (no need to pass through the
-     intermediate `"pending"` stop the ordinary sequence uses — this check
-     already *is* the confirmation that stop exists to gate); no
-     `delete_document`/`ingest_document` call either way, the claim was
-     already correctly ingested. A **mismatch** means the title match
-     itself was wrong — a genuine collision with a *different* claim's
-     live, correctly tracked document — so this was never case (b) at all.
-     **On a mismatch, do not write `found_id` into the manifest under any
-     circumstance** — not even provisionally, not even only to gate a later
-     `delete_document` call — **leave the manifest entry exactly as it was
-     at the top of this recovery attempt** (still the old, already-`None`-
-     confirmed id, still `verified: "pending"`), and stop, escalating to
-     the distiller to resolve the collision by hand. This ordering matters
-     beyond the current pass: writing `found_id` provisionally and gating
-     only the delete would leave a *future* pass' "pending-entry-found-at-
-     start" check (above) re-reading that same live, non-`None`, mismatching
-     document — but through the *unconditional* delete branch that check
-     uses for an ordinarily-tracked id, since by then `found_id` would look
-     exactly like this claim's own previously-tracked id. Deferring the
-     manifest write until after confirmation keeps a mismatch inert instead:
-     the untouched `"pending"`/old-id entry re-enters this same
-     ambiguous-`None` branch on the next pass, not the unconditional-delete
-     one. **Found none** → case
-     (a): call `ingest_document` directly (skip `delete_document` — the old
-     document is already confirmed gone by this same `get_document` call),
-     then the same immediate manifest overwrite the ordinary sequence uses.
-     This sweep only runs on the rarer `None` branch of an already-rare
-     `"pending"`-at-start-of-pass finding, so the count check and the sweep
-     itself don't reintroduce the live-round-trip cost the manifest was
-     chosen to avoid for the common path.
-
-   **After a claim add/remove, also refresh the enclosing file's own stale
-   narrative fields.** Several manifest keys are Stage-6-era completion
-   markers (`_DONE`-suffixed keys, a `_note`/`_status` string like "FILE
-   COMPLETE (... N claims)") written once at migration close. A claim add or
-   remove (not a same-count text revision) changes the true count under
-   them, so update or strike that file's `_note`/`_status` narrative in the
-   same edit if it states a specific claim count or a "complete" status the
-   change just made stale — don't leave a frozen migration-era summary next
-   to data it no longer describes.
-
-   **The manifest has no locking — treat it like the shared git index.**
-   `kb-claim-manifest.json` is a flat JSON file; a read-modify-write race
-   between two dispatches touching it concurrently is a silent lost update,
-   not a crash, the same failure shape `claude/AGENTS.md` already documents
-   for the shared git index. Serialize: never run two `cobb` distillation
-   passes against this file at the same time.
-
-   **`MENTIONS`-equivalent tagging stays an open item, not solved here.**
-   `ws:agent-team`'s `Document` model has no edge for crediting a second
-   agent a KB claim substantively concerns — falkor-chat has no analogue to
-   the predecessor store's `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge
-   (retired along with `kaizen_team` itself, deleted per
-   `claude/docs/plans/kaizen-team-retirement-coordination.md`), and the plan
-   explicitly leaves this open
-   (`agent-knowledge-base-strategy.md` §5, Track 2 Stage 9 bullet). If a KB
-   claim genuinely needs that credit, express it in the claim's own prose (as
-   today) — there is currently no standing cross-agent pointer mechanism to
-   fall back to. Do not invent a `ws:agent-team`-native workaround for it.
+5. **A KB `.md` edit syncs itself; you confirm it.** Whenever step 3 routes a promotion to "An
+   on-demand knowledge base", or any later edit changes an already-migrated claim (a fix, a
+   correction, a re-split), the file edit is the whole authoring act: the post-edit hook mirrors a
+   registered KB file into `ws:agent-team` (`coordgraph`, `coordination-graph/README.md`; producer
+   `kb-mirror`). A **new** KB file is added to `coordination-graph/kb-files.txt` in the same change.
+   Authoring shape: one claim per `##` heading, or a declared `<!-- kb-split: bullets -->` heading
+   (one document per top-level bullet; the claim text includes its list marker); two headings with
+   the same claim text are refused as duplicates. After each KB edit:
+   - **Confirm the hook report.** A failure report (exit 2: file, reason) means the sync is not done;
+     name it and fix the cause. If **no report appears** — the hook is unregistered, or the context is
+     unverified until the S0 probe — run `coordgraph kb-sync <file>` yourself, then
+     `coordgraph kb-status` (`skills/coordination-graph/SKILL.md`; shared mode needs
+     `--confirm coordination` or the standing `COORDGRAPH_SHARED_CONFIRM`).
+   - **Resolve what `kb-status` flags.** `coarse` (`needs-resplit`: a judgment-split heading was edited
+     and is now one document) → re-split it (bullets marker or separate headings), then re-sync.
+     `duplicate` → dedupe the claim text in the file. `stale`/`pending` → `kb-sync <file>` (a pending
+     section completes by itself via `kb-finish`). `unmirrored` → fix the heading or `kb-sync <file>`.
+     `failed-doc` (not searchable) → **you** run `kb-sync <file>`, which retries it (bounded). `degraded`
+     is informational (extraction failed, still searchable; never re-post it by hand).
+     `kb-reconcile` is flag-only (`--confirm coordination`); the distiller runs it when drift is
+     suspected.
+   - **Removing a claim or retiring a file.** Deleting a `##` heading from a registered file is
+     mirrored by `kb-sync <file>` (it prints `removed` and deletes that section's documents). A
+     retired file is the exception, **read from `kbsync.py` `sync_file`, not live-tested**: only
+     sections of files still in the registry are removed, so dropping the path from `kb-files.txt`
+     first leaves `unregistered` lines. Retire in this order: empty the file of `##` headings,
+     `kb-sync <file>` (expect `removed`), then drop it from `kb-files.txt` and delete it. An
+     `unregistered` line on a file you did not just retire is a registry error: fix `kb-files.txt`.
+   - **Never hand-sync.** No `ingest_document`/`delete_document` for a KB claim and no manifest write:
+     they bypass the mapping and recreate the drift this step exists to prevent.
+     `claude/cobb/scripts/kb-claim-manifest.json` is **frozen for claim tracking** (2026-11-21; its
+     `files` map is read by `check_content_loss.py`); it remains the home of the
+     `_dispositioned_raw_*` exclusion lists, which step 1 still appends to.
+   - **`MENTIONS`-equivalent tagging stays open.** `ws:agent-team` has no edge crediting a second agent
+     a KB claim; say it in the claim's prose. Do not invent a workaround.
 
 > Origin: 2026-07-12 — the user asked how the agents could self-improve from
 > what they learn exploring their areas; the answer generalized graph-dba's
@@ -840,6 +679,10 @@ distills — on request, and folded into every certification pass (§4):
 > 3, and the legacy/current-shape clearing shapes in step 4 — were retired
 > from the live procedure: `ws:agent-team` is now the sole live source, end
 > to end, for every read, write, and clear this section describes.
+>
+> **2026-11-21 (coordination-graph S9):** step 5's manual delete-and-ingest sequence and its manifest
+> bookkeeping (the Stage 9 and follow-up entries above) are replaced by the automatic `coordgraph`
+> mirror; the manifest is frozen.
 
 ---
 

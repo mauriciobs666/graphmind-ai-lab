@@ -1,9 +1,8 @@
 # Identity, ledger columns, unit lookup, degraded mode
 
 Verified 2026-11-20 against `coordination-graph/coordgraph/{identity.py,shapes.py,parse/ledger.py}`
-and `claude/docs/plans/coordination-graph3.md` §3.1-§3.4. The `unit`/`inflight` views are planned
-(S7a); the lookup rules below are implemented in `identity.select_units` / `resolve_need`, which the
-views will call. The code wins over this text.
+and `claude/docs/plans/coordination-graph3.md` §3.1-§3.4. The lookup rules below are implemented in `identity.select_units` / `resolve_need`, which the
+`unit`/`inflight` views call. The code wins over this text.
 
 ## IDs are stored as written and resolved at read time
 

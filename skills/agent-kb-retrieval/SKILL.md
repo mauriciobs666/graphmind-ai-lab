@@ -39,6 +39,15 @@ this file.
    follow up with `get_document(documentId)` rather than trusting one chunk's excerpt.
 4. **Apply the score floor yourself** — reject any returned hit with `score > 0.43`. See
    below for the value's derivation and caveats. Do not invent a different number.
+5. **Check the hits' freshness.** Run `coordgraph kb-status --ids <documentIds of the kept hits>` from
+   the repo root, with the standing `COORDGRAPH_SHARED_CONFIRM=coordination` (or `--confirm coordination`).
+   Invoke it as `coordination-graph/coordgraph.sh kb-status …`, or, when that exits 1 "no venv",
+   as `PYTHONPATH=coordination-graph cypher-mcp/.venv/bin/python -m coordgraph kb-status …`
+   (`skills/coordination-graph/SKILL.md`, Entry point). It prints the KB mirror's last sync time and
+   flags a hit whose section's file text moved (`stale` / `pending`: read the named `<file>` § `<heading>`,
+   which wins over the search text), unmirrored sections and duplicate claims. `degraded` and `coarse`
+   are informational. An `unmapped-id` line (exit 2) is normal for a hit that is not a KB claim (a raw
+   `Fact:` capture). If the command cannot run at all, say the freshness is unchecked; never treat that as clean.
 
 ## The query-instruction prefix (exact, fenced — do not paraphrase or reformat)
 

@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-11-21 — coordination-graph S9: graph-resume, ledger-edit, proposal and delivery-heading rules
+
+- **What:** three short additions — step 1 resumes a coordination via `coordgraph unit`/`inflight` (relay the sync header; the file wins on a drift row); step 2's ledger paragraph gains "a ledger edit is done only when the hook reports no failure, else run `coordgraph sync <ledger>` yourself" plus the optional `Item`/`Needs` columns; a Documentation-curation bullet covers requesting (never applying) a milestone proposal, the three planning facts on a new backlog item (`Depends on`, `Priority`, `Touches`) and the `<ID> delivered`/`closed` history heading. Offsetting trims: step 5's re-verify bullet condensed (230 -> 153 words), the fencing-note bullet, a `Cost` clause and a drift-tell sentence. Net +33 words (9,089 -> 9,122 body+frontmatter by `wc -w`).
+- **Why:** plan `claude/docs/plans/coordination-graph.md` §4 row S9 (and `coordination-graph3.md` §5 S9 for the `Item`/`Needs` columns). The hook is not registered and S0 has not run, so the rule is fail-safe: no hook report means run the sync yourself.
+- **Plan items:** K-016 (still open: the prompt is still far past the weight smell; this edit did not slim it).
+
 ## 2026-11-19 — ccg impact-answer seam (P1-27)
 
 - **What:** added one step-5 bullet before "CPG freshness": for a `ccg`-covered system, an architect/implementer brief carries the impact answer verbatim (CLI via Bash, no new tool grant), its stamp, a staleness note and the answer's `notices` text; no stamp, no dispatch; no "safe/complete/no impact" wording; `stale-kept` stated, never omitted; a typed error is stated as `ccg unavailable: <code>` and the old CPG line applies. The CPG-freshness bullet is retitled to uncovered systems and `cpg_*` graphs, body unchanged.

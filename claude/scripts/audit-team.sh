@@ -85,6 +85,20 @@
 #      agent builds it inline). Catches DEFINITION drift only, never
 #      COMPLIANCE drift (a live call omitting the prefix) — see the check's
 #      own inline comment.
+#  13-15. coordination-graph (claude/docs/plans/coordination-graph.md S9) —
+#      13: `coordgraph lint` clean (backlog format, every `Depends on` ref that
+#      resolves to nothing, an `unknown` unit status in a non-archived ledger);
+#      14: the KB registry (coordination-graph/kb-files.txt) against the
+#      mirror — registered paths exist, and `coordgraph kb-status` reports no
+#      stale/pending/unmirrored/duplicate/failed-doc/unregistered line
+#      (`degraded` and `coarse` are informational NOTEs; an unreachable shared
+#      instance is a NOTE, not a verdict); 15: the post-edit hook is registered
+#      on BOTH PostToolUse and PostToolUseFailure in a project settings file, with
+#      the script path and a Write/Edit/Bash matcher (each event judged alone).
+#      Check 15 FAILs by name until the stakeholder applies
+#      coordination-graph/docs/hook-settings.md — an expected, named finding,
+#      not a fault of this script. The shared instance is only ever READ here
+#      (routine commands under the standing confirmation).
 #
 # Exit 0 = all PASS; exit 1 = at least one FAIL.
 # Origin: 2026-07-09 teco interface review — teco's roster had silently missed
@@ -389,6 +403,85 @@ for a in tico security-expert; do
     failmsg "python-web-quirks pointer: $a tools: line lacks search_documents and/or get_document (D7/AC-10)"
   fi
 done
+
+# 13-15. coordination-graph checks (plan S9). The component venv is the
+#     documented entry point (coordination-graph/coordgraph.sh); before
+#     `setup.sh` has been run, fall back to the cypher-mcp venv with the
+#     package on PYTHONPATH (same code, `falkordb` already installed there).
+echo
+CG="$ROOT/coordination-graph"
+cg_py=""
+if [ -x "$CG/.venv/bin/python" ]; then
+  cg_py="$CG/.venv/bin/python"
+elif [ -x "$ROOT/cypher-mcp/.venv/bin/python" ]; then
+  cg_py="$ROOT/cypher-mcp/.venv/bin/python"
+fi
+cg() { (cd "$ROOT" && COORDGRAPH_REPO_ROOT="$ROOT" PYTHONPATH="$CG${PYTHONPATH:+:$PYTHONPATH}" COORDGRAPH_SHARED_CONFIRM=coordination "$cg_py" -m coordgraph "$@"); }
+
+if [ -z "$cg_py" ]; then
+  failmsg "coordgraph: no interpreter (coordination-graph/.venv or cypher-mcp/.venv) — checks 13-14 cannot run; run coordination-graph/setup.sh"
+else
+  # 13. lint — exit 1 on any error finding (warnings do not fail).
+  lint_out="$(cg lint 2>&1)"; lint_rc=$?
+  if [ "$lint_rc" -eq 0 ]; then
+    pass "coordgraph lint: $(printf '%s' "$lint_out" | tail -n1)"
+  else
+    failmsg "coordgraph lint: exit $lint_rc — fix the findings below (unresolvable Depends-on refs, unknown ledger status, backlog format)"
+    printf '%s\n' "$lint_out" | sed 's/^/        /' | head -n 25
+  fi
+
+  # 14. KB registry vs mirror.
+  reg="$CG/kb-files.txt"; reg_bad=""; reg_n=0
+  if [ -f "$reg" ]; then
+    while IFS= read -r rp; do
+      case "$rp" in ''|'#'*) continue;; esac
+      reg_n=$((reg_n+1))
+      [ -f "$ROOT/$rp" ] || reg_bad="$reg_bad $rp"
+    done < "$reg"
+    if [ -z "$reg_bad" ]; then
+      pass "KB registry: all $reg_n registered paths exist"
+    else
+      failmsg "KB registry: registered path(s) missing on disk:$reg_bad"
+    fi
+  else
+    failmsg "KB registry: coordination-graph/kb-files.txt not found"
+  fi
+  kb_out="$(cg kb-status 2>&1)"; kb_rc=$?
+  if printf '%s\n' "$kb_out" | grep -q '^KB mirror: '; then
+    kb_bad="$(printf '%s\n' "$kb_out" | awk -F'\t' 'NF>=2 && $1 ~ /^(stale|pending|unmirrored|duplicate|failed-doc|unmapped-id|unregistered|failed|refused|orphan|non-current)$/ {print $1}' | sort | uniq -c | awk '{printf "%s%s=%s", s, $2, $1; s=", "}')"
+    kb_info="$(printf '%s\n' "$kb_out" | awk -F'\t' '$1=="degraded"||$1=="coarse"{c[$1]++} END{for(k in c) {printf "%s%s=%s", s, k, c[k]; s=", "}}')"
+    if [ -n "$kb_bad" ]; then
+      failmsg "KB mirror vs registry: $kb_bad — run \`coordgraph kb-status\`; the distiller resolves (agent-maintenance §5 step 5)"
+    elif [ "$kb_rc" -ne 0 ]; then
+      failmsg "KB mirror vs registry: kb-status exit $kb_rc with no recognised clean state — run \`coordgraph kb-status\` (first lines: $(printf '%s\n' "$kb_out" | sed -n '2,3p' | tr '\n' ';' | cut -c1-200))"
+    else
+      pass "KB mirror vs registry: no stale/pending/unmirrored/duplicate/failed-doc/unregistered section"
+    fi
+    [ -n "$kb_info" ] && note "KB mirror informational: $kb_info (degraded = extraction failed but still searchable; coarse = needs-resplit for the distiller)"
+  else
+    note "KB mirror vs registry not judged: coordgraph kb-status could not read the shared mirror (exit $kb_rc: $(printf '%s' "$kb_out" | tail -n1 | cut -c1-120))"
+  fi
+fi
+
+# 15. hook registered on BOTH events (S0/S8; plan §3.2). Each event is judged
+#     independently by coordgraph-hook-registered.py (command path AND a
+#     Write/Edit/Bash matcher), in the project settings files only. A named
+#     FAIL until the stakeholder applies coordination-graph/docs/hook-settings.md;
+#     never a crash. AUDIT_CG_SETTINGS overrides the file list (selftest seam).
+hook_sh="coordination-graph/hooks/post-tool-sync.sh"
+hook_files="${AUDIT_CG_SETTINGS:-$ROOT/.claude/settings.json $ROOT/.claude/settings.local.json}"
+# shellcheck disable=SC2086
+hook_out="$(python3 "$CL/scripts/coordgraph-hook-registered.py" "$hook_sh" $hook_files 2>&1)"; hook_rc=$?
+if [ "$hook_rc" -eq 0 ]; then
+  if [ -x "$ROOT/$hook_sh" ]; then
+    pass "coordination-graph hook: registered on PostToolUse and PostToolUseFailure (matcher covers Write/Edit/Bash), script executable"
+  else
+    failmsg "coordination-graph hook: registered but $hook_sh is not executable"
+  fi
+else
+  failmsg "coordination-graph hook NOT REGISTERED correctly ($(printf '%s' "$hook_out" | tr '\n' ';' | sed 's/;$//')) — the stakeholder applies coordination-graph/docs/hook-settings.md; until then edits are not mirrored and every ledger/backlog edit must be synced by hand (coordgraph sync <file>)"
+fi
+[ -e "$CG/.state/disabled" ] && note "coordination-graph hook kill switch present (coordination-graph/.state/disabled) — the hook exits 0 without syncing"
 
 echo
 if [ "$fail" -eq 0 ]; then

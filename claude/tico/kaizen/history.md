@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-11-21 — coordination-graph S9: stakeholder-facing graph answers
+
+- **What:** one "Running the conversation" bullet — "what is in flight / waiting on me / planned" is answered from `coordgraph inflight|unit|planned` with the sync header relayed (file wins on drift); a milestone proposal is relayed and a `Milestone` recorded only on explicit approval; after editing a mirrored file a hook failure report means not done, and with no report the agent runs `coordgraph sync <file>` itself (hook unregistered, S0 unverified). Offsetting trims: the docs-only chain's "instant a unit would touch code" and "milestone-close archival" bullets condensed. Net +39 words (6,212 -> 6,251).
+- **Why:** plan §4 row S9 (`tico.md`: stakeholder answers via the skill).
+- **Plan items:** —
+
 ## 2026-11-10 — `Python/web/test gotchas` pointer (D7)
 
 - **What:** new line + `search_documents`/`get_document` tool grant.

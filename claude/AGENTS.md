@@ -126,17 +126,14 @@ symlink):
   `guard-broad-write.sh`, for the same two broad-implementer agents. Closes a gap the Write/Edit
   guard alone didn't: `permissionMode: acceptEdits` auto-approves in-working-directory file edits
   but has no effect on Bash, so a hook-free Bash call still hits the plain confirm prompt on every
-  invocation — moving the friction from Write/Edit onto Bash rather than removing it (observed
-  live, 2026-09-11). Rather than duplicating `guard-destructive-ops.sh`'s destructive-command
+  invocation. Rather than duplicating `guard-destructive-ops.sh`'s destructive-command
   catalog, this core pipes the same stdin JSON through that script (same `<agent-name>` arg) and
   relays its `"ask"` decision on a match; when it stays silent (no destructive pattern matched),
   this core emits an explicit `"allow"` instead of leaving the command to whatever ambient
   permission mode governs. Two wrappers: `tdd-engineer/hooks/guard-tdd-broad-bash.sh` and
-  `coder/hooks/guard-coder-broad-bash.sh`. Same caveat as the Write/Edit guard: this only closes
-  the friction for a session not governed by the auto-mode classifier — a Task/`Agent`-delegated
-  subagent's Bash call is reviewed by that classifier independently of this hook's decision, the
-  same settled, permanent limitation `guard-broad-write.sh` already carries (root-caused
-  2026-08-24, `skills/agent-standards/claude-code.md`) — not something this guard can fix.
+  `coder/hooks/guard-coder-broad-bash.sh`. Same limit as the Write/Edit guard: a delegated
+  subagent's Bash call is classifier-reviewed independently of this hook's decision
+  (`skills/agent-standards/claude-code.md`, 2026-08-24).
 - **`scripts/guard-destructive-ops.sh`** — thin-wrapped by the three destructive-ops guards
   (`devops`, `graph-dba`, `qa-engineer`; each passes its agent name; the core matches Bash command
   patterns — `GRAPH.DELETE`, `FLUSHALL`/`FLUSHDB`, volume wipes, `docker rm -f`, and
@@ -149,12 +146,14 @@ symlink):
   `subagent_type` — an omitted field silently spawns a `general-purpose` delegate with none of
   the named agent's prompt, tools, or hooks, and a later `SendMessage` resume inherits the wrong
   identity for the rest of the thread. `ask`-only, no allow branch, same fail-open/jq→python3
-  contract as the other cores. Extracted 2026-08-29 from `teco`'s original standalone script when
-  `tico` gained the same `Agent`+`SendMessage` shape
-  (`claude/docs/requirements/tico-specialist-collaboration.md`) — `teco`'s script had anticipated
-  the trigger exactly ("extract into a shared core only if a second orchestrator-shaped agent
-  ever needs it"), though the actual shared hazard is the `Agent`+`SendMessage` combination, not
-  orchestrator status (`tico` stays single-topic per its own FR-9, never a second orchestrator).
+  contract as the other cores. Extracted from `teco`'s standalone script when `tico` gained the same `Agent`+`SendMessage` shape
+  (`claude/docs/requirements/tico-specialist-collaboration.md`); the shared hazard is that combination, not orchestrator status.
+
+**One project-settings hook class** sits beside those frontmatter cores: `coordination-graph/hooks/post-tool-sync.sh`,
+registered by the stakeholder in `.claude/settings.json` (never a frontmatter hook, never agent-edited;
+`coordination-graph/docs/hook-settings.md`) on both `PostToolUse` and `PostToolUseFailure`, matcher
+`Write|Edit|Bash`. It mirrors an edited coordination or KB file into the graph and exits 2 when the sync
+failed. Settings hooks reach every agent, subagents included, but not every context is proven to fire them, so an agent that sees no hook report runs `coordgraph sync <file>` itself (`skills/coordination-graph/SKILL.md`). Registration state: `scripts/audit-team.sh` check 15.
 
 Each agent named above carries one or two
 `PreToolUse` hooks under a single frontmatter `hooks:` block — one hook per agent is the common
