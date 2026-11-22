@@ -246,3 +246,75 @@ published statistic" bullet in the specialist prompt covers it.
    (c) both. Recommended: (c), decided before the variants' numbers are seen.
 2. graph-dba or architect: confirm the system's distance for **providers** and for **config anchors' consumers** at distance 0/1 against
    `docs/plans/connected-code-graph-graph.md` §3.3; the dominance check on dev will expose a mismatch either way.
+
+## Pass 2
+
+**Scope.** Revision `04b6e9c7` of the note (§4-§7). Verified by reading `cpg/ccg/engine/bfs.py` (`ROWS`) and by executing:
+`tests/test_engine_bfs_pins.py` (8 passed), `tests/test_engine_bfs_rows.py::test_a_config_change_reaches_only_the_sites_it_binds...` (passed),
+and two scratch walks (session scratchpad, nothing under `cpg/` edited) on synthetic graphs through `tests/test_engine_bfs.run`.
+
+**Verdict: approve with suggestions.** The pass-1 findings are folded in. §6 can be pinned after the one-line edits of N2.
+
+### Dispositions of pass 1
+
+- F1 / A1-A4: fixed (§6: harness list, `itemSetSha256`, symbol-only pair, paired 2x2, two-sided statement; record text matches mine). One tightening, N2.
+- F2: fixed (`kind_scope`, key variant, anchor-type reporting; S1 stays open, correctly). F3: fixed (§7 item 1 changes `score` and `bootstrap`).
+- F4: fixed (bound from the record; `score` refuses a mismatch). F5: fixed (§7, `oracle.py`: status split, `linked-no-provider`).
+- M1: **fixed, and my config claim withdrawn** (below). M2, m1, m2, m3: fixed as named (§4 `byName`, §6 named choices, §7 items 4-5, one row per answer, `unit` type refused).
+- Draw pins: fixed (§7 list matches my six items).
+
+### Ask 1: config-anchor consumers cost 2 — **confirmed; graph-dba is right**
+
+`bound_in` (`ConfigEntry` -> `Link` in state `site`, increment 1), `via_in:site` (`Link` -> `CallSite`, increment 1), `owner:CallSite` (-> `Symbol`,
+increment 0) sum to 2. Executed: the engine's own test asserts the listed consumers `C1`, `C3` at `{i.distance} == {2}` and passed. My pass-1
+"I could not confirm" was an unverified guess about config; it is withdrawn. Contract-anchor consumers cost 1, confirmed by executing a contract
+walk on a graph with provider `A`, `P3`, consumer `H` and a caller `R` of `H`: the system listed exactly `{H: 1}`.
+
+Two facts the note should state (not defects): (i) in contract mode the engine lists **no provider** and no caller of the consumer (the consumer
+arrives in state `end`), so "a provider is at distance 0, as in the system's answer" is wrong in wording: provider seeds are the baseline's own
+choice from the pre-registered "every provider". (ii) In a flag-true unit the symbol-anchor walk lists direct callers only (executed: anchor
+`A`, `B` calls `A`, `C` calls `B`: `{B: 1}`); the baseline's second call step is therefore deeper than anything the system does in such a unit,
+by design of a naive baseline. Neither favours the product; both mean the reduction measures flow-sensitivity plus kind filtering, and the report
+should say so. Rule 3's arithmetic (config seed at cost 2 with `bound` 2 gives no further step; at bound 1 config consumers are absent, as in the
+engine, which does not follow an increment-1 row from the bound) is consistent with the engine. I re-derived the §4.1 rows `A`/kind (9), `A`/key (7),
+`CP1`/kind (11), `CP1`/key (9), `CE1`/kind (5) and `byName` for `A` and `K` from the rules: all agree.
+
+### Ask 2: interactions between the fixes
+
+No interaction defect in the cost change, key variant, F3 pairing or the dominance check against each other. Findings:
+
+**N1 (minor) "or whose id is absent from the snapshot" returns an unresolved row silently.** A2 was about answers the **system** left unresolved.
+Absence of a resolved answer's anchor from the snapshot means a wrong or stale export; it should raise (as the first revision did), because
+otherwise a wrong snapshot gives burden 0 everywhere and the run proceeds. Burden 0 is not favourable to the product, but it is a silent pass.
+Fix: unresolved rows come only from the answer's `type: "unresolved"`; an absent id on a resolved answer raises with a count; `score` prints the
+unresolved-row count (already stated) and the harness checks it equals the answers' unresolved count. Also the note's "(EP §5.4 key-error
+anchors included)" conflates an anchor with an item: §5.4 concerns gold **items**, which are carried by `keyError`; an unresolved **anchor** is
+the system's answer status. Reword.
+
+**N2 (minor) The record must pin more than §6, and `itemSetSha256` needs a canonical form.** §6 states the hit rule and figures, but the over-lister's
+definition lives in §4 rules 1-6; a hash of §6 alone lets §4 drift. Pin §4-§6 together (and `baseline.py`). The hash input
+`anchorId|type:repoId:path:qname-or-keyPath` omits `lines`: two gold items with the same impacted key and different lines would be
+indistinguishable, so add the sorted `lines`, and state the sort (Python string order, UTF-8) and a final `\n`-free join. Both are one-line edits and the
+only changes needed before the hash is taken.
+
+### Ask 3: dominance exclusion (`->` hop, `DATA`, `CONTROLLED_BY`, `HAS_PARAM`, `HAS_RETURN`, `HAS_COND`)
+
+The exclusion cannot hide a violation **in the product's favour**, because a violation is a system item the baseline lacks, and a smaller baseline
+lowers baseline burden and recall, i.e. the reduction is understated (the conservative direction of A4). Two real weaknesses remain:
+
+**N3 (minor) Exclusion is by the system's chosen best chain.** The walk picks the chain by cost (possible hops, distance, length, own-possible),
+so an item reachable by a pure reverse-call path within the bound can still carry a best chain with a `DATA` edge; it would be excluded and a baseline
+bug on it invisible. Fix: check every item; report two counts, class A (best chain has none of the excluded edges; expected 0) and class B
+(excluded), with class B split by the edge type that excluded it. A large class B share makes "checked" small and must be visible.
+
+**N4 (minor) The check is one-sided: it detects a baseline too small, not too big.** The direction that favours the product is baseline
+**inflation** (more listed items), and a bloated baseline passes dominance trivially. Because contract-mode never lists providers or callers, and
+symbol-mode in a flag-true unit lists direct callers only (Ask 1), a large part of the baseline's burden is items the system never lists by
+construction. Add to the report, counts only, the baseline items by source: `bySeed` = items reachable only from provider seeds, only from consumer
+seeds or config seeds, only by name rows (`byName` exists), and only as kind-wide members, per anchor type. No threshold; it makes the
+composition of the reduction readable and tells S1 what each variant buys.
+
+### Is §6 stable enough to pin?
+
+Yes after N2: §6 has no open choice, the figures and the flag are exact, and the dependencies it cites (§4 rule 4, S1 in §7) are named, not
+undecided. S1 does not block the pin: both variants are emitted and neither carries a bar at gate 1.
