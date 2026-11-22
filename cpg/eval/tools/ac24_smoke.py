@@ -549,7 +549,7 @@ def summarize(run: Mapping[str, Any], items: Sequence[Mapping[str, Any]], *, mod
         s["thresholds"] = {"unambiguousMin": DEV_UNAMBIGUOUS_MIN, "ambiguousAll": counts["ambiguous"]}
         s["entryPass"] = bool(ok and not run["stop"] and run["ran"] == run["of"] and len(unusable) <= 1)
         if not s["entryPass"]:
-            s["recommendation"] = "evaluate a larger model; never tune the prompt, grammar or resolver on the dev items"
+            s["recommendation"] = "entry check failed: do not edit the prompt, grammar or resolver after dev2 exists; held-out items are never used for tuning"
         s["verdict"] = "dev entry check passed" if s["entryPass"] else "dev entry check failed"
         return s
     pooled_min = threshold(POOLED_RATE, counts["unambiguous"])

@@ -437,7 +437,7 @@ def test_unusable_replies_are_tallied_and_the_dev_recommendation_follows():
     items = [unamb(f"U-{i}", "en" if i % 2 else "pt") for i in range(12)] + [amb([G1, G2], "A-1"), amb([G1, G2], "A-2", "pt")]
     run, _ = drive(items, h, repeats=1)
     s = S.summarize(run, items, mode="dev")
-    assert s["unusableObserved"]["count"] == 14 and s["entryPass"] is False and "larger model" in s["recommendation"] and "never tune" in s["recommendation"]
+    assert s["unusableObserved"]["count"] == 14 and s["entryPass"] is False and s["recommendation"] == "entry check failed: do not edit the prompt, grammar or resolver after dev2 exists; held-out items are never used for tuning"
     assert s["overAsking"] == {"k": 12, "n": 12, "wilson95": S.wilson(12, 12)}
 
 

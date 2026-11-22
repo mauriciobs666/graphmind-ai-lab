@@ -2,9 +2,9 @@ You read one question about a software system and extract what it names. You nev
 
 Fields:
 - useCase: "impact" for a question about what is affected by a change or what something relies on. Questions about a root cause, a code review, test coverage or security use "root-cause", "code-review", "test-coverage" or "security"; those four are not built yet.
-- direction: "impact" when the question asks what is affected, who consumes or reaches the anchor, what would fail. "depends-on" when it asks what the anchor relies on, requires, is built on, or what the anchor itself calls or uses. null when the wording states no direction (for example only "an overview of" or "o panorama de"). Any wording that implies a direction counts, in English or Portuguese; the cues in the examples are only examples. Never answer null when the question implies a direction.
-- anchors: one to three groups, one group per thing the question points at. A group holds one to three spans that qualify each other (a symbol and the file it lives in, a file and a line, a tool and its server).
-- span: text must be copied from the question character for character; never paraphrase, never complete a name, never invent one. kindHint is one of symbol, file, line, route, tool, server, other. A file with a line written as path:line is one span with kindHint line.
+- direction: "impact" when the question asks what is affected, who or what calls, uses, consumes or reaches the anchor, what would fail. "depends-on" when it asks what the anchor relies on, requires, is built on, or what the anchor itself calls or uses. null when the question asks how the anchor connects to the rest of the system, names both directions, or names neither. Cues such as "an overview of", "o panorama de", "relations of", "relações de", "everything about", "how it fits in" are examples only. Any wording that implies a direction counts, in English or Portuguese. Never answer null when the question implies a direction.
+- anchors: one to three groups, one group per thing the question points at. A parameter, field or option that the question only says will be changed is not an anchor: anchor the tool, route or function that owns it. A group holds one to three spans that qualify each other (a symbol and the file it lives in, a file and a line, a tool and its server).
+- span: text must be copied from the question character for character; never paraphrase, never complete a name, never invent one. A span is one unbroken stretch of the question. Never join words and never add a "/" or ":" that is not there. A component name written before a file name is not part of the file span: copy only the file name. A route span keeps its HTTP verb exactly as written: in "PUT /fx-items/{id} is slow" the span is "PUT /fx-items/{id}". kindHint is one of symbol, file, line, route, tool, server, other; tool is the tool's own name and server is the server's. A protocol or product label in brackets after a tool name, such as "(FXQ)", is neither: give it other or leave it out. A file with a line written as path:line is one span with kindHint line.
 - scope: the repository the question restricts itself to, copied from the question, else null.
 - readings: when the question names two use cases, the second one as {useCase, direction}; else [].
 
@@ -21,3 +21,9 @@ A: {"useCase":"impact","direction":null,"anchors":[{"spans":[{"text":"GET /fx-or
 
 Q: faca um code review de fx_checkout em fx-shop/cart.py e diga quem consome fx_checkout
 A: {"useCase":"impact","direction":"impact","anchors":[{"spans":[{"text":"fx_checkout","kindHint":"symbol"},{"text":"fx-shop/cart.py","kindHint":"file"}]}],"scope":null,"readings":[{"useCase":"code-review","direction":null}]}
+
+Q: PUT /fx-items/{id}: renaming the fx_limit field, which callers are hit?
+A: {"useCase":"impact","direction":"impact","anchors":[{"spans":[{"text":"PUT /fx-items/{id}","kindHint":"route"}]}],"scope":null,"readings":[]}
+
+Q: quais as conexões do fx_ledger_close em fx-books/close.py?
+A: {"useCase":"impact","direction":null,"anchors":[{"spans":[{"text":"fx_ledger_close","kindHint":"symbol"},{"text":"fx-books/close.py","kindHint":"file"}]}],"scope":null,"readings":[]}
