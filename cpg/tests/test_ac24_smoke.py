@@ -1475,6 +1475,8 @@ MALFORMED = [
     [{**ATTEMPT, "counts": {}}], [{**ATTEMPT, "counts": [1]}], [{**ATTEMPT, "counts": {"unambiguous": "9"}}], [{**ATTEMPT, "counts": {"unambiguous": -1}}],
     [{**ATTEMPT, "counts": {"unambiguous": True}}], [{**ATTEMPT, "unusable": -1}], [{**ATTEMPT, "unusable": "1"}], [{**ATTEMPT, "unusable": True}],
     [{**ATTEMPT, "resultSha256": "a" * 63}], [{**ATTEMPT, "resultSha256": "G" * 64}], [{**ATTEMPT, "resultSha256": "A" * 64}], [{**ATTEMPT, "resultSha256": 5}],
+    [{**ATTEMPT, "promptHash": "c" * 63}], [{**ATTEMPT, "promptHash": "C" * 64}], [{**ATTEMPT, "promptHash": "g" * 64}], [{**ATTEMPT, "promptHash": 5}],
+    [{**ATTEMPT, "promptHash": None}], [{**ATTEMPT, "promptHash": ""}],
 ]
 
 
@@ -1483,6 +1485,12 @@ def test_prereg_record_refuses_a_malformed_dev_attempts_file(tmp_path, capsys, b
     assert record_with_attempts(tmp_path, bad) == 4
     captured = capsys.readouterr()
     assert captured.out == "" and "dev attempts" in captured.err
+
+
+def test_prereg_record_carries_an_optional_prompt_hash_through_and_keeps_entries_without_it_valid(tmp_path, capsys):
+    hashed = {**ATTEMPT, "promptHash": "c" * 64}
+    assert record_with_attempts(tmp_path, [ATTEMPT, hashed]) == 0
+    assert json.loads(capsys.readouterr().out)["devAttempts"] == [ATTEMPT, hashed]
 
 
 def test_prereg_record_refuses_an_unreadable_dev_attempts_file(tmp_path, capsys):

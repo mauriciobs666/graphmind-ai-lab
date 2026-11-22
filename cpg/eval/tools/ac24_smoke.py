@@ -8,7 +8,7 @@ Reviews: ``docs/reviews/connected-code-graph-p1-35-impl.md`` (analyst), ``-p1-35
 Verbs (stdout: counts and the output path only; qids go to the output JSON, never question text):
   dev       [--dev-items F] [--system S] [--out F] [--prereg F]
               the dev entry check: the 14 dev items, repeat 1 only, cache on and empty at the start, after the canary. Passes at >= 11/12 unambiguous
-              and 2/2 ambiguous; a failure, or more than 1 of the 14 replies unusable, reports "evaluate a larger model" and never "tune on dev".
+              and 2/2 ambiguous; a failure, or more than 1 of the 14 replies unusable, reports "entry check failed: do not edit the prompt, grammar or resolver after dev2 exists; held-out items are never used for tuning".
               Writes the run record (default ``cpg/eval/results/ac24-dev-run.json``). A ``--dev-items`` path under the custodian area is refused.
   canary    [--system S]
               runs the fixed made-up ``fx-*`` questions (``CANARY_QUESTIONS``) through the rig and prints the sha256 digest of the model's replies.
@@ -639,6 +639,7 @@ def tree_differences(rec: Mapping[str, Any], state: Mapping[str, Any]) -> list[s
 # --------------------------------------------------------------------------------------------------------------- the record
 
 ATTEMPT_KEYS = {"model", "counts", "unusable", "resultSha256"}
+ATTEMPT_OPTIONAL_KEYS = {"promptHash"}
 
 
 def _is_count(v: Any) -> bool:
@@ -647,14 +648,14 @@ def _is_count(v: Any) -> bool:
 
 def validate_dev_attempts(obj: Any) -> list[dict[str, Any]]:
     """``devAttempts`` (``docs/plans/connected-code-graph-p1-interpreter-model-ml.md``: every try, passed or failed): a list of ``{model, counts, unusable,
-    resultSha256}``, exactly those keys. ``model`` a non-empty string, ``counts`` a non-empty object of non-negative integers, ``unusable`` a non-negative integer,
+    resultSha256}`` plus an optional ``promptHash`` (64 lowercase hex when present), no other keys. ``model`` a non-empty string, ``counts`` a non-empty object of non-negative integers, ``unusable`` a non-negative integer,
     ``resultSha256`` 64 lowercase hex. Anything else is a :class:`Refusal`; the entries are returned as given."""
     if not isinstance(obj, list) or not obj:
         raise Refusal("dev attempts: the file holds a non-empty JSON list of attempts")
     for i, a in enumerate(obj):
         why = None
-        if not isinstance(a, dict) or set(a) != ATTEMPT_KEYS:
-            why = f"keys are exactly {sorted(ATTEMPT_KEYS)}"
+        if not isinstance(a, dict) or not (ATTEMPT_KEYS <= set(a) <= ATTEMPT_KEYS | ATTEMPT_OPTIONAL_KEYS):
+            why = f"keys are {sorted(ATTEMPT_KEYS)} plus optionally {sorted(ATTEMPT_OPTIONAL_KEYS)}"
         elif not (isinstance(a["model"], str) and a["model"]):
             why = "model is a non-empty string"
         elif not (isinstance(a["counts"], dict) and a["counts"] and all(_is_count(v) for v in a["counts"].values())):
@@ -663,6 +664,8 @@ def validate_dev_attempts(obj: Any) -> list[dict[str, Any]]:
             why = "unusable is a non-negative integer"
         elif not (isinstance(a["resultSha256"], str) and re.fullmatch(r"[0-9a-f]{64}", a["resultSha256"])):
             why = "resultSha256 is 64 lowercase hex characters"
+        elif "promptHash" in a and not (isinstance(a["promptHash"], str) and re.fullmatch(r"[0-9a-f]{64}", a["promptHash"])):
+            why = "promptHash, when present, is 64 lowercase hex characters"
         if why:
             raise Refusal(f"dev attempts: attempt {i} is malformed ({why})")
     return obj
