@@ -46,14 +46,6 @@ Identifier-leak cleanup delivered (U1–U3, `claude/docs/plans/identifier-leak-c
 
 **The end-user team manual `claude/docs/manuals/agent-team.md` is not in `claude/AGENTS.md`'s add/edit/rename/remove update rule** (source, `kaizen/{plan,history}.md`, `README.md` catalog, roster), so team changes never prompt a manual update: it went stale from 2026-08-20 to 2026-10-20 (wrong commit authority, missing `security-expert`, paused units, tico consults/coordination, `ws:agent-team`) until tico rewrote it (commit `44dada09`). Fix: add a "flag `tico` when the change alters user-visible team behavior (roster, who-calls-whom, approvals, commit authority, tracking)" clause to the rule — flag rather than edit, since manuals are tico-owned — and consider an `audit-team.sh` check that every roster agent name appears in the manual.
 
-### K-058 — Narrowed to the KB prerequisite of `claude/docs/plans/coordination-graph.md`
-
-- **Status:** 🔵 proposed
-- **Priority:** high
-- **Added:** 2026-10-20
-
-**Narrowed to the KB prerequisite of `claude/docs/plans/coordination-graph.md`; S2 delivered (record: `kaizen/history.md` 2026-11-20 S2 entries), the ongoing-freshness half is that plan's S6/S8a.** Open, for S6's first `kb-sync`/`kb-reconcile`, not hand-fixed: (1) **`falkordb-quirks.md`** (committed in `6aeefcf5`, since edited again by another session): S6's first run on it waits for its 4 `<!-- kb-split: bullets -->` markers (cobb adds them once the file is committed), because unmarked its 84 hand-split claims would be replaced by 5 whole-section documents; its sync and 4 claims matching no section (`c10f097d`, `424a70a2`, `b275e16e`, `24baa610`) wait with it. (2) **5 sections with no claim:** teco "A standing commit grant…", review-techniques ×3 ("Mutation-testing a small pure module…", "A document's own prose summary of a count…", "Verifying a mutation-tested checker…"), lm-studio "A live-run report's provenance…" (its drifted claim `35964b75` is stored under an older title). (3) **Drifted claims** (file text changed since ingest): review-techniques 11, lm-studio 3 unplaced plus 8 whitespace-only, teco 1 whitespace-only, plan-authoring "Reconciling a diverging delegated note…" 1 (`c0bf904a`), qa-testing-techniques "model-bench attest/run — non-interactive re-attestation…" 1 (`781c055d`, `check_content_loss.py` NOT_FOUND). (4) **Bullet claim text:** the S1a convention is that a bullet claim's text includes its list marker; `frontend-quirks.md`'s 6 stored claims match it, the 17 claims of `falkordb-reference.md`'s three marked headings were stored without and S6's first sync re-ingests them (append-before-delete keeps it safe). Raw evidence: `ws:agent-team` doc `92e938a3c14b4d0890fc8cafa15b8623`.
-
 ### K-059 — `audit-team.sh` checks 2/3 print the expanded `$HOME` path in their PASS lines
 
 - **Status:** 🔵 proposed
