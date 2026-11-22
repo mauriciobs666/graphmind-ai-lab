@@ -1,6 +1,6 @@
 # Review — message entity mentions (K-093, option B plan gate)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-093
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-093
 
 ## Scope & verdict
 

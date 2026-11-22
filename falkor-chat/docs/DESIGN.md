@@ -49,6 +49,7 @@ links there and does not re-explain. `AGENTS.md` carries only a terse pointer in
 | **Vector indexes via DDL**, not a procedure | `db.idx.vector.createNodeIndex` is not registered on this build | §2, §7.1 |
 | **Index before constraint, always** | `GRAPH.CONSTRAINT CREATE` requires a pre-existing range index | §2, §7.1 |
 | **`Message.embedding` inline as `vecf32`** | Single-query vector + traversal hybrid retrieval | §5.2, §7.3 |
+| **No `Message→Entity` co-occurrence expansion** *(rejected alternative)* | No consumer used per-seed related messages. Under fresh-entity-per-mention extraction the 2-hop read can only return the seed. Reopen when a requirements document or backlog item names a consumer of per-seed related-message context (the responder prompt, a tool output schema, or a UI). Rebuild from a canonical-entity `MENTIONS` target, never from the dropped read. | §8 |
 | **Vector score is cosine *distance*** (0 = identical) → `ORDER BY score ASC` | Most-similar-first ranking | §7.1, §8 |
 | **`status` as a property, not a label** | Avoids re-labeling churn on state changes; index it for "all running" reads | §6.2 |
 | **`ctx` / `input` / `output` are flat/serialised strings** | FalkorDB stores scalars + scalar lists only — no nested maps; never query inside them | §6.2 |
@@ -242,9 +243,6 @@ Everything below lives in `ws:{workspaceId}` unless marked `reference`.
   // (new→existing), not a semantic claim — SAME_AS-anchored reads that need
   // direction-agnosticism match endpoints undirected (QUERIES.md §14.6)
 
-// Read by queries but written by no current code path (dormant schema)
-(:Message)-[:MENTIONS]->(:Entity)                      // hybrid_search's co-occurrence expansion
-
 // Workflow ↔ chat linkage (§6.2)
 (:WorkflowRun)-[:TRIGGERED_BY]->(:Message)
 (:StepRun)-[:PRODUCED]->(:Message)                     // step-emitted chat message — NOT the Message→Message EMITTED
@@ -323,7 +321,7 @@ Everything below lives in `ws:{workspaceId}` unless marked `reference`.
   `Message.createdAt` and `Thread.updatedAt` range indexes, not edge traversal.
 - **`Message.embedding` inline as `vecf32`** rather than a separate `Embedding` node: a single
   query seeds with `db.idx.vector.queryNodes` then reaches the seed's thread scope (by
-  `threadId`) and entity co-occurrence — hybrid retrieval in one round trip (§8).
+  `threadId`) — hybrid retrieval in one round trip (§8).
 - **`Message.role` as a property, not derived from `POSTED_BY` label**: lets the app filter by
   role (`WHERE m.role = 'assistant'`) without an extra hop.
 - **AI as `Agent` author, not a magic flag**: assistant messages share one timeline with human
@@ -881,10 +879,9 @@ traversal — read-only queries, routable to a replica.
 
 - **Message hybrid read** — an ANN seed over `Message.embedding`, then the seed's thread looked
   up by its `threadId` index (never walked along `HEAD|NEXT`), optionally scoped to one channel by
-  a `Thread → Channel` hop, plus a bounded entity co-occurrence expansion (`MENTIONS` → `Entity` ←
-  `MENTIONS`), so neither thread depth nor threads per channel grows its cost, and an entity's
-  fan-in does not grow its memory (latency grows linearly with fan-in — QUERIES §6). The expansion
-  returns nothing today because no write path creates `MENTIONS` (§5.1).
+  a `Thread → Channel` hop, so neither thread depth nor threads per channel grows its cost
+  (QUERIES §6). The read has no entity hop: each row is the seed alone (`msgId`, `text`, `role`,
+  `score`), and a per-seed co-occurrence expansion is a rejected alternative (§1.2).
 - **Chunk read** — an ANN seed over `Chunk.embedding` with no scope traversal, filtered after the
   ANN step to `documentCurrent = true` (a superseded version's chunks never surface by default).
   The filter runs on the `k` ANN rows, so a caller wanting `limit` results over-fetches via `k`.

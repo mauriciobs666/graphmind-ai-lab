@@ -68,6 +68,9 @@
 - A status word that reports from static configuration (`registered`, `enabled`, `active`) is checked against every setting that overrides it in the consuming tool (a global off switch, a handler `type`/`if` narrowing, scope precedence), one planted settings file each; and its plumbing argument is mutated at every call site, not only the one the live test drives.
 - A live spec's description of a validator or guard ('asserts the property sets of §7') is checked by feeding it a record that carries every optional property the writer can emit, not only the fields present in the real corpus; a pass on the real tree is a bound.
 - A test double that gains a read-only entry point (`ro_query`) rejects write statements through it; a passthrough to the write-capable method is a check that cannot fail.
+- When a plan deletes a test helper, check every caller of that helper, including calls made through other helpers, and check it hardest for the tests the plan keeps as guards.
+- When a plan drops a named element, build its close list from an unfiltered grep of the element's name **and** its prose synonyms across the live spec and docstrings. A grep for the field name alone is a bound.
+- When a removal drops several independent elements (a clause and the column it feeds, a field and its stamp), mutate each element alone and name the check each one reddens. A mutant that restores them together proves only that some check catches the pair.
 
 ## Do not report
 

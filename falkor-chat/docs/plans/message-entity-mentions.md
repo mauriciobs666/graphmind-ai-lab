@@ -1,6 +1,6 @@
 # Message entity mentions — drop the co-occurrence expansion
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-093 · **Version:** 2
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-093 · **Version:** 2
 
 2026-11-21: v2. The stakeholder picked option B (drop). The plan gate's findings are folded in (`docs/reviews/message-entity-mentions.md`).
 

@@ -361,8 +361,9 @@ Both write paths carry a `$mentions` parameter: a flat list of member ids, each 
 creates `(:Message)-[:MENTIONS_MEMBER]->(member)` edges *inside* it — atomically, in the
 **same** `GRAPH.QUERY` as the HEAD/TAIL write (the atomicity rule).
 
-- **`MENTIONS_MEMBER` is distinct from `MENTIONS`.** `MENTIONS`→`Entity` is GraphRAG co-occurrence
-  (§6). Participant mentions use `MENTIONS_MEMBER`. Do not conflate them.
+- **`MENTIONS_MEMBER` is the only edge a message has to what it mentions.** It targets members
+  (`User`/`Agent`); a `Message` has no edge to an `Entity` (entities hang off `Chunk` via `ABOUT`,
+  §14).
 - **Empty list is a true no-op.** `$mentions = []` → the `CASE` yields `[null]`, both `OPTIONAL
   MATCH`es miss, `collect(DISTINCT …)` drops the null → `[]`, the nested `FOREACH` creates
   nothing — and the guard above keeps the write itself alive.
@@ -496,12 +497,7 @@ YIELD node AS seed, score
 MATCH (t:Thread {threadId: seed.threadId})
 WITH seed, score, t
 MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t)
-CALL { WITH seed
-       OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)
-       WITH DISTINCT related LIMIT 5
-       RETURN collect(related) AS expanded }
-RETURN seed.msgId AS msgId, seed.text AS text, seed.role AS role, score,
-       [m IN expanded | m.text] AS relatedContext
+RETURN seed.msgId AS msgId, seed.text AS text, seed.role AS role, score
 ORDER BY score ASC, msgId ASC
 LIMIT $limit
 ```
@@ -520,18 +516,6 @@ recall is approximate: kNN may return fewer than `$k` seeds. The service may pas
   `Node By Index Scan | (t:Thread)` → `Conditional Traverse | (t)->(c:Channel)` → `Filter`.
   Moving `{threadId: seed.threadId}` into the channel pattern does not help: it plans like no
   barrier.
-- **Expansion bounded at 5 per seed — in memory, not in time.** The per-seed `CALL { … LIMIT 5 }`
-  emits at most 5 distinct co-mentioning messages per seed and never collects an entity's whole
-  fan-in, so the query's tracked memory does not grow with a hub entity's mention count. The
-  traverse's execution time still does, linearly: about 85 ms per 1M mentions at k=10
-  (`docs/reviews/hybrid-search-bounded.md` Close check). The seed itself mentions the shared
-  entity, so it counts among its own related messages.
-- **`DISTINCT` is redundant on this text, load-bearing once `e` is referenced.** While the subquery
-  leaves `e` unreferenced the planner fuses the two hops into one `(seed)->(related:Message)`
-  traverse, which already collapses duplicate paths. A subquery that projects or filters `e` splits
-  the hops, and without `DISTINCT` a message sharing two entities with the seed is listed twice.
-- **Dormant today.** Nothing writes `(:Message)-[:MENTIONS]->(:Entity)`, so `relatedContext` is
-  `[]` and the expansion no-ops.
 
 ### Set a message embedding (async, after posting)
 ```cypher
@@ -826,8 +810,8 @@ a `Chunk`.
   FalkorDB traverses the typed `EMITTED` edge from the anchored answer via its adjacency matrix — no
   relationship-property index is needed. Uniqueness is guaranteed structurally (see idempotency
   below), so no relationship constraint (which would also need a supporting index) is created.
-- **`EMITTED` is a third, distinct edge type.** `MENTIONS_MEMBER`→`User`/`Agent` (participants, §4)
-  and `MENTIONS`→`Entity` (GraphRAG co-occurrence, §6) are unrelated — do not conflate any of them.
+- **`EMITTED` is a distinct edge type.** `MENTIONS_MEMBER`→`User`/`Agent` (participants, §4) is
+  unrelated — do not conflate them.
 - **Seed-id resolution: bare-id `coalesce`, not a namespaced id scheme.** `$seedIds` resolves against both `Message.msgId` and
   `Chunk.chunkId` directly via the same two-label `OPTIONAL MATCH` + `coalesce` idiom already used
   for author/mention resolution below — no `kind` field, no `msg:<uuid>`/`chunk:<uuid>` prefix
@@ -2015,7 +1999,7 @@ LIMIT $limit
 ```
 *Only chunks of a current document version are returned — a superseded document's chunks stay in
 the vector index but are filtered after the ANN step, so a search can return fewer than `$k` rows.
-No scope traversal (a `Chunk` has no Thread/Channel) and no Entity expansion. `documentId` rides
+No scope traversal (a `Chunk` has no Thread/Channel). `documentId` rides
 denormalized on `Chunk`, so a hit reports its source document with no extra hop. `score` is cosine
 distance, most similar first — do not re-sort. The service may pass a per-query `timeout` (ms).*
 

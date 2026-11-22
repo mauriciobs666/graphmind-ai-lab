@@ -5,6 +5,43 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-21 — K-093 closed: the dormant `Message→Entity` `MENTIONS` expansion and `relatedContext` dropped from hybrid search
+
+- **Decision.** The stakeholder picked option B (drop) from `architect`'s decision note
+  `docs/plans/message-entity-mentions.md`. No code wrote `(:Message)-[:MENTIONS]->(:Entity)`: 0
+  edges in every live `ws:*` graph. No consumer read `relatedContext`. Under
+  fresh-entity-per-mention extraction a writer would have let the 2-hop read return only the seed.
+  The reason and the reversal trigger live in DESIGN §1.2.
+- **What (commit `3f7e5c2e`, `tdd-engineer`).**
+  - `Repository.hybrid_search` drops the per-seed `CALL { … }` subquery and returns
+    `msgId`/`text`/`role`/`score`. `Services.hybrid_search` no longer stamps `relatedContext: []`
+    on Chunk rows.
+  - The `WITH seed, score, t` barrier and the `msgId` tie-break are unchanged.
+  - Three red-first pins in `test_graphrag.py`/`test_services.py`: the exact row keys, no
+    `MENTIONS` in the sent text, and no `relatedContext` on Chunk rows. The expansion tests and
+    their five helpers are deleted. The planner test is rebased onto `_seed_thread`.
+  - `scripts/test_queries.sh` §6 copies follow. Its always-true "Entity graph is empty" assertion
+    is removed.
+- **Not live yet.** The code takes effect at the next falkor-chat server restart.
+- **Verified.** Analyst's solo runs: pytest 3795 passed (baseline 3797: 6 obsolete test cases
+  out, 4 pin cases in), queries 493/493. Plan gate `docs/reviews/message-entity-mentions.md`: Pass 1
+  needed changes (M1–M4), Pass 2 approved with suggestions. Implementation gate
+  `docs/reviews/message-entity-mentions-impl.md` Pass 1: approve.
+- **Live spec updated** (`tdd-engineer`):
+  - DESIGN §1.2: new rejected-alternative row with the reversal trigger;
+  - DESIGN §5.1: the dormant-schema line is gone;
+  - DESIGN §5.2 and §8: the message read has no entity hop;
+  - QUERIES §4, §6, §10 and §14.3.
+
+  Checked by `docs/reviews/message-entity-mentions-impl.md` Pass 2: approve with suggestions. Its
+  m1, a duplicated QUERIES §6 bullet, was deleted by `teco`.
+- **REVIEW.md.** Three lines applied verbatim to root `REVIEW.md` `## Always check`, none
+  narrowing:
+  - test-helper callers, from plan-gate M1;
+  - name-and-synonym grep for a drop's close list, from M3;
+  - mutate each removed element alone, from impl N1.
+- **BACKLOG.** K-093 removed.
+
 ## 2026-11-21 — U12 closed: `hybrid_search`'s Message read bounded (thread by `threadId` index, 5 related per seed, `msgId` tie-break)
 
 - **Cause.** K-098's note `docs/plans/graph-config-defaults-graph.md` §3.1 found two unbounded
