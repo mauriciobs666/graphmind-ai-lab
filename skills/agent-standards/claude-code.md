@@ -358,6 +358,24 @@ the always-loaded project memory (`CLAUDE.md`).
 - The **harness** runs them, not the model — this is how you enforce
   deterministic "always do X" behavior. Prefer a hook over hopeful prompt text
   whenever the requirement is "must always happen."
+- **`PostToolUse`/`PostToolUseFailure` firing contexts — live-probed 2026-11-21** (Claude Code,
+  permission mode `auto` in every logged firing; a logging hook on matcher `Write|Edit|Bash`, 27
+  JSON-line firings). **Verified:** 2026-11-21 against the probe log (not doc-sourced).
+  - `PostToolUse` fired for Write, Edit and Bash in the main session (`agent_id` null) and in
+    foreground, background and worktree subagents (`agent_id` set); also for incidental
+    `qa-engineer` subagent calls.
+  - A **failing Bash** (exit 1) fired `PostToolUseFailure` and **no** `PostToolUse` (main and
+    both non-worktree subagents; the worktree leg did not run a failing Bash).
+  - A **failing Edit** ("String to replace not found", a tool-validation error) fired **neither**
+    event — zero Edit entries of either kind for it in the log (main and subagent). A failed Edit
+    must be treated as producing no hook firing.
+  - **Worktree subagent:** `cwd` = `<repo>/.claude/worktrees/agent-<id>`, but
+    `CLAUDE_PROJECT_DIR` = the **original project root**, not the worktree.
+  - **Exit 2 + stderr** (observed in-session, not in the log): the stderr text reached the agent
+    as a separate system message ("PostToolUse:Bash hook blocking error ...") — not inside the
+    tool result — in main, foreground, background and worktree subagents alike.
+  - The log's `permission_mode` field is the only way to read the mode; subagents could not
+    report it. **Not tested:** `acceptEdits`/`default` modes, teammate/agent-team sessions, MCP tools.
 - **A `SessionStart` hook in an agent's own frontmatter fires for `claude --agent
   <name>`** (main-session mode) — live-verified 2026-10-14, Claude Code 2.1.300, user-scoped
   agent, both `-p` and interactive, under the user's `defaultMode: auto`; its

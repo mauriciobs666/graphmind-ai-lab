@@ -32,8 +32,10 @@ the distiller's/`graph-dba`'s, not yours. Never export `COORDGRAPH_EPHEMERAL_POR
 Every subcommand below is built and the shared mirror is loaded. **The post-edit hook is built but
 registering it is the stakeholder's step** (`coordination-graph/docs/hook-settings.md`); until it is,
 nothing mirrors an edit for you, and the header's `Hook:` says so (`registered`, `not registered` or
-`disabled`; only `registered` means settings register both events). Which contexts the hook fires in (main session, foreground and
-background subagents, worktrees, a Bash that writes then fails) is **unverified until S0 runs**.
+`disabled`; only `registered` means settings register both events). The S0 probe (2026-11-21, mode `auto`) saw it fire for Write/Edit/Bash in the main session and in
+foreground, background and worktree subagents; a failing Bash fires `PostToolUseFailure`; **a failed
+Edit fires no event**. Other permission modes and teammate sessions are unverified
+(`coordination-graph/docs/hook-settings.md` §6).
 
 ## Rules that never bend
 
@@ -48,7 +50,8 @@ background subagents, worktrees, a Bash that writes then fails) is **unverified 
    **If no hook report appears** — the hook is unregistered, or you are in a context where it may not
    fire — run `coordgraph sync <file>` yourself after the edit, and `coordgraph drift <file>` when
    unsure; a non-zero exit is reported the same way. Do this for every such edit until the hook is
-   registered and S0 has cleared your context.
+   registered and your context is one S0 covered (unverified: modes other than `auto`, teammates). A
+   failed Edit never triggers the hook, but it also wrote nothing.
 4. **A proposal never takes effect without explicit stakeholder approval.** `propose` is a pure
    planner that writes nothing; relay it for approval. Only after the stakeholder approves each
    placement in conversation do you record `Milestone` on the items, by a normal file edit. An agent

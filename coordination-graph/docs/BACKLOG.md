@@ -79,10 +79,10 @@ through the one decoder.
 
 - **Status:** 🔵 proposed — defaulted; owner confirms status
 
-Nothing fires the hook until the stakeholder applies `coordination-graph/docs/hook-settings.md`; where
-Claude Code fires it is unverified until the S0 probe (`claude/cobb/scripts/hook-probe.md`) runs, and
-the go-live (stamp initialisation) has not been run. The KB round trip against the real falkor-chat and
-embedder has not been measured. These are operator steps, not code.
+The hook's firing contexts were probed 2026-11-21 (`coordination-graph/docs/hook-settings.md` §6);
+still unverified: permission modes other than `auto` and teammate sessions. Live constraint: a failed
+Edit fires no hook event. The KB round trip against the real falkor-chat and embedder has not been
+measured. These are operator steps, not code.
 
 ### GAL-F0044 — Fast-path budget holds only on an idle machine
 

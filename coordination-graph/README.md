@@ -175,7 +175,7 @@ the package's repo), `STATE_DIR` (default `coordination-graph/.state`), `FALKORD
 `Write|Edit|Bash`) that mirrors a coordination file into the graph before the agent reads the tool
 result. **It is built but not registered by this component**: the settings block is applied by the
 stakeholder (plan S8, `claude/docs/plans/coordination-graph.md` §3.2), and until it is, nothing
-fires it. Where it fires (S0 probe, FR-4) is not recorded here.
+fires it. Where it fires (S0 probe result, FR-4): `coordination-graph/docs/hook-settings.md` §6.
 
 - **Fast path.** A call that changed nothing runs one pruned `find -newer .state/stamp` over the
   repo (plus the KB registry) and exits 0: no Python, no database. The script needs **bash 5**

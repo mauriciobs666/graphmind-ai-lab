@@ -51,7 +51,7 @@ Choices:
 - **`PostToolUseFailure` too** (plan M1): a Bash that writes a ledger then exits non-zero may be
   classified under either event; the script is idempotent, so a double firing costs a no-op.
 - **Shell form** (no `args`), with the placeholder in double quotes: the form the hooks doc's own
-  example uses and what the S0 probe runbook uses. Needs the script's executable bit (it has it).
+  example uses and what the S0 probe used. Needs the script's executable bit (it has it).
 - **`timeout: 60`** seconds (the unit is seconds). The script bounds its own foreground sync at
   `timeout 50`, leaving 10 s of headroom so the shell can queue the retry and write its warning
   before Claude Code would kill it.
@@ -60,9 +60,8 @@ Choices:
 
 ## 2. Apply steps (stakeholder)
 
-1. Prefer to do this after the S0 probe (`claude/cobb/scripts/hook-probe.md`) so the contexts where
-   the hook fires are known. S0 and S8 blocks must not be registered at once: remove the probe's
-   two `hooks` entries first.
+1. The S0 probe has run (section 6), so the contexts where the hook fires are known. Do not register
+   a probe block alongside this one: remove any leftover probe `hooks` entries first.
 2. Confirm `coordination-graph/hooks/post-tool-sync.sh` is executable (`ls -l`).
 3. **Before registering**, create the kill switch: `touch coordination-graph/.state/disabled`
    (`mkdir -p coordination-graph/.state` first). With it present the script exits 0 before it looks
@@ -85,8 +84,8 @@ disposable check, not a real source edit:
    `docs/reviews/*.md`, not a live ledger) and check that `coordination-graph/.state/stamp` mtime
    moved and `./coordgraph.sh drift --confirm coordination` shows no drift for it.
 4. A fault is visible, not silent: exit 2 puts stderr ("not synced ... say so") in front of the agent.
-5. Per context (main session, foreground and background subagents, worktree) the answer is
-   **unverified until S0 runs**; see section 6.
+5. Per context (main session, foreground, background and worktree subagents) the S0 probe saw the
+   hook fire under permission mode `auto`; other modes and teammates are unverified; see section 6.
 
 ## 4. Turn it off
 
@@ -126,29 +125,35 @@ someone edits it again. If step 2 reports a failed source or step 3 shows drift,
 
 Then record in `coordination-graph/docs/HISTORY.md` one dated entry: the settings block registered and
 when, the `sync --all` counts and any source that needed a re-run, the stamp time, the final clean
-`drift`, the kill switch removed, and the S0 result if known.
+`drift`, the kill switch removed, and the S0 result (section 6).
 
 **Guard refusal on first run.** If `.state/stamp` is absent and the guard refuses the endpoint, the hook
 sets a 15-minute `retry-due`; until it passes, edits are neither mirrored nor warned about
 (`coordination-graph/README.md`, "The post-edit hook"). Initialising the stamp in step 1 avoids the
 first-run path, but if the stamp is ever lost, expect this window and run `sync --all` by hand.
 
-## 6. Unverified until S0 runs
+## 6. S0 probe result and what remains unverified
 
-The S0 probe has not been run. Hooks docs (checked 2026-11-21, `code.claude.com/docs/en/hooks`)
-say settings hooks run inside subagents and the input carries `agent_id`/`agent_type`, and that exit 2
-from `PostToolUse`/`PostToolUseFailure` shows stderr to Claude without blocking. The docs do not
-settle, and this block therefore does not assume:
+The S0 probe ran 2026-11-21 (Claude Code, permission mode `auto` in every logged firing; a logging
+hook on `PostToolUse` and `PostToolUseFailure`, matcher `Write|Edit|Bash`). Recorded in
+`skills/agent-standards/claude-code.md` (Hooks, `Verified:` stamp). Result:
 
-- whether the hook fires in **background** subagents, or in subagents under **auto/acceptEdits** modes;
-- which event a **Bash that writes then exits non-zero** produces (hence both registered);
-- whether stderr from exit 2 reaches the **subagent** and not only the main session;
-- `CLAUDE_PROJECT_DIR` in a **worktree** agent (docs say it stays the original project root; S0 leg L5 confirms);
-- the hook-doc sections for `PostToolUse`/`PostToolUseFailure` payload fields (`tool_input.file_path`)
-  could not be read in full (page truncated in fetch); the script reads `file_path` leniently and the
-  fast path does not depend on it.
+- `PostToolUse` fires for Write, Edit and Bash in the main session and in foreground, background and
+  worktree subagents (`agent_id` set in the subagents).
+- A **failing Bash** fires `PostToolUseFailure` and no `PostToolUse`; hence both events stay registered.
+- **A failed Edit ("String to replace not found") fires no hook event at all**: FR-5 must treat it as
+  producing no firing (nothing was written, so nothing is lost).
+- In a worktree subagent `cwd` is `<repo>/.claude/worktrees/agent-<id>` while `CLAUDE_PROJECT_DIR` is the
+  original project root.
+- Exit 2 stderr reaches the agent as a separate system message ("PostToolUse:Bash hook blocking
+  error ..."), not inside the tool result, in main, foreground, background and worktree subagents.
 
-A silent context is not a stop (plan Q2): it falls back to FR-5 flagging only, recorded for S9/S11.
+**Still unverified:** other permission modes (`acceptEdits`, `default`), teammate/agent-team sessions,
+MCP tools (not in the matcher), and the `PostToolUse`/`PostToolUseFailure` payload field docs
+(`tool_input.file_path`; page truncated in fetch; the script reads `file_path` leniently and the fast
+path does not depend on it).
+
+A silent context is not a stop (plan Q2): it falls back to FR-5 flagging only.
 
 ## 7. Sources checked (2026-11-21)
 
