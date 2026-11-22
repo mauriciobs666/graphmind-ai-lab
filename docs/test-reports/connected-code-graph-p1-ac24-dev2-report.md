@@ -65,3 +65,14 @@ Per `docs/reviews/connected-code-graph-p1-interpreter-design-fault-ml.md` Pass 3
 Depends-on among survivors: code-location 6, contract-point 5. Ambiguous survivors by kind: unknown-name 1, no-anchor 1, several-symbols 2, two-use-cases 0.
 
 **Result: still short.** `contract-point/en` has 2 survivors, 3 needed (the cell is short under the item-duplication rule too; its after-join count is 17, 15 of them removed by dev1 anchor-set 4, text shingle 7 and full gold 7, with overlap). Per Pass 3, no file written. `cpg/eval/dev/ac24-r2.jsonl` does not exist. `heldout-manifest.json` sha256 before and after: `ce2bb8b1c1c7941ede76e742b03ce3a0e7777128cfe376303ae07eccfc6f800d`.
+
+## 6. Final selection (Pass 4 within-group rebalance)
+
+Same 74 candidates, filters and seed (`ccg-p1-ac24-r2|cf7b2042cce7bad5d0ab7876940bcea00343d914`); no new session. Quota: code-location 3 en + 3 pt, contract-point 2 en + 4 pt, first by rank per cell; ambiguous: first several-symbols by rank, then the best-ranked remaining ambiguous survivor.
+
+- Survivors / selected per cell: code-location/en 3/3, code-location/pt 12/3, contract-point/en 2/2, contract-point/pt 6/4; ambiguous 4 survivors (several-symbols 2, unknown-name 1, no-anchor 1) / 2.
+- Pooled unambiguous: 12 (en 5, pt 7). Depends-on per group: code-location 2, contract-point 4 (both >= 2). Swaps: none.
+- Ambiguous selected: pt several-symbols 1, en unknown-name 1. No two-use-cases item (0 survived the §10.3 join).
+- File `cpg/eval/dev/ac24-r2.jsonl`: 14 items, same key sets as `ac24.jsonl` (12 unambiguous with `gold`/`goldForm`, 2 ambiguity with `goldOptions`/`ambiguityKind`), unique qids, none shared with `ac24.jsonl`; `ac24_smoke.load_items` accepts it and `recount` gives 12 unambiguous, 2 ambiguous. sha256 `950d33da5a3f64eccb7eed1d24248e908809bc5f8209412e94a9e0062f947bfc`.
+- `heldout-manifest.json` sha256 before and after: `ce2bb8b1c1c7941ede76e742b03ce3a0e7777128cfe376303ae07eccfc6f800d` (identical).
+- Disclosures: the held-out/reserve filter reading changed after the first selection attempt (counts only, before any model run); the contract-point group is 2 en + 4 pt; no two-use-cases item; the ambiguous slots hold one trivial (non-resolving) kind.
