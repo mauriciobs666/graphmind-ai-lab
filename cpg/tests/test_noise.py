@@ -404,23 +404,82 @@ def _label_all(cust, name="noise-labels.jsonl", flip=()):
     return lab
 
 
+def _baseline_files(tmp_path, cust, baseline=None, recall=None, hits=None, key=False, record=2):
+    """The custodian-side inputs of the reduction: baseline rows, recall pairs, ``system-hits.jsonl`` and the gate record."""
+    hits = _hits() if hits is None else hits
+    rows = list((_baseline() if baseline is None else baseline).values())
+    (cust / "noise-baseline.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (cust / "noise-recall.json").write_text(json.dumps(_recall(hits) if recall is None else recall))
+    (cust / "system-hits.jsonl").write_text("".join(json.dumps(h) + "\n" for h in hits))
+    if key:
+        (cust / "noise-baseline-key.jsonl").write_text("".join(json.dumps(dict(r, count=r["count"] // 2, countInScope=r["countInScope"] // 2)) + "\n" for r in rows))
+        (cust / "noise-recall-key.json").write_text(json.dumps(_recall(hits)))
+    (tmp_path / "gate.json").write_text(json.dumps({"defaultDepthBound": record}))
+    return ["--gate-record", str(tmp_path / "gate.json")]
+
+
 def test_score_reports_counts_only_with_thresholds_and_the_scope_counts(tmp_path, capsys):
-    cust = _draw(tmp_path, _scoring_answers())
+    cust = _draw(tmp_path, _bounded(_scoring_answers()))
     capsys.readouterr()
     _label_all(cust)
-    (cust / "noise-baseline.jsonl").write_text("".join(json.dumps({"anchorId": f"SECRET{a}", "count": 200}) + "\n" for a in range(4)))
-    (cust / "noise-recall.json").write_text(json.dumps({"system": [9, 10], "baseline": [9, 10]}))
-    assert _score(tmp_path, cust) == 0
+    extra = _baseline_files(tmp_path, cust)
+    assert _score(tmp_path, cust, extra) == 0
     out = capsys.readouterr().out
     rep = json.loads(out)
     assert "SECRET" not in out and "u1:p" not in out
     assert rep["outOfScope"]["perAnswer"] == [1, 1, 1, 1] and rep["outOfScope"]["byReason"] == {"name-only-provider": 4}
     assert rep["burden"]["inScope"]["p90"] == 13 and rep["burden"]["allListed"]["p90"] == 14
-    assert rep["reduction"]["inScope"] == round(800 / 52, 3) and rep["reduction"]["allListed"] == round(800 / 56, 3)
+    assert rep["reduction"]["inScope"] == round(300 / 52, 3) and rep["reduction"]["allListed"] == round(600 / 56, 3)
+    assert rep["baseline"]["unresolved"] == 1 and "keyScoped" not in rep
     assert set(rep["thresholds"]) == {"Q", "possiblePrecision", "p90InScope", "reduction"}
     assert rep["thresholds"]["p90InScope"]["met"] is True
     assert rep["estimates"]["confirmedPrecision"]["k"] == 4
     assert rep["labelsUnstable"] is None            # no second labeller supplied: nothing to say, not "stable"
+
+
+def test_score_cli_reads_the_key_scoped_variant_beside_the_headline(tmp_path, capsys):
+    cust = _draw(tmp_path, _bounded(_scoring_answers()))
+    _label_all(cust)
+    extra = _baseline_files(tmp_path, cust, key=True)
+    capsys.readouterr()
+    assert _score(tmp_path, cust, extra) == 0
+    rep = json.loads(capsys.readouterr().out)
+    assert rep["keyScoped"]["reduction"]["inScope"] == round(150 / 52, 3) and rep["reduction"]["inScope"] == round(300 / 52, 3)
+
+
+def _refused_with(tmp_path, cust, capsys, extra):
+    capsys.readouterr()
+    assert _score(tmp_path, cust, extra) == 4
+    cap = capsys.readouterr()
+    assert cap.out == "" and "SECRET" not in cap.err and "u1:" not in cap.err
+    return cap.err
+
+
+def test_score_cli_refuses_a_baseline_without_the_gate_record_and_each_bad_input(tmp_path, capsys):
+    cust = _draw(tmp_path, _bounded(_scoring_answers()))
+    _label_all(cust)
+    extra = _baseline_files(tmp_path, cust)
+    assert "gate-record" in _refused_with(tmp_path, cust, capsys, [])
+    (tmp_path / "gate.json").write_text(json.dumps({"defaultDepthBound": 3}))
+    assert "bound" in _refused_with(tmp_path, cust, capsys, extra)
+    (tmp_path / "gate.json").write_text(json.dumps({"defaultDepthBound": 2}))
+    rows = [json.loads(l) for l in (cust / "noise-baseline.jsonl").read_text().splitlines()]
+    (cust / "noise-baseline.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows + [rows[0]]))      # a duplicated anchor row
+    assert "duplicate" in _refused_with(tmp_path, cust, capsys, extra)
+    (cust / "noise-baseline.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (cust / "system-hits.jsonl").unlink()
+    _refused_with(tmp_path, cust, capsys, extra)
+    _baseline_files(tmp_path, cust)
+    (cust / "noise-recall.json").write_text(json.dumps(dict(_recall(), itemSetSha256="f" * 64)))
+    assert "itemSetSha256" in _refused_with(tmp_path, cust, capsys, extra)
+
+
+def test_score_cli_refuses_a_key_variant_with_only_one_of_its_two_files(tmp_path, capsys):
+    cust = _draw(tmp_path, _bounded(_scoring_answers()))
+    _label_all(cust)
+    extra = _baseline_files(tmp_path, cust, key=True)
+    (cust / "noise-recall-key.json").unlink()
+    assert "come together" in _refused_with(tmp_path, cust, capsys, extra)
 
 
 def _spot(cust):
@@ -597,3 +656,436 @@ def test_bootstrap_fallback_rate_is_the_full_sample_rate_not_zero():
                 labels[(f"A{a}", f"i{n}")] = "real" if j < 2 else "false"
     out = N.bootstrap(rows, labels, "g1", B=60)["Q"]
     assert out["used"] == 60 and out["lower"] == out["upper"] == Fr(1)
+
+
+# ================================================================ P1-36 store-side note §7 consumer edits
+# (``docs/plans/connected-code-graph-p1-noise-export-graph.md`` §7; ``docs/reviews/connected-code-graph-p1-noise-export-ml.md``)
+
+# ---------------------------------------------------------------- item 4 (m1): the frame is unique on (anchorId, itemId)
+def test_build_frame_refuses_one_planted_duplicate_item_with_the_count_only():
+    a = answer("SECRET-A", [item("s1"), item("s2")], members=[item("s1")])        # s1 listed as item and as group member
+    with pytest.raises(ValueError, match=r"1 duplicate") as e:
+        N.build_frame([a], EXCL)
+    assert "SECRET-A" not in str(e.value) and "s1" not in str(e.value)
+
+
+def test_build_frame_accepts_the_same_item_under_two_anchors():
+    f = N.build_frame([answer("A", [item("s1")]), answer("B", [item("s1")])], EXCL)
+    assert len(f["frame"]) == 2
+
+
+def test_build_frame_counts_duplicates_not_just_detects_them():
+    a = answer("A", [item("s1"), item("s2")], members=[item("s1"), item("s2")])
+    with pytest.raises(ValueError, match=r"2 duplicate"):
+        N.build_frame([a], EXCL)
+
+
+def test_build_frame_refuses_a_possible_item_whose_reason_is_not_a_string():
+    bad = item("s1")
+    del bad["reason"]
+    with pytest.raises(ValueError, match=r"1 possible item"):
+        N.build_frame([answer("A", [bad, item("s2")])], EXCL)
+    bad2 = item("s1")
+    bad2["reason"] = None
+    with pytest.raises(ValueError, match=r"1 possible item"):
+        N.build_frame([answer("A", [bad2])], EXCL)
+
+
+def test_cli_draw_exits_4_on_a_duplicate_item(tmp_path):
+    _write_answers(tmp_path / "a.jsonl", [answer("A", [item("s1")], members=[item("s1")])])
+    (tmp_path / "e.json").write_text(json.dumps(EXCL))
+    assert N.main(["draw", "--answers", str(tmp_path / "a.jsonl"), "--exclusions", str(tmp_path / "e.json"),
+                   "--gate-id", "g", "--snapshot-id", "s", "--custodian", str(tmp_path / "c")]) == 4
+
+
+# ---------------------------------------------------------------- item 5 (m2): agreement split by status, possible-item note
+def test_agreement_carries_the_wilson_interval_of_the_raw_agreement():
+    full = lambda s: {("A", f"i{i}"): ("real" if c == "r" else "false") for i, c in enumerate(s)}  # noqa: E731
+    g = N.agreement(full("r" * 16 + "f" * 4), full("r" * 20))
+    assert g["wilson"] == N.wilson(16, 20) and g["wilson"]["lower"] is not None
+    assert N.agreement({}, {})["wilson"]["s"] is None
+
+
+def test_split_agreement_counts_confirmed_and_possible_keys_separately():
+    first = {("A", f"c{i}"): "real" for i in range(8)} | {("A", f"p{i}"): "real" for i in range(12)}
+    second = dict(first)
+    second[("A", "c0")] = "false"                       # a confirmed disagreement
+    second[("A", "p0")] = "false"                       # two possible disagreements
+    second[("A", "p1")] = "false"
+    status = {k: ("confirmed" if k[1].startswith("c") else "possible") for k in first}
+    sp = N.split_agreement(first, second, status)
+    assert (sp["confirmed"]["n"], sp["confirmed"]["agree"]) == (8, 7)
+    assert (sp["possible"]["n"], sp["possible"]["agree"]) == (12, 10)
+    assert sp["possible"]["wilson"] == N.wilson(10, 12)
+    assert sp["possible"]["rawAgreement"] == round(10 / 12, 3)
+
+
+def test_split_agreement_with_no_possible_keys_is_not_measured_for_that_class():
+    first = {("A", "c0"): "real"}
+    sp = N.split_agreement(first, dict(first), {("A", "c0"): "confirmed"})
+    assert sp["possible"]["n"] == 0 and sp["possible"]["rawAgreement"] is None and sp["possible"]["wilson"]["s"] is None
+
+
+@pytest.mark.parametrize("n_possible,unstable,note", [
+    (9, False, "agreement not measured on possible items"), (9, True, "agreement not measured on possible items"),
+    (0, None, "agreement not measured on possible items"), (10, True, "labels unstable"), (10, False, None), (20, False, None)])
+def test_possible_precision_note_needs_ten_possible_spot_keys(n_possible, unstable, note):
+    assert N.possible_precision_note(unstable, n_possible) == note
+
+
+def _confirmed_heavy_answers():
+    out = []
+    for a in range(4):
+        items = [item(f"p{a}{j}", reason="r1", distance=1 + j % 3) for j in range(2)]
+        items += [item(f"c{a}{j}", status="confirmed") for j in range(30)]
+        out.append(answer(f"SECRET{a}", items))
+    return out
+
+
+def test_score_says_agreement_not_measured_on_possible_items_when_the_spot_keys_are_mostly_confirmed(tmp_path, capsys):
+    cust = _draw(tmp_path, _confirmed_heavy_answers())
+    _label_all(cust)
+    _labels2(cust, _spot(cust), flip_all=True)             # overall agreement 0: would read "labels unstable"
+    capsys.readouterr()
+    assert _score(tmp_path, cust) == 0
+    rep = json.loads(capsys.readouterr().out)
+    ag = rep["agreement"]
+    assert ag["possible"]["n"] < 10 and ag["confirmed"]["n"] + ag["possible"]["n"] == 20
+    assert rep["estimates"]["possiblePrecisionNote"] == "agreement not measured on possible items"
+    assert ag["wilson"]["n"] == 20
+
+
+def test_score_reports_the_split_and_keeps_labels_unstable_when_ten_or_more_spot_keys_are_possible(tmp_path, capsys):
+    cust = _draw(tmp_path, _scoring_answers())
+    _label_all(cust)
+    _labels2(cust, _spot(cust), flip_all=True)
+    capsys.readouterr()
+    assert _score(tmp_path, cust) == 0
+    rep = json.loads(capsys.readouterr().out)
+    ag = rep["agreement"]
+    assert ag["possible"]["n"] >= 10 and ag["possible"]["n"] + ag["confirmed"]["n"] == 20
+    assert ag["possible"]["agree"] == 0 and rep["estimates"]["possiblePrecisionNote"] == "labels unstable"
+
+
+# ---------------------------------------------------------------- item 1: burden pairing, in the score reduction and in the bootstrap
+def _bounded(answers, bound=2):
+    return [dict(a, depthBound={"bound": bound}) for a in answers]
+
+
+def _labels_for(answers):
+    f = N.build_frame(answers, EXCL)
+    drawn = N.draw(f["frame"], N.allocate(f["strata"]), "g", "s")
+    return {(r["anchorId"], r["itemId"]): "real" for r in drawn + f["census"]}
+
+
+def brow(anchor, count=200, in_scope=100, type_="symbol", bound=2, by_name=(2, 3), unresolved=False, own=10):
+    row = {"anchorId": anchor, "type": type_, "count": count, "countInScope": in_scope, "countConfirmedOwn": own,
+           "byName": {"resolvedSite": by_name[0], "unresolvedSite": by_name[1]}, "bound": bound}
+    if unresolved:
+        row["unresolved"] = True
+    return row
+
+
+def _baseline():
+    return {"SECRET0": brow("SECRET0"), "SECRET1": brow("SECRET1"), "SECRET2": brow("SECRET2", type_="contract"),
+            "SECRET3": brow("SECRET3", 0, 0, type_="unresolved", by_name=(0, 0), unresolved=True, own=0)}
+
+
+def hit_row(anchor, qname, lines, hit=True, key_error=False, type_="symbol", **imp):
+    impacted = {"type": type_, "repoId": "r", "path": "a.py", ("qname" if type_ == "symbol" else "keyPath"): qname, **imp}
+    return {"anchorId": anchor, "impacted": impacted, "lines": lines, "hit": hit, "keyError": key_error}
+
+
+def _hits():
+    rows = [hit_row(f"SECRET{i % 4}", f"q{i}", [i, i + 5]) for i in range(10)]
+    rows[9]["keyError"] = True
+    return rows
+
+
+def _recall(hits=None):
+    hits = _hits() if hits is None else hits
+    return {"system": [9, 10], "baseline": [8, 10], "systemSym": [8, 9], "baselineSym": [7, 9],
+            "paired": {"both": 7, "systemOnly": 2, "baselineOnly": 1, "neither": 0}, "configGold": 1,
+            "itemSetSha256": N.item_set_sha256(hits),
+            "exKeyError": {"system": [8, 9], "baseline": [7, 9], "systemSym": [7, 8], "baselineSym": [6, 8],
+                           "itemSetSha256": N.item_set_sha256([h for h in hits if not h["keyError"]])}}
+
+
+def _run(answers=None, baseline=None, recall=None, hits=None, depth=2, **kw):
+    answers = _bounded(_scoring_answers()) if answers is None else answers
+    hits = _hits() if hits is None else hits
+    return N.score(answers, EXCL, _labels_for(answers), "g", "s", B=30, baseline=_baseline() if baseline is None else baseline,
+                   recall=_recall(hits) if recall is None else recall, system_hits=hits, depth_bound=depth, **kw)
+
+
+def test_in_scope_reduction_uses_count_in_scope_and_all_listed_uses_count():
+    rep = _run()
+    # in-scope burden 13 per answer, all-listed 14; baseline count 200 / countInScope 100 on three answers
+    assert rep["reduction"]["inScope"] == round(300 / 52, 3)        # crossed with count would be 600/52 = 11.538
+    assert rep["reduction"]["allListed"] == round(600 / 56, 3)      # crossed with countInScope would be 300/56 = 5.357
+    assert 300 / 52 != 600 / 52 != 300 / 56
+
+
+def test_the_reduction_threshold_judges_the_in_scope_pairing():
+    b = _baseline()
+    for a in b.values():
+        a["count"], a["countInScope"] = (1000, 10) if a["count"] else (0, 0)    # all-listed passes 5x, in-scope does not
+    rep = _run(baseline=b)
+    assert rep["reduction"]["allListed"] > 5 > rep["reduction"]["inScope"]
+    assert rep["thresholds"]["reduction"]["met"] is False
+
+
+def _independent_reduction_interval(rows, anchors, num, den, B, gate="g1"):
+    import random
+    rng = random.Random("ccg-noise-boot-v1|" + gate)
+    vals = []
+    for _ in range(B):
+        pick = [anchors[rng.randrange(len(anchors))] for _ in anchors]
+        d = sum(den[a] for a in pick)
+        if d:
+            vals.append(Fr(sum(num[a] for a in pick), d))
+    vals.sort()
+    return vals[int(len(vals) * 0.025)], vals[int(len(vals) * 0.975) - 1]
+
+
+def test_bootstrap_pairs_each_baseline_column_with_its_own_burden_and_gives_each_its_own_interval():
+    rows, labels = boot_fixture()
+    anchors = [f"A{a}" for a in range(6)]
+    extra = {"A1": 3, "A3": 7, "A4": 2}                  # all-listed burden = in-scope burden + out-of-scope items
+    all_b = {a: sum(r["anchorId"] == a for r in rows) + extra.get(a, 0) for a in anchors}
+    in_b = {a: sum(r["anchorId"] == a for r in rows) for a in anchors}
+    base = {a: {"count": 40 + 11 * i * i, "countInScope": 5 + 3 * i} for i, a in enumerate(anchors)}
+    B = 60
+    got = N.bootstrap(rows, labels, "g1", B=B, anchors=anchors, baseline=base, all_burden=all_b)
+    want_in = _independent_reduction_interval(rows, anchors, {a: base[a]["countInScope"] for a in anchors}, in_b, B)
+    want_all = _independent_reduction_interval(rows, anchors, {a: base[a]["count"] for a in anchors}, all_b, B)
+    assert (got["reduction"]["lower"], got["reduction"]["upper"]) == want_in
+    assert (got["reductionAll"]["lower"], got["reductionAll"]["upper"]) == want_all
+    assert want_in != want_all
+    crossed = _independent_reduction_interval(rows, anchors, {a: base[a]["count"] for a in anchors}, in_b, B)
+    assert crossed != want_in
+
+
+def test_bootstrap_with_a_baseline_needs_the_all_listed_burden():
+    rows, labels = boot_fixture()
+    with pytest.raises(ValueError, match="all-listed"):
+        N.bootstrap(rows, labels, "g1", B=5, baseline={"A0": {"count": 1, "countInScope": 1}})
+
+
+def test_score_interval_for_the_in_scope_reduction_is_the_countinscope_pairing():
+    rep = _run()
+    a = _bounded(_scoring_answers())
+    f = N.build_frame(a, EXCL)
+    anchors = sorted(x["anchorId"] for x in a)
+    base = _baseline()
+    boot = N.bootstrap(f["frame"], _labels_for(a), "g", 30, anchors, base, dict(zip(anchors, f["burden"]["allListed"])))
+    assert rep["reduction"]["interval"] == N._ci(boot["reduction"])
+    assert rep["reduction"]["intervalAllListed"] == N._ci(boot["reductionAll"])
+
+
+# ---------------------------------------------------------------- item 2: refusals (ValueError with counts only; the CLI turns each into exit 4)
+def test_item_set_sha256_is_the_pinned_canonical_form():
+    rows = [hit_row("B1", "p.f", [10, 9, 2]), hit_row("a1", "x.y", [5], type_="config"),
+            hit_row("é", "q", [1, 3])]
+    want = "\n".join(sorted(["B1|symbol:r:a.py:p.f|2,9,10", "a1|config:r:a.py:x.y|5", "é|symbol:r:a.py:q|1,3"]))
+    assert want.split("\n") == ["B1|symbol:r:a.py:p.f|2,9,10", "a1|config:r:a.py:x.y|5", "é|symbol:r:a.py:q|1,3"]  # code-point order
+    assert N.item_set_sha256(rows) == hashlib.sha256(want.encode("utf-8")).hexdigest()
+    assert N.item_set_sha256(list(reversed(rows))) == N.item_set_sha256(rows)
+    assert N.item_set_sha256([hit_row("B1", "p.f", [10, 9, 3])]) != N.item_set_sha256([hit_row("B1", "p.f", [10, 9, 2])])
+
+
+def test_the_baseline_pair_k_n_must_be_coherent():
+    for bad in ([5, 4], [1, 0], [0, 0], [-1, 5], [2, -3]):
+        r = _recall()
+        r["baseline"] = bad
+        with pytest.raises(ValueError, match="noise-recall"):
+            _run(recall=r)
+
+
+@pytest.mark.parametrize("key", ["system", "systemSym", "baselineSym"])
+def test_every_recall_pair_is_checked_not_only_the_headline_baseline(key):
+    r = _recall()
+    r[key] = [10, 9]
+    with pytest.raises(ValueError, match="noise-recall"):
+        _run(recall=r)
+
+
+def test_the_ex_key_error_pair_is_checked_too():
+    r = _recall()
+    r["exKeyError"]["baseline"] = [9, 8]
+    with pytest.raises(ValueError, match="noise-recall"):
+        _run(recall=r)
+
+
+def test_recall_with_a_different_item_set_hash_is_refused():
+    r = _recall()
+    r["itemSetSha256"] = "0" * 64
+    with pytest.raises(ValueError, match="itemSetSha256"):
+        _run(recall=r)
+    hits = _hits()
+    with pytest.raises(ValueError, match="itemSetSha256"):        # the same recall against a system-hits.jsonl that moved
+        _run(hits=hits[:-1] + [hit_row("SECRET0", "other", [1])], recall=_recall(hits))
+
+
+def test_the_ex_key_error_figure_carries_its_own_hash_over_the_reduced_set():
+    r = _recall()
+    r["exKeyError"]["itemSetSha256"] = r["itemSetSha256"]           # the full-set hash on the reduced figure
+    with pytest.raises(ValueError, match="exKeyError"):
+        _run(recall=r)
+
+
+def test_a_recall_without_the_hash_is_refused():
+    r = _recall()
+    del r["itemSetSha256"]
+    with pytest.raises(ValueError, match="itemSetSha256"):
+        _run(recall=r)
+
+
+def test_baseline_anchor_set_must_equal_the_answers():
+    missing = _baseline()
+    del missing["SECRET2"]
+    with pytest.raises(ValueError, match=r"1 answer\(s\) without a baseline row, 0"):
+        _run(baseline=missing)
+    extra = _baseline()
+    extra["SECRET9"] = brow("SECRET9")
+    with pytest.raises(ValueError, match=r"0 answer\(s\) without a baseline row, 1"):
+        _run(baseline=extra)
+
+
+def test_count_in_scope_must_lie_between_zero_and_count():
+    over = _baseline()
+    over["SECRET1"]["countInScope"] = 201
+    with pytest.raises(ValueError, match=r"1 baseline row\(s\) .*countInScope"):
+        _run(baseline=over)
+    neg = _baseline()
+    neg["SECRET1"]["countInScope"] = -1
+    with pytest.raises(ValueError, match=r"1 baseline row\(s\) .*countInScope"):
+        _run(baseline=neg)
+    edge = _baseline()
+    edge["SECRET1"]["countInScope"] = 200                           # == count is allowed
+    edge["SECRET0"]["countInScope"] = 0                             # 0 is allowed
+    _run(baseline=edge)
+
+
+def test_an_unresolved_row_must_have_count_zero():
+    b = _baseline()
+    b["SECRET3"]["count"] = 4
+    with pytest.raises(ValueError, match=r"1 unresolved baseline row\(s\)"):
+        _run(baseline=b)
+
+
+def test_a_baseline_row_bound_different_from_the_record_is_refused():
+    b = _baseline()
+    b["SECRET2"]["bound"] = 3
+    with pytest.raises(ValueError, match=r"1 baseline row\(s\) .*bound"):
+        _run(baseline=b)
+
+
+def test_an_answer_depth_bound_different_from_the_record_is_refused():
+    ans = _bounded(_scoring_answers())
+    ans[1]["depthBound"]["bound"] = 3
+    with pytest.raises(ValueError, match=r"1 answer\(s\) .*depthBound"):
+        _run(answers=ans)
+    with pytest.raises(ValueError, match=r"4 answer\(s\) .*depthBound"):
+        _run(depth=3, baseline={k: dict(v, bound=3) for k, v in _baseline().items()})
+
+
+def test_an_answer_without_a_depth_bound_is_refused_when_a_baseline_is_scored():
+    ans = _scoring_answers()
+    with pytest.raises(ValueError, match=r"4 answer\(s\) .*depthBound"):
+        _run(answers=ans)
+
+
+def test_a_baseline_needs_the_record_depth_bound_the_hits_and_the_recall():
+    ans = _bounded(_scoring_answers())
+    lab = _labels_for(ans)
+    with pytest.raises(ValueError, match="depth bound"):
+        N.score(ans, EXCL, lab, "g", "s", B=5, baseline=_baseline(), recall=_recall(), system_hits=_hits())
+    with pytest.raises(ValueError, match="system-hits"):
+        N.score(ans, EXCL, lab, "g", "s", B=5, baseline=_baseline(), recall=_recall(), depth_bound=2)
+
+
+def test_the_key_scoped_variant_is_held_to_the_same_refusals():
+    key = {a: dict(r) for a, r in _baseline().items()}
+    key["SECRET1"]["countInScope"] = 500
+    with pytest.raises(ValueError, match="key-scoped"):
+        _run(baseline_key=key, recall_key=_recall())
+    key = {a: dict(r) for a, r in _baseline().items()}
+    r = _recall()
+    r["itemSetSha256"] = "1" * 64
+    with pytest.raises(ValueError, match="key-scoped"):
+        _run(baseline_key=key, recall_key=r)
+    with pytest.raises(ValueError, match="key-scoped"):
+        _run(baseline_key=_baseline())                                  # variant baseline without its recall
+
+
+def test_refusal_messages_carry_counts_only():
+    b = _baseline()
+    b["SECRET1"]["countInScope"] = 999
+    with pytest.raises(ValueError) as e:
+        _run(baseline=b)
+    assert "SECRET" not in str(e.value)
+
+
+# ---------------------------------------------------------------- item 3: reports (counts only)
+def test_reduction_says_when_the_baseline_recalls_more_and_equal_recall_is_neither_flag_nor_higher():
+    assert N.reduction([40], [10], (9, 10), (10, 10)) == {"reduction": Fr(4), "flagged": False, "baselineRecallHigher": True}
+    assert N.reduction([40], [10], (9, 10), (18, 20))["baselineRecallHigher"] is False
+    assert N.reduction([40], [10], (9, 10), (8, 10))["baselineRecallHigher"] is False
+
+
+def test_report_burden_and_reduction_by_anchor_type_baseline_and_system():
+    by = _run()["reduction"]["byType"]
+    assert set(by) == {"symbol", "contract", "unresolved"}
+    assert by["symbol"] == {"anchors": 2, "baselineCount": 400, "baselineInScope": 200, "baselineConfirmedOwn": 20,
+                            "systemInScope": 26, "systemAllListed": 28,
+                            "reductionInScope": round(200 / 26, 3), "reductionAllListed": round(400 / 28, 3)}
+    assert by["contract"]["baselineInScope"] == 100 and by["contract"]["systemAllListed"] == 14
+    assert by["unresolved"]["anchors"] == 1 and by["unresolved"]["reductionInScope"] == 0.0
+
+
+def test_report_by_name_unresolved_rows_and_the_non_symbol_system_items():
+    ans = _bounded(_scoring_answers())
+    ans[0]["items"] += [{"subject": {"type": "config", "entryId": "e1", "path": "x.yml"}, "repoId": "r", "unitId": "u1",
+                         "status": "confirmed", "directness": "direct", "distance": 2, "viaData": False, "chain": []}]
+    ans[1]["groups"] = [{"kind": "k", "key": "k", "reason": "resolution-unverified", "count": 1, "members": [
+        {"subject": {"type": "unit", "unitId": "u7"}, "repoId": "r", "unitId": "u7", "status": "possible",
+         "reason": "name-only-provider", "directness": "direct", "distance": 1, "viaData": False, "chain": []}]}]
+    ans[2]["items"].append(item("o", path="cpg/zz.py"))             # a symbol: not counted
+    rep = _run(answers=ans)
+    assert rep["baseline"] == {"anchors": 4, "unresolved": 1, "byName": {"resolvedSite": 6, "unresolvedSite": 9},
+                               "nonSymbolSystemItems": 2}
+
+
+def test_report_the_recall_pairs_with_wilson_intervals_the_paired_table_and_the_config_count():
+    rc = _run()["recall"]
+    assert rc["system"] == N.wilson(9, 10) and rc["baseline"] == N.wilson(8, 10)
+    assert rc["systemSym"] == N.wilson(8, 9) and rc["baselineSym"] == N.wilson(7, 9)
+    assert rc["paired"] == {"both": 7, "systemOnly": 2, "baselineOnly": 1, "neither": 0} and rc["configGold"] == 1
+    assert rc["exKeyError"]["system"] == N.wilson(8, 9) and rc["exKeyError"]["baselineSym"] == N.wilson(6, 8)
+    assert rc["flagged"] is True and rc["baselineRecallHigher"] is False
+    assert rc["symbolOnly"] == {"flagged": True, "baselineRecallHigher": False}
+
+
+def test_report_names_the_figure_a_burden_ratio_and_says_so_when_the_baseline_recalls_more():
+    assert _run()["reduction"]["kind"] == "burden ratio" and "note" not in _run()["reduction"]
+    r = _recall()
+    r["baseline"], r["baselineSym"] = [10, 10], [9, 9]
+    rep = _run(recall=r)
+    assert rep["reduction"]["baselineRecallHigher"] is True and rep["reduction"]["flagged"] is False
+    assert "not at equal recall" in rep["reduction"]["note"] and "upper bound" in rep["reduction"]["note"]
+    assert rep["recall"]["symbolOnly"] == {"flagged": False, "baselineRecallHigher": True}       # 9/9 > 8/9
+
+
+def test_the_key_scoped_variant_is_reported_beside_the_headline_with_its_own_numbers():
+    key = {a: dict(r, count=r["count"] // 4, countInScope=r["countInScope"] // 4) for a, r in _baseline().items()}   # 50 / 25
+    rk = _recall()
+    rk["baseline"] = [9, 10]
+    rep = _run(baseline_key=key, recall_key=rk)
+    ks = rep["keyScoped"]
+    assert ks["reduction"]["inScope"] == round(75 / 52, 3) and ks["reduction"]["allListed"] == round(150 / 56, 3)
+    assert ks["reduction"]["flagged"] is False and rep["reduction"]["flagged"] is True      # each with its own recall pair
+    assert ks["recall"]["baseline"] == N.wilson(9, 10) and ks["baseline"]["unresolved"] == 1
+    assert rep["reduction"]["inScope"] == round(300 / 52, 3)                                  # the headline is untouched
+    assert ks["reduction"]["interval"] != rep["reduction"]["interval"]
+    assert "keyScoped" not in _run()

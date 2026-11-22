@@ -190,7 +190,7 @@ def test_report_is_counts_only_and_names_no_miss():
 
 def test_misses_carry_element_and_key_for_the_custodian():
     _, misses = O.score([row("GET", "/shop/api/health", "a.py", "f")], [])
-    assert misses == [{"element": "a.py::f", "keyNorm": "GET /shop/api/health", "grain": "function"}]
+    assert misses == [{"element": "a.py::f", "keyNorm": "GET /shop/api/health", "grain": "function", "class": "extractor"}]
 
 
 # ---------------------------------------------------------------- CLI: misses go to a separate custodian-side file, never stdout
@@ -214,3 +214,142 @@ def test_cli_refuses_a_misses_file_inside_the_repo(tmp_path, capsys):
     inside = Path(O.REPO) / "cpg" / "oracle-misses.jsonl"
     assert O.main(["--capture", str(cap), "--links", str(links), "--misses-out", str(inside)]) == 2
     assert not inside.exists()
+
+
+# ================================================================ P1-36 store-side note §7 (F5): link status, linked-no-provider
+# (``docs/plans/connected-code-graph-p1-noise-export-graph.md`` §2, §7; ``docs/reviews/connected-code-graph-p1-noise-export-ml.md`` F5)
+LINK_ROW = {"consumerKey": "GET /{?}/shop/api/x", "element": "h.ts::h", "keyNorm": "GET /shop/api/x", "linkId": "L1",
+            "path": "h.ts", "status": "confirmed"}                                         # the §2 fixture, verbatim
+UNPROVIDED_ROW = {"consumerKey": "GET /{?}/shop/api/x", "element": "h.ts::h", "keyNorm": "GET /{?}/shop/api/x", "linkId": "L3",
+                  "path": "h.ts", "status": "possible"}                                    # no TO: ON key is the consumer's
+
+
+def hrow(method, path, file="h.ts", func=None):
+    return row(method, path, file, func, "spa", host=None, port=None)
+
+
+def test_hits_are_split_by_the_best_status_of_a_matching_link():
+    rows = [hrow("GET", "/shop/api/a", "a.ts"), hrow("GET", "/shop/api/b", "b.ts"), hrow("GET", "/shop/api/c", "c.ts"),
+            hrow("GET", "/shop/api/d", "d.ts")]
+    links = [("a.ts::f", "GET /shop/api/a", "confirmed"), ("b.ts::f", "GET /shop/api/b", "possible"),
+             ("c.ts::f", "GET /shop/api/c", "possible"), ("c.ts::g", "GET /shop/api/c", "confirmed"),     # best wins, either order
+             ("zz.ts::f", "GET /shop/api/d", "confirmed")]                                                # other file: a miss
+    rep, _ = O.score(rows, links)
+    assert rep["pooledAcrossGrains"]["byStatus"]["edges"] == {"confirmed": 2, "possible": 1, "other": 0}
+    assert rep["classes"]["file"]["byStatus"]["keys"] == {"confirmed": 2, "possible": 1, "other": 0}
+    assert rep["classes"]["file"]["edges"]["k"] == 3 and rep["classes"]["function"]["byStatus"]["edges"] == {"confirmed": 0, "possible": 0, "other": 0}
+
+
+def test_best_status_does_not_depend_on_link_order():
+    r = [hrow("GET", "/shop/api/c", "c.ts")]
+    for links in ([("c.ts::f", "GET /shop/api/c", "possible"), ("c.ts::g", "GET /shop/api/c", "confirmed")],
+                  [("c.ts::g", "GET /shop/api/c", "confirmed"), ("c.ts::f", "GET /shop/api/c", "possible")]):
+        assert O.score(r, links)[0]["pooledAcrossGrains"]["byStatus"]["edges"] == {"confirmed": 1, "possible": 0, "other": 0}
+
+
+def test_a_link_without_a_status_is_counted_as_other_never_as_confirmed():
+    rep, _ = O.score([hrow("GET", "/shop/api/c", "c.ts")], [("c.ts::f", "GET /shop/api/c")])
+    assert rep["pooledAcrossGrains"]["byStatus"]["edges"] == {"confirmed": 0, "possible": 0, "other": 1}
+
+
+def test_function_grain_hits_are_split_by_status_too():
+    r = row("GET", "/shop/api/health", "c.py", "ping")
+    rep, _ = O.score([r], [("c.py::ping", "GET /shop/api/health", "possible")])
+    assert rep["classes"]["function"]["byStatus"]["edges"] == {"confirmed": 0, "possible": 1, "other": 0}
+
+
+# ---- linked-no-provider
+def _miss_class(runtime_rows, unprovided, links=()):
+    rep, misses = O.score(runtime_rows, list(links), unprovided)
+    return rep, [m["class"] for m in misses]
+
+
+def test_a_miss_matching_an_unprovided_consumer_key_in_the_same_file_is_linked_no_provider():
+    rep, cls = _miss_class([hrow("GET", "/shop/api/x")], [("h.ts::h", "GET /{?}/shop/api/x")])
+    assert cls == ["linked-no-provider"]
+    assert rep["misses"] == 1 and rep["missClasses"] == {"linked-no-provider": 1, "extractor": 0}
+    assert rep["pooledAcrossGrains"]["edges"]["k"] == 0               # classification only, never scoring
+
+
+def test_a_miss_with_no_unprovided_row_stays_extractor():
+    rep, cls = _miss_class([hrow("GET", "/shop/api/x")], [])
+    assert cls == ["extractor"] and rep["missClasses"] == {"linked-no-provider": 0, "extractor": 1}
+
+
+@pytest.mark.parametrize("unprov,why", [
+    ([("other.ts::h", "GET /{?}/shop/api/x")], "another file"),
+    ([("h.ts::h", "POST /{?}/shop/api/x")], "another verb"),
+    ([("h.ts::h", "GET /{?}/shop/api/y")], "literal differs"),
+    ([("h.ts::h", "GET /{?}/v2/shop/api/x")], "key longer than the runtime path"),
+    ([("h.ts::h", None)], "keyless row"),
+    ([("h.ts::h", "GET /{?}")], "nothing after the wrapper"),
+])
+def test_a_miss_stays_extractor_when_no_unprovided_row_fits(unprov, why):
+    assert _miss_class([hrow("GET", "/shop/api/x")], unprov)[1] == ["extractor"], why
+
+
+@pytest.mark.parametrize("key", ["GET /{?}/{?}/shop/api/x", "GET /{?}/shop/api/{?}", "GET /{?}/shop/{}/x", "GET /{?}/shop/api/{#}",
+                                 "* /{?}/shop/api/x", "GET /shop/api/x", "GET /{?}/api/x"])
+def test_unprovided_key_forms_that_match_the_runtime_path(key):
+    assert _miss_class([hrow("GET", "/shop/api/x")], [("h.ts::h", key)])[1] == ["linked-no-provider"]
+
+
+def test_the_tail_is_compared_to_the_last_runtime_segments_per_segment():
+    r = [hrow("GET", "/shop/api/x/42")]
+    assert _miss_class(r, [("h.ts::h", "GET /{?}/x/{?}")])[1] == ["linked-no-provider"]       # last two segments x, 42
+    assert _miss_class(r, [("h.ts::h", "GET /{?}/api/x")])[1] == ["extractor"]                # api/x are not the last two
+
+
+def test_a_placeholder_tail_segment_needs_a_non_empty_runtime_segment():
+    assert _miss_class([hrow("GET", "/shop/api/")], [("h.ts::h", "GET /{?}/shop/api/{?}")])[1] == ["extractor"]
+
+
+def test_function_grain_miss_is_classified_by_file_not_function():
+    r = row("GET", "/shop/api/x", "h.ts", "caller")
+    assert _miss_class([r], [("h.ts::other", "GET /{?}/shop/api/x")])[1] == ["linked-no-provider"]
+
+
+def test_an_edge_with_several_raw_rows_is_linked_no_provider_when_any_row_fits():
+    u1, u2 = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
+    rows = [hrow("GET", f"/shop/api/t/{u1}"), hrow("GET", f"/shop/api/t/{u2}")]      # one edge: the capture masks UUIDs
+    rep, misses = O.score(rows, [], [("h.ts::h", f"GET /{{?}}/shop/api/t/{u2}")])
+    assert len(misses) == 1 and misses[0]["class"] == "linked-no-provider"           # only the second raw row fits
+
+
+def test_a_hit_has_no_miss_class_and_the_provided_link_wins_over_an_unprovided_one():
+    rep, cls = _miss_class([hrow("GET", "/shop/api/x")], [("h.ts::h", "GET /{?}/shop/api/x")], [("h.ts::h", "GET /shop/api/x", "confirmed")])
+    assert cls == [] and rep["missClasses"] == {"linked-no-provider": 0, "extractor": 0} and rep["misses"] == 0
+
+
+def test_the_report_names_no_unprovided_row():
+    rep, _ = O.score([hrow("GET", "/shop/api/x")], [], [("secret/h.ts::hidden", "GET /{?}/shop/api/x")])
+    assert "hidden" not in json.dumps(rep)
+
+
+# ---- CLI with the §2 format
+def test_cli_reads_status_and_the_unprovided_file_and_writes_the_class_to_the_misses_file(tmp_path, capsys):
+    cap, links, unp, out = tmp_path / "all.jsonl", tmp_path / "links.jsonl", tmp_path / "links-unprovided.jsonl", tmp_path / "cust" / "m.jsonl"
+    _write(cap, [hrow("GET", "/shop/api/x"), hrow("GET", "/shop/api/y", "h.ts"), hrow("GET", "/shop/api/z", "k.ts")])
+    _write(links, [LINK_ROW])
+    _write(unp, [dict(UNPROVIDED_ROW, keyNorm="GET /{?}/shop/api/y", consumerKey="GET /{?}/shop/api/y")])
+    assert O.main(["--capture", str(cap), "--links", str(links), "--links-unprovided", str(unp), "--misses-out", str(out)]) == 0
+    rep = json.loads(capsys.readouterr().out)
+    assert rep["pooledAcrossGrains"]["byStatus"]["edges"] == {"confirmed": 1, "possible": 0, "other": 0}
+    assert rep["missClasses"] == {"linked-no-provider": 1, "extractor": 1}
+    got = {json.loads(l)["keyNorm"]: json.loads(l)["class"] for l in out.read_text().splitlines()}
+    assert got == {"GET /shop/api/y": "linked-no-provider", "GET /shop/api/z": "extractor"}
+
+
+def test_cli_without_an_unprovided_file_classifies_every_miss_extractor(tmp_path, capsys):
+    cap, links, out = tmp_path / "all.jsonl", tmp_path / "links.jsonl", tmp_path / "m.jsonl"
+    _write(cap, [hrow("GET", "/shop/api/y")])
+    _write(links, [LINK_ROW])
+    assert O.main(["--capture", str(cap), "--links", str(links), "--misses-out", str(tmp_path / "cust" / "m.jsonl")]) == 0
+    assert json.loads(capsys.readouterr().out)["missClasses"] == {"linked-no-provider": 0, "extractor": 1}
+
+
+def test_cli_exits_4_on_an_unprovided_file_row_without_an_element(tmp_path, capsys):
+    cap, links, unp = tmp_path / "a.jsonl", tmp_path / "l.jsonl", tmp_path / "u.jsonl"
+    _write(cap, []), _write(links, []), _write(unp, [{"keyNorm": "GET /x"}])
+    assert O.main(["--capture", str(cap), "--links", str(links), "--links-unprovided", str(unp),
+                   "--misses-out", str(tmp_path / "cust" / "m.jsonl")]) == 4

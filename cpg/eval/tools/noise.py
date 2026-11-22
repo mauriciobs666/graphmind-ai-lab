@@ -18,6 +18,12 @@ with counts only. A second-labeller file (``noise-labels2.jsonl``) must carry ex
 The bootstrap drops a resample whose ``RC + Rhat`` is 0; the percentile indices then scale to the resamples kept
 (``int(n*0.025)``, ``int(n*0.975)-1``) and ``used`` reports how many. ``pooledAcrossGrains`` (oracle) is reference only.
 
+With a baseline, ``score`` also reads ``noise-baseline.jsonl`` + ``noise-recall.json`` (and, together, the key-scoped
+``noise-baseline-key.jsonl`` + ``noise-recall-key.json``), ``system-hits.jsonl`` and ``--gate-record`` (``defaultDepthBound``);
+the in-scope reduction pairs ``countInScope`` with the in-scope burden and the all-listed one ``count`` with the all-listed
+burden, never crossed. It exits 4 (counts only) on an anchor-set, count, bound or ``itemSetSha256`` mismatch
+(``docs/plans/connected-code-graph-p1-noise-export-graph.md`` §6-§7). Each ``answers`` line carries ``depthBound.bound``.
+
 Choices not fixed by EP §11 (the code's, for the data-scientist to pin):
 * Draw hash input: ``sha256(f"{seed}|{anchorId}|{itemId}")`` hex, where EP gives only the seed and ``anchorId|itemId``.
 * ``itemId`` is ``"<unitId>:<subjectId>"`` (symbolId / entryId / unitId by subject type), not the bare subject id.
@@ -105,7 +111,7 @@ def _listed(ans: dict):
 
 def build_frame(answers: list[dict], exclusions: list[str]) -> dict:
     """The frame (module docstring). ``burden`` lists are per answer in anchorId order, ids never leave the custodian."""
-    frame, census, strata, oos, burden_in, burden_all = [], [], {}, {}, [], []
+    frame, census, strata, oos, burden_in, burden_all, bad_reason = [], [], {}, {}, [], [], 0
     for ans in sorted(answers, key=lambda a: a["anchorId"]):
         n_in = n_all = 0
         for it in _listed(ans):
@@ -115,6 +121,9 @@ def build_frame(answers: list[dict], exclusions: list[str]) -> dict:
             if path is not None and path_excluded(path, exclusions):
                 d = oos.setdefault(ans["anchorId"], {})
                 d[reason] = d.get(reason, 0) + 1
+                continue
+            if it["status"] == "possible" and not isinstance(it.get("reason"), str):
+                bad_reason += 1
                 continue
             n_in += 1
             row = {"anchorId": ans["anchorId"], "itemId": item_id(it), "status": it["status"],
@@ -128,6 +137,11 @@ def build_frame(answers: list[dict], exclusions: list[str]) -> dict:
                 strata[key] = strata.get(key, 0) + 1
         burden_in.append(n_in)
         burden_all.append(n_all)
+    if bad_reason:
+        raise ValueError(f"{bad_reason} possible item(s) in the frame without a string reason")
+    dup = len(frame) - len({(r["anchorId"], r["itemId"]) for r in frame})
+    if dup:
+        raise ValueError(f"{dup} duplicate (anchorId, itemId) row(s) in the frame")
     return {"frame": frame, "census": census, "strata": strata, "outOfScope": oos,
             "burden": {"inScope": burden_in, "allListed": burden_all}}
 
@@ -240,7 +254,8 @@ def reduction(baseline: list[int], system: list[int], system_recall: tuple[int, 
     """``sum(baseline burden) / sum(system burden)``; flagged when the baseline's recall (k, n) is lower than the system's."""
     ss = sum(system)
     flagged = baseline_recall[0] * system_recall[1] < system_recall[0] * baseline_recall[1]
-    return {"reduction": Fraction(sum(baseline), ss) if ss else None, "flagged": flagged}
+    higher = baseline_recall[0] * system_recall[1] > system_recall[0] * baseline_recall[1]
+    return {"reduction": Fraction(sum(baseline), ss) if ss else None, "flagged": flagged, "baselineRecallHigher": higher}
 
 
 def thresholds(q, w, r, rc, p90_in, reduction) -> dict:
@@ -259,7 +274,7 @@ def agreement(first: dict, second: dict) -> dict:
     n = len(keys)
     agree = sum(first[k] == second[k] for k in keys)
     out = {"n": n, "agree": agree, "rawAgreement": round(agree / n, 3) if n else None,
-           "labelsUnstable": agree * 5 < 4 * n if n else None, "kappa": None}
+           "labelsUnstable": agree * 5 < 4 * n if n else None, "kappa": None, "wilson": wilson(agree, n)}
     if not n:
         out["note"] = "not measured"
     else:
@@ -269,13 +284,39 @@ def agreement(first: dict, second: dict) -> dict:
     return out
 
 
+MIN_POSSIBLE_SPOT = 10
+
+
+def split_agreement(first: dict, second: dict, status: dict) -> dict:
+    """Raw agreement (with its Wilson interval) over the shared keys, split by the item's frame ``status``
+    (``{(anchorId, itemId): "confirmed"|"possible"}``): the spot draw is mostly confirmed items, the flagged figure is not."""
+    out = {}
+    for cls in ("confirmed", "possible"):
+        keys = [k for k in sorted(set(first) & set(second)) if status.get(k) == cls]
+        agree = sum(first[k] == second[k] for k in keys)
+        out[cls] = {"n": len(keys), "agree": agree, "rawAgreement": round(agree / len(keys), 3) if keys else None,
+                    "wilson": wilson(agree, len(keys))}
+    return out
+
+
+def possible_precision_note(labels_unstable, n_possible_spot: int) -> str | None:
+    """With fewer than 10 possible-item spot keys the possible-precision figure has no agreement behind it (m2)."""
+    if n_possible_spot < MIN_POSSIBLE_SPOT:
+        return "agreement not measured on possible items"
+    return "labels unstable" if labels_unstable else None
+
+
 def percentile_indices(b: int) -> tuple[int, int]:
     """0-based percentile indices: 250 and 9749 at B = 10000."""
     return int(b * 0.025), int(b * 0.975) - 1
 
 
-def _agg(rows: list[dict], labels: dict, anchors: list[str], baseline: dict) -> dict:
-    out = {a: {"strata": {}, "rc": 0, "burden": 0, "base": baseline.get(a, 0)} for a in anchors}
+def _agg(rows: list[dict], labels: dict, anchors: list[str], baseline: dict, all_burden: dict) -> dict:
+    """Per-anchor vectors. The two reductions pair like with like (F3): ``baseline_in`` (``countInScope``) with the
+    in-scope ``burden``, ``baseline_all`` (``count``) with ``burden_all``."""
+    out = {a: {"strata": {}, "rc": 0, "burden": 0, "burden_all": all_burden.get(a, 0),
+               "base_in": baseline.get(a, {}).get("countInScope", 0), "base_all": baseline.get(a, {}).get("count", 0)}
+           for a in anchors}
     for r in rows:
         g = out[r["anchorId"]]
         g["burden"] += 1
@@ -293,20 +334,23 @@ def _agg(rows: list[dict], labels: dict, anchors: list[str], baseline: dict) -> 
 
 
 def bootstrap(rows: list[dict], labels: dict, gate_id: str, B: int = 10000, anchors: list[str] | None = None,
-              baseline: dict | None = None) -> dict:
+              baseline: dict | None = None, all_burden: dict | None = None) -> dict:
     """Percentile intervals over **answers** (EP §11.3): answers sorted by anchorId, ``random.Random("ccg-noise-boot-v1|" +
     gateId)``, ``B`` resamples with replacement by ``randrange``; a stratum with ``N_h > 0`` and no labelled item in a
-    resample uses its full-sample rate. Returns ``{"Q", "reduction", "p90InScope"}``, each ``{lower, upper, used}``."""
+    resample uses its full-sample rate. ``baseline`` is ``{anchorId: {count, countInScope, ...}}`` and ``all_burden``
+    ``{anchorId: all-listed burden}``. Returns ``{"Q", "reduction", "reductionAll", "p90InScope"}``, each
+    ``{lower, upper, used}``: ``reduction`` is ``Σ countInScope / Σ in-scope burden``, ``reductionAll`` ``Σ count / Σ all-listed burden``."""
     anchors = sorted(set(anchors) if anchors is not None else {r["anchorId"] for r in rows})
-    baseline = baseline or {}
-    agg = _agg(rows, labels, anchors, baseline)
+    if baseline and all_burden is None:
+        raise ValueError("a baseline needs the all-listed burden per anchor")
+    agg = _agg(rows, labels, anchors, baseline or {}, all_burden or {})
     full: dict = {}
     for g in agg.values():
         for h, c in g["strata"].items():
             t = full.setdefault(h, [0, 0, 0, 0])
             t[:] = [x + y for x, y in zip(t, c)]
     rng = random.Random("ccg-noise-boot-v1|" + gate_id)
-    qs, reds, p90s = [], [], []
+    qs, reds, reds_all, p90s = [], [], [], []
     for _ in range(B):
         picks = [agg[anchors[rng.randrange(len(anchors))]] for _ in anchors]
         tot: dict = {}
@@ -325,8 +369,11 @@ def bootstrap(rows: list[dict], labels: dict, gate_id: str, B: int = 10000, anch
         if rc + rr:
             qs.append(w / (rc + rr))
         burden = sum(g["burden"] for g in picks)
-        if burden:
-            reds.append(Fraction(sum(g["base"] for g in picks), burden))
+        if baseline and burden:
+            reds.append(Fraction(sum(g["base_in"] for g in picks), burden))
+        burden_all = sum(g["burden_all"] for g in picks)
+        if baseline and burden_all:
+            reds_all.append(Fraction(sum(g["base_all"] for g in picks), burden_all))
         p90s.append(p90([g["burden"] for g in picks]))
 
     def interval(vals: list) -> dict:
@@ -335,7 +382,7 @@ def bootstrap(rows: list[dict], labels: dict, gate_id: str, B: int = 10000, anch
             return {"lower": None, "upper": None, "used": 0}
         lo, hi = percentile_indices(len(vals))
         return {"lower": vals[lo], "upper": vals[hi], "used": len(vals)}
-    return {"Q": interval(qs), "reduction": interval(reds), "p90InScope": interval(p90s)}
+    return {"Q": interval(qs), "reduction": interval(reds), "reductionAll": interval(reds_all), "p90InScope": interval(p90s)}
 
 
 def unbound_multi_unit(snapshot: dict) -> dict:
@@ -352,6 +399,18 @@ def spot_check(keys: list, gate_id: str, snapshot_id: str, k: int = 20) -> list:
     """EP §11.4: 20 labels drawn by hash sort from the labelled set, for the second labeller."""
     seed = "ccg-noise-v1|" + gate_id + "|" + snapshot_id + "|spot"
     return sorted(keys, key=lambda x: hashlib.sha256(f"{seed}|{x[0]}|{x[1]}".encode()).hexdigest())[:k]
+
+
+def item_set_sha256(rows: list[dict]) -> str:
+    """Identity of a scored item set (``docs/plans/connected-code-graph-p1-noise-export-graph.md`` §6): sha256 (UTF-8) of the
+    lines ``anchorId|<type>:<repoId>:<path>:<qname or keyPath>|<l1,l2,...>`` (``lines`` ascending), the list sorted in code-point
+    order and joined by ``\n`` (no trailing newline). ``rows`` are ``system-hits.jsonl`` rows."""
+    lines = []
+    for r in rows:
+        i = r["impacted"]
+        who = i["qname"] if "qname" in i else i["keyPath"]
+        lines.append(f"{r['anchorId']}|{i['type']}:{i['repoId']}:{i['path']}:{who}|{','.join(str(n) for n in sorted(r['lines']))}")
+    return hashlib.sha256("\n".join(sorted(lines)).encode("utf-8")).hexdigest()
 
 
 def _f(x, nd: int = 3):
@@ -397,15 +456,120 @@ def _require_spot(labels2: dict, spot_path: Path) -> None:
                          f"{len(set(labels2) - spot)} other")
 
 
+def _check_recall(recall: dict, hits: list[dict], label: str) -> None:
+    """Refuse a recall file that cannot be a pair of recalls over the harness's own item list (counts only)."""
+    def pairs(d: dict, where: str) -> None:
+        for key in ("system", "baseline", "systemSym", "baselineSym"):
+            if key in d:
+                k, n = d[key]
+                if not (isinstance(k, int) and isinstance(n, int) and n > 0 and 0 <= k <= n):
+                    raise ValueError(f"{label}: {where}pair {key} violates 0 <= k <= n with n > 0")
+    pairs(recall, "")
+    if recall.get("itemSetSha256") != item_set_sha256(hits):
+        raise ValueError(f"{label}: itemSetSha256 differs from the one of system-hits.jsonl")
+    if "exKeyError" in recall:
+        ex = recall["exKeyError"]
+        pairs(ex, "exKeyError ")
+        if ex.get("itemSetSha256") != item_set_sha256([h for h in hits if not h["keyError"]]):
+            raise ValueError(f"{label}: exKeyError itemSetSha256 differs from the one of system-hits.jsonl without key errors")
+
+
+def _check_baseline(baseline: dict, answers: list[dict], depth_bound: int, label: str) -> None:
+    ids = {a["anchorId"] for a in answers}
+    missing, extra = len(ids - set(baseline)), len(set(baseline) - ids)
+    if missing or extra:
+        raise ValueError(f"{label}: {missing} answer(s) without a baseline row, {extra} baseline row(s) without an answer")
+    rows = list(baseline.values())
+    bad = sum(not (0 <= r["countInScope"] <= r["count"]) for r in rows)
+    if bad:
+        raise ValueError(f"{label}: {bad} baseline row(s) violate 0 <= countInScope <= count")
+    bad = sum(bool(r.get("unresolved")) and r["count"] != 0 for r in rows)
+    if bad:
+        raise ValueError(f"{label}: {bad} unresolved baseline row(s) with count != 0")
+    bad = sum(r["bound"] != depth_bound for r in rows)
+    if bad:
+        raise ValueError(f"{label}: {bad} baseline row(s) with bound != the record's defaultDepthBound {depth_bound}")
+
+
+def _check_inputs(answers, baseline, recall, system_hits, depth_bound, baseline_key, recall_key) -> None:
+    if baseline is None:
+        return
+    if depth_bound is None:
+        raise ValueError("a baseline needs the record's defaultDepthBound (the depth bound)")
+    if recall is None or system_hits is None:
+        raise ValueError("a baseline needs noise-recall.json and system-hits.jsonl")
+    bad = sum(not isinstance(a.get("depthBound"), dict) or a["depthBound"].get("bound") != depth_bound for a in answers)
+    if bad:
+        raise ValueError(f"{bad} answer(s) with a missing or different depthBound.bound than the record's defaultDepthBound {depth_bound}")
+    _check_baseline(baseline, answers, depth_bound, "noise-baseline.jsonl")
+    _check_recall(recall, system_hits, "noise-recall.json")
+    if (baseline_key is None) != (recall_key is None):
+        raise ValueError("key-scoped variant: the baseline and its recall file come together")
+    if baseline_key is not None:
+        _check_baseline(baseline_key, answers, depth_bound, "key-scoped noise-baseline-key.jsonl")
+        _check_recall(recall_key, system_hits, "key-scoped noise-recall-key.json")
+
+
+HIGHER_NOTE = ("baseline recall higher than the system's: the reduction is a burden ratio, not at equal recall, "
+               "and an upper bound")
+
+
+def _wilson_pairs(d: dict) -> dict:
+    return {k: wilson(*d[k]) for k in ("system", "baseline", "systemSym", "baselineSym") if k in d}
+
+
+def _variant(baseline: dict, recall: dict, answers: list[dict], anchors: list[str], f: dict, boot: dict) -> dict:
+    """One baseline variant's counts-only report: reduction (both pairings, each with its interval, and by anchor type),
+    the baseline's composition, and the recall figures beside it (``-p1-noise-export-graph.md`` §6-§7)."""
+    bin_, ball = f["burden"]["inScope"], f["burden"]["allListed"]
+    rows = [baseline[a] for a in anchors]
+    r_in = reduction([r["countInScope"] for r in rows], bin_, tuple(recall["system"]), tuple(recall["baseline"]))
+    r_all = reduction([r["count"] for r in rows], ball, tuple(recall["system"]), tuple(recall["baseline"]))
+    by_type: dict = {}
+    for r, n_in, n_all in zip(rows, bin_, ball):
+        t = by_type.setdefault(r["type"], {"anchors": 0, "baselineCount": 0, "baselineInScope": 0, "baselineConfirmedOwn": 0,
+                                           "systemInScope": 0, "systemAllListed": 0})
+        t["anchors"] += 1
+        t["baselineCount"] += r["count"]
+        t["baselineInScope"] += r["countInScope"]
+        t["baselineConfirmedOwn"] += r["countConfirmedOwn"]
+        t["systemInScope"] += n_in
+        t["systemAllListed"] += n_all
+    for t in by_type.values():
+        t["reductionInScope"] = _f(Fraction(t["baselineInScope"], t["systemInScope"])) if t["systemInScope"] else None
+        t["reductionAllListed"] = _f(Fraction(t["baselineCount"], t["systemAllListed"])) if t["systemAllListed"] else None
+    red = {"inScope": _f(r_in["reduction"]), "allListed": _f(r_all["reduction"]), "flagged": r_in["flagged"],
+           "baselineRecallHigher": r_in["baselineRecallHigher"], "kind": "burden ratio",
+           "interval": _ci(boot["reduction"]), "intervalAllListed": _ci(boot["reductionAll"]), "byType": by_type}
+    if r_in["baselineRecallHigher"]:
+        red["note"] = HIGHER_NOTE
+    sym = {}
+    if "systemSym" in recall and "baselineSym" in recall:
+        rs = reduction([], [], tuple(recall["systemSym"]), tuple(recall["baselineSym"]))
+        sym = {"symbolOnly": {"flagged": rs["flagged"], "baselineRecallHigher": rs["baselineRecallHigher"]}}
+    rc = {**_wilson_pairs(recall), "paired": recall.get("paired"), "configGold": recall.get("configGold"),
+          "flagged": r_in["flagged"], "baselineRecallHigher": r_in["baselineRecallHigher"], **sym}
+    if "exKeyError" in recall:
+        rc["exKeyError"] = _wilson_pairs(recall["exKeyError"])
+    non_symbol = sum(it["subject"]["type"] != "symbol" for a in answers for it in _listed(a))
+    comp = {"anchors": len(rows), "unresolved": sum(bool(r.get("unresolved")) for r in rows),
+            "byName": {k: sum(r["byName"][k] for r in rows) for k in ("resolvedSite", "unresolvedSite")},
+            "nonSymbolSystemItems": non_symbol}
+    return {"reduction": red, "baseline": comp, "recall": rc}
+
+
 def score(answers: list[dict], exclusions: list[str], labels: dict, gate_id: str, snapshot_id: str, B: int = 10000,
           labels2: dict | None = None, baseline: dict | None = None, recall: dict | None = None,
-          snapshot: dict | None = None) -> dict:
-    """The counts-only report: no anchor or item id appears in it."""
+          snapshot: dict | None = None, *, system_hits: list[dict] | None = None, depth_bound: int | None = None,
+          baseline_key: dict | None = None, recall_key: dict | None = None) -> dict:
+    """The counts-only report: no anchor or item id appears in it. ``baseline`` is ``{anchorId: row}``, a row being
+    ``{anchorId, type, count, countInScope, countConfirmedOwn, byName, unresolved?, bound}`` (``-p1-noise-export-graph.md`` §7)."""
+    _check_inputs(answers, baseline, recall, system_hits, depth_bound, baseline_key, recall_key)
     f = build_frame(answers, exclusions)
     anchors = sorted(a["anchorId"] for a in answers)
     est = estimate(f["frame"], labels)
-    boot = bootstrap(f["frame"], labels, gate_id, B, anchors, baseline)
     bin_, ball = f["burden"]["inScope"], f["burden"]["allListed"]
+    boot = bootstrap(f["frame"], labels, gate_id, B, anchors, baseline, dict(zip(anchors, ball)) if baseline is not None else None)
     by_reason: dict = {}
     for d in f["outOfScope"].values():
         for k, v in d.items():
@@ -424,18 +588,19 @@ def score(answers: list[dict], exclusions: list[str], labels: dict, gate_id: str
     if labels2 is not None:
         rep["agreement"] = agreement(labels, labels2)
         rep["labelsUnstable"] = rep["agreement"]["labelsUnstable"]
-        if rep["labelsUnstable"]:
-            e["possiblePrecisionNote"] = "labels unstable"
-        elif rep["labelsUnstable"] is None:
-            e["possiblePrecisionNote"] = "agreement not measured"
+        status = {(r["anchorId"], r["itemId"]): r["status"] for r in f["frame"]}
+        rep["agreement"].update(split_agreement(labels, labels2, status))
+        note = possible_precision_note(rep["labelsUnstable"], rep["agreement"]["possible"]["n"])
+        if note:
+            e["possiblePrecisionNote"] = note
     red = None
     if baseline is not None:
-        base = [baseline.get(a, 0) for a in anchors]
-        r_in = reduction(base, bin_, tuple(recall["system"]), tuple(recall["baseline"]))
-        r_all = reduction(base, ball, tuple(recall["system"]), tuple(recall["baseline"]))
-        red = r_in["reduction"]
-        rep["reduction"] = {"inScope": _f(r_in["reduction"]), "allListed": _f(r_all["reduction"]), "flagged": r_in["flagged"],
-                            "interval": _ci(boot["reduction"])}
+        v = _variant(baseline, recall, answers, anchors, f, boot)
+        red = Fraction(sum(baseline[a]["countInScope"] for a in anchors), sum(bin_)) if sum(bin_) else None
+        rep.update(v)
+        if baseline_key is not None:
+            kb = bootstrap(f["frame"], labels, gate_id, B, anchors, baseline_key, dict(zip(anchors, ball)))
+            rep["keyScoped"] = _variant(baseline_key, recall_key, answers, anchors, f, kb)
     rep["thresholds"] = thresholds(est["Q"], est["What"], est["Rhat"], est["RC"], p90(bin_), red)
     if snapshot is not None:
         rep["unbound"] = unbound_multi_unit(snapshot)
@@ -455,6 +620,24 @@ def _dump(p: Path, rows: list[dict]) -> None:
     p.write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows), encoding="utf-8")
 
 
+def _read_baseline(path: Path) -> dict:
+    rows = _jsonl(str(path))
+    out = {r["anchorId"]: r for r in rows}
+    if len(out) != len(rows):
+        raise ValueError(f"{path.name}: {len(rows) - len(out)} duplicate anchorId row(s)")
+    return out
+
+
+def _read_variant(cust: Path, bname: str, rname: str):
+    """``(baseline, recall)`` or ``(None, None)`` when neither file exists; one without the other is refused."""
+    bp, rp = cust / bname, cust / rname
+    if bp.exists() != rp.exists():
+        raise ValueError(f"{bname} and {rname} come together: one of them is missing")
+    if not bp.exists():
+        return None, None
+    return _read_baseline(bp), json.loads(rp.read_text(encoding="utf-8"))
+
+
 def _score_cmd(a, cust: Path, answers, exclusions, f) -> int:
     try:
         alloc = allocate(f["strata"])
@@ -466,12 +649,18 @@ def _score_cmd(a, cust: Path, answers, exclusions, f) -> int:
         labels2 = _read_labels(l2p, allowed) if l2p.exists() else None
         if labels2 is not None:
             _require_spot(labels2, cust / "noise-spot.jsonl")
-        bp, rp = cust / "noise-baseline.jsonl", cust / "noise-recall.json"
-        baseline = {r["anchorId"]: r["count"] for r in _jsonl(str(bp))} if bp.exists() else None
-        recall = json.loads(rp.read_text(encoding="utf-8")) if baseline is not None else None
+        baseline, recall = _read_variant(cust, "noise-baseline.jsonl", "noise-recall.json")
+        base_key, recall_key = _read_variant(cust, "noise-baseline-key.jsonl", "noise-recall-key.json")
+        hits = depth = None
+        if baseline is not None:
+            if not a.gate_record:
+                raise ValueError("a baseline needs --gate-record (the ac5-gate-1 record with defaultDepthBound)")
+            depth = json.loads(Path(a.gate_record).read_text(encoding="utf-8"))["defaultDepthBound"]
+            hits = _jsonl(str(cust / "system-hits.jsonl"))
         snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8")) if a.snapshot else None
-        rep = score(answers, exclusions, labels, a.gate_id, a.snapshot_id, a.boot, labels2, baseline, recall, snap)
-    except (OSError, ValueError, KeyError) as e:
+        rep = score(answers, exclusions, labels, a.gate_id, a.snapshot_id, a.boot, labels2, baseline, recall, snap,
+                    system_hits=hits, depth_bound=depth, baseline_key=base_key, recall_key=recall_key)
+    except (OSError, ValueError, KeyError, TypeError) as e:
         print(f"bad input: {e}", file=sys.stderr)
         return 4
     print(json.dumps(rep, sort_keys=True))
@@ -492,6 +681,7 @@ def main(argv=None) -> int:
     for f in ("--gate-id", "--snapshot-id", "--custodian"):
         sp.add_argument(f, required=True)
     sc.add_argument("--snapshot")
+    sc.add_argument("--gate-record", help="the ac5-gate-1 record (JSON with defaultDepthBound); required with a baseline")
     a = ap.parse_args(argv)
     cust = _custodian(a.custodian)
     if cust is None:

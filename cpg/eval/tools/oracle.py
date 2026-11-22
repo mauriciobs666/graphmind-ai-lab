@@ -3,8 +3,9 @@
 
     oracle.py --capture <run>/all.jsonl --links LINKS.jsonl --misses-out CUSTODIAN/misses.jsonl
 
-``LINKS.jsonl`` is the gate snapshot's Link set dumped by the custodian, one ``{"element", "keyNorm"}`` per line
-(element ``path::func`` or ``path``); this tool never queries a store. stdout is a counts-only JSON report; every
+``LINKS.jsonl`` is the gate snapshot's Link set dumped by the custodian, one ``{"element", "keyNorm", "status"}`` per line
+(element ``path::func`` or ``path``; the format of ``docs/plans/connected-code-graph-p1-noise-export-graph.md`` §2);
+``--links-unprovided`` (optional) is the same format for links with no provider, which only classify a miss. This tool never queries a store. stdout is a counts-only JSON report; every
 oracle miss goes to ``--misses-out`` (refused inside the repo), never to stdout.
 
 Rules (P1-47 gate rulings, fixed here before any Link data is seen):
@@ -27,6 +28,11 @@ Rules (P1-47 gate rulings, fixed here before any Link data is seen):
   nested function (``Client.meth``) misses by construction. Limit documented, not widened: the P1-47 ruling fixed exact
   match, and loosening it to the last qname segment would be a policy change. No in-scope P1 edge is function grain.
 * An in-scope row without a frame file is ``unattributed``: counted, not scored, never guessed.
+* Status. A hit is reported split by the best status of a matching Link (``confirmed`` / ``possible`` / ``other`` for a
+  row without a status), counts only, no threshold: oracle recall is "present as a Link", not confirmed coverage.
+* Miss class. A miss is ``linked-no-provider`` (else ``extractor``) when an unprovided row of the same file has a key whose
+  segments after its leading ``{?}`` run equal the last segments of the runtime path (per segment, a placeholder matching one
+  non-empty segment, the verb equal or ``*``). Classification only: the miss stays a miss in every figure.
 * Statistics: observed in-scope distinct edges (element, keyNorm) whose some raw row matches a Link, over observed
   distinct edges; the same over distinct keys; Wilson 95% on each. Reported beside seeded recall, never pooled.
 Exit: 0 ok, 2 usage/refused, 4 bad input.
@@ -105,15 +111,52 @@ def _stat(hit: int, n: int) -> dict:
     return wilson(hit, n)
 
 
-def score(rows: list[dict], links: list[tuple[str, str]]) -> tuple[dict, list[dict]]:
-    """``(report, misses)``. ``links`` are ``(element, keyNorm)`` pairs of the gate snapshot's Links."""
-    by_file: dict[str, list[str]] = {}
-    for el, key in links:
-        by_file.setdefault(el.split("::")[0], []).append((el, key))
+STATUS_RANK = {"confirmed": 2, "possible": 1}
+MISS_CLASSES = ("linked-no-provider", "extractor")
+
+
+def _best(a: str | None, b: str) -> str:
+    """The better of two link statuses (``confirmed`` > ``possible`` > anything else, reported as ``other``)."""
+    return a if a is not None and STATUS_RANK.get(a, 0) >= STATUS_RANK.get(b, 0) else b
+
+
+def _bucket(status: str | None) -> str:
+    return status if status in STATUS_RANK else "other"
+
+
+def _tail_matches(key: str, method: str, raw_path: str) -> bool:
+    """Does an unprovided link's consumer key, minus its leading ``{?}`` run, equal the last runtime segments? Classification only."""
+    verb, _, kpath = key.partition(" ")
+    if verb != "*" and verb.upper() != method.upper():
+        return False
+    segs = [x for x in kpath.split("/")[1:]]
+    while segs and segs[0] == "{?}":
+        segs.pop(0)
+    run = (urlsplit(raw_path).path or "/").split("/")[1:]
+    if not segs or len(segs) > len(run):
+        return False
+    return all(r != "" and s in PLACEHOLDERS or s == r for s, r in zip(segs, run[len(run) - len(segs):]))
+
+
+def _link(l) -> tuple[str, str, str | None]:
+    return (l[0], l[1], l[2] if len(l) > 2 else None)
+
+
+def score(rows: list[dict], links: list[tuple], unprovided: list[tuple] = ()) -> tuple[dict, list[dict]]:
+    """``(report, misses)``. ``links`` are ``(element, keyNorm[, status])`` of the gate snapshot's Links; ``unprovided`` the
+    same for links with no provider (they classify a miss, never score)."""
+    by_file: dict[str, list[tuple]] = {}
+    for el, key, status in map(_link, links):
+        by_file.setdefault(el.split("::")[0], []).append((el, key, status))
+    unp_by_file: dict[str, list[str]] = {}
+    for el, key, _ in map(_link, unprovided):
+        if key:
+            unp_by_file.setdefault(el.split("::")[0], []).append(key)
     counts = {"in_scope": 0, "out_of_scope": 0, "testclient": 0}
     unattributed = 0
     oos_edges: set = set()
-    edges: dict = {}                       # (grain, element, keyNorm) -> hit?
+    edges: dict = {}                       # (grain, element, keyNorm) -> best matching link status, or None
+    raw: dict = {}                         # the same key -> [(file, method, raw path)], for the miss class
     for r in rows:
         c = classify(r)
         counts[c] += 1
@@ -130,24 +173,37 @@ def score(rows: list[dict], links: list[tuple[str, str]]) -> tuple[dict, list[di
         grain = "function" if func else "file"
         element = f"{file}::{func}" if func else file
         cand = by_file.get(file, [])
-        hit = any((grain == "file" or el == element) and key_matches(k, r["method"], r["path"]) for el, k in cand)
         ident = (grain, element, _keynorm(r))
-        edges[ident] = edges.get(ident, False) or hit
+        best = edges.get(ident)
+        for el, k, status in cand:
+            if (grain == "file" or el == element) and key_matches(k, r["method"], r["path"]):
+                best = _bucket(_best(best, _bucket(status)))
+        edges[ident] = best
+        raw.setdefault(ident, []).append((file, r["method"], r["path"]))
 
     def block(sel) -> dict:
         es = {i: h for i, h in edges.items() if sel(i)}
         keys: dict = {}
         for (_, _, key), h in es.items():
-            keys[key] = keys.get(key, False) or h
-        return {"edges": _stat(sum(es.values()), len(es)), "keys": _stat(sum(keys.values()), len(keys))}
+            keys[key] = h if keys.get(key) is None else keys[key] if h is None else _bucket(_best(keys[key], h))
 
-    misses = [{"element": el, "keyNorm": key, "grain": g} for (g, el, key), h in sorted(edges.items()) if not h]
+        def split(d: dict) -> dict:
+            return {b: sum(v == b for v in d.values()) for b in ("confirmed", "possible", "other")}
+        return {"edges": _stat(sum(h is not None for h in es.values()), len(es)),
+                "keys": _stat(sum(h is not None for h in keys.values()), len(keys)),
+                "byStatus": {"edges": split(es), "keys": split(keys)}}
+
+    def miss_class(ident) -> str:
+        return MISS_CLASSES[0] if any(_tail_matches(k, m, p) for f, m, p in raw[ident] for k in unp_by_file.get(f, [])) else MISS_CLASSES[1]
+
+    misses = [{"element": el, "keyNorm": key, "grain": g, "class": miss_class((g, el, key))}
+              for (g, el, key), h in sorted(edges.items()) if h is None]
     report = {
         "rows": len(rows), "inScopeRows": counts["in_scope"], "outOfScope": counts["out_of_scope"],
         "testclient": counts["testclient"], "outOfScopeEdges": len(oos_edges), "unattributed": unattributed,
         "classes": {g: block(lambda i, g=g: i[0] == g) for g in ("function", "file")},
         "pooledAcrossGrains": block(lambda i: True),
-        "misses": len(misses),
+        "misses": len(misses), "missClasses": {c: sum(m["class"] == c for m in misses) for c in MISS_CLASSES},
         "unrunEntryPoints": list(UNRUN_ENTRY_POINTS),
         "notes": ["no mcp_tool oracle edge exists at P1", "/order/advance is one key: transitions are not distinguished"],
     }
@@ -162,6 +218,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--capture", required=True)
     ap.add_argument("--links", required=True)
+    ap.add_argument("--links-unprovided", help="links with no provider (same format); they only classify a miss")
     ap.add_argument("--misses-out", required=True)
     a = ap.parse_args(argv)
     out = Path(a.misses_out).expanduser().resolve()
@@ -170,11 +227,12 @@ def main(argv=None) -> int:
         return 2
     try:
         rows = _jsonl(a.capture)
-        links = [(l["element"], l["keyNorm"]) for l in _jsonl(a.links)]
+        links = [(l["element"], l["keyNorm"], l.get("status")) for l in _jsonl(a.links)]
+        unprovided = [(l["element"], l.get("keyNorm"), l.get("status")) for l in _jsonl(a.links_unprovided)] if a.links_unprovided else []
     except (OSError, ValueError, KeyError) as e:
         print(f"bad input: {e}", file=sys.stderr)
         return 4
-    report, misses = score(rows, links)
+    report, misses = score(rows, links, unprovided)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(json.dumps(m, sort_keys=True) + "\n" for m in misses), encoding="utf-8")
     print(json.dumps(report, sort_keys=True))
