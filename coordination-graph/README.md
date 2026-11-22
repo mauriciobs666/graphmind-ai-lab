@@ -234,4 +234,3 @@ result. **It is registered in `.claude/settings.json`** (settings block and kill
   50). Live tests use a shim that drops the
   `--confirm coordination` pair, because the guard refuses it on an ephemeral port.
 
-The shared instance is loaded and the hook is registered (go-live done).
