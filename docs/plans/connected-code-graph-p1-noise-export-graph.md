@@ -139,21 +139,23 @@ def naive_over_lister(snapshot: dict, anchors: list[dict], bound: int = 2, *, di
   "symbolId" | "cpId" | "entryId"}`, the projection of that answer's resolved `anchor` (answer-v1 `AnchorSymbol`/
   `AnchorContract`/`AnchorConfig`). A `unit` anchor arrives as the contract anchor of its probe (EP §5.1); a `unit`
   type in the input is a `ValueError`, so a unit and its probe cannot both enter. An answer whose anchor did not resolve
-  arrives as `type: "unresolved"` (EP §5.4 key-error anchors included). The CLI takes `bound` from the `ac5-gate-1` record's
+  arrives as `type: "unresolved"`, and only that (the answer's own `anchor` is absent; EP §5.4 concerns items, not anchors). The CLI takes `bound` from the `ac5-gate-1` record's
   `defaultDepthBound`; the default 2 is for tests only.
 - `kind_scope`: `"kind"` (headline, rule 4) or `"key"` (reported beside it, rule 4).
 - `in_scope`: `None` (everything in scope) or a callable taking a `symbol` record; production passes
   `lambda s: not path_excluded(s["path"], exclusions)` (`noise.py`, the same filter as the system's frame, `-p1-ml.md` §6.3).
 - **Returns**, one dict per anchor in `anchorId` order: `{"anchorId", "type", "count", "countInScope", "countConfirmedOwn",
-  "byName": {"resolvedSite", "unresolvedSite"}, "items"}`. `items` is the sorted list of distinct `symbolId`s listed;
+  "byName": {"resolvedSite", "unresolvedSite"}, "bySeed", "items"}`. `items` is the sorted list of distinct `symbolId`s listed;
   `count = len(items)`; `countInScope` those for which `in_scope` is true; `countConfirmedOwn` those whose own edge status is
   `confirmed` (rule 6); `byName` the number of items that disappear when the name rows of sites that have a `call` row
-  (`resolvedSite`: a `resolution-unverified` candidate) or of sites that have none (`unresolvedSite`) are ignored. Deterministic:
+  (`resolvedSite`: a `resolution-unverified` candidate) or of sites that have none (`unresolvedSite`) are ignored; `bySeed` partitions the items, by precedence, into `kindWideOnly` (in `Kind`, not in `Reach`), `nameOnly` (in
+  `Reach` only through name rows), `providerOnly` (reached only from cost-0 provider seeds), `consumerOrConfigOnly` (reached only
+  from consumer or config seeds) and `other` (a symbol anchor's callers, or mixed), summing to `count`. Deterministic:
   no clock, no randomness, independent of record order.
-- **Unresolved anchor (not an error).** An anchor of `type: "unresolved"`, or whose id is absent from the snapshot, returns
+- **Unresolved anchor (not an error).** An anchor of `type: "unresolved"` returns
   `{anchorId, type, count: 0, countInScope: 0, countConfirmedOwn: 0, items: [], unresolved: true}`: the system's answer
-  exists with burden 0, its gold items stay in `n` and are misses for both (§6). Raises `ValueError` (counts, never ids) for
-  `bound < 0`, `direction != "impact"`, a `kind_scope` outside the two, a `unit` anchor type or a duplicate `anchorId`.
+  exists with burden 0, its gold items stay in `n` and are misses for both (§6). Raises `ValueError` (counts, never ids) for an
+  id absent from the snapshot on a resolved answer (a build or export mismatch, never burden 0), `bound < 0`, `direction != "impact"`, a `kind_scope` outside the two, a `unit` anchor type or a duplicate `anchorId`.
 
 **Rules** (ids are symbols unless stated; "owner of site `x`" = `site.owner`):
 
@@ -186,6 +188,10 @@ def naive_over_lister(snapshot: dict, anchors: list[dict], bound: int = 2, *, di
    bound of rule 3, from a confirmed seed reaches it (name rows never qualify), or (b) it is in `Kind` through a `provides`/
    `consumes` row with `status == "confirmed"`, or (c) it is a contract or config seed whose own `provides`/`consumes`/`via`
    row has `status == "confirmed"` (a symbol anchor is a confirmed seed). It is reporting only and never changes `count`.
+
+**What the reduction measures.** The baseline is reverse call reach with name rows plus kind-wide members. Against it the
+system's reduction is flow-sensitivity plus kind filtering, not "correctness": in a flag-true unit a symbol anchor lists its
+direct callers only (precise `arg(i)`/`Ret` rows), and the baseline lists callers to the bound.
 
 ### 4.1 Worked graph and expected numbers
 
@@ -256,7 +262,7 @@ and the gate review's Q3 read it, not keys or units.
 
 ## 6. Item-level recall: the baseline's hit rule
 
-*(Final text: `ccg-noise-recall-rule-v1` pins the sha256 of this section and of `baseline.py`.)*
+*(Final text: `ccg-noise-recall-rule-v1` pins the sha256 of §4-§6 together and of `baseline.py`.)*
 
 **Gold item** (`ccg-key-v1`, as in `cpg/eval/dev/*.jsonl`): `{anchorId, impacted: {type, repoId, path, qname | keyPath}, lines:
 [int], counting: bool, ...}`. **System hit** is EP §5.2 H1-H4, scored by the P1-32b harness.
@@ -272,7 +278,8 @@ never a hit.
 
 **Population (identity, not a count).** The input is the harness's list of scored counting gold items, one JSONL row per item in
 `system-hits.jsonl` (custodian): `{anchorId, impacted, lines, hit, keyError}`; `baseline_recall` never reads the gold files.
-`itemSetSha256` = sha256 (UTF-8) of the sorted lines `anchorId|<type>:<repoId>:<path>:<qname or keyPath>` joined by `\n`.
+`itemSetSha256` = sha256 (UTF-8) of the lines `anchorId|<type>:<repoId>:<path>:<qname or keyPath>|<l1,l2,...>` (`lines` sorted
+ascending, comma-joined), the list sorted by Python string order (code point) and joined by `\n`.
 Both figures are over the same rows by construction, and `score` recomputes the hash from `system-hits.jsonl` and exits 4 when it
 differs from the one in `noise-recall.json`. Items under an anchor that did not resolve stay in `n` and are misses for both
 (`unresolved: true` rows of §4 add nothing to either burden sum). The **ex-key-error** figure drops the `keyError` items from
@@ -338,11 +345,12 @@ the record. A rule changed after scoring is "after adaptation".
 (`confirmed` / `possible`, counts only, no threshold); a miss is `linked-no-provider` under the §2 rule; a fixture row of the §2
 format is added to `test_oracle.py`.
 
-**Dominance check (M1), dev anchors only, design time.** `baseline.dominance(system_items, baseline_rows) -> {"checked", "violations"}`:
-for each dev anchor, a system symbol item whose chain has no `->` hop and no `DATA`, `CONTROLLED_BY`, `HAS_PARAM`, `HAS_RETURN` or
-`HAS_COND` edge (the call-continuation and contract edges the baseline models) must be in the baseline's `items` for that anchor
-at the same bound; `violations` counts the absent ones (counts only). Each is a baseline bug or a distance mismatch; the expected
-count is 0, and the callee-run items of a flag-false unit (a `->` hop) are excluded by construction. A dev dry run of the two
+**Dominance check (M1), dev anchors only, design time.** `baseline.dominance(system_items, baseline_rows) -> {"A", "B"}` over
+**every** system symbol item for each dev anchor, at the same bound, absent from the baseline's `items` counts as a violation.
+Class A: the item's chain has no excluded edge (no `->` hop, no `DATA`, `CONTROLLED_BY`, `HAS_PARAM`, `HAS_RETURN`, `HAS_COND`),
+reported as `{checked, violations}`; expected 0, any violation is a baseline bug or a distance mismatch. Class B: the item's chain
+has an excluded edge, reported as `{checked, violations}` split by the first excluded edge type (`->` callee run, `DATA`, ...), so
+the baseline's blind spots are visible rather than excluded by construction. Counts only. A dev dry run of the two
 variants' `Σ count / Σ system burden` is a sizing measurement nobody tunes on; a rule change after it is a defect fix only.
 
 **Draw choices pinned in the `ac5-gate-1` record** (accepted as implemented in `noise.py`; code-level facts a verifier needs):
