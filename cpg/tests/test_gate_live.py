@@ -66,7 +66,7 @@ def load_world(db, key, w: "H.World"):
     g = db.select_graph(key)
     g.query("CREATE (:Snapshot {snapshotId: $s})", {"s": H.SNAP})
     g.query("CREATE (:ContractPoint {cpId: $c, kind: 'http', keyNorm: 'GET /a'})", {"c": w.cp})
-    g.query("CREATE (:Link {linkId: $l}), (:CallSite {callSiteId: $c}), (:Symbol {symbolId: $s, qname: $q, path: $p, lineStart: 5, lineEnd: 20, ownedRegions: [[28, 32]]})",
+    g.query("CREATE (:Link {linkId: $l}), (:CallSite {callSiteId: $c}), (:Symbol {symbolId: $s, qname: $q, path: $p, lineStart: 5, lineEnd: 20, ownedRegions: [28, 32]})",
             {"l": w.link, "c": w.cs, "s": w.sid, "q": w.qname, "p": w.qname.split("::")[0]})
     g.query("MATCH (l:Link {linkId: $l}), (p:ContractPoint {cpId: $c}) CREATE (l)-[:ON]->(p)", {"l": w.link, "c": w.cp})
     g.query("MATCH (c:CallSite {callSiteId: $c}), (l:Link {linkId: $l}) CREATE (c)-[:VIA]->(l)", {"l": w.link, "c": w.cs})
@@ -122,7 +122,7 @@ def test_live_every_replayable_edge_pair_query_is_valid_cypher(throwaway):
 def test_live_the_hit_rule_end_to_end_including_owned_regions_and_the_stamp(throwaway):
     w = H.World(lines=(30,), span=(5, 20))                     # the line lies in an owned region, not in the span
     snap = load_world(throwaway, "gate_tw_d", w)
-    ans = w.answer([H.ans_item(H.sym_subject(w.sid, w.qname, 5, 20, ownedRegions=[[28, 32]]), w.chain())])
+    ans = w.answer([H.ans_item(H.sym_subject(w.sid, w.qname, 5, 20, ownedRegions=[28, 32]), w.chain())])
     res = G.score_gate([w.rec], w.run(ans), snap, ())
     assert res["items"][w.rec["itemId"]]["outcome"] == "hit" and res["defects"] == {}
     assert G.check_stamp(ans, snap.snapshot_id()) == []

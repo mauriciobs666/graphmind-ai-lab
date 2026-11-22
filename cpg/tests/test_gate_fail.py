@@ -12,7 +12,7 @@ STRATA = list(G.STRATA)
 def result(rows, **extra):
     """rows: (id, stratum, outcome, counting, anchor)."""
     items = {i: {"stratum": s, "outcome": o, "counting": c, "anchorId": a, **({"reason": "no-qualifying-item", "stage": "none"} if o == "miss" else
-                                                                                {"hops": 2, "interFunctionHops": 1} if o == "hit" else {})}
+                                                                                {"hops": 2, "interFunctionHops": 1, "distance": 1} if o == "hit" else {})}
              for i, s, o, c, a in rows}
     return {"items": items, "defects": {}, "harnessErrors": {}, "maskedComparisons": 0, "stops": {}, **extra}
 
@@ -163,6 +163,41 @@ def test_regate_blockers_block_a_would_be_pass():
     assert d["verdict"] == "blocked" and d["floorMet"] is True
 
 
+def _recs():
+    return [H.item(n, H.contract("http", f"GET /a{n}"), H.sym(f"svc/c{n}.py::f")) for n in (1, 2, 3)]
+
+
+def _lines(recs, **kw):
+    return "".join(json.dumps(r, **kw) + "\n" for r in recs)
+
+
+def test_list_key_is_the_full_sha256_of_the_sorted_canonical_records_and_ignores_the_bytes():
+    a, b, c = _recs()
+    key = G.list_key([a, b, c])
+    assert len(key) == 64 and int(key, 16) >= 0
+    assert G.list_key([c, a, b]) == key                                          # `--lists A,B` vs `B,A`
+    assert G.list_key([a, b, c, b]) == key                                       # a duplicated record
+    assert G.list_key([json.loads(json.dumps(r, sort_keys=True)) for r in (a, b, c)]) == key       # re-serialised, other key order
+    assert G.list_key([a, b]) != key and G.list_key([a, b, {**c, "lines": [11]}]) != key             # content still counts
+
+
+def test_list_key_from_lines_ignores_blank_lines_and_key_order():
+    recs = _recs()
+    base = G.list_key_from_text(_lines(recs))
+    assert G.list_key_from_text(_lines(recs) + "\n\n") == base
+    assert G.list_key_from_text(_lines(recs, sort_keys=True)) == base
+    assert G.list_key_from_text(_lines(recs[::-1])) == base
+
+
+def test_first_run_marker_keys_on_the_full_64_hex_not_a_prefix(tmp_path):
+    k1, k2 = "ab" * 8 + "01" * 24, "ab" * 8 + "02" * 24                         # same first 16 hex
+    m1 = G.first_run_marker(tmp_path, k1, {"x": 1})
+    m2 = G.first_run_marker(tmp_path, k2, {"x": 1})
+    assert m1 != m2 and k1 in m1.name
+    with pytest.raises(G.Refusal, match="64"):
+        G.first_run_marker(tmp_path, "ab" * 8, {"x": 1})
+
+
 def test_first_run_marker_refuses_a_rerun_on_the_same_list(tmp_path):
     G.first_run_marker(tmp_path, "ab" * 32, {"x": 1})
     with pytest.raises(G.Refusal, match="already run"):
@@ -218,7 +253,7 @@ def test_report_anchor_as_cluster_when_no_map_is_given():
 def test_report_chain_length_median_and_p90_by_stratum():
     res = result(hits("a", 4, "http"))
     for i, h in zip(sorted(res["items"]), (1, 2, 3, 10)):
-        res["items"][i]["interFunctionHops"] = h
+        res["items"][i]["distance"] = h
     rep = G.build_report(res, G.decide_gate(res))
     assert rep["chainLength"]["http"]["median"] == 2.5 and rep["chainLength"]["http"]["n"] == 4 and rep["chainLength"]["http"]["p90"] == 10
 
@@ -273,7 +308,7 @@ def test_report_excludes_out_of_scope_items_from_every_figure():
     res["items"]["oos"] = {"stratum": "http", "outcome": "out-of-scope", "triage": "key-error", "counting": True, "anchorId": "zz"}
     rep = G.build_report(res, G.decide_gate(res))
     assert rep["H_all"] == 4 and rep["recall"]["pooled"]["items"]["n"] == 4 and rep["recall"]["byStratum"]["http"]["items"]["n"] == 4
-    assert rep["outOfScope"] == {"count": 1, "triage": {"key-error": 1}}
+    assert rep["outOfScope"] == {"count": 1, "triage": {"key-error": 1}, "outcome": "proposed, unconfirmed"}
 
 
 def test_regate_report_claims_nothing_when_it_is_not_a_pass():
@@ -282,3 +317,164 @@ def test_regate_report_claims_nothing_when_it_is_not_a_pass():
     res = result(rows)
     rep = G.build_report(res, G.decide_gate(res, flags), flags=flags)
     assert rep["verdict"] == "all hits, floor not met" and rep["regate"]["claim"] == "no AC-5 pass claimed" and rep["regate"]["floorMet"] is False
+
+
+# ---------------------------------------------------------------- B5: precedence stopped > blocked(harness error) > fail > blocked(defect/mask) > re-gate > pass
+def _with_miss(**extra):
+    rows = gate1_rows()
+    rows[0] = (rows[0][0], rows[0][1], "miss", True, "AX")
+    return result(rows, **extra)
+
+
+def test_b5_a_harness_error_plus_a_miss_is_blocked_not_fail():
+    d = G.decide_gate(_with_miss(harnessErrors={"edgeType-not-allowed": 1}))
+    assert d["verdict"] == "blocked" and "harness-errors" in d["blockers"]
+
+
+def test_b5_an_errored_item_alone_is_blocked_and_is_not_scored():
+    rows = gate1_rows()
+    res = result(rows)
+    res["items"]["er"] = {"stratum": "http", "outcome": "error", "reason": "edgeType-not-allowed", "counting": True, "anchorId": "AE"}
+    d = G.decide_gate(res)
+    assert d["verdict"] == "blocked" and d["misses"] == 0 and d["scored"] == len(rows)
+    rep = G.build_report(res, d)
+    assert rep["H_all"] == len(rows) and rep["erroredItems"] == 1
+
+
+@pytest.mark.parametrize("extra", [{"defects": {"x": 1}}, {"maskedComparisons": 2}])
+def test_b5_an_engine_defect_or_a_masked_comparison_plus_a_miss_stays_fail(extra):
+    assert G.decide_gate(_with_miss(**extra))["verdict"] == "fail"
+
+
+def test_b5_a_masked_comparison_alone_is_blocked():
+    assert G.decide_gate(result(gate1_rows(), maskedComparisons=1))["verdict"] == "blocked"
+
+
+def test_b5_stopped_outranks_a_harness_error():
+    assert G.decide_gate(_with_miss(harnessErrors={"dir": 1}, stops={"C5:stamp:snapshotId": 1}))["verdict"] == "stopped"
+
+
+def test_b5_a_harness_error_blocks_a_regate_ahead_of_a_miss():
+    rows = kept_rows() + hits("fr", 35, "wiring")
+    flags = {r[0]: "fresh-cluster" if r[0].startswith("fr") else "kept" for r in rows}
+    rows[0] = (rows[0][0], rows[0][1], "miss", True, "AX")
+    d = G.decide_gate(result(rows, harnessErrors={"class-X": 1}), flags)
+    assert d["verdict"] == "blocked" and d["kind"] == "re-gate"
+
+
+# ---------------------------------------------------------------- M1: the strata the run gates are an input; flow is withheld at P1
+def withheld_rows(per=8, wiring=8):
+    return [r for s, n in (("http", per), ("mcp", per), ("scripts", per), ("wiring", wiring)) for r in hits(s[:2], n, s)] + hits("xx", 30, "http")
+
+
+def test_m1_strata_gated_is_http_mcp_scripts_wiring():
+    assert G.STRATA_GATED == ("http", "mcp", "scripts", "wiring")
+
+
+def test_m1_a_perfect_four_strata_run_passes_when_flow_is_withheld():
+    res = result(withheld_rows(per=30, wiring=8))
+    d = G.decide_gate(res, gated_strata=G.STRATA_GATED)
+    assert d["verdict"] == "pass" and d["H"] >= 75
+    assert G.decide_gate(res)["verdict"] == "minimums-not-met"                # the default still demands all five
+
+
+def test_m1_each_gated_stratum_still_needs_8_and_H_75():
+    short = result(withheld_rows(per=30, wiring=7))
+    assert G.decide_gate(short, gated_strata=G.STRATA_GATED)["verdict"] == "minimums-not-met"
+    low = result([r for s in G.STRATA_GATED for r in hits(s[:2], 18, s)])         # H = 72
+    assert G.decide_gate(low, gated_strata=G.STRATA_GATED)["verdict"] == "minimums-not-met"
+
+
+def test_m1_a_scored_item_in_a_withheld_stratum_is_refused_not_silently_counted():
+    res = result(withheld_rows(per=30) + hits("fl", 1, "flow"))
+    with pytest.raises(G.Refusal, match="not gated"):
+        G.decide_gate(res, gated_strata=G.STRATA_GATED)
+
+
+def test_m1_withhold_strata_removes_flow_records_and_counts_them():
+    recs = [{"itemId": "a", "derivedStratum": "flow"}, {"itemId": "b", "derivedStratum": "http"}, {"itemId": "c", "derivedStratum": "flow"}]
+    kept, withheld = G.withhold_strata(recs, G.STRATA_GATED)
+    assert [r["itemId"] for r in kept] == ["b"] and withheld == {"flow": 2}
+
+
+def test_m1_report_says_flow_unavailable_labels_wiring_and_gives_no_flow_figure():
+    res = result(withheld_rows(per=30, wiring=8))
+    d = G.decide_gate(res, gated_strata=G.STRATA_GATED)
+    rep = G.build_report(res, d, gated_strata=G.STRATA_GATED, withheld={"flow": 12}, flow_flag=False)
+    assert rep["flow"] == {"status": "flow-unavailable, not closed", "flag": False, "withheld": 12}
+    assert "flow" not in rep["recall"]["byStratum"] and "flow" not in rep["chainLength"]
+    assert rep["wiring"] == "screened, not certified"
+    assert rep["H"] == d["H"] and rep["H_all"] == d["scored"]
+    text = json.dumps(rep)
+    assert "AC-5 passed for flow" not in text
+
+
+def test_m1_wiring_above_its_floor_is_not_labelled():
+    res = result(withheld_rows(per=30, wiring=9))
+    rep = G.build_report(res, G.decide_gate(res, gated_strata=G.STRATA_GATED), gated_strata=G.STRATA_GATED, withheld={}, flow_flag=False)
+    assert "wiring" not in rep
+
+
+def _decision(tmp_path, verdict):
+    import subprocess
+    repo = H.make_repo(tmp_path)
+    f = repo / "cpg" / "eval" / "decisions" / "ccg-p1-flow-python-v2-decision.json"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({"decision": {"verdict": verdict}}))
+    H.git(repo, "add", "-A")
+    H.git(repo, "commit", "-qm", "decision")
+    return f
+
+
+def test_m1_flow_flag_is_read_from_the_committed_decision_record(tmp_path):
+    f = _decision(tmp_path, "FALSE:measured")
+    assert G.flow_flag(f) is False
+    assert G.flow_flag(f.parent / "absent.json") is False                          # no record means false
+
+
+def test_m1_flow_flag_true_only_for_a_committed_true_verdict(tmp_path):
+    f = _decision(tmp_path, "TRUE:measured")
+    assert G.flow_flag(f) is True
+    f.write_text(json.dumps({"decision": {"verdict": "TRUE:measured", "x": 1}}))     # edited after the commit: HEAD's copy disagrees
+    assert G.flow_flag(f) is False
+    f.write_text("not json")
+    assert G.flow_flag(f) is False
+
+
+def test_m1_exposure_rows_carry_the_stratum():
+    res = result(hits("a", 2, "http") + hits("b", 1, "wiring"))
+    assert {r["itemId"]: r["stratum"] for r in G.exposure_rows(res)} == {"a000": "http", "a001": "http", "b000": "wiring"}
+
+
+def test_m1_the_report_reads_the_stratum_from_exposure_rows():
+    rows = hits("fr", 35, "wiring")
+    flags = {r[0]: "fresh-cluster" for r in rows}
+    res = result(rows)
+    prior = [{"itemId": "old1", "hit": True, "stratum": "http"}]
+    cum = G.build_report(res, G.decide_gate(res, flags), flags=flags, exposure=prior)["regate"]["cumulativeFirstExposure"]
+    assert cum["byStratum"]["http"]["n"] == 1 and cum["unassignedStratum"] == 0
+
+
+def test_m1_chain_length_reports_the_engines_distance_and_the_symbol_count_beside_it():
+    res = result(hits("a", 2, "http"))
+    for i, (d, sy) in zip(sorted(res["items"]), ((3, 0), (5, 2))):
+        res["items"][i]["distance"], res["items"][i]["interFunctionHops"] = d, sy
+    cl = G.build_report(res, G.decide_gate(res))["chainLength"]["http"]
+    assert cl["median"] == 4.0 and cl["symbolHops"]["median"] == 1.0
+
+
+def test_m1_build_report_carries_no_stratum_figure_for_a_withheld_stratum_even_if_one_slipped_in():
+    res = result(withheld_rows(per=30, wiring=8) + hits("fl", 3, "flow"))
+    rep = G.build_report(res, G.decide_gate(res), gated_strata=G.STRATA_GATED, withheld={"flow": 1}, flow_flag=False)
+    assert "flow" not in rep["recall"]["byStratum"] and "flow" not in rep["chainLength"]
+
+
+def test_list_key_does_not_depend_on_the_hash_seed_of_the_process():
+    import os
+    import subprocess
+    import sys
+    code = ("import sys; sys.path.insert(0, %r); import gate_helpers as H; G = H.G; "
+            "recs = [H.item(n, H.contract('http', f'GET /a{n}'), H.sym(f'svc/c{n}.py::f')) for n in range(1, 9)]; print(G.list_key(recs))" % str(__import__("pathlib").Path(H.__file__).parent))
+    keys = {subprocess.run([sys.executable, "-c", code], env={**os.environ, "PYTHONHASHSEED": seed}, capture_output=True, text=True, check=True).stdout.strip()
+            for seed in ("1", "2", "3", "4")}
+    assert len(keys) == 1 and len(next(iter(keys))) == 64

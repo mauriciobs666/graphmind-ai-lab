@@ -213,6 +213,63 @@ def test_harness_pin_a_file_the_record_lacks_is_a_difference(tmp_path):
     assert G.harness_pin(repo, rec, ("cpg/eval/tools/new.py",))["afterAdaptation"] is True
 
 
+# ---------------------------------------------------------------- M3: the self-pin is built from the import graph
+def _tools(tmp_path, files):
+    d = tmp_path / "tools"
+    d.mkdir()
+    for name, text in files.items():
+        (d / name).write_text(text)
+    return d
+
+
+def test_m3_the_real_harness_pin_covers_the_run_wiring_and_the_snapshot_transport():
+    names = {Path(f).name for f in G.HARNESS_FILES}
+    assert {"gate.py", "gate_run.py", "snapshot_export.py", "match_keys.py", "split_manifest.py", "noise.py", "oracle.py", "ac24_smoke.py",
+            "export_kit.py", "baseline.py"} <= names
+    assert "cpg/eval/EVAL_COMMIT" in G.HARNESS_FILES and all(f.startswith("cpg/eval/") for f in G.HARNESS_FILES)
+
+
+@pytest.fixture(params=[
+    ("top-level", "import planted\n"),
+    ("from-import", "from planted import x\n"),
+    ("lazy-in-function", "def f():\n    import planted\n"),
+    ("lazy-from-in-function", "def f():\n    from planted import x\n"),
+    ("sys.path then import", "import sys\nsys.path.insert(0, '.')\nimport planted\n"),
+    ("import_module", "import importlib\nimportlib.import_module('planted')\n"),
+    ("__import__", "__import__('planted')\n"),
+    ("relative", "from . import planted\n"),
+], ids=lambda p: p[0])
+def axis_text(request):
+    return request.param
+
+
+@pytest.mark.parametrize("entry", ["gate.py", "gate_run.py"])
+def test_m3_a_new_import_in_either_entry_point_joins_the_pin(tmp_path, entry, axis_text):
+    axis, text = axis_text
+    d = _tools(tmp_path, {"gate.py": "x = 1\n", "gate_run.py": "y = 1\n", "planted.py": "z = 1\n", "other.py": "w = 1\n"})
+    before = {Path(f).name for f in G.harness_files(d)}
+    assert "planted.py" not in before
+    (d / entry).write_text(text)
+    after = {Path(f).name for f in G.harness_files(d)}
+    assert "planted.py" in after, axis
+    assert "other.py" not in after
+
+
+def test_m3_the_closure_is_transitive_and_ignores_names_outside_the_tools_dir(tmp_path):
+    d = _tools(tmp_path, {"gate.py": "import json\nimport a\n", "gate_run.py": "", "a.py": "def f():\n    import b\n", "b.py": "import os\n", "c.py": ""})
+    assert sorted(Path(f).name for f in G.harness_files(d)) == ["EVAL_COMMIT", "a.py", "b.py", "gate.py", "gate_run.py"]
+
+
+def test_m3_a_pinned_file_edited_after_the_record_is_after_adaptation(tmp_path):
+    repo = H.make_repo(tmp_path)
+    (repo / "cpg/eval/tools/gate_run.py").write_text("# run v1\n")
+    H.git(repo, "add", "-A")
+    H.git(repo, "commit", "-qm", "run")
+    rec = H.head(repo)
+    (repo / "cpg/eval/tools/gate_run.py").write_text("# run v2\n")
+    assert G.harness_pin(repo, rec, ("cpg/eval/tools/gate_run.py",))["afterAdaptation"] is True
+
+
 def test_rescore_changes_lists_only_changed_items():
     assert G.rescore_changes({"a": "hit", "b": "miss"}, {"a": "hit", "b": "hit", "c": "hit"}) == ["b", "c"]
 

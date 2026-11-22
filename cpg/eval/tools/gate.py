@@ -21,6 +21,7 @@ stdout and committed reports carry counts, hashes and classes only. Exit: 0 ok, 
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import math
@@ -50,10 +51,51 @@ MIN_COUNTING = 75                            # AC-5 pooled
 MIN_STRATUM = 8                              # AC-5 per stratum
 EMPTY_VERDICT_LOG_HASH = "c482b1cf54631b37eb4572dc86a68fb1"     # HA-4: the literal, never ``answer.EMPTY_VERDICT_LOG_HASH``
 STRATA = _mk.STRATA
-HARNESS_FILES = tuple(f"cpg/eval/tools/{n}" for n in (
-    "gate.py", "match_keys.py", "split_manifest.py", "noise.py", "oracle.py", "ac24_smoke.py", "export_kit.py"))
+STRATA_GATED = ("http", "mcp", "scripts", "wiring")      # P1-37 while the flow flag is false: flow is withheld, not gated (``-p1-gate-marker-ml.md`` §4)
+FLOW_DECISION = Path("cpg") / "eval" / "decisions" / "ccg-p1-flow-python-v2-decision.json"
+ENTRY_POINTS = ("gate.py", "gate_run.py")                # the modules that run the gate; the pin is their import closure under ``cpg/eval/tools/``
 STATUSES = ("confirmed", "possible")        # H2
 TRIAGE = ("key-error", "extraction", "recognizer", "linker-engine", "depth-bound", "dynamic")    # EP §12.1 step 2
+
+
+def _imported_names(src: str) -> set[str]:
+    """Every module name the source can import, anywhere in it (top level or lazily inside a function): ``import a``, ``from a import b``,
+    ``from . import a``, ``importlib.import_module("a")``, ``__import__("a")``. The first dotted component only."""
+    out: set[str] = set()
+    for n in ast.walk(ast.parse(src)):
+        if isinstance(n, ast.Import):
+            out.update(a.name.split(".")[0] for a in n.names)
+        elif isinstance(n, ast.ImportFrom):
+            if n.level and not n.module:
+                out.update(a.name for a in n.names)
+            elif n.module:
+                out.add(n.module.split(".")[0])
+        elif isinstance(n, ast.Call) and n.args and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str):
+            f = n.func
+            if (isinstance(f, ast.Attribute) and f.attr == "import_module") or (isinstance(f, ast.Name) and f.id in ("__import__", "import_module")):
+                out.add(n.args[0].value.split(".")[0])
+    return out
+
+
+def harness_files(tools_dir: Path | None = None, entries: Sequence[str] = ENTRY_POINTS) -> tuple[str, ...]:
+    """The self-pin set (``-p1-ml.md`` §6.1), built from the import graph: every ``.py`` under ``tools_dir`` that the entry points import, directly,
+    lazily or transitively, plus ``cpg/eval/EVAL_COMMIT``. A hand-listed set would silently miss a new import. A name that matches a file in the
+    directory counts as that file (fail-closed against a shadowing module)."""
+    tools = Path(tools_dir) if tools_dir else _HERE
+    seen: list[str] = []
+    todo = [e for e in entries if (tools / e).is_file()]
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.append(name)
+        for mod in _imported_names((tools / name).read_text(encoding="utf-8")):
+            if (tools / f"{mod}.py").is_file() and f"{mod}.py" not in seen:
+                todo.append(f"{mod}.py")
+    return tuple(f"cpg/eval/tools/{n}" for n in sorted(seen)) + ("cpg/eval/EVAL_COMMIT",)
+
+
+HARNESS_FILES = harness_files()
 
 
 class Refusal(RuntimeError):
@@ -299,6 +341,17 @@ def _edge_cypher(etype: str, sl: str, dl: str) -> str:
     return f"MATCH (a:{sl} {{{sp}: $a}})-[:{etype}]->(b:{dl} {{{dp}: $b}}) RETURN count(*)"
 
 
+def region_pairs(v):
+    """Flat ``[s0, e0, ...]`` (the store's and the answer's shape) -> ``[[s0, e0], ...]``; nested pairs pass through; ``None``/empty -> ``None``."""
+    if not v:
+        return None
+    if all(isinstance(r, (list, tuple)) for r in v):
+        return [list(r) for r in v]
+    if len(v) % 2 or any(isinstance(n, (list, tuple, bool)) or not isinstance(n, int) for n in v):
+        raise HarnessError("ownedRegions: not a flat even-length integer list")
+    return [[v[i], v[i + 1]] for i in range(0, len(v), 2)]
+
+
 class StoreSnapshot:
     """The gate snapshot over a read-only runner ``run(cypher, params) -> rows`` (``GRAPH.RO_QUERY``; ``snapshot_export.RoRunner``).
     Reads are memoized: one gate answers each question once."""
@@ -338,8 +391,10 @@ class StoreSnapshot:
         return v
 
     def _symbol_row(self, r) -> dict:
+        """``ownedRegions`` is stored flat (``[s0, e0, s1, e1, ...]``, ``ccg.assemble.rows._flatten_regions``); ``match_keys`` reads pairs, so the
+        snapshot hands it pairs. An odd-length stored list is a harness error."""
         d = {"symbolId": r[0], "qname": r[1], "path": r[2], "lineStart": r[3], "lineEnd": r[4]}
-        owned = self._regions(r[5])
+        owned = region_pairs(self._regions(r[5]))
         return {**d, **({"ownedRegions": owned} if owned else {})}
 
     def symbol(self, sid: str) -> dict | None:
@@ -394,6 +449,8 @@ def replay_chain(chain: Sequence[Mapping], snap) -> tuple[str, str]:
     neither a hit nor a miss, and the gate verdict is blocked."""
     if not chain:
         return "fail", "empty-chain"
+    if not all(isinstance(h, dict) and isinstance(h.get("id"), str) for h in chain):
+        return "error", "hop-shape"
     for h in chain:
         if h.get("kind") not in LABELS:
             return "error", "hop-kind"
@@ -452,9 +509,15 @@ def _h1(x: Mapping, rec: Mapping, snap, acc: Acc) -> bool:
         if real is None:
             acc.defects["subject-not-in-snapshot"] += 1
             return False
-        for k in ("qname", "lineStart", "lineEnd", "ownedRegions"):
+        for k in ("qname", "lineStart", "lineEnd"):
             if subj.get(k) != real.get(k):
                 acc.defects[f"subject-{k}"] += 1
+        try:
+            same = region_pairs(subj.get("ownedRegions")) == region_pairs(real.get("ownedRegions"))     # the answer's flat copy against the stored one
+        except HarnessError:                                                                          # a malformed copy is an engine defect
+            same = False
+        if not same:
+            acc.defects["subject-ownedRegions"] += 1
         return _mk.h1_symbol_credit(real, {"qname": e["qname"]}, rec["lines"])
     if e.get("type") == "config":
         if subj.get("type") != "config":
@@ -486,7 +549,7 @@ def evaluate_item(rec: Mapping, ask_id: str, ans: Mapping, snap, acc: Acc) -> di
     """The hit decision for one key item against its anchor's answer. -> ``{"hit", "stage", ["chain"]}``; ``stage`` is the deepest of H1-H3
     any candidate reached (``none`` when no candidate is *e*): the triage hint, with ``extractionAbsent`` and ``depthBoundCut`` flags."""
     stage_rank = {"none": 0, "H1": 1, "H2": 2, "H3": 3}
-    best, hit_chain = "none", None
+    best, hit_chain, hit_x, err = "none", None, None, None
     for x in candidates(ans):
         if not _h1(x, rec, snap, acc):
             continue
@@ -495,21 +558,27 @@ def evaluate_item(rec: Mapping, ask_id: str, ans: Mapping, snap, acc: Acc) -> di
             continue
         chain = x.get("chain") or []
         subj_id = _subject_id(x.get("subject") or {})
+        if chain and not (isinstance(chain[0], dict) and isinstance(chain[-1], dict)):
+            acc.harness_errors["hop-shape"] += 1
+            err = err or "hop-shape"
+            continue
         if not chain or chain[0].get("id") != ask_id or chain[-1].get("id") != subj_id:      # H3, shape
             best = max(best, "H2", key=stage_rank.get)
             continue
         verdict, code = replay_chain(chain, snap)                           # H3, replay (HA-1)
-        if verdict == "error":
+        if verdict == "error":                                              # EP §5.2.1 (g)/(h): neither a hit nor a miss, the verdict is blocked
             acc.harness_errors[code] += 1
-            best = max(best, "H2", key=stage_rank.get)
+            err = err or code
             continue
         if verdict == "fail":
             best = max(best, "H2", key=stage_rank.get)
             continue
         if hit_chain is None or len(chain) < len(hit_chain):
-            hit_chain = chain
+            hit_chain, hit_x = chain, x
     if hit_chain is not None:
-        return {"hit": True, "stage": "H3", "chain": hit_chain}
+        return {"hit": True, "stage": "H3", "chain": hit_chain, "distance": hit_x.get("distance")}
+    if err is not None:
+        return {"hit": False, "error": err}
     e = rec["impacted"]
     absent = e.get("type") == "symbol" and _mk.source_check_needed({"qname": e["qname"]}, rec["lines"], snap.symbols_of_path(e["path"]))
     return {"hit": False, "stage": best, "extractionAbsent": bool(absent),
@@ -521,8 +590,8 @@ def evaluate_item(rec: Mapping, ask_id: str, ans: Mapping, snap, acc: Acc) -> di
 # =============================================================================================
 
 def unit_probe(rec: Mapping, records: Sequence[Mapping]) -> str:
-    """EP §5.1: a ``unit`` anchor is asked from its probe: of its ``serves[]`` points, the one with the fewest items in the list, ties by
-    smallest ``cpId``."""
+    """The record-local probe rule (of the record's ``serves[]`` the point with the fewest items in the list, ties by smallest ``cpId``). It is NOT
+    what a unit anchor is asked from: that is the S47 probe map (EP §5.1; :func:`ask_id_of`); this is only its cross-check."""
     served = sorted({_mk.contract_id(loc) for loc in rec.get("serves") or []})
     if not served:
         raise HarnessError("unit anchor without a served contract point")
@@ -530,27 +599,60 @@ def unit_probe(rec: Mapping, records: Sequence[Mapping]) -> str:
     return min(served, key=lambda c: (n.get(c, 0), c))
 
 
-def ask_id_of(rec: Mapping, records: Sequence[Mapping]) -> str:
-    return unit_probe(rec, records) if rec["anchor"].get("type") == "unit" else rec["anchorId"]
+def read_probe_map(path: Path, home: Path | None = None) -> dict:
+    """The S47 probe map ``{unit anchorId: probe cpId}`` (``split_manifest.split(...)["probe"]``, written custodian-side), read only from the
+    custodian area. Never printed."""
+    area = _ac.custodian_area(home).resolve()
+    p = Path(path).expanduser().resolve()
+    if p != area and area not in p.parents:
+        raise Refusal("REFUSED: the probe map must be under the custodian area, never elsewhere")
+    m = json.loads(p.read_text(encoding="utf-8"))
+    if not isinstance(m, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in m.items()):
+        raise HarnessError("the probe map is not {unit anchorId: cpId}")
+    return m
 
 
-def build_request(rec: Mapping, ask_id: str) -> dict:
-    """The structured impact request of EP §5.1 (never plain language, no ``scope``)."""
+def ask_id_of(rec: Mapping, probes: Mapping | None = None) -> str:
+    """The id a record's anchor is asked by: its own ``anchorId``, or for a ``unit`` anchor its S47 probe. A unit item with no entry in ``probes`` is a
+    harness error (fail closed: the probe is never re-derived from the list passed in, which is not the population S47 used)."""
+    if rec["anchor"].get("type") != "unit":
+        return rec["anchorId"]
+    pid = (probes or {}).get(rec["anchorId"])
+    if not pid:
+        raise HarnessError("unit anchor without an S47 probe entry")
+    return pid
+
+
+def locator_index(records: Sequence[Mapping]) -> dict:
+    """``cpId -> contract locator`` over every contract anchor and every ``serves[]`` entry of the records (what a probe request is built from)."""
+    out = {}
+    for r in records:
+        for loc in [r["anchor"]] + list(r.get("serves") or []):
+            if loc.get("type") == "contract":
+                out[_mk.contract_id(loc)] = loc
+    return out
+
+
+def build_request(rec: Mapping, ask_id: str, locators: Mapping | None = None) -> dict:
+    """The structured impact request of EP §5.1 (never plain language, no ``scope``). A unit anchor is asked from its probe contract point, whose
+    locator comes from ``locators`` (:func:`locator_index`) or the record's ``serves[]``."""
     a = rec["anchor"]
     if a["type"] == "symbol":
         anchor = {"type": "symbol", "symbolId": ask_id, "qname": a["qname"], "repoId": a["repoId"], "path": a["path"]}
     elif a["type"] == "config":
         anchor = {"type": "config", "entryId": ask_id, "repoId": a["repoId"], "path": a["path"], "keyPath": a["keyPath"]}
     else:
-        loc = a if a["type"] == "contract" else next(x for x in rec["serves"] if _mk.contract_id(x) == ask_id)
+        loc = a if a["type"] == "contract" else (locators or {}).get(ask_id) or next((x for x in rec.get("serves") or [] if _mk.contract_id(x) == ask_id), None)
+        if loc is None:
+            raise HarnessError("the probe contract point has no locator in any record")
         anchor = {"type": "contract", "cpId": ask_id, "kind": loc["kind"], "keyNorm": loc["keyNorm"]}
     return {"useCase": "impact", "direction": "impact", "anchors": [anchor]}
 
 
-def _asks(records: Sequence[Mapping]) -> dict:
+def _asks(records: Sequence[Mapping], probes: Mapping | None = None) -> dict:
     out = {}
     for r in sorted(records, key=lambda r: r["itemId"]):
-        out.setdefault(ask_id_of(r, records), r)
+        out.setdefault(ask_id_of(r, probes), r)
     return out
 
 
@@ -571,25 +673,36 @@ def check_repeat_cache_hits(repeats: Sequence[Mapping]) -> dict:
     return {"stop": 1 in bad, "voided": bool(bad) and 1 not in bad, "badRepeats": bad}
 
 
-def run_asks(records: Sequence[Mapping], snap, ask: Callable[[dict], Mapping], cache_len: Callable[[], int]) -> dict:
+def run_asks(records: Sequence[Mapping], snap, ask: Callable[[dict], Mapping], cache_len: Callable[[], int], probes: Mapping | None = None) -> dict:
     """One question per distinct asked anchor, after the cache assertion; ``snapshotId`` is read from the ``:Snapshot`` node BEFORE the first
-    question. A contract anchor whose ``cpId`` is absent from the gate graph is not asked (an ``anchor-not-in-graph`` miss)."""
+    question. A contract anchor whose ``cpId`` is absent from the gate graph is not asked (an ``anchor-not-in-graph`` miss). ``probes`` is the S47
+    probe map: a unit item without an entry is a :class:`HarnessError` before anything is asked. The result records the probes used and how many
+    differ from the record-local cross-check :func:`unit_probe`."""
+    asks = _asks(records, probes)                                            # fail closed on a missing probe before the cache check and any question
+    locators = locator_index(records)
+    for aid, rec in asks.items():
+        if rec["anchor"].get("type") == "unit":
+            build_request(rec, aid, locators)                                 # a probe point no record can locate fails here, before the first question
     check_cache_empty(cache_len)
     pinned = snap.snapshot_id()
     answers = {}
-    for aid, rec in _asks(records).items():
+    for aid, rec in asks.items():
         if rec["anchor"].get("type") in ("contract", "unit") and not snap.node_exists("ContractPoint", aid):
             continue
-        req = build_request(rec, aid)
+        req = build_request(rec, aid, locators)
         answers[aid] = {"request": req, "answer": ask(req)}
-    return {"snapshotId": pinned, "answers": answers}
+    units = {r["anchorId"]: r for r in records if r["anchor"].get("type") == "unit"}
+    used = {u: ask_id_of(r, probes) for u, r in units.items()}
+    differs = sum(1 for u, r in units.items() if r.get("serves") and unit_probe(r, records) != used.get(u))
+    return {"snapshotId": pinned, "answers": answers, **({"probes": {u: used[u] for u in units}} if units else {}), "probeCrossCheckDiffers": differs}
 
 
 def score_gate(records: Sequence[Mapping], run: Mapping, snap, patterns: Sequence[str]) -> dict:
     """The hit rule over every key item (``run`` is :func:`run_asks`' result). -> per-item outcomes plus what the run lists.
 
     Outcomes: ``hit``, ``miss`` (with ``reason``), ``out-of-scope`` (triaged ``key-error``; never a hit, a miss or a wrong-possible item),
-    ``void`` (a C5 stamp failure: the answer is void and the run is reported). Held-out ids never leave this structure but the custodian file."""
+    ``error`` (a harness error: neither a hit nor a miss, EP §5.2.1 (g)/(h)), ``void`` (a C5 stamp failure: the answer is void and the run is
+    reported). Held-out ids never leave this structure but the custodian file."""
     acc, items, stops = Acc(), {}, Counter()
     pinned, answers = run["snapshotId"], run["answers"]
     anchor_state = {}
@@ -607,7 +720,7 @@ def score_gate(records: Sequence[Mapping], run: Mapping, snap, patterns: Sequenc
         if item_out_of_scope(rec, patterns):
             items[iid] = {**base, "outcome": "out-of-scope", "triage": "key-error"}
             continue
-        aid = ask_id_of(rec, records)
+        aid = ask_id_of(rec, run.get("probes"))
         if aid not in answers:
             items[iid] = {**base, "outcome": "miss", "reason": "anchor-not-in-graph"}
             continue
@@ -618,10 +731,14 @@ def score_gate(records: Sequence[Mapping], run: Mapping, snap, patterns: Sequenc
             items[iid] = {**base, "outcome": "miss", "reason": "not-resolved" if st["echo"]["state"] == "not-resolved" else "request-unequal"}
         else:
             r = evaluate_item(rec, aid, answers[aid]["answer"], snap, acc)
-            items[iid] = {**base, "outcome": "hit" if r["hit"] else "miss",
-                          **({"hops": len(r["chain"]), "interFunctionHops": sum(1 for h in r["chain"][1:] if h["kind"] == "Symbol")} if r["hit"]
-                             else {"reason": "no-qualifying-item", "stage": r["stage"], "extractionAbsent": r["extractionAbsent"],
-                                   "depthBoundCut": r["depthBoundCut"]})}
+            if r.get("error"):
+                items[iid] = {**base, "outcome": "error", "reason": r["error"]}
+            else:
+                items[iid] = {**base, "outcome": "hit" if r["hit"] else "miss",
+                              **({"hops": len(r["chain"]), "interFunctionHops": sum(1 for h in r["chain"][1:] if h["kind"] == "Symbol"),
+                                  "distance": r["distance"]} if r["hit"]
+                                 else {"reason": "no-qualifying-item", "stage": r["stage"], "extractionAbsent": r["extractionAbsent"],
+                                       "depthBoundCut": r["depthBoundCut"]})}
     return {"items": items, "defects": dict(acc.defects), "harnessErrors": dict(acc.harness_errors), "maskedComparisons": acc.masked,
             "stops": dict(stops)}
 
@@ -646,33 +763,66 @@ def _counts(items: Mapping) -> dict:
     return {"scored": len(sc), "counting": sum(1 for o in sc.values() if o["counting"]), "byStratum": dict(by)}
 
 
-def decide_gate(result: Mapping, flags: Mapping[str, str] | None = None, moved_out: Mapping[str, int] | None = None) -> dict:
-    """EP §12.1. With no ``flags`` this is gate 1: pass iff every scored item is a hit over >= 75 counting items and >= 8 items per stratum.
-    With ``flags`` (itemId -> kept / kept-cluster-fresh / fresh-cluster) it is a re-gate: a pass needs (1) every item a hit, (2) the composition
-    rule (H >= 75, every H_s >= 8, and per stratum that had a miss at least as many fresh-cluster items as were ``moved_out``) and (3) at least
-    F = 35 COUNTING items on fresh clusters; (1) and (2) without (3) is "all hits, floor not met", never a pass.
+def withhold_strata(records: Sequence[Mapping], gated_strata: Sequence[str] = STRATA_GATED) -> tuple[list, dict]:
+    """The records of the gated strata, and the COUNT withheld per stratum (never ids): a withheld item is not asked, scored or resolved
+    (``-p1-gate-marker-ml.md`` §4.2). Used by ``score`` here and by the run verb."""
+    kept = [r for r in records if r["derivedStratum"] in gated_strata]
+    return kept, dict(Counter(r["derivedStratum"] for r in records if r["derivedStratum"] not in gated_strata))
 
-    Precedence: ``stopped`` (a C5 stamp failure) > ``fail`` (a miss, reported as run) > ``blocked`` (an engine defect, a harness error or a
-    listed masked comparison, which block a pass) > the re-gate outcomes > ``pass``. Out-of-scope items are neither hits nor misses."""
+
+def flow_flag(record_path: Path, committed_text: Callable[[Path], str] | None = None) -> bool:
+    """The flow flag from the committed ``ccg-p1-flow-python-v2-decision`` record (never from the command line; ``-p1-gate-marker-ml.md`` §4.1).
+    True only if the file is present, parses, its ``decision.verdict`` starts with ``TRUE`` AND HEAD's committed copy holds the same text;
+    everything else (no record, unparsable, edited after the commit, any other verdict) is false."""
+    path = Path(record_path)
+    try:
+        text = path.read_text(encoding="utf-8")
+        if (committed_text or _ac._git_head_text)(path) != text:
+            return False
+        verdict = (json.loads(text).get("decision") or {}).get("verdict")
+    except (OSError, ValueError, AttributeError, subprocess.CalledProcessError):
+        return False
+    return isinstance(verdict, str) and verdict.startswith("TRUE")
+
+
+def decide_gate(result: Mapping, flags: Mapping[str, str] | None = None, moved_out: Mapping[str, int] | None = None,
+                gated_strata: Sequence[str] = STRATA) -> dict:
+    """EP §12.1. With no ``flags`` this is gate 1: pass iff every scored item is a hit over >= 75 counting items and >= 8 items per GATED stratum
+    (``gated_strata``; default all five, P1-37 passes :data:`STRATA_GATED` while the flow flag is false). With ``flags`` (itemId -> kept /
+    kept-cluster-fresh / fresh-cluster) it is a re-gate: a pass needs (1) every item a hit, (2) the composition rule (H >= 75, every H_s >= 8, and per
+    stratum that had a miss at least as many fresh-cluster items as were ``moved_out``) and (3) at least F = 35 COUNTING items on fresh clusters; (1) and
+    (2) without (3) is "all hits, floor not met", never a pass.
+
+    Precedence (``-p1-gate-marker-ml.md`` §3): ``stopped`` (a C5 stamp failure or void) > ``blocked`` by a HARNESS ERROR (an item neither hit nor miss) >
+    ``fail`` (a miss, reported as run) > ``blocked`` by an engine defect or a listed masked comparison (these block a pass only) > the re-gate
+    outcomes > ``pass``. Out-of-scope and errored items are neither hits nor misses. A scored item in a stratum outside ``gated_strata`` is a
+    :class:`Refusal` (a withheld stratum must not reach the verdict)."""
     items = _scored(result)
+    strays = {o["stratum"] for o in result["items"].values() if o["outcome"] in ("hit", "miss", "error") and o["stratum"] not in gated_strata}
+    if strays:
+        raise Refusal(f"{sum(1 for o in result['items'].values() if o['stratum'] in strays)} scored items lie in a stratum that is not gated")
     misses = sorted(i for i, o in items.items() if o["outcome"] == "miss")
     voided = sorted(i for i, o in result["items"].items() if o["outcome"] == "void")
+    errored = [i for i, o in result["items"].items() if o["outcome"] == "error"]
     blockers = []
+    if result.get("harnessErrors") or errored:
+        blockers.append("harness-errors")
     if result.get("defects"):
         blockers.append("engine-defects")
-    if result.get("harnessErrors"):
-        blockers.append("harness-errors")
     if result.get("maskedComparisons"):
         blockers.append("masked-comparisons")
     cnt = _counts(result["items"])
-    strata_ok = all(cnt["byStratum"].get(s, 0) >= MIN_STRATUM for s in STRATA)
-    base = {"misses": len(misses), "voided": len(voided), "blockers": blockers, "H": cnt["counting"], "scored": cnt["scored"],
-            "minimumsMet": cnt["counting"] >= MIN_COUNTING and strata_ok, "byStratum": cnt["byStratum"],
+    strata_ok = all(cnt["byStratum"].get(s, 0) >= MIN_STRATUM for s in gated_strata)
+    kind = "gate" if flags is None else "re-gate"
+    base = {"misses": len(misses), "voided": len(voided), "errored": len(errored), "blockers": blockers, "H": cnt["counting"], "scored": cnt["scored"],
+            "minimumsMet": cnt["counting"] >= MIN_COUNTING and strata_ok, "byStratum": cnt["byStratum"], "gatedStrata": list(gated_strata),
             "missClusters": sorted({result["items"][i]["anchorId"] for i in misses}), "movedOutByStratum": dict(Counter(items[i]["stratum"] for i in misses))}
     if result.get("stops") or voided:
-        return {**base, "verdict": "stopped", "kind": "gate" if flags is None else "re-gate"}
+        return {**base, "verdict": "stopped", "kind": kind}
+    if "harness-errors" in blockers:
+        return {**base, "verdict": "blocked", "kind": kind}
     if misses:
-        return {**base, "verdict": "fail", "kind": "gate" if flags is None else "re-gate", "rule": "the first run is the result (EP §12.1 step 1)"}
+        return {**base, "verdict": "fail", "kind": kind, "rule": "the first run is the result (EP §12.1 step 1)"}
     if flags is None:
         v = "blocked" if blockers else ("pass" if base["minimumsMet"] else "minimums-not-met")
         return {**base, "verdict": v, "kind": "gate"}
@@ -694,9 +844,23 @@ def decide_gate(result: Mapping, flags: Mapping[str, str] | None = None, moved_o
     return {**out, "verdict": "pass"}
 
 
+def list_key(records: Iterable[Mapping]) -> str:
+    """The canonical identity of a held-out list (``-p1-gate-marker-ml.md`` §1.1): the full 64-hex sha256 over the canonical JSON of each distinct
+    record, sorted. Byte order, blank lines, key order and duplicate records do not change it."""
+    canon = sorted({_mk.canon(r) for r in records})
+    return hashlib.sha256("\n".join(canon).encode("utf-8")).hexdigest()
+
+
+def list_key_from_text(text: str) -> str:
+    return list_key(json.loads(l) for l in text.splitlines() if l.strip())
+
+
 def first_run_marker(custodian: Path, list_sha256: str, payload: Mapping) -> Path:
-    """EP §12.1 step 7: the gate is never re-run on the list that was run. The marker is created atomically; an existing one refuses the run."""
-    marker = Path(custodian) / f"gate-run-{list_sha256[:16]}.marker"
+    """EP §12.1 step 7: the gate is never re-run on the list that was run. ``list_sha256`` is :func:`list_key` (full 64 hex; a prefix is a truncated
+    key and is refused). The marker is created atomically; an existing one refuses the run."""
+    if not re.fullmatch(r"[0-9a-f]{64}", list_sha256):
+        raise Refusal("the list key is not a full 64-hex sha256")
+    marker = Path(custodian) / f"gate-run-{list_sha256}.marker"
     try:
         _ac.take_marker(marker, payload)
     except _ac.Refusal:
@@ -760,16 +924,25 @@ def _dist(vals: Sequence[int]) -> dict:
     return {"n": len(vals), "median": float(_noise.median(list(vals))) if vals else None, "p90": _noise.p90(list(vals)) if vals else None}
 
 
+def _chain_length(rows: Sequence[Mapping]) -> dict:
+    """The engine's ``distance`` over hit items; the Symbol-hop count (``interFunctionHops``) is reported beside it (a ConfigEntry hit has 0 of those)."""
+    return {**_dist([o["distance"] for o in rows if o.get("distance") is not None]), "symbolHops": _dist([o["interFunctionHops"] for o in rows])}
+
+
 def build_report(result: Mapping, decision: Mapping, *, flags: Mapping[str, str] | None = None, cluster_of: Mapping | None = None,
-                 exposure: Sequence[Mapping] = (), exposure_strata: Mapping | None = None, context: Mapping | None = None) -> dict:
+                 exposure: Sequence[Mapping] = (), exposure_strata: Mapping | None = None, context: Mapping | None = None,
+                 gated_strata: Sequence[str] = STRATA, withheld: Mapping[str, int] | None = None, flow_flag: bool | None = None) -> dict:
     """Counts, hashes and classes only (never item content, never an id). Recall is given over items, distinct anchors and clusters, per
     stratum and pooled, each with its Wilson interval, and the cluster interval of P0-ML §7.3 (anchors as clusters when no map is given).
-    ``context`` carries the preflight blocks (first contact, pins, harness pin, scope) verbatim."""
+    ``context`` carries the preflight blocks (first contact, pins, harness pin, scope) verbatim. When ``flow`` is not in ``gated_strata`` the report
+    says "flow-unavailable, not closed" with the flag and the withheld count, labels a wiring stratum at its floor "screened, not certified", and
+    carries no flow recall or interval."""
     items = _scored(result)
     rows = list(items.items())
-    per = {s: _rec_block([o for _, o in rows if o["stratum"] == s], cluster_of) for s in STRATA if any(o["stratum"] == s for _, o in rows)}
+    per = {s: _rec_block([o for _, o in rows if o["stratum"] == s], cluster_of) for s in gated_strata if any(o["stratum"] == s for _, o in rows)}
     miss = [o for _, o in rows if o["outcome"] == "miss"]
     oos = [o for o in result["items"].values() if o["outcome"] == "out-of-scope"]
+    errored = sum(1 for o in result["items"].values() if o["outcome"] == "error")
     rep = {"verdict": decision["verdict"], "kind": decision["kind"], "H": decision["H"], "H_all": len(rows), "scored": len(rows),
            "minimumsMet": decision["minimumsMet"], "blockers": decision["blockers"],
            "recall": {"pooled": _rec_block([o for _, o in rows], cluster_of), "byStratum": per},
@@ -777,12 +950,17 @@ def build_report(result: Mapping, decision: Mapping, *, flags: Mapping[str, str]
                       "anchorNotInGraph": sum(1 for o in miss if o["reason"] == "anchor-not-in-graph"),
                       "extractionAbsent": sum(1 for o in miss if o.get("extractionAbsent")), "depthBoundCut": sum(1 for o in miss if o.get("depthBoundCut")),
                       "triage": {c: 0 for c in TRIAGE}, "triageNote": "to be filled by the gate runner and the method owner (EP §12.1 step 2)"},
-           "outOfScope": {"count": len(oos), "triage": {"key-error": len(oos)}},
+           "outOfScope": {"count": len(oos), "triage": {"key-error": len(oos)}, "outcome": "proposed, unconfirmed"},   # EP §12.1 step 2: the stakeholder confirms
+           "erroredItems": errored,
            "voided": decision["voided"], "stops": dict(result.get("stops", {})), "engineDefects": dict(result.get("defects", {})),
            "harnessErrors": dict(result.get("harnessErrors", {})), "maskedComparisons": result.get("maskedComparisons", 0),
-           "chainLength": {s: _dist([o["interFunctionHops"] for _, o in rows if o["stratum"] == s and o["outcome"] == "hit"]) for s in per},
-           "chainLengthUnit": "inter-function hops: Symbol hops after the first, over hit items (the shortest qualifying chain)",
+           "chainLength": {s: _chain_length([o for _, o in rows if o["stratum"] == s and o["outcome"] == "hit"]) for s in per},
+           "chainLengthUnit": "the engine's `distance` over hit items (the shortest qualifying chain); `symbolHops` = Symbol hops after the first, beside it",
            "units": "items, distinct anchors, clusters (`clusterUnit` says which map was given)"}
+    if "flow" not in gated_strata:
+        rep["flow"] = {"status": "flow-unavailable, not closed", "flag": bool(flow_flag), "withheld": int((withheld or {}).get("flow", 0))}
+        if "wiring" in gated_strata and decision["byStratum"].get("wiring", 0) <= MIN_STRATUM:
+            rep["wiring"] = "screened, not certified"
     if flags is not None:
         rep["regate"] = _regate_block(items, flags, decision, exposure, exposure_strata)
     rep.update(context or {})
@@ -797,7 +975,7 @@ def _regate_block(items: Mapping, flags: Mapping, decision: Mapping, exposure: S
     fresh = fig("fresh-cluster")
     prior = {r["itemId"]: r for r in exposure}
     # each item once, at the first gate that exposed it: every row already on record (listed now or not), then this gate's items not on record
-    cum_rows = [((exposure_strata or {}).get(i), bool(r["hit"])) for i, r in prior.items()]
+    cum_rows = [((exposure_strata or {}).get(i) or r.get("stratum"), bool(r["hit"])) for i, r in prior.items()]
     cum_rows += [(o["stratum"], o["outcome"] == "hit") for i, o in items.items() if i not in prior]
     known = sorted({st for st, _ in cum_rows if st})
     cum = {"pooled": _wilson(sum(h for _, h in cum_rows), len(cum_rows)),
@@ -812,8 +990,9 @@ def _regate_block(items: Mapping, flags: Mapping, decision: Mapping, exposure: S
 
 
 def exposure_rows(result: Mapping, flags: Mapping | None = None) -> list[dict]:
-    """``{itemId, hit}`` for every scored item, for the ``exposure`` verb (custodian file only)."""
-    return [{"itemId": i, "hit": o["outcome"] == "hit"} for i, o in sorted(_scored(result).items())]
+    """``{itemId, hit, stratum}`` for every scored item, for the ``exposure`` verb (custodian file only); the stratum is what P1-43's per-stratum
+    cumulative record reads."""
+    return [{"itemId": i, "hit": o["outcome"] == "hit", "stratum": o["stratum"]} for i, o in sorted(_scored(result).items())]
 
 
 def write_custodian(root: Path, name: str, rows: Sequence[Mapping] | Mapping, home: Path | None = None) -> Path:
@@ -863,7 +1042,89 @@ def preflight(repo: Path, gate_id: str, *, observed: Mapping | None = None, tree
             "label": "after-adaptation" if (not fc["firstContact"] or pin["afterAdaptation"]) else "first-contact"}
 
 
-def main(argv=None, snapshot=None) -> int:
+def _git_out(repo: Path, *args: str) -> str:
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True).stdout
+
+
+def run_context(repo: Path, pf: Mapping, *, allow_after_adaptation: bool = False) -> dict:
+    """M5 (EP §12.3: the record precedes the first build). Refuses unless the record's commit was found, is an ancestor of HEAD, and no file under ``cpg/``
+    outside ``cpg/eval/`` and ``*.md`` changed since it; refuses an ``after-adaptation`` label unless ``allow_after_adaptation`` (the label is then
+    recorded, since a first run's label cannot be repaired afterwards). -> the preflight block ``gate_run`` stores in ``run.json`` and ``score`` prints:
+    label, record commit, HEAD, first-contact counts, the harness pin with each pinned file's sha256 (counts, hashes and names only)."""
+    repo = Path(repo)
+    rc = pf.get("recordCommit")
+    if not rc:
+        raise Refusal("the record's commit was not found in git log: the record must be committed before the run")
+    if subprocess.run(["git", "merge-base", "--is-ancestor", rc, "HEAD"], cwd=repo, capture_output=True).returncode != 0:
+        raise Refusal("the record's commit is not an ancestor of HEAD")
+    touched = [p for p in _git_out(repo, "diff", "--name-only", rc, "HEAD", "--", "cpg").split()
+               if not (p.startswith("cpg/eval/") or p.endswith(".md"))]
+    if touched:
+        raise Refusal(f"{len(touched)} file{'s' if len(touched) != 1 else ''} under cpg/ outside cpg/eval/ changed after the record's commit")
+    if pf["label"] != "first-contact" and not allow_after_adaptation:
+        raise Refusal("the preflight label is after-adaptation: the run is refused unless it is explicitly allowed and labelled")
+    fc, hp = pf["firstContact"], pf["harnessPin"]
+    sha = {rel: hashlib.sha256((repo / rel).read_bytes()).hexdigest() for rel in HARNESS_FILES if (repo / rel).is_file()}
+    return {"label": pf["label"], "afterAdaptationAllowed": bool(allow_after_adaptation and pf["label"] != "first-contact"),
+            "recordCommit": rc, "head": _git_out(repo, "rev-parse", "HEAD").strip(),
+            "firstContact": {"firstContact": fc["firstContact"], "fieldsDiffering": list(fc["fieldsDiffering"]), "dirtyPaths": fc["dirtyPaths"]},
+            "harnessPin": {"afterAdaptation": hp["afterAdaptation"], "differ": list(hp["differ"]), "sha256": sha},
+            "pins": {"differences": len(pf["pins"]["differences"]), "protocolStringConsistent": pf["pins"]["protocolStringConsistent"]},
+            "scope": dict(pf["scope"])}
+
+
+def require_run_context(run: Mapping) -> dict:
+    """``score`` needs the preflight block the run recorded; a run file without one is refused."""
+    ctx = run.get("preflight")
+    if not isinstance(ctx, dict) or ctx.get("label") not in ("first-contact", "after-adaptation") or not ctx.get("recordCommit"):
+        raise Refusal("the run file carries no preflight block: the run did not record its label")
+    return ctx
+
+
+def gate_kind(record: Mapping) -> tuple[str, dict | None]:
+    """The kind of gate and, for a re-gate, the moved-out counts, from the COMMITTED prereg record (``kind``: ``gate`` | ``re-gate``; a re-gate carries
+    ``movedOut`` ``{stratum: n}``), never from the command line. A record that does not say is refused, not read as gate 1."""
+    kind = record.get("kind")
+    if kind == "gate" and "movedOut" not in record:
+        return "gate", None
+    if kind == "re-gate":
+        mo = record.get("movedOut")
+        if isinstance(mo, dict) and all(isinstance(k, str) and type(v) is int and v >= 0 for k, v in mo.items()):
+            return "re-gate", dict(mo)
+        raise Refusal("the record is a re-gate with no usable movedOut counts")
+    raise Refusal("the committed record does not state a valid gate kind (gate | re-gate)")
+
+
+FORBIDDEN_PORTS = (6379, 6390, 16390, 16400)          # falkordb-dev, the ccg dev store and the other services of this lab: the gate never reads them
+
+
+def snapshot_graph(host: str, port: int | None, graph: str | None, system: str, db_factory: Callable[[str, int], Any] | None = None):
+    """The read-only graph handle for the gate snapshot. Refuses (before any connection) a missing or forbidden port, a non-loopback host, and an
+    explicit ``graph`` that is not the system's live key; the graph is derived from ``system`` when not given."""
+    from ccg import sysname
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        raise Refusal("the gate reads a store on the loopback host only")
+    if port is None or port in FORBIDDEN_PORTS or not 1 <= port <= 65535:
+        raise Refusal("a store port is required and must not be one of the lab's other services")
+    key = sysname.live_key(system)
+    if graph is not None and graph != key:
+        raise Refusal("--graph and --system disagree")
+    if db_factory is None:
+        from falkordb import FalkorDB
+        db_factory = lambda h, p: FalkorDB(host=h, port=p)      # noqa: E731
+    return db_factory(host, port).select_graph(key)
+
+
+def within_custodian(path: Path, home: Path | None, what: str) -> Path:
+    """The resolved path, or :class:`Refusal` unless it lies under the custodian area (a symlink or ``..`` out of it is resolved first)."""
+    area = _ac.custodian_area(home).resolve()
+    p = Path(path).expanduser().resolve()
+    if p != area and area not in p.parents:
+        raise Refusal(f"{what} must be under the custodian area, never elsewhere")
+    return p
+
+
+def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Callable[..., dict] | None = None, committed_text=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     v = sub.add_parser("verify")
@@ -873,38 +1134,54 @@ def main(argv=None, snapshot=None) -> int:
     sc = sub.add_parser("score")
     for f in ("--gate-id", "--lists", "--run", "--custodian"):
         sc.add_argument(f, required=True)
-    sc.add_argument("--flags")
+    sc.add_argument("--flags", help="re-gate only: regate-flags.jsonl (the kind itself comes from the committed record)")
     sc.add_argument("--exposure")
-    sc.add_argument("--moved-out", help="JSON {stratum: n}")
+    sc.add_argument("--flow-decision", help="the committed ccg-p1-flow-python-v2-decision record (default: the repository's)")
     sc.add_argument("--host", default="127.0.0.1")
     sc.add_argument("--port", type=int)
     sc.add_argument("--graph")
+    sc.add_argument("--system", default="ccg")
     a = ap.parse_args(argv)
     try:
         if a.cmd == "verify":
             rep = preflight(Path(a.repo), a.gate_id, record_commit_sha=a.record_commit)
             print(json.dumps(rep, sort_keys=True))
             return 0 if rep["label"] == "first-contact" else 1
-        cust = Path(a.custodian).expanduser().resolve()
-        area = _ac.custodian_area().resolve()
-        if cust != area and area not in cust.parents:
-            print("REFUSED: --custodian is outside ~/.local/share/ccg-eval", file=sys.stderr)
-            return 2
-        repo = _CPG.parent
-        records = [r for f in a.lists.split(",") for r in _jsonl(Path(f))]
+        cust = within_custodian(Path(a.custodian), None, "--custodian")
+        repo = Path(repo) if repo else _CPG.parent
+        records = []
+        for f in a.lists.split(","):
+            records += _jsonl(within_custodian(Path(f), None, "--lists"))
         require_clean_renormalize(renormalize_stored_gold(records))
-        run = json.loads(Path(a.run).read_text(encoding="utf-8"))
-        em = _load_yaml(repo / "cpg" / "eval" / "eval-manifest.yaml")
+        run = json.loads(within_custodian(Path(a.run), None, "--run").read_text(encoding="utf-8"))
+        ctx = require_run_context(run)
+        pf = (preflight_fn or preflight)(repo, a.gate_id)
+        if pf["firstContact"]["dirtyPaths"]:
+            raise Refusal(f"the working tree is dirty ({pf['firstContact']['dirtyPaths']} paths under cpg/): score refuses")
+        _, record = find_prereg_line(repo / "cpg" / "eval" / "preregistration.jsonl", a.gate_id, committed_text)
+        kind, moved_out = gate_kind(record)
+        if kind == "re-gate" and not a.flags:
+            raise Refusal("the committed record is a re-gate: --flags is required")
+        if kind == "gate" and a.flags:
+            raise Refusal("the committed record is gate 1: --flags is refused")
         if snapshot is None:
-            from falkordb import FalkorDB
             sys.path.insert(0, str(_HERE))
             from snapshot_export import RoRunner
-            snapshot = StoreSnapshot(RoRunner(FalkorDB(host=a.host, port=a.port).select_graph(a.graph)))
-        flags = {r["itemId"]: r["flag"] for r in _jsonl(Path(a.flags))} if a.flags else None
-        expo = _jsonl(Path(a.exposure)) if a.exposure else []
+            snapshot = StoreSnapshot(RoRunner(snapshot_graph(a.host, a.port, a.graph, a.system)))
+        live = snapshot.snapshot_id()
+        if live != run.get("snapshotId"):
+            raise Refusal("the live :Snapshot node differs from the run file's pin: score stops")
+        em = _load_yaml(repo / "cpg" / "eval" / "eval-manifest.yaml")
+        flag = flow_flag(Path(a.flow_decision) if a.flow_decision else repo / FLOW_DECISION, committed_text)
+        gated = STRATA if flag else STRATA_GATED
+        records, withheld = withhold_strata(records, gated)
+        flags = {r["itemId"]: r["flag"] for r in _jsonl(within_custodian(Path(a.flags), None, "--flags"))} if a.flags else None
+        expo = _jsonl(within_custodian(Path(a.exposure), None, "--exposure")) if a.exposure else []
         res = score_gate(records, run, snapshot, scope_patterns(em))
-        dec = decide_gate(res, flags, json.loads(a.moved_out) if a.moved_out else None)
-        rep = build_report(res, dec, flags=flags, exposure=expo)
+        dec = decide_gate(res, flags, moved_out, gated_strata=gated)
+        label = "first-contact" if ctx["label"] == "first-contact" and pf["label"] == "first-contact" else "after-adaptation"
+        rep = build_report(res, dec, flags=flags, exposure=expo, gated_strata=gated, withheld=withheld, flow_flag=flag,
+                           context={"label": label, "preflight": ctx, "scoreLabel": pf["label"]})
         write_custodian(cust, "gate-outcomes.jsonl", [{"itemId": i, **o} for i, o in sorted(res["items"].items())])
         write_custodian(cust, "gate-exposure.jsonl", exposure_rows(res))
         write_custodian(cust, "gate-report.json", rep)
@@ -913,7 +1190,7 @@ def main(argv=None, snapshot=None) -> int:
     except Refusal as e:
         print(f"REFUSED: {e}", file=sys.stderr)
         return 2
-    except (OSError, ValueError, KeyError, TypeError, HarnessError) as e:
+    except Exception as e:                       # exit 1 is "not a pass"; every other failure class is its own code
         print(f"bad input: {type(e).__name__}", file=sys.stderr)
         return 4
 

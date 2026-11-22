@@ -142,7 +142,7 @@ def test_ha1e_edgetype_outside_the_allowlist_is_a_harness_error_and_never_querie
     it["chain"][1]["edgeType"] = bad
     before = w.snap.queries
     o, res = w.outcome(w.answer([it]))
-    assert o["outcome"] == "miss" and res["harnessErrors"] == {"edgeType-not-allowed": 1}
+    assert o["outcome"] == "error" and res["harnessErrors"] == {"edgeType-not-allowed": 1}
     assert w.snap.queries == before                      # rejected before any query
 
 
@@ -170,7 +170,7 @@ def test_ha1g_class_d_row_against_a_snapshot_with_no_such_edges_is_a_harness_err
     it = w.item()
     it["chain"][2]["edgeType"] = "READS"
     o, res = w.outcome(w.answer([it]))
-    assert o["outcome"] == "miss" and res["harnessErrors"] == {"class-D-not-loaded": 1}
+    assert o["outcome"] == "error" and res["harnessErrors"] == {"class-D-not-loaded": 1}
 
 
 def test_ha1g_class_d_row_is_replayed_once_the_snapshot_loads_it(w):
@@ -407,3 +407,122 @@ def test_ha5_listing_when_only_the_answer_side_is_masked():
 def test_ha5_listing_when_only_the_gold_side_is_masked():
     res = _cfg_world("services.[#]", "services." + "b" * 24)
     assert res["items"][next(iter(res["items"]))]["outcome"] == "hit" and res["maskedComparisons"] == 1
+
+
+# ---------------------------------------------------------------- B4: the store's flat ownedRegions (the loader's shape)
+def _flat_store(owned, qname="svc/c.py::call", span=(5, 20)):
+    sid = "3" * 32
+    props = H.loader_symbol_props(sid, qname, *span, owned=owned)
+    return sid, props, G.StoreSnapshot(H.LoaderRunner([props]))
+
+
+def test_b4_the_loader_writes_ownedRegions_flat_and_the_snapshot_hands_match_keys_pairs():
+    sid, props, snap = _flat_store([[28, 32], [40, 41]])
+    assert props["ownedRegions"] == [28, 32, 40, 41]                       # the producer's shape, not a hand-written one
+    assert snap.symbol(sid)["ownedRegions"] == [[28, 32], [40, 41]]
+    assert snap.symbols_of_path("svc/c.py")[0]["ownedRegions"] == [[28, 32], [40, 41]]
+
+
+def _split(store, world_snap):
+    """Symbols from the loader-fed ``StoreSnapshot``, everything else from the dict world."""
+    class Both:
+        def __getattr__(self, n):
+            return getattr(store if n in ("symbol", "symbols_of_path") else world_snap, n)
+    return Both()
+
+
+def test_b4_a_hit_through_a_flat_owned_region_scores_without_crashing():
+    w = H.World(lines=(30,), span=(5, 20))
+    sid, props, store = _flat_store([[28, 32]])
+    w.snap.add_edge("HAS_CALL", ("Symbol", sid), ("CallSite", w.cs))
+    w.snap.add_node("Symbol", sid)
+    chain = w.chain()
+    chain[-1]["id"] = sid
+    ans = H.answer(w.request(), [H.ans_item(H.sym_subject(sid, w.qname, 5, 20, ownedRegions=[28, 32]), chain)])    # the engine's copy is flat too
+    res = G.score_gate([w.rec], {"snapshotId": H.SNAP, "answers": {w.cp: {"request": w.request(), "answer": ans}}}, _split(store, w.snap), ())
+    assert res["items"][w.rec["itemId"]]["outcome"] == "hit" and res["defects"] == {}
+
+
+def test_b4_a_miss_still_runs_the_source_check_over_flat_rows():
+    w = H.World(lines=(99,), span=(5, 20))
+    _, _, store = _flat_store([[28, 32]])
+    run = {"snapshotId": H.SNAP, "answers": {w.cp: {"request": w.request(), "answer": H.answer(w.request(), [])}}}
+    o = G.score_gate([w.rec], run, _split(store, w.snap), ())["items"][w.rec["itemId"]]
+    assert o["outcome"] == "miss" and o["extractionAbsent"] is True
+
+
+def test_b4_a_nested_pair_snapshot_is_still_accepted_as_a_regression():
+    w = H.World(lines=(30,), span=(5, 20))
+    w.snap.symbols[w.sid]["ownedRegions"] = [[28, 32]]
+    sub = H.sym_subject(w.sid, w.qname, 5, 20, ownedRegions=[28, 32])
+    o, res = w.outcome(w.answer([H.ans_item(sub, w.chain())]))
+    assert o["outcome"] == "hit" and res["defects"] == {}
+
+
+def test_b4_an_odd_length_stored_region_list_is_a_harness_error_not_a_crash():
+    props = H.loader_symbol_props("3" * 32, "svc/c.py::call", 5, 20)
+    props["ownedRegions"] = [28, 32, 40]
+    with pytest.raises(G.HarnessError):
+        G.StoreSnapshot(H.LoaderRunner([props])).symbol("3" * 32)
+
+
+# ---------------------------------------------------------------- B5 at the scorer: a harness error is neither hit nor miss
+@pytest.mark.parametrize("mut,code", [(lambda c: c[1].update(edgeType="X'; MATCH (n) DELETE n //"), "edgeType-not-allowed"),
+                                      (lambda c: c[1].update(dir="<->"), "dir"),
+                                      (lambda c: c[1].update(kind="link"), "hop-kind"),
+                                      (lambda c: c[1].pop("id"), "hop-shape"),
+                                      (lambda c: c.__setitem__(1, "not a dict"), "hop-shape")])
+def test_b5_a_harness_error_chain_is_an_error_item_not_a_miss(w, mut, code):
+    it = w.item()
+    mut(it["chain"])
+    o, res = w.outcome(w.answer([it]))
+    assert o["outcome"] == "error" and o["reason"] == code and res["harnessErrors"] == {code: 1}
+    assert G.decide_gate(res)["verdict"] == "blocked"
+
+
+def test_b5_a_hit_by_another_candidate_stays_a_hit_and_the_error_still_blocks(w):
+    bad = w.item()
+    bad["chain"][1]["edgeType"] = "NOPE"
+    o, res = w.outcome(w.answer([bad, w.item()]))
+    assert o["outcome"] == "hit" and G.decide_gate(res)["verdict"] == "blocked"
+
+
+def test_b5_a_plain_chain_failure_is_still_a_miss(w):
+    it = w.item()
+    it["chain"][1]["dir"] = "->"
+    assert w.outcome(w.answer([it]))[0]["outcome"] == "miss"
+
+
+# ---------------------------------------------------------------- m1: distance
+def test_m1_a_hit_records_the_engines_distance_and_the_symbol_hop_count(w):
+    it = w.item()
+    it["distance"] = 7
+    o, _ = w.outcome(w.answer([it]))
+    assert o["distance"] == 7 and o["interFunctionHops"] == 1
+
+
+def test_m1_a_config_hit_reports_a_nonzero_distance():
+    sid = "5" * 32
+    snap = H.DictSnapshot()
+    snap.add_entry(sid, "deploy/compose.yaml", "services.web")
+    rec = H.item(1, H.contract("http", "GET /a"), H.cfg("deploy/compose.yaml", "services.web"), stratum="wiring")
+    cp = rec["anchorId"]
+    snap.add_node("ContractPoint", cp)
+    snap.add_edge("WRITES", ("ConfigEntry", sid), ("ContractPoint", cp))
+    subj = {"type": "config", "entryId": sid, "path": "deploy/compose.yaml", "keyPath": "services.web"}
+    chain = [H.hop0("ContractPoint", cp), H.hopn("ConfigEntry", sid, "WRITES", "<-", status="confirmed")]
+    it = H.ans_item(subj, chain)
+    it["distance"] = 2
+    req = H.request([cp])
+    run = {"snapshotId": H.SNAP, "answers": {cp: {"request": req, "answer": H.answer(req, [it])}}}
+    o = G.score_gate([rec], run, snap, ())["items"][rec["itemId"]]
+    assert o["outcome"] == "hit" and o["interFunctionHops"] == 0 and o["distance"] == 2
+
+
+@pytest.mark.parametrize("copy", [[28, 33], [28, 32, 40, 41], None, [28, 32, 40]])
+def test_b4_an_answer_copy_of_ownedRegions_that_differs_from_the_store_is_an_engine_defect(copy):
+    w = H.World(lines=(30,), span=(5, 20))
+    w.snap.symbols[w.sid]["ownedRegions"] = [[28, 32]]
+    sub = H.sym_subject(w.sid, w.qname, 5, 20, **({"ownedRegions": copy} if copy is not None else {}))
+    o, res = w.outcome(w.answer([H.ans_item(sub, w.chain())]))
+    assert o["outcome"] == "hit" and res["defects"] == {"subject-ownedRegions": 1}          # credit on the snapshot's values; the difference is listed

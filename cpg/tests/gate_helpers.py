@@ -190,3 +190,34 @@ class World:
     def outcome(self, ans=None, **kw):
         res = self.score(ans, **kw)
         return res["items"][self.rec["itemId"]], res
+
+
+# ----------------------------------------------------------------------------- a store fed by the LOADER's row builder
+
+def loader_symbol_props(sid: str, qname: str, start: int, end: int, owned=None, path: str | None = None) -> dict:
+    """The Symbol node properties exactly as ``ccg.assemble.rows`` writes them (``ownedRegions`` flat), built by the producer's own function."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from ccg.assemble import rows as R
+    b = R._Builder()
+    rec = {"type": "symbol", "id": sid, "repoId": "r", "fileId": "f" * 32, "qname": qname, "path": path or qname.split("::")[0],
+           "lineStart": start, "lineEnd": end, "kind": "function", "name": qname.split("::")[-1], **({"ownedRegions": owned} if owned else {})}
+    R._record(b, rec, "u", "r", {}, {sid}, {}, {}, {sid: 1})
+    return b.rows.nodes["Symbol"][0]
+
+
+class LoaderRunner:
+    """A read-only runner (``run(cypher, params) -> rows``) over Symbol rows built by the loader, answering ``StoreSnapshot``'s symbol queries."""
+
+    def __init__(self, symbols: list[dict]):
+        self.symbols = symbols
+
+    @staticmethod
+    def _row(p):
+        return [p["symbolId"], p["qname"], p["path"], p["lineStart"], p["lineEnd"], p.get("ownedRegions")]
+
+    def __call__(self, cypher: str, params=None):
+        if "(s:Symbol {symbolId: $id})" in cypher:
+            return [self._row(p) for p in self.symbols if p["symbolId"] == params["id"]]
+        if "(s:Symbol {path: $p})" in cypher:
+            return [self._row(p) for p in sorted(self.symbols, key=lambda p: p["symbolId"]) if p["path"] == params["p"]]
+        raise AssertionError(f"unexpected query: {cypher}")
