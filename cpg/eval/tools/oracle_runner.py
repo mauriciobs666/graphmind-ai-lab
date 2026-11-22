@@ -6,8 +6,13 @@
 
 Every phase first passes ``oracle_capture.check_fence`` exactly as ``oracle_capture.py run`` does (explicit
 FALKORDB_HOST/PORT, loopback, not 6379/6390, exactly one throwaway container labelled ccg-falkordb=1 and
-ccg-falkordb.throwaway=1 publishing that port); a refusal exits 3 before anything starts. The throwaway itself is the
-caller's (``cpg/infra/ccg-falkordb.sh --throwaway up``); this runner never creates or removes a container.
+ccg-falkordb.throwaway=1 publishing that port); a refusal exits 3 before anything starts. By default the runner starts
+its OWN unauthenticated throwaway (falkor-chat cannot authenticate; the ``ccg-falkordb.sh`` throwaways are
+password-protected): the locally present pinned image ``falkordb/falkordb:v4.18.11`` (``--pull never``), bound to
+127.0.0.1 on a free port in 16400-16499, named ``ccg-falkordb-tw-<port>``, labelled ccg-falkordb=1 and
+ccg-falkordb.throwaway=1; the labels and the loopback bind are verified with ``docker inspect`` before anything
+uses it, it is exported as FALKORDB_HOST/FALKORDB_PORT, and it is removed in a ``finally``. ``--external`` instead
+uses the instance named by the caller's environment (old behaviour). Only a container this run started is removed.
 
 Phases (each re-runnable; logs append under ``<root>/oracle/runs/<run-id>/``):
   prep     create_workspace / seed_demo / seed_catalog / verify_catalog / seed_salesperson / verify_salesperson
@@ -45,6 +50,60 @@ REPO = OC.REPO
 WS = "demo"
 WIN_OUT = r"C:\Windows\Temp\ccg-oracle-out"
 WIN_OUT_WSL = "/mnt/c/Windows/Temp/ccg-oracle-out"
+
+
+IMAGE = "falkordb/falkordb:v4.18.11"
+TW_PREFIX = "ccg-falkordb-tw-"
+
+
+def docker_run_cmd(name: str, port: int, image: str = IMAGE) -> list[str]:
+    return ["docker", "run", "-d", "--pull", "never", "--name", name, "--label", "ccg-falkordb=1",
+            "--label", "ccg-falkordb.throwaway=1", "-p", f"127.0.0.1:{port}:6379", "--memory", "2g", "--memory-swap", "2g", image]
+
+
+def verify_started(name: str, port: int, run=subprocess.run) -> None:
+    """Raise FenceRefused unless the container carries both labels and publishes 6379/tcp ONLY on 127.0.0.1:<port>."""
+    r = run(["docker", "inspect", "-f", "{{json .Config.Labels}}|{{json .NetworkSettings.Ports}}", name],
+            capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        raise OC.FenceRefused(f"docker inspect {name} failed")
+    labels_s, ports_s = r.stdout.strip().split("|", 1)
+    labels, ports = json.loads(labels_s) or {}, json.loads(ports_s) or {}
+    if labels.get("ccg-falkordb") != "1" or labels.get("ccg-falkordb.throwaway") != "1":
+        raise OC.FenceRefused(f"{name} lacks the ccg-falkordb labels")
+    binds = ports.get("6379/tcp") or []
+    if len(binds) != 1 or binds[0].get("HostIp") != "127.0.0.1" or binds[0].get("HostPort") != str(port):
+        raise OC.FenceRefused(f"{name} is not published only on 127.0.0.1:{port}: {binds}")
+
+
+def start_throwaway(run=subprocess.run) -> tuple[str, int]:
+    """Start and verify our own throwaway; on any failure remove what was started and raise."""
+    if run(["docker", "image", "inspect", IMAGE], capture_output=True).returncode != 0:
+        raise SystemExit(f"image {IMAGE} not present locally (no pull is allowed)")
+    taken = set(run(["docker", "ps", "-a", "--format", "{{.Names}}"], capture_output=True, text=True).stdout.split())
+    port = next((q for q in range(16400, 16500) if f"{TW_PREFIX}{q}" not in taken and
+                 socket.socket().connect_ex(("127.0.0.1", q)) != 0), None)
+    if port is None:
+        raise SystemExit("no free port in 16400-16499")
+    name = f"{TW_PREFIX}{port}"
+    if run(docker_run_cmd(name, port), capture_output=True, text=True).returncode != 0:
+        run(["docker", "rm", "-f", name], capture_output=True)
+        raise SystemExit(f"docker run failed for {name}")
+    try:
+        verify_started(name, port, run)
+        for _ in range(60):
+            if "PONG" in run(["redis-cli", "-h", "127.0.0.1", "-p", str(port), "ping"], capture_output=True, text=True).stdout:
+                return name, port
+            time.sleep(0.5)
+        raise OC.FenceRefused(f"{name} did not answer PONG")
+    except BaseException:
+        remove_throwaway(name, run)
+        raise
+
+
+def remove_throwaway(name: str, run=subprocess.run) -> None:
+    if name.startswith(TW_PREFIX) and name != "ccg-falkordb-tw-16390":
+        run(["docker", "rm", "-f", name], capture_output=True)
 
 
 def free_port(start=16500, end=16599) -> int:
@@ -190,7 +249,26 @@ def main(argv=None) -> int:
     p.add_argument("--run-id", default="run1")
     p.add_argument("--chrome-port", type=int, default=9333)
     p.add_argument("--turn-timeout-s", type=int, default=150)
+    p.add_argument("--external", action="store_true", help="use the instance named by FALKORDB_HOST/FALKORDB_PORT")
     a = p.parse_args(argv)
+    owned = None
+    try:
+        if not a.external:
+            try:
+                owned, port = start_throwaway()
+            except OC.FenceRefused as e:
+                print(f"FENCE REFUSED: {e}", file=sys.stderr)
+                return 3
+            os.environ["FALKORDB_HOST"], os.environ["FALKORDB_PORT"] = "127.0.0.1", str(port)
+            print(json.dumps({"throwaway": owned, "port": port}))
+        return _run(a)
+    finally:
+        if owned:
+            remove_throwaway(owned)
+            print(json.dumps({"removed": owned}))
+
+
+def _run(a) -> int:
     try:
         OC.check_fence()
     except OC.FenceRefused as e:

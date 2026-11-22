@@ -122,7 +122,82 @@ def test_attribute_spa_maps_first_non_wrapper_frame_through_a_source_map(tmp_pat
 def test_runner_refuses_through_the_fence_before_creating_anything(tmp_path):
     env = {k: v for k, v in os.environ.items() if k not in ("FALKORDB_PORT", "FALKORDB_HOST")}
     for extra in ({}, {"FALKORDB_HOST": "127.0.0.1", "FALKORDB_PORT": "6390"}, {"FALKORDB_HOST": "127.0.0.1", "FALKORDB_PORT": "6379"}):
-        r = subprocess.run([sys.executable, str(TOOLS / "oracle_runner.py"), "--root", str(tmp_path)], env={**env, **extra},
+        r = subprocess.run([sys.executable, str(TOOLS / "oracle_runner.py"), "--external", "--root", str(tmp_path)], env={**env, **extra},
                            capture_output=True, text=True)
         assert r.returncode == 3 and "FENCE REFUSED" in r.stderr
     assert list(tmp_path.iterdir()) == []
+
+
+# --- runner-owned throwaway (container-start path) -------------------------------------------------------------
+import types  # noqa: E402
+
+import oracle_runner as RN  # noqa: E402
+
+
+def _inspect_stdout(labels, ports):
+    return json.dumps(labels) + "|" + json.dumps(ports)
+
+
+GOOD_L = {"ccg-falkordb": "1", "ccg-falkordb.throwaway": "1"}
+GOOD_P = {"6379/tcp": [{"HostIp": "127.0.0.1", "HostPort": "16400"}]}
+
+
+def _fake(stdout, rc=0):
+    return lambda *a, **k: types.SimpleNamespace(returncode=rc, stdout=stdout, stderr="")
+
+
+def test_docker_run_cmd_is_loopback_labelled_and_never_pulls():
+    c = RN.docker_run_cmd("ccg-falkordb-tw-16400", 16400)
+    assert c[c.index("-p") + 1] == "127.0.0.1:16400:6379"
+    assert c.count("--label") == 2 and "ccg-falkordb=1" in c and "ccg-falkordb.throwaway=1" in c
+    assert c[c.index("--pull") + 1] == "never" and c[-1] == RN.IMAGE == "falkordb/falkordb:v4.18.11"
+
+
+def test_verify_started_accepts_the_good_shape():
+    RN.verify_started("n", 16400, _fake(_inspect_stdout(GOOD_L, GOOD_P)))
+
+
+@pytest.mark.parametrize("labels,ports", [
+    ({"ccg-falkordb": "1"}, GOOD_P),                                              # throwaway label missing
+    ({"ccg-falkordb.throwaway": "1"}, GOOD_P),                                    # ccg-falkordb label missing
+    ({}, GOOD_P),
+    (GOOD_L, {"6379/tcp": [{"HostIp": "0.0.0.0", "HostPort": "16400"}]}),         # non-loopback bind
+    (GOOD_L, {"6379/tcp": [{"HostIp": "127.0.0.1", "HostPort": "16401"}]}),       # other port
+    (GOOD_L, {"6379/tcp": [{"HostIp": "127.0.0.1", "HostPort": "16400"}, {"HostIp": "::", "HostPort": "16400"}]}),
+    (GOOD_L, {}),                                                                 # unpublished
+])
+def test_verify_started_refuses_bad_shapes(labels, ports):
+    with pytest.raises(O.FenceRefused):
+        RN.verify_started("n", 16400, _fake(_inspect_stdout(labels, ports)))
+
+
+def test_start_throwaway_removes_what_it_started_when_verification_fails():
+    calls = []
+
+    def run(cmd, **k):
+        calls.append(cmd)
+        out = ""
+        if cmd[:3] == ["docker", "inspect", "-f"]:
+            out = _inspect_stdout({}, GOOD_P)
+        return types.SimpleNamespace(returncode=0, stdout=out, stderr="")
+    with pytest.raises(O.FenceRefused):
+        RN.start_throwaway(run)
+    assert any(c[:3] == ["docker", "rm", "-f"] and c[3].startswith("ccg-falkordb-tw-") for c in calls)
+
+
+def test_start_throwaway_refuses_a_missing_local_image_without_pulling():
+    calls = []
+
+    def run(cmd, **k):
+        calls.append(cmd)
+        return types.SimpleNamespace(returncode=1, stdout="", stderr="")
+    with pytest.raises(SystemExit):
+        RN.start_throwaway(run)
+    assert not any(c[:2] == ["docker", "run"] or c[:2] == ["docker", "pull"] for c in calls)
+
+
+def test_remove_throwaway_never_touches_a_foreign_or_the_16390_container():
+    calls = []
+    for n in ("ccg-falkordb", "falkordb-dev", "ccg-falkordb-tw-16390"):
+        RN.remove_throwaway(n, lambda *a, **k: calls.append(a))
+    assert calls == []
