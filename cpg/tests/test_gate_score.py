@@ -526,3 +526,61 @@ def test_b4_an_answer_copy_of_ownedRegions_that_differs_from_the_store_is_an_eng
     sub = H.sym_subject(w.sid, w.qname, 5, 20, **({"ownedRegions": copy} if copy is not None else {}))
     o, res = w.outcome(w.answer([H.ans_item(sub, w.chain())]))
     assert o["outcome"] == "hit" and res["defects"] == {"subject-ownedRegions": 1}          # credit on the snapshot's values; the difference is listed
+
+
+# ---------------------------------------------------------------- A2: a per-anchor harness-error entry in run.json
+# run.json shape: ``answers[<asked anchor id>] = {"harnessError": "<exception class name>"}`` in place of ``{"request", "answer"}``.
+def _errored_run(w, cls="StoreError"):
+    run = w.run()
+    run["answers"][w.cp] = {"harnessError": cls}
+    return run
+
+
+def test_a2_an_anchor_entry_with_a_harness_error_makes_its_item_neither_hit_nor_miss(w):
+    res = G.score_gate([w.rec], _errored_run(w), w.snap, ())
+    o = res["items"][w.rec["itemId"]]
+    assert o["outcome"] == "error" and o["reason"] == "StoreError" and res["harnessErrors"] == {"StoreError": 1}
+    assert G.decide_gate(res, gated_strata=G.STRATA_GATED)["verdict"] == "blocked"
+
+
+def test_a2_a_miss_beside_an_errored_anchor_is_blocked_not_fail(w):
+    other = H.item(2, H.contract("http", "GET /b"), H.sym("svc/other.py::g"))
+    run = _errored_run(w)
+    run["answers"][other["anchorId"]] = {"request": H.request([other["anchorId"]]), "answer": H.answer(H.request([other["anchorId"]]), [])}
+    w.snap.add_node("ContractPoint", other["anchorId"])
+    res = G.score_gate([w.rec, other], run, w.snap, ())
+    assert res["items"][other["itemId"]]["outcome"] == "miss" and res["items"][w.rec["itemId"]]["outcome"] == "error"
+    d = G.decide_gate(res, gated_strata=G.STRATA_GATED)
+    assert d["verdict"] == "blocked" and d["misses"] == 1 and d["errored"] == 1
+
+
+def test_a2_two_items_on_one_errored_anchor_are_both_errors(w):
+    twin = H.item(2, w.anchor, H.sym("svc/other.py::g"))
+    res = G.score_gate([w.rec, twin], _errored_run(w), w.snap, ())
+    assert [o["outcome"] for o in res["items"].values()] == ["error", "error"]
+
+
+def test_a2_an_out_of_scope_item_on_an_errored_anchor_stays_out_of_scope(w):
+    res = G.score_gate([w.rec], _errored_run(w), w.snap, ["svc/*"])
+    assert res["items"][w.rec["itemId"]]["outcome"] == "out-of-scope" and res["harnessErrors"] == {}
+
+
+@pytest.mark.parametrize("bad", ["Store Error: id 3333", "", 7, None, {"x": 1}, "a" * 200])
+def test_a2_a_malformed_class_name_is_reported_as_unclassified_never_echoed(w, bad):
+    run = w.run()
+    run["answers"][w.cp] = {"harnessError": bad}
+    res = G.score_gate([w.rec], run, w.snap, ())
+    assert res["items"][w.rec["itemId"]]["outcome"] == "error" and res["harnessErrors"] == {"unclassified": 1}
+
+
+def test_a2_an_entry_with_both_an_answer_and_a_harness_error_is_an_error(w):
+    run = w.run()
+    run["answers"][w.cp]["harnessError"] = "StoreError"
+    assert G.score_gate([w.rec], run, w.snap, ())["items"][w.rec["itemId"]]["outcome"] == "error"
+
+
+def test_a2_the_report_names_the_class_and_counts_never_an_id(w):
+    res = G.score_gate([w.rec], _errored_run(w), w.snap, ())
+    rep = G.build_report(res, G.decide_gate(res, gated_strata=G.STRATA_GATED), gated_strata=G.STRATA_GATED, withheld={}, flow_flag=False)
+    assert rep["verdict"] == "blocked" and rep["erroredItems"] == 1 and rep["harnessErrors"] == {"StoreError": 1} and rep["scored"] == 0
+    assert w.rec["itemId"] not in str(rep) and w.cp not in str(rep)

@@ -605,7 +605,7 @@ def read_probe_map(path: Path, home: Path | None = None) -> dict:
     area = _ac.custodian_area(home).resolve()
     p = Path(path).expanduser().resolve()
     if p != area and area not in p.parents:
-        raise Refusal("REFUSED: the probe map must be under the custodian area, never elsewhere")
+        raise Refusal("the probe map must be under the custodian area, never elsewhere")
     m = json.loads(p.read_text(encoding="utf-8"))
     if not isinstance(m, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in m.items()):
         raise HarnessError("the probe map is not {unit anchorId: cpId}")
@@ -697,16 +697,35 @@ def run_asks(records: Sequence[Mapping], snap, ask: Callable[[dict], Mapping], c
     return {"snapshotId": pinned, "answers": answers, **({"probes": {u: used[u] for u in units}} if units else {}), "probeCrossCheckDiffers": differs}
 
 
+_CLASS_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
+
+
+def _error_class(value: Any) -> str:
+    """The class name of a recorded harness error, or ``unclassified``: only an identifier ever reaches the outcome or the report."""
+    return value if isinstance(value, str) and _CLASS_NAME.fullmatch(value) else "unclassified"
+
+
 def score_gate(records: Sequence[Mapping], run: Mapping, snap, patterns: Sequence[str]) -> dict:
     """The hit rule over every key item (``run`` is :func:`run_asks`' result). -> per-item outcomes plus what the run lists.
 
     Outcomes: ``hit``, ``miss`` (with ``reason``), ``out-of-scope`` (triaged ``key-error``; never a hit, a miss or a wrong-possible item),
     ``error`` (a harness error: neither a hit nor a miss, EP §5.2.1 (g)/(h)), ``void`` (a C5 stamp failure: the answer is void and the run is
-    reported). Held-out ids never leave this structure but the custodian file."""
+    reported). Held-out ids never leave this structure but the custodian file.
+
+    **The per-anchor harness-error entry** (the shape ``gate_run`` follows once it records a post-marker ``HarnessError`` for ONE anchor instead of
+    ending the whole run): ``run["answers"][<asked anchor id>] = {"harnessError": "<exception class name>"}`` in place of
+    ``{"request": ..., "answer": ...}``. Every item asked by that anchor is ``error`` (reason = the class name), counted per item in
+    ``harnessErrors[<class name>]``, and the verdict is ``blocked`` (:func:`decide_gate`). Only the class name is carried: a value that is not an
+    identifier of at most 64 characters is reported as ``unclassified`` (a message, an id or a path never reaches the report). An entry that also
+    carries an ``answer`` is still an error (fail closed). A deterministic failure of the whole run still ends without a ``run.json``;
+    ``gate_run`` writes no such entry today."""
     acc, items, stops = Acc(), {}, Counter()
     pinned, answers = run["snapshotId"], run["answers"]
     anchor_state = {}
     for aid, entry in answers.items():
+        if "harnessError" in entry:
+            anchor_state[aid] = {"harnessError": _error_class(entry["harnessError"])}
+            continue
         bad = check_stamp(entry["answer"], pinned)
         echo = check_request_echo(entry["answer"], entry["request"])
         if echo["state"] == "unequal":
@@ -725,7 +744,10 @@ def score_gate(records: Sequence[Mapping], run: Mapping, snap, patterns: Sequenc
             items[iid] = {**base, "outcome": "miss", "reason": "anchor-not-in-graph"}
             continue
         st = anchor_state[aid]
-        if st["stamp"]:
+        if "harnessError" in st:
+            acc.harness_errors[st["harnessError"]] += 1
+            items[iid] = {**base, "outcome": "error", "reason": st["harnessError"]}
+        elif st["stamp"]:
             items[iid] = {**base, "outcome": "void", "reason": "stamp"}
         elif st["echo"]["state"] != "ok":
             items[iid] = {**base, "outcome": "miss", "reason": "not-resolved" if st["echo"]["state"] == "not-resolved" else "request-unequal"}
@@ -780,7 +802,7 @@ def flow_flag(record_path: Path, committed_text: Callable[[Path], str] | None = 
         if (committed_text or _ac._git_head_text)(path) != text:
             return False
         verdict = (json.loads(text).get("decision") or {}).get("verdict")
-    except (OSError, ValueError, AttributeError, subprocess.CalledProcessError):
+    except (OSError, ValueError, AttributeError, subprocess.CalledProcessError, Refusal, _ac.Refusal):      # fail closed: never a traceback
         return False
     return isinstance(verdict, str) and verdict.startswith("TRUE")
 
@@ -866,6 +888,17 @@ def first_run_marker(custodian: Path, list_sha256: str, payload: Mapping) -> Pat
     except _ac.Refusal:
         raise Refusal("this list was already run: a re-run on the same list is refused (EP §12.1 step 7); a new list is required") from None
     return marker
+
+
+def marker_state(custodian: Path, list_sha256: str) -> str | None:
+    """The state of the once-only marker of a list (``started`` | ``asked`` | ``failed:<class>``), or ``None`` when there is no marker, it cannot
+    be read, or it is not a marker (``gate_run`` writes it; this only reads it, so ``score`` never trusts a run file without one)."""
+    try:
+        doc = json.loads((Path(custodian) / f"gate-run-{list_sha256}.marker").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    state = doc.get("state") if isinstance(doc, dict) else None
+    return state if isinstance(state, str) else None
 
 
 # --- intervals -------------------------------------------------------------------------------
@@ -1000,7 +1033,7 @@ def write_custodian(root: Path, name: str, rows: Sequence[Mapping] | Mapping, ho
     root = Path(root).resolve()
     area = _ac.custodian_area(home).resolve()
     if root != area and area not in root.parents:
-        raise Refusal("REFUSED: held-out-derived files go under the custodian root, never elsewhere")
+        raise Refusal("held-out-derived files go under the custodian root, never elsewhere")
     root.mkdir(parents=True, exist_ok=True)
     f = root / name
     f.write_text(("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows)) if not isinstance(rows, Mapping) else json.dumps(rows, sort_keys=True) + "\n",
@@ -1155,6 +1188,11 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         require_clean_renormalize(renormalize_stored_gold(records))
         run = json.loads(within_custodian(Path(a.run), None, "--run").read_text(encoding="utf-8"))
         ctx = require_run_context(run)
+        key = list_key(records)                           # over every record of --lists, withheld strata included (the key gate_run took the marker under)
+        if run.get("listKey") != key:
+            raise Refusal("the run file is not the run of these lists (its list key differs or is missing)")
+        if marker_state(cust, key) != "asked":            # -p1-gate-marker-ml.md §1.1.7: a started or failed run, or none, is never scored
+            raise Refusal("the run has no marker in state `asked` for this list: score refuses")
         pf = (preflight_fn or preflight)(repo, a.gate_id)
         if pf["firstContact"]["dirtyPaths"]:
             raise Refusal(f"the working tree is dirty ({pf['firstContact']['dirtyPaths']} paths under cpg/): score refuses")

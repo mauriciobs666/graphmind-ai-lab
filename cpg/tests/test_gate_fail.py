@@ -432,6 +432,32 @@ def test_m1_flow_flag_is_read_from_the_committed_decision_record(tmp_path):
     assert G.flow_flag(f.parent / "absent.json") is False                          # no record means false
 
 
+def test_a2_flow_flag_is_false_for_an_uncommitted_decision_file_and_never_a_traceback(tmp_path):
+    repo = H.make_repo(tmp_path)
+    f = repo / "cpg" / "eval" / "decisions" / "ccg-p1-flow-python-v2-decision.json"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({"decision": {"verdict": "TRUE:measured"}}))                 # on disk, never committed
+    assert G.flow_flag(f) is False
+
+
+def test_a2_flow_flag_is_false_for_an_unreadable_decision_file(tmp_path):
+    repo = H.make_repo(tmp_path)
+    d = repo / "cpg" / "eval" / "decisions"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "ccg-p1-flow-python-v2-decision.json").mkdir()                                    # a directory where the record should be
+    assert G.flow_flag(d / "ccg-p1-flow-python-v2-decision.json") is False
+    f = _decision(tmp_path / "t2", "TRUE:measured")
+    f.write_bytes(b"\xff\xfe not utf8")
+    assert G.flow_flag(f) is False
+
+
+def test_a2_flow_flag_is_false_when_the_committed_text_reader_itself_refuses(tmp_path):
+    f = _decision(tmp_path, "TRUE:measured")
+    def refuse(_p):
+        raise G.Refusal("no HEAD copy")
+    assert G.flow_flag(f, refuse) is False
+
+
 def test_m1_flow_flag_true_only_for_a_committed_true_verdict(tmp_path):
     f = _decision(tmp_path, "TRUE:measured")
     assert G.flow_flag(f) is True

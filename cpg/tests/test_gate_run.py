@@ -198,6 +198,18 @@ def test_write_custodian_writes_under_the_root(tmp_path):
     assert f.read_text() == '{"b": 2}\n{"a": 1}\n'
 
 
+def test_a2_library_refusals_do_not_carry_the_cli_prefix(tmp_path):
+    """The CLI adds ``REFUSED:`` once; a library message that starts with it prints it twice."""
+    home = tmp_path / "home"
+    (tmp_path / "elsewhere.json").write_text("{}")
+    with pytest.raises(G.Refusal) as e1:
+        G.read_probe_map(tmp_path / "elsewhere.json", home=home)
+    with pytest.raises(G.Refusal) as e2:
+        G.write_custodian(tmp_path / "elsewhere", "x.jsonl", [{"a": 1}], home=home)
+    assert "custodian" in str(e1.value) and "custodian" in str(e2.value)
+    assert "REFUSED" not in str(e1.value) and "REFUSED" not in str(e2.value)
+
+
 def test_write_custodian_refuses_the_repo_tree(tmp_path):
     with pytest.raises(G.Refusal):
         G.write_custodian(G._CPG.parent / "cpg" / "eval", "leak.json", {"x": 1}, home=tmp_path)
@@ -380,10 +392,22 @@ class ScoreEnv:
         pf = G.preflight(self.repo, "ac5-gate-1", observed=OBS)
         self.ctx = {**G.run_context(self.repo, pf, allow_after_adaptation=True), "label": label}
         self.run = self.cust / "run.json"
+        self.key = G.list_key([self.w.rec])
+        self.write_marker("asked")
         self.write_run(run_pin)
 
+    def set_records(self, recs):
+        """The list changes, so its key does: the marker and the run file follow it (as they would for a run of that list)."""
+        self.lists.write_text("".join(json.dumps(r) + "\n" for r in recs))
+        self.key = G.list_key(recs)
+        self.write_marker("asked")
+        self.write_run()
+
+    def write_marker(self, state, key=None):
+        (self.cust / f"gate-run-{key or self.key}.marker").write_text(json.dumps({"state": state, "pins": {}}) + "\n")
+
     def write_run(self, pin=H.SNAP, **extra):
-        run = {**self.w.run(snapshot_id=pin), "preflight": self.ctx, **extra}
+        run = {**self.w.run(snapshot_id=pin), "preflight": self.ctx, "listKey": self.key, **extra}
         self.run.write_text(json.dumps(run))
 
     def argv(self, **over):
@@ -408,6 +432,102 @@ def test_cli_score_prints_counts_only_and_writes_outcomes_to_the_custodian(tmp_p
     rows = [json.loads(l) for l in (e.cust / "gate-outcomes.jsonl").read_text().splitlines()]
     assert rows[0]["itemId"] == e.w.rec["itemId"] and rows[0]["outcome"] == "hit"
     assert [json.loads(l)["stratum"] for l in (e.cust / "gate-exposure.jsonl").read_text().splitlines()] == ["http"]
+
+
+# ---- A2 (ruling §1.1.7): score requires the marker of the run's list key to be in state `asked`
+def _refused_without_output(e, capsys, **kw):
+    rc = e.main(**kw)
+    cap = capsys.readouterr()
+    assert rc == 2 and cap.err.count("REFUSED") == 1 and cap.out == ""
+    assert not (e.cust / "gate-outcomes.jsonl").exists() and not (e.cust / "gate-report.json").exists()
+    for secret in ("SENTINEL", e.w.rec["itemId"], e.w.rec["anchorId"], e.key):
+        assert secret not in cap.err
+    return cap.err
+
+
+@pytest.mark.parametrize("state", ["started", "failed:transient", "failed:deterministic", "anything-else"])
+def test_a2_score_refuses_unless_the_marker_is_asked(tmp_path, monkeypatch, capsys, state):
+    e = ScoreEnv(tmp_path, monkeypatch)
+    e.write_marker(state)
+    assert "marker" in _refused_without_output(e, capsys)
+
+
+def test_a2_score_refuses_when_there_is_no_marker(tmp_path, monkeypatch, capsys):
+    e = ScoreEnv(tmp_path, monkeypatch)
+    (e.cust / f"gate-run-{e.key}.marker").unlink()
+    assert "marker" in _refused_without_output(e, capsys)
+
+
+@pytest.mark.parametrize("text", ["not json", "[1]", "{}", '{"state": 7}', ""])
+def test_a2_score_refuses_an_unreadable_or_malformed_marker(tmp_path, monkeypatch, capsys, text):
+    e = ScoreEnv(tmp_path, monkeypatch)
+    (e.cust / f"gate-run-{e.key}.marker").write_text(text)
+    assert "marker" in _refused_without_output(e, capsys)
+
+
+def test_a2_the_marker_of_another_list_does_not_serve(tmp_path, monkeypatch, capsys):
+    e = ScoreEnv(tmp_path, monkeypatch)
+    (e.cust / f"gate-run-{e.key}.marker").unlink()
+    e.write_marker("asked", key="b" * 64)
+    assert "marker" in _refused_without_output(e, capsys)
+
+
+@pytest.mark.parametrize("listkey", [None, "b" * 64])
+def test_a2_a_run_file_whose_list_key_is_missing_or_not_the_lists_is_refused(tmp_path, monkeypatch, capsys, listkey):
+    e = ScoreEnv(tmp_path, monkeypatch)
+    run = json.loads(e.run.read_text())
+    run.pop("listKey")
+    e.run.write_text(json.dumps({**run, **({} if listkey is None else {"listKey": listkey})}))
+    if listkey:
+        e.write_marker("asked", key=listkey)                      # even a marker for the run's own (wrong) key does not serve the --lists
+    assert "list" in _refused_without_output(e, capsys)
+
+
+def test_a2_score_stays_re_runnable_on_asked(tmp_path, monkeypatch, capsys):
+    e = ScoreEnv(tmp_path, monkeypatch)
+    assert e.main() == 1 and e.main() == 1
+    assert json.loads((e.cust / "gate-report.json").read_text())["verdict"] == "minimums-not-met"
+
+
+def test_a2_a_marker_written_by_gate_run_is_what_score_reads(tmp_path):
+    """The marker file name and state vocabulary are gate_run's, not a copy that could drift."""
+    from gate_run_helpers import Env
+    e = Env(tmp_path)
+    e.go()
+    run = json.loads(e.run_files()[0].read_text())
+    assert e.marker()["state"] == "asked" and run["listKey"] == G.list_key([e.w.rec])
+    assert G.marker_state(e.cust, run["listKey"]) == "asked"
+
+
+# ---- A2: gate_run today never writes the per-anchor harness-error entry (the score_gate shape is forward-compatible)
+def test_a2_gate_run_writes_no_harness_error_entry_today(tmp_path):
+    from gate_run_helpers import Env
+    e = Env(tmp_path)
+    e.go()
+    run = json.loads(e.run_files()[0].read_text())
+    assert all(set(v) == {"request", "answer"} for v in run["answers"].values())
+
+
+def test_a2_a_post_marker_harness_error_still_ends_the_whole_run_without_a_run_json(tmp_path):
+    import gate_run as R
+    from gate_run_helpers import Env
+    e = Env(tmp_path)
+    e.ask_hook = lambda req, n: (_ for _ in ()).throw(G.HarnessError("planted"))
+    with pytest.raises(R.RunFailed):
+        e.go()
+    assert e.run_files() == [] and e.marker()["state"] == "failed:deterministic"
+    assert not any("harnessError" in l for l in e.answers_file().read_text().splitlines()) if list(e.cust.glob("run-*.answers.jsonl")) else True
+
+
+def test_a2_score_of_a_run_with_an_errored_anchor_reports_blocked_with_counts_and_a_class_only(tmp_path, monkeypatch, capsys):
+    e = ScoreEnv(tmp_path, monkeypatch)
+    e.write_run(answers={e.w.cp: {"harnessError": "StoreError"}})
+    rc = e.main()
+    cap = capsys.readouterr()
+    rep = json.loads(cap.out)
+    assert rc == 1 and rep["verdict"] == "blocked" and rep["harnessErrors"] == {"StoreError": 1} and rep["erroredItems"] == 1
+    for secret in ("SENTINEL", e.w.rec["itemId"], e.w.rec["anchorId"], e.w.cp):
+        assert secret not in cap.out + cap.err
 
 
 def test_cli_score_refuses_a_custodian_dir_outside_the_area(tmp_path, monkeypatch, capsys):
@@ -515,7 +635,7 @@ def test_m7_a_regate_record_needs_the_flags_file_and_a_gate_record_refuses_one(t
 def test_m1_flow_items_are_withheld_and_only_counted(tmp_path, monkeypatch, capsys):
     e = ScoreEnv(tmp_path, monkeypatch)
     flow = H.item(2, H.contract("http", "GET /flowonly"), H.sym("svc/f.py::g"), stratum="flow")
-    e.lists.write_text(json.dumps(e.w.rec) + "\n" + json.dumps(flow) + "\n")
+    e.set_records([e.w.rec, flow])
     e.main()
     rep = json.loads(capsys.readouterr().out)
     assert rep["flow"] == {"status": "flow-unavailable, not closed", "flag": False, "withheld": 1} and rep["scored"] == 1
@@ -526,7 +646,7 @@ def test_m7_the_moved_out_counts_of_the_record_reach_the_verdict(tmp_path, monke
     def run(moved):
         e = ScoreEnv(tmp_path / f"m{moved}", monkeypatch, record={"kind": "re-gate", "movedOut": {"http": moved}})
         recs = [H.item(n, e.w.anchor, H.sym(e.w.qname), stratum=("http", "mcp", "scripts", "wiring")[n % 4]) for n in range(1, 81)]
-        e.lists.write_text("".join(json.dumps(r) + "\n" for r in recs))
+        e.set_records(recs)
         fresh = [r for r in recs if r["derivedStratum"] == "http"][:20] + [r for r in recs if r["derivedStratum"] == "mcp"][:15]
         flags = e.cust / "flags.jsonl"
         ids = {r["itemId"] for r in fresh}
@@ -571,7 +691,7 @@ def test_m1_a_committed_true_flow_decision_makes_flow_a_gated_stratum_at_score(t
     H.git(e.repo, "add", "-A")
     H.git(e.repo, "commit", "-qm", "decision")
     flow = H.item(2, H.contract("http", "GET /flowonly"), H.sym("svc/f.py::g"), stratum="flow")
-    e.lists.write_text(json.dumps(e.w.rec) + "\n" + json.dumps(flow) + "\n")
+    e.set_records([e.w.rec, flow])
     e.main()
     rep = json.loads(capsys.readouterr().out)
     assert "flow" not in rep and rep["scored"] == 2           # gated: scored (as a miss: not in graph), no withheld block
