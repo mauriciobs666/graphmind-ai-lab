@@ -97,3 +97,32 @@ def test_normalize_and_summary_split_testclient_and_unattributed(tmp_path, capsy
     assert O.main(["summary", "--edges", str(out)]) == 0
     s = json.loads(capsys.readouterr().out)
     assert (s["rows"], s["testclient"], s["unattributed"], s["attributed"], s["distinctEdges"]) == (3, 1, 1, 1, 1)
+
+
+def test_attribute_spa_maps_first_non_wrapper_frame_through_a_source_map(tmp_path):
+    # generated line 1 col 0 -> sources[0] (client.ts) line 1; line 2 col 0 -> sources[1] (endpoints.ts) line 5
+    # mappings "AAAA;AAIA": seg1 = [0,0,0,0]; seg2 = [0,+0 src... sources idx +1, line +4, col 0]
+    sm = {"version": 3, "sources": ["../src/api/client.ts", "../src/api/endpoints.ts"], "mappings": "AAAA;ACIA"}
+    dist = tmp_path / "dist" / "assets"
+    dist.mkdir(parents=True)
+    (dist / "index-X.js.map").write_text(json.dumps(sm))
+    raw = tmp_path / "raw.jsonl"
+    stack = ("Error\n    at window.fetch (http://h:1/shop/assets/index-X.js:9:9)\n"
+             "    at apiFetch (http://h:1/shop/assets/index-X.js:1:1)\n"
+             "    at getState (http://h:1/shop/assets/index-X.js:2:1)\n")
+    raw.write_text(json.dumps({"method": "GET", "url": "http://h:1/shop/api/state", "stack": stack}) + "\n"
+                   + json.dumps({"method": "GET", "url": "http://h:1/shop/api/x", "stack": "Error\n    at z (http://h:1/other.js:1:1)"}) + "\n")
+    out = tmp_path / "o.jsonl"
+    assert O.main(["attribute-spa", "--raw", str(raw), "--dist", str(tmp_path / "dist"), "--out", str(out)]) == 0
+    rows = [json.loads(l) for l in out.read_text().splitlines()]
+    assert rows[0]["frame"] == {"file": "salesperson/src/api/endpoints.ts", "func": None} and rows[0]["path"] == "/shop/api/state"
+    assert rows[1]["frame"] is None
+
+
+def test_runner_refuses_through_the_fence_before_creating_anything(tmp_path):
+    env = {k: v for k, v in os.environ.items() if k not in ("FALKORDB_PORT", "FALKORDB_HOST")}
+    for extra in ({}, {"FALKORDB_HOST": "127.0.0.1", "FALKORDB_PORT": "6390"}, {"FALKORDB_HOST": "127.0.0.1", "FALKORDB_PORT": "6379"}):
+        r = subprocess.run([sys.executable, str(TOOLS / "oracle_runner.py"), "--root", str(tmp_path)], env={**env, **extra},
+                           capture_output=True, text=True)
+        assert r.returncode == 3 and "FENCE REFUSED" in r.stderr
+    assert list(tmp_path.iterdir()) == []

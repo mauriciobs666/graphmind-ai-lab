@@ -5,6 +5,7 @@
     oracle_capture.py export --root R [--commit SHA]   git archive EVAL_COMMIT into R/oracle/src (user tree untouched)
     oracle_capture.py run --root R --log L -- CMD...   fence, then run CMD with the shims on PATH/PYTHONPATH
     oracle_capture.py normalize --log L --out O        raw log -> keyNorm edges (match_keys.normalize_contract)
+    oracle_capture.py attribute-spa --raw R --dist D --out L   SPA fetch records -> shim-format log (source-mapped frames)
     oracle_capture.py summary --edges O                counts only
 
 Fence (P1-47): FALKORDB_HOST and FALKORDB_PORT must be EXPLICIT (unset refuses: the named mutant); the effective
@@ -138,6 +139,91 @@ def cmd_normalize(a) -> int:
     return 0
 
 
+_B64 = {c: i for i, c in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")}
+
+
+def _vlq(seg: str) -> list[int]:
+    out, shift, val = [], 0, 0
+    for ch in seg:
+        d = _B64[ch]
+        val += (d & 31) << shift
+        if d & 32:
+            shift += 5
+        else:
+            out.append(-(val >> 1) if val & 1 else val >> 1)
+            shift = val = 0
+    return out
+
+
+def decode_map(sm: dict) -> list[list[tuple[int, int, int, int]]]:
+    """Per generated line, sorted [(genCol, srcIdx, srcLine, srcCol)] (segments without a source are dropped)."""
+    lines, src, sl, sc = [], 0, 0, 0
+    for line in sm["mappings"].split(";"):
+        gc, segs = 0, []
+        for seg in line.split(",") if line else []:
+            v = _vlq(seg)
+            gc += v[0]
+            if len(v) >= 4:
+                src, sl, sc = src + v[1], sl + v[2], sc + v[3]
+                segs.append((gc, src, sl, sc))
+        lines.append(segs)
+    return lines
+
+
+def map_frame(maps: dict, bundle: str, line: int, col: int):
+    """1-based line/col of a stack frame -> (source path, 1-based line) or None."""
+    sm = maps.get(bundle)
+    if not sm:
+        return None
+    segs = sm[1][line - 1] if 0 < line <= len(sm[1]) else []
+    best = None
+    for s in segs:
+        if s[0] <= col - 1:
+            best = s
+    if best is None:
+        return None
+    return sm[0]["sources"][best[1]], best[2] + 1
+
+
+_FRAME = __import__("re").compile(r"at (?:(?P<fn>[^ ]+) \()?(?P<url>https?://[^ )]+?):(?P<ln>\d+):(?P<col>\d+)\)?")
+WRAPPERS = ("src/api/client.ts", "src/api/dispatch.ts")
+
+
+def cmd_attribute_spa(a) -> int:
+    """Pick, per fetch record, the first stack frame that maps to a source file that is not a transport wrapper
+    (client.ts, dispatch.ts) and not node_modules: `src/api/endpoints.ts` in practice. Unmappable -> frame null."""
+    dist = Path(a.dist)
+    maps = {}
+    for mp in dist.rglob("*.js.map"):
+        sm = json.loads(mp.read_text(encoding="utf-8"))
+        maps[mp.name[:-4]] = (sm, decode_map(sm))
+    from urllib.parse import urlsplit
+    n = 0
+    with open(a.out, "w", encoding="utf-8") as out:
+        for line in Path(a.raw).read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            u = urlsplit(r["url"])
+            frame = None
+            for m in _FRAME.finditer(r.get("stack", "")):
+                hit = map_frame(maps, m.group("url").rsplit("/", 1)[-1], int(m.group("ln")), int(m.group("col")))
+                if not hit:
+                    continue
+                src = hit[0].replace("\\", "/")
+                src = src[src.index("src/"):] if "src/" in src else src
+                if "node_modules" in src or src in WRAPPERS:
+                    continue
+                frame = {"file": "salesperson/" + src, "func": None}
+                break
+            out.write(json.dumps({"src": "spa", "method": r["method"], "host": u.hostname, "port": u.port,
+                                  "path": u.path + ("?" + u.query if u.query else ""), "frame": frame, "cls": "app"},
+                                 sort_keys=True, separators=(",", ":")) + "\n")
+            n += 1
+    print(json.dumps({"rows": n}))
+    return 0
+
+
 def cmd_summary(a) -> int:
     rows = [json.loads(l) for l in Path(a.edges).read_text().splitlines() if l.strip()]
     s = {"rows": len(rows), "testclient": sum(r["cls"] == "testclient" for r in rows),
@@ -157,12 +243,13 @@ def main(argv=None) -> int:
     r = sp.add_parser("run"); r.add_argument("--root", required=True); r.add_argument("--log", required=True)
     r.add_argument("cmd", nargs=argparse.REMAINDER)
     n = sp.add_parser("normalize"); n.add_argument("--log", required=True); n.add_argument("--out", required=True)
+    q = sp.add_parser("attribute-spa"); q.add_argument("--raw", required=True); q.add_argument("--dist", required=True); q.add_argument("--out", required=True)
     s = sp.add_parser("summary"); s.add_argument("--edges", required=True)
     a = p.parse_args(argv)
     if a.verb == "run" and a.cmd and a.cmd[0] == "--":
         a.cmd = a.cmd[1:]
     return {"fence": cmd_fence, "export": cmd_export, "run": cmd_run, "normalize": cmd_normalize,
-            "summary": cmd_summary}[a.verb](a)
+            "summary": cmd_summary, "attribute-spa": cmd_attribute_spa}[a.verb](a)
 
 
 if __name__ == "__main__":
