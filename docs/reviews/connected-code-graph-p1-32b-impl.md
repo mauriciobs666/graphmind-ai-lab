@@ -185,3 +185,68 @@ No line is pruned: none of the existing lines is enforced by these checks.
 | untracked / ignored / staged / `cpg/tests` change | refused; untracked outside `cpg/` runs |
 | symlink out of custody; `..` custodian; outside list | refused |
 | harness file edited after the record | runs; `label: after-adaptation` on stdout only; `run.json` has `answers`, `snapshotId` only (M5) |
+
+## Pass 2
+
+Scope: `gate.py` and `gate_run.py` at HEAD (rounds A, A2, B, commits after `3c39856e`; rule text `docs/plans/connected-code-graph-p1-gate-marker-ml.md`). Executed: the seven gate test files, 437 passed, exit 0; plants `plants1..5` re-run on a fresh copy of HEAD (`scratchpad/copy2`), new `plants9..14` (real `SIGKILL` through `os.fork`, not a stand-in). Live tier not run (the delegates' range starts at 16420; I started no service). **Verdict: needs changes** (one new blocker-class state-machine deadlock and four new majors, all small fixes).
+
+### Dispositions of Pass 1
+
+- **B1 fixed.** `_default_deps` builds `Target(LiveStore(build_db, sys), build_db, verdict_db)` with `acl_user`/`_credential`/`connect`/`Target` signatures matching the real modules (introspected); guards refuse port None/6379/6390/16390/16400/0/70000, a non-loopback host and a `--graph` that is not the system key, before any connection (executed). Not proven live with real ACL users (see rehearsal list).
+- **B2 fixed.** Reordered `--lists`, blank lines, re-serialised and duplicated records: refused with one marker; a subset list takes a new key; key is the full 64-hex.
+- **B3 fixed, with N1/N5.** `SIGKILL` in ask 1, 2, 3 and during the `run.json` write: marker `started`, answers on disk (0/1/2/3), resume asks only the missing (3/2/1/0). Resume refused on a changed snapshot id, an edited-and-committed harness file, a dirty `cpg/`, a different engine snapshot, and a resolve dry-run that now fails; a run without `--resume` on a started marker is refused.
+- **B4 fixed.** Flat `[28, 32]` through `StoreSnapshot` scores `hit` (`region_pairs`). A flat list put directly in `DictSnapshot` still raises; the double is the only path left.
+- **B5 fixed at item level, not end to end (Q1).** Injection/`dir`/kind/hop-shape faults give `outcome: error`; miss + error → `blocked`; miss + defect → `fail`; error only → `blocked`, 79 scored.
+- **M1 fixed** (four strata perfect → `pass`; a scored flow item while withheld → `Refusal`). **M2 fixed** (`score` re-reads the live id, requires marker `asked`, `listKey`, the preflight block, clean tree), but N3. **M3 fixed** (closure now lists `gate_run`, `snapshot_export`, `baseline`, `export_kit`, `EVAL_COMMIT`; lazy, `__import__`, `import_module`, relative imports followed; `runpy`/`exec` is a bound, none today). **M4 fixed** (S47 probe map; a unit item without an entry is a pre-marker `HarnessError`). **M5 fixed** (record ancestor, no non-eval `cpg/` change since; `after-adaptation` refused unless allowed, label in marker and `run.json`). **M6 fixed**, with N2/N4. **M7 fixed** (kind and `movedOut` from the committed record; the two fields are an extension of EP §12.3, which the ledger discloses; `-p1-ml.md` §8 should name them). **M8 fixed.**
+- **m1 fixed** (`distance` plus `symbolHops`). **m2 not fixed** (zero-miss cluster interval still `[1.0, 1.0]`). **m3 not fixed** (no `--clusters`). **m4 not fixed** (no per-item HA-3/HA-5 list). **m5 not fixed** (empty repeat set passes). **m6 not fixed** (`verdictLogOffset: 0.0` hits). **m7 not fixed** (`cache_len` default constant; `_default_deps` supplies none). **m8 fixed** (`hop-shape` error). **m9 fixed** (`gate.py` maps other failures to 4; `gate_run` exits 2/3/4/5/6). **nit fixed.** m2-m7 are disclosed as not done; none blocks a pass.
+- **Decisions.** (1) noise.py alignment not done (still owed; disclosed). (2) accept, now labelled `proposed, unconfirmed`. (3) unchanged, accept. (4) fixed. (5) fixed. (6) fixed. (7) fixed: exposure rows carry `stratum`.
+- **Rulings (a)-(c).** (a) fixed: dry-run `resolve` before the marker, exactly one candidate with the asked id, counts by status, exit 5; an in-graph anchor that does not resolve after the marker is a `HarnessError`; config key masked in the stored `[#…]` form. (b) fixed (state machine, fsynced per-answer lines, torn-line discard, pin-checked resume). (c) fixed.
+
+### Answers to the two questions
+
+**(1) Post-marker harness error: not realised end to end. Executed (plants11).** `ask` raising `HarnessError` at anchor 2 of 3, an engine `StoreError`, or a `ValueError`: marker `failed:deterministic`, 1 answer on disk, no `run.json`, resume refused, `score` refuses (not `asked`). No `blocked` verdict exists anywhere, and the N-1 answers already recorded are unusable. A `failed:deterministic` marker with a class name is an acceptable record of a **run-wide** fault (credential refused, snapshot changed mid-run, disk full), but for a **per-anchor** fault it discards the evidence and the verdict the ruling requires. `gate_run` must catch per anchor: a `HarnessError` becomes the persisted line `{"anchorId", "harnessError": <class>}` (the shape `score_gate` already reads), the loop continues, `run.json` is written, the marker ends `asked`, and `score` reports `blocked`. An engine exception that is not transient on one anchor (build error, answer fails validation) is a product failure on that anchor, so record it as a miss with reason `engine-error`; this needs the data-scientist's ruling, since the gate-marker note covers only harness faults. Keep `failed:deterministic` for the run-wide class and have `gate_run` print its class and the count of recorded answers.
+
+**(2) Config key mask: the delegate is right (executed).** The loader stores `services.[#…].ports[0]` (`rows._mask_key_path`); `answer.mask_identifier` prints `[#]` for a raw key and leaves a stored `[#…]` unchanged; `resolve_config` matches the stored form. Request side fixed. But see N2: the same two forms diverge in H1.
+
+### New findings
+
+**N1 (major, verified). Crash windows in the marker state machine deadlock a spent list.** (a) `SIGKILL` after `run-<key>.json` is renamed in and before the marker becomes `asked` (`gate_run.py` run block): marker stays `started`, `--resume` refuses ("a run file already exists"), and `score` refuses a non-`asked` marker, so a complete run can never be scored. (b) `take_marker` creates the file with `O_EXCL` and writes the payload afterwards; a kill between them leaves an empty marker: re-run says "already run", resume says "marker is unreadable" (plant: 0 asked, both refuse). The rule that no human removes the AC-5 marker makes both permanent. Fix: (a) on resume, if `run-<key>.json` exists, parses, and its `listKey` and `snapshotId` equal the marker's pins, only finalise the marker to `asked` (ask nothing); (b) write the payload to a temp file and `os.link` it into place (atomic, refuses an existing name), or treat an empty marker with no answers file and no run file as `started` with no pins and let resume fill them. Test with `SIGKILL` at both points.
+
+**N2 (major, verified). H1 on a config item with a screen-failing key segment is a false miss.** Plant: stored `services.[#…].ports`, gold `services.<24 a's>.ports`: `outcome: miss`, `maskedComparisons: 1`. `_h1` masks both sides with `gate.mask_keypath` (`[#]` form), but the store, and so `real["keyPath"]`, holds the `[#…]` form, so `[#…]` is never equal to `[#]`. HA-5 expects the comparison to be listed and judged, not to fail silently. Fix: mask the gold with the loader's `rows._mask_key_path` (as `cli_request` now does), compare in the stored form, and list the entry. Plant with the loader-masked store value (`plants10.py`); gold already in stored form hits.
+
+**N3 (major, verified at function level, read at CLI). `score` recomputes the flow flag instead of using the run's.** `run.json` records `flowFlag`, `withheld` and `listKey`, and `score` reads none of the first two; it calls `flow_flag` again. If the committed decision flips to TRUE between run and score, flow items that were never asked score `miss: anchor-not-in-graph` and the verdict is `fail` (plant: flow item absent from the run → miss, `fail`). Fix: gate on `run["flowFlag"]`, refuse a mismatch with the current record, and put `flowFlag` and the withheld counts into the marker pins so a resume cannot change the asked set.
+
+**N4 (major, inferred from reading; needs the rehearsal). The gate build can overwrite the developer's `ccg` work area.** `refresh(system, …)` requires `system` equal to the clone's manifest system, which is `ccg`; `_default_deps.refresh` passes no `work_root`, `keys_root` or `audit_dir`, so bundles, unit-state files and the retention pass (`prune_unit`, `prune_orphans`, `sweep_stale_tmp` in `ccg/atrest.py`) run in the default work area for `ccg`, shared with the dev system. Fix: pass `work_root=<custodian>/gate-work-<key>`, a private `audit_dir`, and refuse a `--port` whose store already holds a `ccg_<system>` graph.
+
+**N5 (minor, verified). The ask key path can reject gated anchors the dry-run will catch.** `http_key(…, "consumer")` changes provider-form keys that carry `{?}`, `{#}` or a `?query` (`GET /x/{?}` → `GET /x/{`; `…/x?y=1` → `…/x`), so the exact read misses; the dry-run refuses (exit 5, nothing spent) and the cluster goes to dev. Safe, but it can shrink a stratum below 8: run the dry-run over dev anchors and count first.
+
+**N6 (minor, read).** No lock on the answers file or marker: two live `--resume` processes both pass the `started` check and append duplicates. The marker holds no hash of the probe map or the answers file. The eval manifest (scope) and the flow decision are read from the working tree, unpinned. `cache_len` is still a constant (m7).
+
+### Cross-fix interactions checked
+
+- Marker name: `first_run_marker`, `_marker_path` and `marker_state` all use `gate-run-<64-hex>.marker`; `gate_run` keys over all records (withheld included) and `score` keys over `--lists` before `withhold_strata`: equal.
+- `run.json` fields `score` requires (`preflight.label`, `recordCommit`, `listKey`, `snapshotId`, `probes`) are written by `run_gate`; a resume writes the same block.
+- Resume re-runs the dry-run, the cache check (≤ recorded+1), and the pin equality; it skips the build and reuses the store.
+- `snapshot_graph`'s forbidden ports apply to the one `--port` used for build, snapshot reader, engine client and `raw` cross-check; a rehearsal port 16430+ passes.
+- Import-closure pin covers the new modules; non-`.py` inputs are not pinned (N6).
+
+### Dress rehearsal on dev anchors: what it must cover that the offline tests cannot
+
+Run the whole `run` verb with the real default deps, dev records only (a dev list and a dev probe map under a throwaway custodian area), on your own store at 16430 or above:
+1. **Real ACL users and credentials.** Provision `ccg_build_<s>`, `ccg_verdict_<s>`, `ccg_engine_<s>`, `ccg_raw_<s>` on the throwaway with a private `CCG_CREDENTIALS_DIR`; the delegates' live tier uses the default user only. Check that the snapshot reader (plain `FalkorDB(host, port)`, default user) still works or is switched to a read-only role, and that `raw_query`'s `:Snapshot` cross-check passes.
+2. **A real `build_at_eval_commit` end to end:** clone at a pinned commit, refresh into the throwaway through the real `Target`, with a planted dev bundle in the default work area to prove N4 (it must survive).
+3. **The resolve dry-run on every dev anchor kind** (symbol by location, config with a masked segment, http contract incl. `{}`, `{?}` and a `?query`, an mcp contract, a unit probe): status counts per class, expecting `ok` for all in-graph anchors.
+4. **The real engine answer through `score`**: loader-written `ownedRegions` flat, a wiring hit with a masked key (N2), a possible-status hit, a group-member hit, a chain with `CALLS_NAME`, an engine-stamp `snapshotId` equal to the node.
+5. **A real `SIGKILL` of the `run` process** at ask k, at the run-file write and at the final marker write (N1), then `--resume`; and a `SIGTERM`.
+6. **A planted per-anchor fault** (an anchor whose ask raises) to prove the Q1 behaviour once built, and a planted C5 failure (a stale engine) to prove `stopped`.
+7. **Exit codes and streams** from the real process: 0/2/3/4/5/6, and a content scan of stdout and stderr for the dev gold, ids and paths.
+8. **Flow flag both ways** (N3) and the first-contact / `--allow-after-adaptation` labels in `run.json` and the report.
+9. **`score` afterwards** on the same custodian root: marker `asked`, listKey, live-id re-read, dirty-tree refusal, report with no ids.
+10. **Timing and memory**: wall time of the build, the dry-run and the asks at dev scale, against the query timeout of `raw_query`.
+
+### Proposed REVIEW.md lines (Pass 2)
+
+Target: root `REVIEW.md`, "Always check". Source: N1, N2, N3.
+- A state machine written to disk is checked for every state reachable by a kill between two of its writes: for each, a planted real `SIGKILL` and an assertion that the next command can finish or refuse with a way forward. A state from which no command leaves is a finding.
+- A comparison that normalises both sides is run with the producer's own normalised value on one side, not two raw strings; a test that masks both sides alike cannot see a producer that masks differently.
+- A value recorded in a run file that a later step recomputes (a flag, a stratum set, a decision record) is read from the run file, and a mismatch is refused.
