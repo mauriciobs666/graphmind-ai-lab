@@ -180,12 +180,12 @@ Index §5 is the design; `-p1-ml.md` question 2 fixes the numbers. Python only u
    estimate. If it is not entered, `flowAvailable` stays false, reported not closed with the figure. The report states the
    four-cell table (shipped/old, shipped/new, fixed/old, fixed/new; the old-join cells diagnostic) and the residual misses by
    cause (C8). `s28_core.py` and `extract.sc` are committed together before the pre-registration records (index core-freeze
-   rule), and the `ccg-p1-flow-python-v1` record names that commit and the scorer's `JOIN_P0_ONLY = False`; `JOIN_P0_ONLY` is a
+   rule), and the `ccg-p1-flow-python-v2` record names that commit and the scorer's `JOIN_P0_ONLY = False`; `JOIN_P0_ONLY` is a
    diagnostic switch and no gate or decision record uses it.
 3. **If entered, pre-register** the draw before any label: the seed
    `ccg-p1a-v1-flow|python|<corpusCommit>` (spurious sample `ccg-p1a-v1-spur|`), 30 methods, a frame of P0-ML §6.4's population at `0caf85e3` minus the 30 P0 methods and minus
    every held-out AC-5 flow anchor (the custodian applies that exclusion and reports the count only), the
-   `ccg-p1-flow-python-v1` record (and `-decision` after the run; `-p1-ml.md` §3.3, §8), tier-2 rule, the labeller brief
+   `ccg-p1-flow-python-v2` record (and `-v2-decision` after the run; `-p1-ml.md` §3.3, §8), tier-2 rule, the labeller brief
    (`cpg/spikes/frontend-fitness/flow-brief.template.md` with the patch notes) and the adjudication procedure (one fresh blind
    `qa-engineer` labeller, a Part F-style audit and `data-scientist` rulings; `-p1-ml.md` §3.3), committed before labelling; run
    `s28_run.py`/`s28_metrics.py` in both configurations offline with the scorer frozen at the commit the record names (index core-freeze rule, C5).
@@ -228,12 +228,12 @@ control). The code is exported with `git archive` at
 shim at function grain; **shell callers at file grain** (a PATH-shimmed `curl` records the parent script from
 `/proc/$PPID/cmdline`, and the item is the `<script>` symbol); `falkor-chat`'s suites' `TestClient` edges are
 reported as a class outside the denominator; a frame that cannot be attributed is counted `unattributed`. The
-`ccg-oracle-v1` record is committed before the capture. **Fence:** every FalkorDB the run
+`ccg-oracle-v4` record is committed before the capture. **Fence:** every FalkorDB the run
 needs is a **throwaway instance** (`infra/ccg-falkordb.sh --throwaway`) on a free port; the run never connects to
-the shared `falkordb-dev` (6379) or to `ccg-falkordb` (6390). The suites and scripts under test default to port 6379
+the shared `falkordb-dev` (6379), to `ccg-falkordb` (6390) or to `ccg-falkordb-tw-16390` (16390). The suites and scripts under test default to port 6379
 (`${FALKORDB_PORT:-6379}` in `falkor-chat/scripts/`), so the capture wrapper **exports `FALKORDB_HOST` and
 `FALKORDB_PORT` explicitly** and then asserts that the *effective* port equals the throwaway's own published port and
-is neither 6379 nor 6390, and that the target container carries the `ccg-falkordb=1` label. Test: with
+is none of 6379, 6390, 16390, that `CCG_ORACLE_RUN` (a per-run random owner token) is set, that exactly one running container publishes that port carrying the labels `ccg-falkordb=1`, `ccg-falkordb.throwaway=1` and `ccg-oracle.run=<token>`, and that every host binding of the port is 127.0.0.1 (`cpg/eval/tools/oracle_capture.py`). Test: with
 `FALKORDB_PORT` unset the wrapper refuses (the named mutant). **Gate:** `analyst`. **Needs:** 48, 02, `-ml`.
 
 ## P1-36 · noise and runtime-oracle tooling — `data-scientist`

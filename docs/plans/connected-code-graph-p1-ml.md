@@ -239,7 +239,7 @@ success ≥ 0.95. Reported beside it:
 A true flag flips the D2 row only through the decision record. Held-out `flow` is then gated only on
 items whose chain stays in flag-true units, and fewer than 8 such items means "present, not gated".
 
-**Records:** `ccg-p1-flow-python-v1`, before labelling, and `ccg-p1-flow-python-v1-decision`.
+**Records:** `ccg-p1-flow-python-v2` (successor of `-v1`), before labelling, and `ccg-p1-flow-python-v2-decision`.
 
 ### 3.4 Synthetic-cond transparency (a projection rule for P1-09)
 
@@ -736,7 +736,7 @@ the user's tree is untouched.
 
 **Fence and record.**
 - The fence is as P1-47 states.
-- **Record `ccg-oracle-v1`**: `EVAL_COMMIT`, the session script, instrumentation and shim sha256s,
+- **Record `ccg-oracle-v4`** (successor chain `-v1`..`-v3`): `EVAL_COMMIT`, the session script, instrumentation and shim sha256s,
   and the suite list. It is committed before the capture.
 
 ### 6.6 Flow-fallback labelling (decided)
@@ -799,8 +799,8 @@ Gate records go to `cpg/eval/preregistration.jsonl`. Decision records go to
 |---|---|---|---|
 | `ccg-p1-indexer-v1` | P1-15 | the offline run | §2.3 |
 | `ccg-p1-flow-fallback-v1` | P1-39 | the measurement | §3.5's walks and rule |
-| `ccg-p1-flow-python-v1` (+ `-decision`) | P1-34 step 3, the D2 row | labelling; the registry edit | §3.3, P0-ML §8.4 |
-| `ccg-oracle-v1` | P1-47 | the capture | §6.5 |
+| `ccg-p1-flow-python-v2` (+ `-decision`; supersedes `-v1`) | P1-34 step 3, the D2 row | labelling; the registry edit | §3.3, P0-ML §8.4 |
+| `ccg-oracle-v4` | P1-47 | the capture | §6.5 |
 | `ccg-prereg-ac24-v1` | P1-35 | the held-out AC-24 run | §4.3 |
 | `ccg-prereg-v1` / `ac5-gate-1` | P1-37 | the gate build (freeze) | EP §12.1, plus §6.1 |
 | `ccg-noise-ratify-v1` | the next gate's noise bars | that gate's record | §5.3 |
@@ -809,10 +809,10 @@ The P1-34 entry value is fixed in §3.1.
 
 ## 9. Stakeholder decisions and label custody
 
-No stakeholder question remains open.
+One stakeholder question is open: **S1**, which noise-reduction variant (kind-wide, key-scoped, both) carries the >=5x bar, decided before any variant reduction is seen and recorded in the next gate's pre-registration (`cpg/eval/decisions/ccg-noise-recall-rule-v1.json`). AC-24 was not met at P1 for the local model; the stakeholder accepted it and it is carried to P2.
 
-- **S36 spot-check (decided 2026-11-10: redo the existing sample).** The stakeholder redoes EP
-  §7.3's existing 40-item sample, with its escalation triggers, before the `ac5-gate-1` record.
+- **S36 spot-check (decided 2026-11-10: redo the existing sample; done).** The redo of EP
+  §7.3's existing 40-item sample, with its escalation triggers, was done by an AI `fable` reviewer on the stakeholder's instruction (39 correct, 1 key-error, 0 unsure; `docs/test-reports/connected-code-graph-p1-s36-redo-report.md`).
   - P0's check was done by an AI analyst, a disclosed deviation from S36. EP §12.1 separately
     requires the stakeholder to confirm every `key-error`.
   - The stakeholder is not a builder, so reading these items creates no contact.

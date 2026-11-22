@@ -96,7 +96,7 @@ the earlier gains `Extended by:`. It states **only** the changes:
   caller of it as a resolved `CALLS ←` hop, not only the call site the change entered by. Accepted and documented for
   P1 (a test pins it): no P1 acceptance criterion measures it, because every P1 language's
   `flowAvailable` is false (index §5, D2), so these rows are not followed in any measured unit, and flag-true units
-  exist only in fixtures. A flag that flips true by a decision record (`ccg-p1-flow-python-v1-decision`) first needs
+  exist only in fixtures. A flag that flips true by a decision record (`ccg-p1-flow-python-v2-decision`) first needs
   a call-string version of the row, a table change and a version bump, before that population is gated): in a flag-true unit items are then precise, no hop enters the `function` state, and a
   caller of a function whose return the change does not reach is no longer listed through it; each of the six slice walks
   is pinned as a named delta against the slice's 21-item set (`-p0-graph.md` §3.3): the items dropped and the items

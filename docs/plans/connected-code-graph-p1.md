@@ -261,7 +261,7 @@ every walk only the flow-dependent hops are `possible` (`-answer-spec2.md` §5).
 - **AC-5 `flow` stratum.** Gated at P1 only for a language whose flag is true after P1-34 (expected: none).
   Otherwise **reported not closed, flow-unavailable**; the held-out flow items stay unexposed and P1-37 runs flow
   diagnostics on dev items only. If gated, flow recall is reported with and without the 15 invalid KA-flow lines.
-- **AC-25 (closes at P1, proposal §4).** The planted fixtures assert what a symbol-level, call-level walk can list.
+- **AC-25 (closes at P1 for its data-flow half only; the control half stays open, `cpg/eval/decisions/ccg-p1-flow-python-v2-decision.json`: python flow is not available at P1, the V-both fallback ships; proposal §4).** The planted fixtures assert what a symbol-level, call-level walk can list.
   The **data-flow effect** (a changed return value used two calls away) is the callers' chain: the direct caller
   `confirmed`, a caller beyond it `possible`/`flow-unavailable`. The **control-dependency effect** (a changed condition guarding other code) is a
   `CONTROLLED_BY` reach from the condition to the guarded points inside the same function; a symbol-level,
@@ -422,8 +422,8 @@ files after the record makes the run "after adaptation" (the AC-5 result is lost
 `check-report` (the P1-32a verb) over the path set; a hit is triaged by the custodian and a contacted cluster moves to
 dev. (2) `tico` takes the 40-item redo (`-p1-ml.md` §9 Q-D) to the stakeholder; the custodian re-records and commits the
 held-out manifest if a held-out file changed. (3) `teco` commits each decision or pre-registration record before the act
-it governs: `ccg-p1-indexer-v1` (P1-15), `ccg-p1-flow-fallback-v1` (P1-39), `ccg-p1-flow-python-v1` (P1-34, if entered),
-`ccg-oracle-v1` (P1-47), `ccg-prereg-ac24-v1` (P1-35). `ccg-noise-ratify-v1` is `tico`'s requirements-log entry, which
+it governs: `ccg-p1-indexer-v1` (P1-15), `ccg-p1-flow-fallback-v1` (P1-39), `ccg-p1-flow-python-v2` (P1-34, if entered; it supersedes `-v1`),
+`ccg-oracle-v4` (P1-47; it supersedes `-v1`..`-v3`), `ccg-prereg-ac24-v1` (P1-35). `ccg-noise-ratify-v1` is `tico`'s requirements-log entry, which
 the next gate's record cites.
 
 ## 8. Test strategy

@@ -783,7 +783,7 @@ may still ask for the wider rule (a consumer key matching no provider while a ne
 semantic with false alarms and new floors); it is not built here.
 - **57d files (after 57c):** `fixtures/system1/fx-svc/deploy/compose.yaml`, `fixtures/system1/fx-svc/api/orders.py`, `tests/test_fixtures.py`
   (the `fx-svc` entries of `PINNED_SHAS`: all five commits and four branches change), `tests/test_fixture_binding_live.py` (the Link tier gains
-  LNK-42/43 in the all-built world: `confirmed`/`binding-confirmed`, `BOUND_BY` ord 0 the URL entry).
+  LNK-42/43 in the all-built world: `confirmed`/`binding-confirmed`, `BOUND_BY` ord 0 the Compose port launchFact, ord 1 the `build.context` mount).
 - **Steps:** (1) probe on the live fixture build first (stop rule: if the Link in a store with `svc-legacy` and `svc-tools` failed is not
   `possible`/`target-not-mapped` with `TO_UNIT`, stop and return to the architect; do not tune the linker); (2) the two edits, SHAs
   regenerated; (3) the pin green. `UNIT_FLOORS` and the unit counters do not move (a service is not a unit, no callable is added).
