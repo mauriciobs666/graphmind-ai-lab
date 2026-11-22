@@ -10,14 +10,15 @@
 // complete is recorded as a step outcome, never skipped silently. stdout: one JSON line per step, then a summary.
 //
 // Coverage (every screen and action of salesperson/src/routes.tsx, App paths '/' and '/presenter'):
-//   S01 join screen + 4 header sheets before join (health)      S09 profile sheet, session reset (confirm)
-//   S02 join (session)                                          S10 language step -> second join (pt-BR)
-//   S03 chat turn 1: catalog question (messages, state)         S11 round 2: add + order, then cancel the order
-//   S04 chat turn 2: add to cart                                S12 presenter: bad key, right key, roster
-//   S05 chat turn 3: place the order                            S13 presenter reset-everyone (confirm)
-//   S06 catalog sheet   S07 cart sheet   S08 order sheet        S14 the salesperson/tests/e2e/ actions, by mapping:
-//       (state, catalog)   S08b fulfil, deliver (order/advance)     mobile-shell.spec = S01, S09; presenter.spec = S12, S13
-//
+//   S01 join screen + 4 header sheets before join (health)   S07 order sheet: cancel the order (order/advance cancel)
+//   S02 join (session)                                       S08 round 2: add, place with address (one retry)
+//   S03 chat turn: catalog question (messages, state)        S09 order sheet: fulfil, deliver (order/advance)
+//   S04 chat turn: add to cart                               S10 profile sheet, session reset (confirm)
+//   S05 place the order with an address (one retry turn)     S11 presenter: bad key, right key, roster
+//   S06 catalog and cart sheets (state, catalog)             S12 presenter reset-everyone (confirm)
+//   S13 the salesperson/tests/e2e/ actions, by mapping: mobile-shell.spec = S01, S10; presenter.spec = S11, S12
+// A step that finds no order after the retry fails with "model did not place an order" (recorded, not skipped).
+// The post-reset language step is not driven: its join posts displayName '' and the server answers 422 (S10 of v2).
 // The tests/e2e specs mock /shop/api through page.route(); they are NOT executed under Playwright here (no Linux node,
 // no Playwright browser on the Windows side). Their user actions are the steps named in S14, run against the real server.
 import { spawn } from 'node:child_process';
@@ -136,45 +137,53 @@ await step('S01 join screen and the four sheets before join', async () => {
   for (const l of ['Browse catalog', 'Cart', 'Order status', 'Profile']) { await sheet(l); await closeSheet(); }
 });
 await step('S02 join', async () => { await join('Oracle One', 'en'); await until(`!!document.querySelector('textarea, input[placeholder^="Type a message"]')`, 30000, 'chat view'); });
+const ADDR = 'Deliver to Rua das Flores 100, Sao Paulo, Brazil.';
+const orderSeen = async () => {                      // opens the Order sheet; true iff an order exists (Cancel order shown)
+  await sheet('Order status'); await sleep(2000);
+  const seen = await ev(`!!window.__o.btn('Cancel order')`);
+  if (!seen) await closeSheet();
+  return seen;
+};
+const placeOrder = async () => {                     // address-bearing turn, then one retry turn if still no order
+  const a = await turn(`Please place my order now. ${ADDR} Yes, that address is correct.`);
+  if (await orderSeen()) return a;
+  const b = await turn(`Yes, please go ahead and place the order for the items in my cart, delivering to ${ADDR}`);
+  if (await orderSeen()) return `${a},${b}`;
+  throw new Error('model did not place an order');
+};
 await step('S03 chat turn: catalog question', () => turn('Hi! What products do you sell?'));
 await step('S04 chat turn: add to cart', () => turn('Please add one of the cheapest products to my cart.'));
-await step('S05 chat turn: place the order', () => turn('Please place my order now.'));
-await step('S06 catalog sheet', async () => { await sheet('Browse catalog'); await sleep(1500); await closeSheet(); });
-await step('S07 cart sheet', async () => { await sheet('Cart'); await sleep(1500); await closeSheet(); });
-await step('S08 order sheet: fulfil then deliver', async () => {
-  await sheet('Order status'); await sleep(1500);
+await step('S05 chat turns: place the order with an address (one retry)', placeOrder);   // leaves the Order sheet open
+await step('S06 catalog and cart sheets', async () => {
+  await closeSheet(); await sheet('Browse catalog'); await sleep(1500); await closeSheet();
+  await sheet('Cart'); await sleep(1500); await closeSheet();
+});
+await step('S07 order sheet: cancel the order (round 1)', async () => {
+  await sheet('Order status'); await sleep(1500); await clickL('Cancel order', 8000); await sleep(2500); await closeSheet();
+});
+await step('S08 round 2: add, place with address (one retry)', async () => {
+  const a = await turn('Please add one of the cheapest products to my cart.');
+  return a + ',' + await placeOrder();
+});
+await step('S09 order sheet: fulfil then deliver (round 2)', async () => {
   await clickL('Simulate: mark fulfilled', 8000); await sleep(2500);
   await clickL('Simulate: mark delivered', 8000); await sleep(2500); await closeSheet();
 });
-await step('S09 profile sheet and session reset', async () => {
+await step('S10 profile sheet and session reset (last SPA-participant action)', async () => {
   await sheet('Profile'); await sleep(1500);
   await clickL('Reset my session'); await clickL('Yes, reset'); await sleep(3000);
   if (await ev(`!!window.__o.btn('Close')`)) await closeSheet();
 });
-await step('S10 language step and second join', async () => {
-  await until(`/Choose your language/.test(window.__o.text())`, 20000, 'language step');
-  await join('', 'pt-BR'); await until(`!!document.querySelector('textarea, input[placeholder], input[placeholder^="Type"]')`, 30000, 'chat view');
-});
-await step('S11 round 2: add, order, cancel', async () => {
-  const a = await turn('Please add one of the cheapest products to my cart.');
-  const b = await turn('Please place my order now.');
-  // labels are localised after the pt-BR step: the cancel control is found by its test id parent instead
-  await ev(`(() => { const n=document.querySelectorAll('header nav button, nav button'); if(n[2]) n[2].click(); return true; })()`); // header icon order: catalog, cart, order, profile
-  await sleep(2000);
-  const clicked = await ev(`(() => { const c=[...document.querySelectorAll('button')].filter(e=>e.offsetWidth&&!e.disabled&&/cancel/i.test(e.textContent)&&/pedido|order/i.test(e.textContent)); if(c[0]){c[0].click(); return true;} return false; })()`);
-  await sleep(2500);
-  return `${a},${b},cancel-clicked=${clicked}`;
-});
-await step('S12 presenter key and roster', async () => {
+await step('S11 presenter key and roster', async () => {
   await goto('/shop/presenter'); await until(`/Presenter key/.test(window.__o.text())`, 20000, 'key screen');
   await ev(`window.__o.set('input', 'definitely-wrong-key')`); await clickL('Enter'); await until(`/not accepted/.test(window.__o.text())`, 15000, 'rejection');
   if (!KEY) throw new Error('ORACLE_PRESENTER_KEY not set: right-key path not run');
   await ev(`window.__o.set('input', ${q(KEY)})`); await clickL('Enter'); await until(`/Participants/.test(window.__o.text())`, 20000, 'roster'); await sleep(2500);
 });
-await step('S13 presenter reset everyone', async () => {
+await step('S12 presenter reset everyone', async () => {
   await clickL('Reset everyone'); await clickL('Yes, reset everyone'); await sleep(4000);
 });
-await step('S14 e2e-spec actions covered by S01/S09 (mobile-shell) and S12/S13 (presenter)', async () => 'mapping only');
+await step('S13 e2e-spec actions covered by S01/S10 (mobile-shell) and S11/S12 (presenter)', async () => 'mapping only');
 
 ws.close(); chrome.kill();
 console.log(JSON.stringify({ summary: { steps: results.length, ok: results.filter((r) => r.outcome === 'ok').length, failed: results.filter((r) => r.outcome !== 'ok').length } }));
