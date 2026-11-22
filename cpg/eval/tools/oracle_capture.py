@@ -9,8 +9,10 @@
     oracle_capture.py summary --edges O                counts only
 
 Fence (P1-47): FALKORDB_HOST and FALKORDB_PORT must be EXPLICIT (unset refuses: the named mutant); the effective
-host is loopback; the port is neither 6379 (falkordb-dev) nor 6390 (ccg-falkordb); and a running container
-publishes that port carrying the labels ccg-falkordb=1 and ccg-falkordb.throwaway=1.
+host is loopback; the port is none of 6379 (falkordb-dev), 6390 (ccg-falkordb), 16390 (ccg-falkordb-tw-16390);
+CCG_ORACLE_RUN (the per-run owner token the runner generates) is set; and exactly one running container publishes
+that port carrying the labels ccg-falkordb=1, ccg-falkordb.throwaway=1 AND ccg-oracle.run=<CCG_ORACLE_RUN>, with
+every host binding of the port on 127.0.0.1 (a foreign container with only the two generic labels is refused).
 Exit: 0 ok, 2 usage, 3 fence refused, 4 bad input.
 """
 from __future__ import annotations
@@ -26,7 +28,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SHIMS = HERE / "oracle_shims"
 REPO = HERE.parents[2]
-FORBIDDEN_PORTS = (6379, 6390)
+FORBIDDEN_PORTS = (6379, 6390, 16390)
+RUN_LABEL = "ccg-oracle.run"
+RUN_ENV = "CCG_ORACLE_RUN"
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
 
@@ -34,18 +38,32 @@ class FenceRefused(Exception):
     pass
 
 
-def _docker_labelled(port: int) -> list[str]:
-    out = subprocess.run(
+def _host_ips(ports_field: str, port: int) -> list[str]:
+    """Host IPs publishing ``port`` in a ``docker ps`` Ports column (``127.0.0.1:16400->6379/tcp, [::]:16400->...``)."""
+    ips = []
+    for part in ports_field.split(", "):
+        left, arrow, _ = part.partition("->")
+        ip, _, hp = left.rpartition(":")
+        if arrow and hp.split("-")[0] == str(port):
+            ips.append(ip.strip("[]"))
+    return ips
+
+
+def _docker_labelled(port: int, run_id: str, run=subprocess.run) -> list[tuple[str, list[str]]]:
+    """[(name, host IPs publishing ``port``)] of running containers carrying all three labels."""
+    out = run(
         ["docker", "ps", "--filter", "label=ccg-falkordb=1", "--filter", "label=ccg-falkordb.throwaway=1",
-         "--filter", f"publish={port}", "--format", "{{.Names}}"],
+         "--filter", f"label={RUN_LABEL}={run_id}", "--filter", f"publish={port}",
+         "--format", "{{.Names}}\t{{.Ports}}"],
         capture_output=True, text=True, timeout=30)
     if out.returncode != 0:
         raise FenceRefused(f"docker lookup failed: {out.stderr.strip()[:200]}")
-    return [n for n in out.stdout.split() if n]
+    rows = [ln.split("\t", 1) for ln in out.stdout.splitlines() if ln.strip()]
+    return [(r[0], _host_ips(r[1] if len(r) > 1 else "", port)) for r in rows]
 
 
 def check_fence(env=None, containers=_docker_labelled) -> tuple[str, int, str]:
-    """Return (host, port, container) or raise FenceRefused. ``containers(port)`` is injectable for tests."""
+    """Return (host, port, container) or raise FenceRefused. ``containers(port, run_id)`` is injectable for tests."""
     env = os.environ if env is None else env
     host, port_s = env.get("FALKORDB_HOST"), env.get("FALKORDB_PORT")
     if not host or not port_s:
@@ -59,11 +77,18 @@ def check_fence(env=None, containers=_docker_labelled) -> tuple[str, int, str]:
         raise FenceRefused(f"FALKORDB_HOST {host!r} is not loopback")
     if port in FORBIDDEN_PORTS:
         raise FenceRefused(f"FALKORDB_PORT {port} is a shared instance")
-    names = containers(port)
-    if len(names) != 1:
+    run_id = env.get(RUN_ENV)
+    if not run_id:
+        raise FenceRefused(f"{RUN_ENV} (the per-run owner label value) must be set")
+    found = containers(port, run_id)
+    if len(found) != 1:
         raise FenceRefused(f"expected exactly one throwaway container (labels ccg-falkordb=1, "
-                           f"ccg-falkordb.throwaway=1) publishing {port}, found {names}")
-    return host, port, names[0]
+                           f"ccg-falkordb.throwaway=1, {RUN_LABEL}=<run>) publishing {port}, "
+                           f"found {[n for n, _ in found]}")
+    name, ips = found[0]
+    if not ips or any(ip != "127.0.0.1" for ip in ips):
+        raise FenceRefused(f"{name} publishes {port} on {ips}, not only 127.0.0.1")
+    return host, port, name
 
 
 def sha256(p: Path) -> str:
