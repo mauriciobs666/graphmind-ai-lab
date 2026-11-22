@@ -147,3 +147,49 @@ Target: root `REVIEW.md`, `## Always check`, after the live-spec absolute-word b
    P1-36? I recommend file grain.
 2. M3: run `load_demo.py stub` and `web/app.js` now (one more phase), or list them as unrun in the P1-36 report? I recommend listing;
    neither changes the denominator's honesty if stated.
+
+## Pass 2 (2026-11-22): M1 fence fix, commits `56b5e485` (code, tests) and `864a659a` (record `ccg-oracle-v4`)
+
+**Verdict: approve with suggestions** (no blocker; M1 is closed). CPG: considered, not relevant: a 280-line standalone script and its tests, read whole.
+Scope: `cpg/eval/tools/oracle_capture.py`, `oracle_runner.py`, `cpg/tests/test_oracle_capture.py`, record v4. Root `REVIEW.md` has no fence-guard line
+yet (the Pass 1 proposal is still held for close); I applied that rule as proposed. No docker, container or live capture was touched; fakes only,
+on a copy in the session scratchpad (the repo tree is unchanged, `git status` clean).
+
+**M1: fixed.** Pass 1 asked for 16390 forbidden, a per-run owner label, a loopback-only bind, and a case per named untouchable.
+Evidence (my own plants through the real CLI `oracle_capture.py fence`, with a fake `docker` on PATH that honours the `label=` and `publish=`
+filters; 29 cases):
+- Ports 6379, 6390, 16390 (even with a container carrying all three labels on 16390) refuse with exit 3, including `06379` and `"6379 "`.
+- Foreign container with exactly `ccg-falkordb=1`, `ccg-falkordb.throwaway=1` refuses; same plus guessed `ccg-oracle.run=run1` refuses (the runner's token is
+  `secrets.token_hex(8)`; `run1` is only the run directory name, never a label). The container names `ccg-falkordb`, `falkordb-dev`,
+  `ccg-falkordb-tw-16390` are refused by port and by the missing token, not by name (a container so named on 16400 with this run's token passes; see m3).
+- Binds `0.0.0.0`, `[::]`, `[::1]`, and `127.0.0.1` plus `[::]` refuse; a port range publish (`16400-16401->...`) refuses (fails closed). Host `10.0.0.5`,
+  `127.0.0.2`, `0.0.0.0` refuse; `localhost` and `::1` as `FALKORDB_HOST` are admitted (m2).
+- Ports 16399, 16400, 16599, 16600 and 0 are all admitted when a container carries the token (no range is enforced; the token is the guard, which is sound).
+- `CCG_ORACLE_RUN` unset or empty refuses; `--external` through `oracle_runner.main` with the token unset refuses with exit 3, and with port 6379 refuses.
+- `check_fence` before every phase: planted refusals at each of the 6 call sites (entry check plus the five phases) stop the run with rc 3 before that phase starts.
+- Mutants on the copy against `test_oracle_capture.py`: 17 of 21 killed (16390, 6379, 6390 each dropped, run filter removed or wrong, token check removed or weakened to
+  `is None`, `any`->`all`, `not ips` dropped, `!=1`, loopback check off, forbidden check off, docker rc ignored, `cmd_run` fence removed, wrong run id passed, run id literal).
+- Runner: `docker_run_cmd` carries both generic labels, the run label and `-p 127.0.0.1:<port>:6379`; `verify_started` refuses a missing or wrong token, `0.0.0.0`, two binds, no
+  binds, a wrong host port; `remove_throwaway` never issues `docker rm` for `ccg-falkordb-tw-16390`, `ccg-falkordb`, `falkordb-dev`.
+- The `publish=<port>` filter matching the host port is carried over from v3, whose run2 passed it on 16400; I could not re-prove that without real docker.
+
+**Record `ccg-oracle-v4`: sound.** All three tool hashes, both shim hashes, the session script and both e2e spec hashes equal the committed files (recomputed). Versus v3
+only `id`, `fence`, `supersedes` (`ccg-oracle-v3`), `supersedesReason` and `tools` differ; `evalCommit` is identical. `git diff 2152e5b7 HEAD` on the file shows only added
+lines (v3 untouched). Chain v1->v2->v3->v4 consistent. Unfiltered `git grep` for `ccg-oracle-v3` and the three old v3 tool hashes outside the record: no hit (only the record's own
+`supersedes` and the ledger prose). Tests: `.venv/bin/python -m pytest tests/test_oracle_capture.py tests/test_oracle.py` from `cpg/`: **117 passed, exit 0**.
+
+**New findings**
+- **m1 (minor) Survivors and an untested runner.** Not killed: widening `LOOPBACK` with `0.0.0.0` or `startswith("127")` (the tests use only `10.0.0.5`); dropping either generic
+  label filter (the `_ps` fake would admit a container carrying only the run label; harmless in practice since the token is the guard, but the docstring and record claim all
+  three labels); dropping the `publish`/host-port comparison (the fake does not model `publish`). `oracle_runner.py` has no test at all: the per-phase `check_fence`,
+  `verify_started`, `docker_run_cmd`, and the 16390 exclusion in `remove_throwaway` hold today (my plants above) but nothing pins them. Fix: add `0.0.0.0` and `127.0.0.2` to
+  `test_fence_refuses`; a fake that models `publish`; a ~20-line runner test with an injected `check_fence` counting calls per phase (as in my plant, red when the in-loop call is removed).
+  Needs a v5 record only if the test file's pinned hash matters before a capture; the next capture needs it anyway.
+- **m2 (nit) `FALKORDB_HOST` `localhost`/`::1` admitted** while the bind is proven only for 127.0.0.1; `localhost` resolving to `::1` would dial nothing (fail-closed). Prefer
+  `127.0.0.1` only, or document.
+- **m3 (nit) Stale prose.** `oracle_runner.py` docstring line 2 still says record `ccg-oracle-v1`; v4 `runner.throwaway` says "`--external` keeps the v1 behaviour" (it now needs
+  `CCG_ORACLE_RUN`); `docs/plans/connected-code-graph-p1-gates.md:232-236` and `docs/test-plans/connected-code-graph-p1.md:325` still describe the pre-fix fence (neither 6379 nor 6390,
+  one label). The fence is not name-based; say so. Doc owners at feature close.
+
+**Held REVIEW.md line** (Pass 1) stays proposed for `teco` to apply at close; Pass 2 adds: *a guard test that stubs the system call (docker) must include one case that runs the real
+parser over faithful output and one mutant per condition; a condition no test can turn red is reported.*
