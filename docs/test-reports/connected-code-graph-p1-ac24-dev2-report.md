@@ -48,3 +48,20 @@ Custody root: `~/.local/share/ccg-eval/cf7b2042cce7/` (roles `QW-dev2`, `AN1-dev
 - **Selection result: SHORTFALL, file not written.** (1) `contract-point/en` has 2 survivors, 3 needed. (2) `two-use-cases` has **0** final-ambiguous items: all 6 candidates of that kind (3 en, 3 pt, across both rounds) did not survive the §10.3 join (annotators judged them unambiguous or disagreed), before any custodian filter. Survivors of kind: unknown-name 1, no-anchor 1, several-symbols 1. (3) With the information-only waiver of the held-out anchor-probe filter, (1) disappears (contract-point/en 6) but (2) remains. Per protocol (control 5) no second top-up and no shape change; the decision is the caller's.
 - `cpg/eval/dev/ac24-r2.jsonl`: **not created**. No repo file other than this report was edited.
 - `heldout-manifest.json` sha256 after: `ce2bb8b1c1c7941ede76e742b03ce3a0e7777128cfe376303ae07eccfc6f800d` (identical to before). `s47_scripted_steps.py`, `split_manifest.py` not run; no model other than the writer/annotator sessions was run.
+
+## 5. Selection redone under the item-duplication reading (no new session)
+
+Per `docs/reviews/connected-code-graph-p1-interpreter-design-fault-ml.md` Pass 3: the held-out/reserve anchor-probe drop is replaced by full-gold equality (use case, direction, anchor set, scope), compared in-process against the held-out AC-24 items (the only held-out file with item-level gold); the 6-word text shingle check (through `match_keys.py check-report`) and the dev1 filters are unchanged. Same 74 candidates, same seed. Drops (an item may hit several):
+
+| cell | dev1 anchor-set | dev1 text | held-out text shingle | held-out full gold | pool duplicate | after join | survivors |
+|---|---|---|---|---|---|---|---|
+| code-location/en | 0 | 0 | 0 | 3 | 0 | 6 | 3 |
+| code-location/pt | 2 | 0 | 0 | 4 | 0 | 18 | 12 |
+| contract-point/en | 4 | 0 | 7 | 7 | 0 | 17 | 2 |
+| contract-point/pt | 4 | 1 | 7 | 5 | 1 | 18 | 6 |
+| ambiguous/en | 2 | 0 | 0 | 1 | 0 | 4 | 1 |
+| ambiguous/pt | 0 | 0 | 1 | 0 | 0 | 4 | 3 |
+
+Depends-on among survivors: code-location 6, contract-point 5. Ambiguous survivors by kind: unknown-name 1, no-anchor 1, several-symbols 2, two-use-cases 0.
+
+**Result: still short.** `contract-point/en` has 2 survivors, 3 needed (the cell is short under the item-duplication rule too; its after-join count is 17, 15 of them removed by dev1 anchor-set 4, text shingle 7 and full gold 7, with overlap). Per Pass 3, no file written. `cpg/eval/dev/ac24-r2.jsonl` does not exist. `heldout-manifest.json` sha256 before and after: `ce2bb8b1c1c7941ede76e742b03ce3a0e7777128cfe376303ae07eccfc6f800d`.
