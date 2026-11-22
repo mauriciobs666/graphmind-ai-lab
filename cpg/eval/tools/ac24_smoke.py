@@ -55,6 +55,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
@@ -319,14 +320,25 @@ class CountingBroker:
         return decision, resp
 
 
+def draft_record(draft: Any) -> dict[str, Any] | None:
+    """The draft as the interpreter returned it, in the reply's own shape (``useCase``, ``direction``, ``anchors`` groups of ``{text, kindHint}`` spans, ``scope``,
+    ``readings``); None for an unusable reply. Dev items only: it carries verbatim question text, so it is never written for a held-out run."""
+    if draft is None:
+        return None
+    return {"useCase": draft.use_case, "direction": draft.direction,
+            "anchors": [{"spans": [{"text": sp.text, "kindHint": sp.kind_hint} for sp in g.spans]} for g in draft.anchors],
+            "scope": draft.scope, "readings": [{"useCase": r.use_case, "direction": r.direction} for r in draft.readings]}
+
+
 def recording_interpreter(log: RequestLog, cache: Any = None):
-    """An ``Interpreter`` that records, per ``interpret`` call, whether the reply was unusable (``draft is None``) and the call's provenance, into ``log.events``."""
+    """An ``Interpreter`` that records, per ``interpret`` call, whether the reply was unusable (``draft is None``), the draft itself (:func:`draft_record`) and the
+    call's provenance, into ``log.events``."""
     from ccg.front import interpret
 
     class Recording(interpret.Interpreter):
         def interpret(self, question, snapshot_id, run, *, bypass=False):
             result = super().interpret(question, snapshot_id, run, bypass=bypass)
-            log.events.append({"draftNone": result.draft is None, "provenance": dict(result.provenance)})
+            log.events.append({"draftNone": result.draft is None, "draft": draft_record(result.draft), "provenance": dict(result.provenance)})
             return result
     return Recording(cache)
 
@@ -398,11 +410,13 @@ def check_sampler_effective(sampler_observer: Callable[[], Mapping[str, Any]] | 
 def run_items(items: Sequence[Mapping[str, Any]], client: Any, *, repeats: int, log: RequestLog, cache_len: Callable[[], int],
               expected_interpreter: Mapping[str, Any] | None = None, expected_sampler_request: Mapping[str, Any] | None = None,
               sampler_observer: Callable[[], Mapping[str, Any]] | None = None, expected_sampler_effective: Mapping[str, Any] | None = None,
-              cap_floor: int = CAP_FLOOR) -> dict[str, Any]:
+              cap_floor: int = CAP_FLOOR, record_drafts: bool = False) -> dict[str, Any]:
     """Drive ``client.ask(question=, cache_bypass=)`` (a ``clients.common.Client`` over the real ``Front``) over ``items`` in qid order, item by item.
 
     Repeat 1 is not bypassed (the cache must be empty at the start of the run and ``cacheHit`` false); repeats 2..``repeats`` pass ``cache_bypass=True``.
-    Returns the run record: per-item observations and the stop reason, if any. Raises :class:`HarnessError` for any failed assertion about the run itself."""
+    Returns the run record: per-item observations and the stop reason, if any. Raises :class:`HarnessError` for any failed assertion about the run itself.
+    ``record_drafts`` (dev only; the held-out run never sets it: a draft is verbatim question text) stores the observed draft on each repeat as ``draft`` (a field
+    no hash and no verdict reads)."""
     from clients.common import ClientError, ModelUnavailable, NotBuilt
 
     if cache_len() != 0:
@@ -465,7 +479,7 @@ def run_items(items: Sequence[Mapping[str, Any]], client: Any, *, repeats: int, 
                         raise HarnessError("a completion request's sampler parameters differ from the pre-registered request body")
             unusable = bool(ev and ev["draftNone"])
             verdict = score_item(item, doc, cap_floor, unusable=unusable)
-            obs.update(verdict=verdict, understood=verdict["understood"])
+            obs.update(verdict=verdict, understood=verdict["understood"], **({"draft": ev.get("draft") if ev else None} if record_drafts else {}))
             if prov is not None and prov["cacheHit"]:
                 if r == 1:
                     obs["understood"] = verdict["understood"] = False
@@ -624,9 +638,39 @@ def tree_differences(rec: Mapping[str, Any], state: Mapping[str, Any]) -> list[s
 
 # --------------------------------------------------------------------------------------------------------------- the record
 
+ATTEMPT_KEYS = {"model", "counts", "unusable", "resultSha256"}
+
+
+def _is_count(v: Any) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+
+
+def validate_dev_attempts(obj: Any) -> list[dict[str, Any]]:
+    """``devAttempts`` (``docs/plans/connected-code-graph-p1-interpreter-model-ml.md``: every try, passed or failed): a list of ``{model, counts, unusable,
+    resultSha256}``, exactly those keys. ``model`` a non-empty string, ``counts`` a non-empty object of non-negative integers, ``unusable`` a non-negative integer,
+    ``resultSha256`` 64 lowercase hex. Anything else is a :class:`Refusal`; the entries are returned as given."""
+    if not isinstance(obj, list) or not obj:
+        raise Refusal("dev attempts: the file holds a non-empty JSON list of attempts")
+    for i, a in enumerate(obj):
+        why = None
+        if not isinstance(a, dict) or set(a) != ATTEMPT_KEYS:
+            why = f"keys are exactly {sorted(ATTEMPT_KEYS)}"
+        elif not (isinstance(a["model"], str) and a["model"]):
+            why = "model is a non-empty string"
+        elif not (isinstance(a["counts"], dict) and a["counts"] and all(_is_count(v) for v in a["counts"].values())):
+            why = "counts is a non-empty object of non-negative integers"
+        elif not _is_count(a["unusable"]):
+            why = "unusable is a non-negative integer"
+        elif not (isinstance(a["resultSha256"], str) and re.fullmatch(r"[0-9a-f]{64}", a["resultSha256"])):
+            why = "resultSha256 is 64 lowercase hex characters"
+        if why:
+            raise Refusal(f"dev attempts: attempt {i} is malformed ({why})")
+    return obj
+
+
 def build_prereg_record(dev_result: Mapping[str, Any], *, eval_commit: str, core_commit: str, core_tree_hash: str, pack_set_hash: str, harness_hash: str,
                         heldout_list_sha256: str, sampler_effective: Mapping[str, Any] | None = None, lm_studio_version: str | None = None,
-                        recorded_by: str = "teco") -> dict[str, Any]:
+                        recorded_by: str = "teco", dev_attempts: Sequence[Mapping[str, Any]] | None = None) -> dict[str, Any]:
     """The ``ccg-prereg-ac24-v1`` record (EP §12.3; ``-p1-ml.md`` §4.3) from the final dev run's result. ``interpreter`` is the provenance that run observed;
     ``devExtras`` its ambiguous items' ``|options|`` and extras; ``canary`` its canary digest. **Returns the record; never appends it** (``teco`` appends)."""
     interp = dev_result.get("interpreterObserved")
@@ -635,7 +679,7 @@ def build_prereg_record(dev_result: Mapping[str, Any], *, eval_commit: str, core
     if not dev_result.get("canary"):
         raise Refusal("the dev run has no canary digest")
     extras = dev_result["summary"]["ambiguousExtras"]
-    return {
+    rec = {
         "schema": PREREG_SCHEMA, "evalCommit": eval_commit, "coreCommit": core_commit, "coreTreeHash": core_tree_hash, "packSetHash": pack_set_hash,
         "harnessHash": harness_hash,
         "interpreter": {k: interp[k] for k in INTERPRETER_KEYS},
@@ -651,6 +695,9 @@ def build_prereg_record(dev_result: Mapping[str, Any], *, eval_commit: str, core
         "directionCues": DIRECTION_CUES, "unbuiltReadingsRule": UNBUILT_READINGS_RULE, "resolverRules": list(RESOLVER_RULES),
         "recordedBy": recorded_by,
     }
+    if dev_attempts is not None:
+        rec["devAttempts"] = [dict(a) for a in validate_dev_attempts(list(dev_attempts))]
+    return rec
 
 
 # --------------------------------------------------------------------------------------------------------------- guards
@@ -776,7 +823,7 @@ def run_dev(dev_items: Path, rig: Rig, out: Path, *, prereg_interpreter: Mapping
     stamp = dict(tree_state(None))
     canary = run_canary(rig.client, rig.log)
     run = run_items(items, rig.client, repeats=1, log=rig.log, cache_len=rig.cache_len, expected_interpreter=prereg_interpreter,
-                    sampler_observer=rig.sampler_observer)
+                    sampler_observer=rig.sampler_observer, record_drafts=True)
     if dict(tree_state(None)) != stamp:
         raise HarnessError("the tree (hashes, HEAD or cleanliness) changed during the dev run: no stamp can describe it")
     s = summarize(run, items, mode="dev")
@@ -908,6 +955,7 @@ def main(argv: Sequence[str] | None = None, *, rig_factory: Callable[[str], Rig]
         p.add_argument(f"--{k}", required=True)
     p.add_argument("--heldout-list-sha256")
     p.add_argument("--out", type=Path)
+    p.add_argument("--dev-attempts", type=Path, help="JSON file: a list of {model, counts, unusable, resultSha256}, copied into the record as devAttempts")
     try:
         a = ap.parse_args(argv)
     except SystemExit as e:
@@ -941,6 +989,12 @@ def main(argv: Sequence[str] | None = None, *, rig_factory: Callable[[str], Rig]
         if a.out and (a.out.exists() or a.out.name == "preregistration.jsonl"):
             raise Refusal("--out exists or names preregistration.jsonl: the record is never written over a file (teco appends it)")
         dev = _load_json(a.dev_result, "the dev result")
+        attempts = None
+        if a.dev_attempts is not None:
+            try:
+                attempts = json.loads(a.dev_attempts.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise Refusal(f"dev attempts: {a.dev_attempts} is unreadable or not JSON ({type(exc).__name__})") from None
         stamp = dev.get("treeStamp")
         if not isinstance(stamp, dict) or not all(isinstance(stamp.get(k), str) for k in ("coreTreeHash", "packSetHash", "harnessHash")):
             raise Refusal("the dev result carries no tree stamp: run the dev verb again from a clean committed tree")
@@ -954,7 +1008,7 @@ def main(argv: Sequence[str] | None = None, *, rig_factory: Callable[[str], Rig]
             raise Refusal("the record is not built from the tree the dev run ran on: " + "; ".join(problems))
         list_sha = a.heldout_list_sha256 or _file_sha(custodian_root(home=home) / "heldout" / "ac24.jsonl")
         rec = build_prereg_record(dev, eval_commit=a.eval_commit, core_commit=a.core_commit, core_tree_hash=stamp["coreTreeHash"],
-                                  pack_set_hash=stamp["packSetHash"], harness_hash=stamp["harnessHash"], heldout_list_sha256=list_sha)
+                                  pack_set_hash=stamp["packSetHash"], harness_hash=stamp["harnessHash"], heldout_list_sha256=list_sha, dev_attempts=attempts)
         line = canonical_json(rec)
         if a.out:
             a.out.write_text(line + "\n", encoding="utf-8")

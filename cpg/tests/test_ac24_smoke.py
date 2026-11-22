@@ -1396,3 +1396,108 @@ def test_cli_prereg_record_out_never_overwrites_a_file_or_the_registry(tmp_path,
     ok = tmp_path / "new.json"
     assert S.main(record_args(dev, **{"--out": str(ok)}), tree_state=lambda c: dict(TREE)) == 0 and json.loads(ok.read_text())["schema"] == "ccg-prereg-ac24-v1"
     capsys.readouterr()
+
+
+# --------------------------------------------------------------------------------------------------------------- the draft per item and devAttempts (P1-35)
+
+def test_the_recording_interpreter_records_the_draft_in_the_reply_shape_and_none_for_an_unusable_reply():
+    g, _ = world()
+    reply = draft_reply("depends-on", (("m.py", "file"), ("A", "symbol")), scope="in the shop", readings=(("impact", "impact"),))
+    rig, _, _ = rig_over(g, [reply])
+    rig.client.ask(question=QS[0])
+    assert rig.log.events[0]["draft"] == reply
+    rig2, _, _ = rig_over(g, ['{"useCase": "impact"}'])
+    rig2.client.ask(question=QS[0])
+    assert rig2.log.events[0]["draftNone"] is True and rig2.log.events[0]["draft"] is None
+
+
+def test_the_run_records_the_observed_draft_on_each_repeat_and_null_when_none_was_observed():
+    stub_draft = draft_reply()
+
+    def handler(question, bypass, n, log):
+        get(log)
+        post(log)
+        log.events[-1]["draft"] = stub_draft
+        return doc(request=req(), bypass=bypass)
+    run, _ = drive([unamb()], handler, repeats=1, record_drafts=True)
+    assert run["items"][0]["repeats"][0]["draft"] == stub_draft
+    run2, _ = drive([unamb()], good, repeats=1, record_drafts=True)                                             # an event with no draft key: nothing observed, recorded as null
+    assert run2["items"][0]["repeats"][0]["draft"] is None
+
+
+def test_the_draft_field_changes_no_verdict_and_no_stamped_hash_and_is_not_in_the_record(tmp_path):
+    marker = draft_reply((("ZZ-DRAFT-SPAN", "symbol"),))
+
+    def handler(question, bypass, n, log):
+        get(log)
+        post(log)
+        log.events[-1]["draft"] = marker
+        return doc(request=req(), bypass=bypass)
+    plain, _ = drive([unamb()], good, repeats=1)
+    with_draft, _ = drive([unamb()], handler, repeats=1, record_drafts=True)
+    strip = lambda r: [{k: v for k, v in x.items() if k != "draft"} for x in r["items"][0]["repeats"]]  # noqa: E731
+    assert strip(plain) == strip(with_draft)
+    res = dev_result()
+    res["items"][0]["repeats"][0]["draft"] = marker
+    assert "ZZ-DRAFT-SPAN" not in json.dumps(build(res)) and S.summarize(res, DEV_ITEMS, mode="dev") == res["summary"]
+
+
+ATTEMPT = {"model": "ministral-3-3b-instruct-2512", "counts": {"unambiguous": 9, "ambiguous": 2}, "unusable": 1, "resultSha256": "a" * 64}
+
+
+def attempts_file(tmp_path, obj):
+    p = tmp_path / "attempts.json"
+    p.write_text(json.dumps(obj))
+    return p
+
+
+def record_with_attempts(tmp_path, obj):
+    dev = tmp_path / "dev.json"
+    dev.write_text(json.dumps(dev_result()))
+    return S.main(record_args(dev, **{"--dev-attempts": str(attempts_file(tmp_path, obj))}), tree_state=lambda c: dict(TREE))
+
+
+def test_prereg_record_copies_dev_attempts_verbatim_and_omits_the_key_without_the_option(tmp_path, capsys):
+    other = {**ATTEMPT, "model": "qwen2.5-3b-instruct", "unusable": 0, "resultSha256": "b" * 64}
+    assert record_with_attempts(tmp_path, [ATTEMPT, other]) == 0
+    assert json.loads(capsys.readouterr().out)["devAttempts"] == [ATTEMPT, other]
+    dev = tmp_path / "dev2.json"
+    dev.write_text(json.dumps(dev_result()))
+    assert S.main(record_args(dev), tree_state=lambda c: dict(TREE)) == 0
+    assert "devAttempts" not in json.loads(capsys.readouterr().out)
+
+
+MALFORMED = [
+    {"a": 1}, [], "x", [ATTEMPT, "x"],
+    [{k: v for k, v in ATTEMPT.items() if k != "model"}], [{k: v for k, v in ATTEMPT.items() if k != "counts"}],
+    [{k: v for k, v in ATTEMPT.items() if k != "unusable"}], [{k: v for k, v in ATTEMPT.items() if k != "resultSha256"}],
+    [{**ATTEMPT, "extra": 1}], [{**ATTEMPT, "model": ""}], [{**ATTEMPT, "model": 3}],
+    [{**ATTEMPT, "counts": {}}], [{**ATTEMPT, "counts": [1]}], [{**ATTEMPT, "counts": {"unambiguous": "9"}}], [{**ATTEMPT, "counts": {"unambiguous": -1}}],
+    [{**ATTEMPT, "counts": {"unambiguous": True}}], [{**ATTEMPT, "unusable": -1}], [{**ATTEMPT, "unusable": "1"}], [{**ATTEMPT, "unusable": True}],
+    [{**ATTEMPT, "resultSha256": "a" * 63}], [{**ATTEMPT, "resultSha256": "G" * 64}], [{**ATTEMPT, "resultSha256": "A" * 64}], [{**ATTEMPT, "resultSha256": 5}],
+]
+
+
+@pytest.mark.parametrize("bad", MALFORMED)
+def test_prereg_record_refuses_a_malformed_dev_attempts_file(tmp_path, capsys, bad):
+    assert record_with_attempts(tmp_path, bad) == 4
+    captured = capsys.readouterr()
+    assert captured.out == "" and "dev attempts" in captured.err
+
+
+def test_prereg_record_refuses_an_unreadable_dev_attempts_file(tmp_path, capsys):
+    dev = tmp_path / "dev.json"
+    dev.write_text(json.dumps(dev_result()))
+    assert S.main(record_args(dev, **{"--dev-attempts": str(tmp_path / "missing.json")}), tree_state=lambda c: dict(TREE)) == 4
+
+
+def test_a_run_records_no_draft_unless_asked_and_run_dev_asks(tmp_path):
+    def handler(question, bypass, n, log):
+        get(log)
+        post(log)
+        log.events[-1]["draft"] = draft_reply()
+        return doc(request=req(), bypass=bypass)
+    run, _ = drive([unamb()], handler, repeats=1)                                           # the held-out call shape: no record_drafts
+    assert "draft" not in run["items"][0]["repeats"][0]
+    res = dev_result()
+    assert all("draft" in x for r in res["items"] for x in r["repeats"])
