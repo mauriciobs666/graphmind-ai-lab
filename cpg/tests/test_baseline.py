@@ -419,6 +419,16 @@ def test_config_gold_is_never_a_hit_and_is_counted():
     assert r["system"] == [2, 2] and r["systemSym"] == [1, 1]
 
 
+@pytest.mark.parametrize("kind", ["unit", "bogus"])
+def test_a_scored_item_that_is_neither_symbol_nor_config_is_refused_with_counts_only(kind):
+    base = _rows_for(A_("symbol", "A", "a"))
+    odd = {"anchorId": "a", "impacted": {"type": kind, "repoId": "r1", "path": "SECRET_PATH", "qname": "SECRET_NAME"},
+           "lines": [2], "hit": False, "keyError": False}
+    with pytest.raises(ValueError, match=r"1 scored gold item") as e:
+        B.baseline_recall(H.snapshot(), base, [_gi("a", "e.py", "e.py::E", [2]), odd])
+    assert "SECRET" not in str(e.value) and kind not in str(e.value)
+
+
 def test_system_and_baseline_vectors_are_kept_apart_in_every_figure():
     base = _rows_for(A_("symbol", "A", "a"))
     items = [_gi("a", "e.py", "e.py::E", [2], hit=False),         # baseline hit, system miss

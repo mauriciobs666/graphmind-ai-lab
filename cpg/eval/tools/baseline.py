@@ -357,6 +357,9 @@ def baseline_recall(snapshot: dict, baseline_rows: list, items: list) -> dict:
     missing = len({g["anchorId"] for g in items} - set(rows))
     if missing:
         raise ValueError(f"anchor: {missing} gold anchor(s) have no baseline row")
+    other = sum(1 for g in items if g["impacted"]["type"] not in ("symbol", "config"))
+    if other:
+        raise ValueError(f"items: {other} scored gold item(s) are neither symbol nor config (EP 5.2 H1 defines those two only)")
     symbols = {s["symbolId"]: _paired(s) for s in snapshot["symbol"]}
     hits = [g["impacted"]["type"] == "symbol"
             and any(h1_symbol_credit(symbols[s], g["impacted"], g["lines"]) for s in rows[g["anchorId"]]["items"])
