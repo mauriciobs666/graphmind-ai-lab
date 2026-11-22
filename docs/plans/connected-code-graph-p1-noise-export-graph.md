@@ -166,8 +166,8 @@ def naive_over_lister(snapshot: dict, anchors: list[dict], bound: int = 2, *, di
 2. **Seeds `S0` and their cost**, read from the engine's rows (`cpg/ccg/engine/bfs.py` `ROWS`, pinned in
    `cpg/tests/test_engine_bfs_pins.py`; the AC-1 golden of `docs/plans/connected-code-graph-answer-spec.md` §10 agrees):
    - symbol anchor: `{symbolId}` at 0;
-   - contract anchor: the `provides` symbols of `cpId` at **0** (`provides_in`, increment 0), and the owners of its
-     `consumes` sites at **1** (`consumes_in` and `via_in:contract`, increment 1: the golden's `getHealth` is `direct`,
+   - contract anchor: the `provides` symbols of `cpId` at **0** (`provides_in`, increment 0), and the **union** of the owners of its
+     `consumes` sites and of the `via` sites of every link `ON` it, at **1** (`consumes_in` and `via_in:contract`, increment 1: the golden's `getHealth` is `direct`,
      distance 1). A symbol that does both takes 0;
    - config anchor: the owners of the sites of every `via` row whose `linkId` has a `bound` row for `entryId`, at **2**
      (`bound_in` 1, then `via_in:site` 1, then `owner_of` 0). The review's "a config consumer costs 1" is not what the
@@ -211,10 +211,10 @@ Fifteen symbols, `bound` 2 and `kind_scope` `"kind"` unless stated. Calls are `c
 |---|---|---|---|---|---|
 | symbol `A` | 2, kind | `B C E F G H P2 P3 Q` | **9** | **5** (`B C H P2 P3`) | reach `B`, `E` (1), `C`, `F`, `G` (2); `A` provides http, so `Kind` adds `P2 P3 H Q` (`A` removed); `E F G` rest on name rows; `Q`'s `consumes` is possible; `D` is 3. `byName` `{resolvedSite 0, unresolvedSite 3}` |
 | symbol `A` | 1 / 0 / 3, kind | 6 / 4 / 10 items (3: the nine plus `D`) | 6 / 4 / 10 | 4 / 3 / 6 | one step fewer, none, one more |
-| symbol `A` | 2, key | `B C E F G H P3` | 7 | 4 | `Kind` is `CP1`'s members `A P3 H` only: `P2`, `Q` vanish |
-| contract `CP1` | 2, kind | `A B C E F G H P2 P3 Q R` | **11** | **7** | providers `A P3` at 0, consumer `H` at 1: reach `B E` (1), `C F G` (2) from the providers, `R` (2) from `H`; `S` (3) is out; `Kind(http)` adds `P2 Q`. Under "consumers cost 0" `S` would be in (12) |
+| symbol `A` | 2, key | `B C E F G H P3` | 7 | 4 | `Kind` is `CP1`'s providers and `consumes` owners `A P3 H` only: `P2`, `Q` vanish (a via-only owner is a seed of a contract anchor, not a member of a symbol anchor's key scope) |
+| contract `CP1` | 2, kind | `A B C E F G H P2 P3 Q R` | **11** | **7** | providers `A P3` at 0; consumer owner `H` (`consumes_in`) and via owner `Q` (`via_in:contract`, link `L3` ON `CP1`, possible) at 1: reach `B E` (1), `C F G` (2) from the providers, `R` (2) from `H`; `S` (3) is out; `Kind(http)` adds `P2` only. Under "consumers cost 0" `S` would be in (12) |
 | contract `CP1` | 3, kind | the eleven plus `D S` | 13 | 9 | |
-| contract `CP1` | 2, key | `A B C E F G H P3 R` | 9 | 6 | `P2`, `Q` vanish |
+| contract `CP1` | 2, key | `A B C E F G H P3 Q R` | 10 | 6 | `P2` vanishes; `Q` stays as a via seed. 3, key: the ten plus `D S` = 12, confirmed-own 8 |
 | config `CE1` | 2, kind | `A H P2 P3 Q` | **5** | **4** | bound by `L1`, whose `via` site owner `H` is the seed at cost 2, so `R` (3) is out; `Kind(http)` adds `A P2 P3 Q` |
 | config `CE1` | 3, kind | the five plus `R` | 6 | 5 | |
 | config `CE1` | 2, key | `A H P3` | 3 | 3 | |
