@@ -1,0 +1,1366 @@
+{
+ "asShippedExtract": {
+  "off": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/off/c273665b-d943-42d4-a1c4-78013cec889d.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 14.8
+  },
+  "on": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/on/4162b7df-869d-485b-b62e-951516ad0250.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 14.0
+  }
+ },
+ "cell": {
+  "join": "new",
+  "name": "fixed-new",
+  "projection": "fixed",
+  "record": "ccg-p1-flow-python-v2",
+  "role": "decision",
+  "runRecord": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/s28-run.json"
+ },
+ "censusReach": {
+  "k": 4046,
+  "n": 4046,
+  "note": "informational: tree-sitter named definitions (kind fn/ctor, symbol true) from truth/<lang>.defs.jsonl (S27c census, read-only, in flux) with a Joern METHOD in the same file overlapping its span and equal-named or within 2 lines at both ends",
+  "p": 1.0,
+  "wilson95": [
+   0.9991,
+   1.0
+  ]
+ },
+ "cfg": {
+  "off": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.7547,
+     "ci95": [
+      0.6312,
+      0.8783
+     ],
+     "connected": 80,
+     "n": 27,
+     "pairs": 106,
+     "se": 0.06011,
+     "t": 2.0555
+    },
+    "data": {
+     "R": 0.9474,
+     "ci95": [
+      0.9033,
+      0.9915
+     ],
+     "connected": 216,
+     "n": 30,
+     "pairs": 228,
+     "se": 0.02156,
+     "t": 2.0452
+    },
+    "pooled": {
+     "R": 0.8862,
+     "ci95": [
+      0.8283,
+      0.9442
+     ],
+     "connected": 296,
+     "n": 30,
+     "pairs": 334,
+     "se": 0.02833,
+     "t": 2.0452
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/8a3d50ca-93c9-4f7c-a3e7-fcb21320760f.cpg.bin=6254",
+    "CONTENT /out/8a3d50ca-93c9-4f7c-a3e7-fcb21320760f.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 80,
+    "n": 106,
+    "p": 0.7547,
+    "wilson95": [
+     0.6649,
+     0.8268
+    ]
+   },
+   "cpgMB": 18.7,
+   "data": {
+    "k": 216,
+    "n": 228,
+    "p": 0.9474,
+    "wilson95": [
+     0.9103,
+     0.9696
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 10,
+    "n": 216,
+    "p": 0.0463,
+    "wilson95": [
+     0.0253,
+     0.0831
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 206,
+    "2": 10
+   },
+   "dataSingleEdgeShare": {
+    "k": 206,
+    "n": 216,
+    "p": 0.9537,
+    "wilson95": [
+     0.9169,
+     0.9747
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 184.77,
+    "controlEdgesPerMethod": 0.758,
+    "controlFactsDropped": 5038,
+    "cpgFilesWithMethods": 104,
+    "cpgMBPerFile": 0.1798,
+    "cpgMethods": 6254,
+    "cpgWhole": {
+     "calls": 127665,
+     "edges": 3873261,
+     "edgesPerFile": 35863.5,
+     "fileNodes": 108,
+     "mbPerFile": 0.1731,
+     "nodes": 499932,
+     "nodesPerFile": 4629.0,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 4.427,
+    "dataFactsDropped": 11324,
+    "edgesPerFile": 311.82,
+    "edgesPerMethod": 5.185,
+    "extractSecondsPerKLOC": 0.192,
+    "kLOC": 76.97,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 44.03,
+    "parseSecondsPerKLOC": 0.151,
+    "pointsPerFile": 366.76,
+    "projectedControlEdges": 4743,
+    "projectedDataEdges": 27686,
+    "projectedPoints": 38143,
+    "projectionMsPerKLOC": 8.82,
+    "rawCdgEdges": 48022,
+    "rawCdgSelfEdges": 2751,
+    "rawDataFacts": 40429,
+    "syntheticCallsDropped": 4461
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 4,
+    "source": 1
+   },
+   "endpointUnresolvedShare": {
+    "k": 5,
+    "n": 334,
+    "p": 0.015,
+    "wilson95": [
+     0.0064,
+     0.0346
+    ]
+   },
+   "extract": {
+    "factsMB": 37.73,
+    "peakMemMiB": 1236.0,
+    "rc": 0,
+    "startedUtc": "2026-11-22T01:14:36Z",
+    "wallSeconds": 14.8
+   },
+   "extractInternalMs": {
+    "loadMs": 4563,
+    "projectionMs": 679,
+    "totalMs": 6521
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 87,
+    "10-100ms": 1,
+    "<1ms": 6166
+   },
+   "methodsFullyRecovered": {
+    "k": 17,
+    "n": 30,
+    "p": 0.5667,
+    "wilson95": [
+     0.392,
+     0.7262
+    ]
+   },
+   "methodsMatched": {
+    "k": 30,
+    "n": 30,
+    "p": 1.0,
+    "wilson95": [
+     0.8865,
+     1.0
+    ]
+   },
+   "methodsWithPairs": 30,
+   "methodsWithProjectedPairs": 29,
+   "parse": {
+    "peakMemMiB": 1098.8,
+    "wallSeconds": 11.6
+   },
+   "pooled": {
+    "k": 296,
+    "n": 334,
+    "p": 0.8862,
+    "wilson95": [
+     0.8477,
+     0.916
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 296,
+    "n": 334,
+    "p": 0.8862,
+    "wilson95": [
+     0.8477,
+     0.916
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 296,
+    "n": 334,
+    "p": 0.8862,
+    "wilson95": [
+     0.8477,
+     0.916
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 101,
+    "data": 231
+   },
+   "projectionSuccess": {
+    "k": 6254,
+    "n": 6254,
+    "p": 1.0,
+    "wilson95": [
+     0.9994,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 21,
+    "data": 25
+   },
+   "spuriousPairs": {
+    "k": 46,
+    "n": 332,
+    "p": 0.1386,
+    "wilson95": [
+     0.1055,
+     0.1799
+    ]
+   },
+   "status": {
+    "connected": 296,
+    "endpoint-unresolved": 5,
+    "not-connected": 33
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 80,
+     "endpoint-unresolved": 1,
+     "not-connected": 25
+    },
+    "data": {
+     "connected": 216,
+     "endpoint-unresolved": 4,
+     "not-connected": 8
+    }
+   },
+   "strata": {
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "p": null,
+     "status": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [],
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "otherAbsent": [],
+     "p": null,
+     "reasons": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 293,
+    "n": 320,
+    "p": 0.9156,
+    "wilson95": [
+     0.88,
+     0.9414
+    ]
+   }
+  },
+  "on": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.7547,
+     "ci95": [
+      0.6312,
+      0.8783
+     ],
+     "connected": 80,
+     "n": 27,
+     "pairs": 106,
+     "se": 0.06011,
+     "t": 2.0555
+    },
+    "data": {
+     "R": 0.9474,
+     "ci95": [
+      0.9033,
+      0.9915
+     ],
+     "connected": 216,
+     "n": 30,
+     "pairs": 228,
+     "se": 0.02156,
+     "t": 2.0452
+    },
+    "pooled": {
+     "R": 0.8862,
+     "ci95": [
+      0.8283,
+      0.9442
+     ],
+     "connected": 296,
+     "n": 30,
+     "pairs": 334,
+     "se": 0.02833,
+     "t": 2.0452
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/on.cpg.bin=6254",
+    "CONTENT /out/on.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 80,
+    "n": 106,
+    "p": 0.7547,
+    "wilson95": [
+     0.6649,
+     0.8268
+    ]
+   },
+   "cpgMB": 18.7,
+   "data": {
+    "k": 216,
+    "n": 228,
+    "p": 0.9474,
+    "wilson95": [
+     0.9103,
+     0.9696
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 10,
+    "n": 216,
+    "p": 0.0463,
+    "wilson95": [
+     0.0253,
+     0.0831
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 206,
+    "2": 10
+   },
+   "dataSingleEdgeShare": {
+    "k": 206,
+    "n": 216,
+    "p": 0.9537,
+    "wilson95": [
+     0.9169,
+     0.9747
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 184.77,
+    "controlEdgesPerMethod": 0.758,
+    "controlFactsDropped": 5038,
+    "cpgFilesWithMethods": 104,
+    "cpgMBPerFile": 0.1798,
+    "cpgMethods": 6254,
+    "cpgWhole": {
+     "calls": 127665,
+     "edges": 3873261,
+     "edgesPerFile": 35863.5,
+     "fileNodes": 108,
+     "mbPerFile": 0.1731,
+     "nodes": 499932,
+     "nodesPerFile": 4629.0,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 4.427,
+    "dataFactsDropped": 11324,
+    "edgesPerFile": 311.82,
+    "edgesPerMethod": 5.185,
+    "extractSecondsPerKLOC": 0.182,
+    "kLOC": 76.97,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 44.03,
+    "parseSecondsPerKLOC": 0.16,
+    "pointsPerFile": 366.76,
+    "projectedControlEdges": 4743,
+    "projectedDataEdges": 27686,
+    "projectedPoints": 38143,
+    "projectionMsPerKLOC": 8.38,
+    "rawCdgEdges": 48022,
+    "rawCdgSelfEdges": 2751,
+    "rawDataFacts": 40429,
+    "syntheticCallsDropped": 4461
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 4,
+    "source": 1
+   },
+   "endpointUnresolvedShare": {
+    "k": 5,
+    "n": 334,
+    "p": 0.015,
+    "wilson95": [
+     0.0064,
+     0.0346
+    ]
+   },
+   "extract": {
+    "factsMB": 37.73,
+    "peakMemMiB": 1181.7,
+    "rc": 0,
+    "startedUtc": "2026-11-22T01:15:15Z",
+    "wallSeconds": 14.0
+   },
+   "extractInternalMs": {
+    "loadMs": 4697,
+    "projectionMs": 645,
+    "totalMs": 6541
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 79,
+    "10-100ms": 2,
+    "<1ms": 6173
+   },
+   "methodsFullyRecovered": {
+    "k": 17,
+    "n": 30,
+    "p": 0.5667,
+    "wilson95": [
+     0.392,
+     0.7262
+    ]
+   },
+   "methodsMatched": {
+    "k": 30,
+    "n": 30,
+    "p": 1.0,
+    "wilson95": [
+     0.8865,
+     1.0
+    ]
+   },
+   "methodsWithPairs": 30,
+   "methodsWithProjectedPairs": 29,
+   "parse": {
+    "peakMemMiB": 858.2,
+    "wallSeconds": 12.3
+   },
+   "pooled": {
+    "k": 296,
+    "n": 334,
+    "p": 0.8862,
+    "wilson95": [
+     0.8477,
+     0.916
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 296,
+    "n": 334,
+    "p": 0.8862,
+    "wilson95": [
+     0.8477,
+     0.916
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 296,
+    "n": 334,
+    "p": 0.8862,
+    "wilson95": [
+     0.8477,
+     0.916
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 101,
+    "data": 231
+   },
+   "projectionSuccess": {
+    "k": 6254,
+    "n": 6254,
+    "p": 1.0,
+    "wilson95": [
+     0.9994,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 21,
+    "data": 25
+   },
+   "spuriousPairs": {
+    "k": 46,
+    "n": 332,
+    "p": 0.1386,
+    "wilson95": [
+     0.1055,
+     0.1799
+    ]
+   },
+   "status": {
+    "connected": 296,
+    "endpoint-unresolved": 5,
+    "not-connected": 33
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 80,
+     "endpoint-unresolved": 1,
+     "not-connected": 25
+    },
+    "data": {
+     "connected": 216,
+     "endpoint-unresolved": 4,
+     "not-connected": 8
+    }
+   },
+   "strata": {
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "p": null,
+     "status": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [],
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "otherAbsent": [],
+     "p": null,
+     "reasons": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 293,
+    "n": 320,
+    "p": 0.9156,
+    "wilson95": [
+     0.88,
+     0.9414
+    ]
+   }
+  }
+ },
+ "corpusCommit": "0caf85e3ccb757801d15d6babe55a63477a486dd",
+ "definitions": {
+  "edges": "DATA edge = (def point, use point) from the `d` facts, def != use; CONTROLLED_BY edge = (point, cond) from the `cb` facts with CDG self-edges dropped and (point, cond) pairs de-duplicated (-spec2 §1.4 G-4).",
+  "join": "param by spec index (the name is only a sanity diagnostic); ret by ordinal (line must equal the label's, else the unique ret on the label's line); call by (calleeName, ordinal) when that call site is on the label's line, else the unique call site of that calleeName on the label's line (tag `ordinalShift`), else unresolved; cond by line and collapsed code (equal, else equal ignoring all whitespace [Joern re-spaces `(int, float)` as `(int,float)`], else equal ignoring whitespace AND parentheses [P1-09 (b): Joern drops redundant grouping parentheses, `not (a or b)` is printed `not a or b`; exactly one match], else one contains the other, on that line; several candidates at the same tier = unresolved); and only when no tier resolved or matched (P1-09 (a)), a label whose source line is the python `for <code>:` / `async for <code>:` header resolves to the line's UNIQUE cond coded `iteratorNonEmptyOrException` (the `for` statement's condition point; several = unresolved, reason `cond-several-iterator`).  `JOIN_P0_ONLY = True` restores the P0 join (the pinned P0 figures; a diagnostic, never a gate input).  A pair with an unresolved endpoint is a miss, listed as `endpoint-unresolved`.",
+  "paramIndex": "spec index = Joern index - 1 after dropping the implicit `this` (index 0, named `this`) for javascript, java, csharp and cpp; python: Joern index 0 (self/cls) is -1, then index - 1; go: Joern index 0 (the receiver) is -1, then index - 1; a C# extension-method `this` parameter (Joern code starts `this `) is -1 and the rest count from 0.",
+  "points": "Points per method are those of bundle spec §5.4-§5.6 as normalize.py derives them: param (index), ret (ordinal over the method's own RETURNs sorted by line, column, id), cond (every CDG source), callsite (callee name + ordinal over same-name call sites sorted by the position of the callee's last identifier, found in the SOURCE from the call's start; a call whose name never occurs in the source is synthetic and is not a point, and an edge touching it is dropped, as normalize.py drops it).",
+  "strata": "convention:* = the Part F audit's `convention` tag on a VALID decision (adjudication/<lang>-flow-audit.jsonl), joined to the final pair by (ordinal, kind, endpoint ids without line); provenance:* = the final-set provenance field; frontend-default-ignored-dir = labelled methods whose path has a directory segment the shipped frontend ignores by default (report §a1.4)"
+ },
+ "flowAvailableProvisional": {
+  "perConfig": {
+   "off": {
+    "pairs": 334,
+    "pairsOK": true,
+    "pooledRecall": 0.8862,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   },
+   "on": {
+    "pairs": 334,
+    "pairsOK": true,
+    "pooledRecall": 0.8862,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   }
+  },
+  "rule": "ML §8.4: pooled flow pair recall >= 0.95 observed over >= 120 golden pairs in BOTH configurations, and projection success >= 0.95; provisional: before the data-scientist's adjudication of misses and spurious pairs",
+  "value": false,
+  "wouldBeIfGuarded": null
+ },
+ "flowSet": "p1",
+ "goldenMethods": 30,
+ "goldenPairs": 334,
+ "labelledMethods": [
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "test_list_documents_respects_limit",
+    "params": {
+     "0": "repo"
+    },
+    "span": [
+     1128,
+     1141
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 1,
+   "path": "tests/test_repository.py",
+   "qname": "tests/test_repository.py::test_list_documents_respects_limit",
+   "span": [
+    1128,
+    1139
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_pointer",
+    "params": {
+     "0": "root",
+     "1": "ref"
+    },
+    "span": [
+     383,
+     393
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 2,
+   "path": "tests/test_input_bound_parity.py",
+   "qname": "tests/test_input_bound_parity.py::_pointer",
+   "span": [
+    383,
+    390
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "append_trace_event",
+    "params": {
+     "-1": "self",
+     "0": "ws",
+     "1": "step_run_id",
+     "2": "trace_id",
+     "3": "seq",
+     "4": "kind",
+     "5": "at",
+     "6": "payload"
+    },
+    "span": [
+     3220,
+     3246
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 3,
+   "path": "falkorchat/repository.py",
+   "qname": "falkorchat/repository.py::Repository.append_trace_event",
+   "span": [
+    3220,
+    3244
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "__init__",
+    "params": {
+     "-1": "self",
+     "0": "base_url",
+     "1": "model",
+     "2": "transport",
+     "3": "params",
+     "4": "ref"
+    },
+    "span": [
+     119,
+     134
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 4,
+   "path": "falkorchat/llm.py",
+   "qname": "falkorchat/llm.py::OpenAICompatibleLLM.__init__",
+   "span": [
+    119,
+    132
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_nest",
+    "params": {
+     "0": "depth"
+    },
+    "span": [
+     684,
+     691
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 5,
+   "path": "tests/test_guards.py",
+   "qname": "tests/test_guards.py::_nest",
+   "span": [
+    684,
+    689
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "jaccard",
+    "params": {
+     "0": "a",
+     "1": "b"
+    },
+    "span": [
+     112,
+     129
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 6,
+   "path": "falkorchat/update_detection.py",
+   "qname": "falkorchat/update_detection.py::jaccard",
+   "span": [
+    112,
+    127
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "timeout_for_kind",
+    "params": {
+     "-1": "self",
+     "0": "kind"
+    },
+    "span": [
+     445,
+     451
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 7,
+   "path": "falkorchat/modelconfig.py",
+   "qname": "falkorchat/modelconfig.py::Overlay.timeout_for_kind",
+   "span": [
+    445,
+    449
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "resolve_member_kinds",
+    "params": {
+     "-1": "self",
+     "0": "ws",
+     "1": "ids"
+    },
+    "span": [
+     2449,
+     2467
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 8,
+   "path": "falkorchat/repository.py",
+   "qname": "falkorchat/repository.py::Repository.resolve_member_kinds",
+   "span": [
+    2449,
+    2465
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "dispatch",
+    "params": {
+     "-1": "self",
+     "0": "name",
+     "1": "arguments",
+     "2": "ctx",
+     "3": "run"
+    },
+    "span": [
+     2522,
+     2529
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 9,
+   "path": "tests/test_executor_agent.py",
+   "qname": "tests/test_executor_agent.py::_FailOnceThenSucceedRegistry.dispatch",
+   "span": [
+    2522,
+    2527
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "create_document",
+    "params": {
+     "-1": "self",
+     "0": "ws",
+     "1": "document_id",
+     "2": "title",
+     "3": "text",
+     "4": "source_format",
+     "5": "ingested_by",
+     "6": "created_at",
+     "7": "chunks"
+    },
+    "span": [
+     241,
+     261
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 10,
+   "path": "tests/test_services.py",
+   "qname": "tests/test_services.py::FakeRepo.create_document",
+   "span": [
+    241,
+    259
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_resolve_path",
+    "params": {
+     "0": "path",
+     "1": "ctx",
+     "2": "step_output"
+    },
+    "span": [
+     464,
+     487
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 11,
+   "path": "falkorchat/guards.py",
+   "qname": "falkorchat/guards.py::_resolve_path",
+   "span": [
+    464,
+    485
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_run_churn_and_track_k4",
+    "params": {
+     "0": "graph"
+    },
+    "span": [
+     114,
+     126
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 12,
+   "path": "tests/test_vector_index_churn_guard.py",
+   "qname": "tests/test_vector_index_churn_guard.py::_run_churn_and_track_k4",
+   "span": [
+    114,
+    124
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_contains",
+    "params": {
+     "0": "left",
+     "1": "value"
+    },
+    "span": [
+     127,
+     136
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 13,
+   "path": "falkorchat/guards.py",
+   "qname": "falkorchat/guards.py::_contains",
+   "span": [
+    127,
+    134
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "get_message",
+    "params": {
+     "0": "msg_id",
+     "1": "ctx"
+    },
+    "span": [
+     151,
+     166
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 14,
+   "path": "falkorchat/api.py",
+   "qname": "falkorchat/api.py::build_router.get_message",
+   "span": [
+    151,
+    158
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "health",
+    "params": {
+     "0": "ctx"
+    },
+    "span": [
+     59,
+     69
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 15,
+   "path": "falkorchat/api.py",
+   "qname": "falkorchat/api.py::build_router.health",
+   "span": [
+    59,
+    67
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "call",
+    "params": {
+     "0": "args",
+     "1": "kwargs"
+    },
+    "span": [
+     2085,
+     2091
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 16,
+   "path": "tests/test_storefront_api.py",
+   "qname": "tests/test_storefront_api.py::_FailingAfterNCalls.__getattr__.call",
+   "span": [
+    2085,
+    2089
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_dependency_names",
+    "params": {
+     "0": "dependant"
+    },
+    "span": [
+     1207,
+     1224
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 17,
+   "path": "tests/test_storefront_api.py",
+   "qname": "tests/test_storefront_api.py::_dependency_names",
+   "span": [
+    1207,
+    1212
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "embed",
+    "params": {
+     "-1": "self",
+     "0": "text"
+    },
+    "span": [
+     359,
+     366
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 18,
+   "path": "tests/test_embedding_migration.py",
+   "qname": "tests/test_embedding_migration.py::_FakeEmbedder.embed",
+   "span": [
+    359,
+    364
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_read_or_absent",
+    "params": {
+     "0": "fn",
+     "1": "absent"
+    },
+    "span": [
+     797,
+     814
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 19,
+   "path": "falkorchat/services.py",
+   "qname": "falkorchat/services.py::_read_or_absent",
+   "span": [
+    797,
+    812
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "find_due_wait_candidates",
+    "params": {
+     "-1": "self",
+     "0": "ws",
+     "1": "limit"
+    },
+    "span": [
+     690,
+     697
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 20,
+   "path": "tests/test_workflow_timers.py",
+   "qname": "tests/test_workflow_timers.py::_RacingRepo.find_due_wait_candidates",
+   "span": [
+    690,
+    695
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "test_list_matches_respects_limit",
+    "params": {
+     "0": "repo"
+    },
+    "span": [
+     2569,
+     2592
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 21,
+   "path": "tests/test_repository.py",
+   "qname": "tests/test_repository.py::test_list_matches_respects_limit",
+   "span": [
+    2569,
+    2587
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "post_first_message",
+    "params": {
+     "-1": "self",
+     "0": "ws",
+     "1": "kw"
+    },
+    "span": [
+     176,
+     183
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 22,
+   "path": "tests/test_services.py",
+   "qname": "tests/test_services.py::FakeRepo.post_first_message",
+   "span": [
+    176,
+    181
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_raw_routes",
+    "params": {
+     "0": "app"
+    },
+    "span": [
+     784,
+     806
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 23,
+   "path": "tests/test_storefront_api.py",
+   "qname": "tests/test_storefront_api.py::_raw_routes",
+   "span": [
+    784,
+    804
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "set_chunk_embedding",
+    "params": {
+     "-1": "self",
+     "0": "ws",
+     "1": "chunk_id",
+     "2": "embedding",
+     "3": "expected_dim"
+    },
+    "span": [
+     63,
+     70
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 24,
+   "path": "tests/test_embedding.py",
+   "qname": "tests/test_embedding.py::SpyRepo.set_chunk_embedding",
+   "span": [
+    63,
+    68
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "test_a_wrong_token_for_a_real_participant_resolves_to_none",
+    "params": {
+     "0": "seeded"
+    },
+    "span": [
+     371,
+     379
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 25,
+   "path": "tests/test_storefront.py",
+   "qname": "tests/test_storefront.py::test_a_wrong_token_for_a_real_participant_resolves_to_none",
+   "span": [
+    371,
+    377
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "complete",
+    "params": {
+     "-1": "self",
+     "0": "messages"
+    },
+    "span": [
+     224,
+     233
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 26,
+   "path": "falkorchat/llm.py",
+   "qname": "falkorchat/llm.py::FallbackClient.complete",
+   "span": [
+    224,
+    231
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_returned_columns",
+    "params": {
+     "0": "cypher"
+    },
+    "span": [
+     837,
+     850
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 27,
+   "path": "tests/test_querygen.py",
+   "qname": "tests/test_querygen.py::_returned_columns",
+   "span": [
+    837,
+    848
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_returns_shape",
+    "params": {
+     "-1": "cls",
+     "0": "values"
+    },
+    "span": [
+     128,
+     136
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 28,
+   "path": "falkorchat/querygen.py",
+   "qname": "falkorchat/querygen.py::QueryRequest._returns_shape",
+   "span": [
+    128,
+    134
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "run",
+    "params": {
+     "-1": "self",
+     "0": "arguments",
+     "1": "ctx",
+     "2": "run"
+    },
+    "span": [
+     707,
+     717
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 29,
+   "path": "falkorchat/tools.py",
+   "qname": "falkorchat/tools.py::AddToCartTool.run",
+   "span": [
+    707,
+    715
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "mcp_constraints",
+    "params": {
+     "0": "server",
+     "1": "seen"
+    },
+    "span": [
+     516,
+     526
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 30,
+   "path": "tests/test_input_bound_parity.py",
+   "qname": "tests/test_input_bound_parity.py::mcp_constraints",
+   "span": [
+    516,
+    524
+   ]
+  }
+ ],
+ "lang": "python",
+ "missesFile": {
+  "path": "adjudication/python-flow-p1-misses.jsonl",
+  "rows": 38
+ },
+ "offOnDiscordantPairs": {
+  "offOnlyConnected": 0,
+  "onOnlyConnected": 0,
+  "pairs": 334
+ },
+ "spuriousSample": {
+  "drawn": 46,
+  "omissionRate": null,
+  "onOnlyPairsNotInOffPopulation": 0,
+  "population": 46,
+  "rule": "SHA-256(seed|pairKey) ascending, first 50; pairKey = ordinal|kind|source|sink with point labels param:<idx>, call:<name>#<ordinal>@<line>, ret:<ordinal>@<line>, cond:<line>:<code>",
+  "ruledInvalidByPartF": 0,
+  "seed": "ccg-p1a-v1-spur|python|0caf85e3ccb757801d15d6babe55a63477a486dd",
+  "sharesEndpointWithUnresolvedGolden": 0,
+  "truthIncompleteFlag": "pending adjudication (n=46; raised iff omission rate > 0.05)"
+ },
+ "toolchainImage": null,
+ "truth": "truth/python.flow-p1-final.jsonl",
+ "variant": "as-shipped (headline)"
+}
