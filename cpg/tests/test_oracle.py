@@ -168,7 +168,7 @@ def test_report_lists_the_six_unrun_http_clients():
     rep, _ = O.score([], [])
     assert set(rep["unrunEntryPoints"]) == {
         "falkor-chat/web/app.js", "salesperson/scripts/load_demo.py", "salesperson/scripts/swap_bench.py",
-        "salesperson/scripts/language_salience_probe.py", "salesperson/scripts/qwen_watch.sh", "scripts/install_node.sh"}
+        "salesperson/scripts/language_salience_probe.py", "salesperson/scripts/qwen_watch.sh", "salesperson/scripts/install_node.sh"}
 
 
 def test_report_is_counts_only_and_names_no_miss():
