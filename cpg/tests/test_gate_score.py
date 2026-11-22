@@ -291,6 +291,11 @@ def test_ha4_stamp_is_checked_against_the_pinned_id_read_from_the_snapshot(w):
 
 
 # ---------------------------------------------------------------- HA-5 masking (config)
+def _stored(raw):
+    from ccg.assemble import rows
+    return rows._mask_key_path(raw)                                                  # noqa: SLF001 - the producer's own masking
+
+
 def _cfg_world(answer_key, gold_key):
     snap = H.DictSnapshot()
     cp = "c" * 32
@@ -398,14 +403,17 @@ def test_h1_config_in_another_file_is_a_miss():
     assert res["items"][rec["itemId"]]["outcome"] == "miss"
 
 
-def test_ha5_listing_when_only_the_answer_side_is_masked():
+def test_ha5_listing_when_the_store_holds_the_masked_form_and_the_gold_is_raw():
+    # round C: the store never holds the answer-side `[#]` form, only the loader's `[#…]`; these two cases are the realistic replacement of the
+    # earlier `[#]` fixtures
     a = "services." + "a" * 24
-    res = _cfg_world(a, "services.[#]")                                              # the gold key is already the masked form
+    res = _cfg_world(_stored(a), a)
     assert res["items"][next(iter(res["items"]))]["outcome"] == "hit" and res["maskedComparisons"] == 1
 
 
-def test_ha5_listing_when_only_the_gold_side_is_masked():
-    res = _cfg_world("services.[#]", "services." + "b" * 24)
+def test_ha5_listing_when_both_sides_are_already_the_stored_masked_form():
+    s = _stored("services." + "b" * 24)
+    res = _cfg_world(s, s)
     assert res["items"][next(iter(res["items"]))]["outcome"] == "hit" and res["maskedComparisons"] == 1
 
 
@@ -584,3 +592,74 @@ def test_a2_the_report_names_the_class_and_counts_never_an_id(w):
     rep = G.build_report(res, G.decide_gate(res, gated_strata=G.STRATA_GATED), gated_strata=G.STRATA_GATED, withheld={}, flow_flag=False)
     assert rep["verdict"] == "blocked" and rep["erroredItems"] == 1 and rep["harnessErrors"] == {"StoreError": 1} and rep["scored"] == 0
     assert w.rec["itemId"] not in str(rep) and w.cp not in str(rep)
+
+
+# ---------------------------------------------------------------- N2 (round C): H1 on a config key compares in the loader's STORED form
+def test_n2_a_screen_failing_gold_segment_against_the_loader_masked_store_value_is_a_hit_and_is_listed():
+    raw = "services." + "a" * 24 + ".ports"
+    stored = _stored(raw)
+    assert "[#…]" in stored and G.mask_keypath(raw) != stored                         # the two forms differ: the plant is real
+    res = _cfg_world(stored, raw)                                                    # the store (and the answer) hold the stored form; the gold is raw
+    out = res["items"][next(iter(res["items"]))]
+    assert out["outcome"] == "hit" and res["maskedComparisons"] == 1 and res["defects"] == {}
+
+
+def test_n2_a_gold_already_in_the_stored_form_also_hits():
+    stored = _stored("services." + "a" * 24 + ".ports")
+    res = _cfg_world(stored, stored)
+    assert res["items"][next(iter(res["items"]))]["outcome"] == "hit"
+
+
+def test_n2_a_different_unmasked_segment_is_still_a_miss_against_a_stored_masked_key():
+    stored = _stored("services." + "a" * 24 + ".ports")
+    res = _cfg_world(stored, "other." + "a" * 24 + ".ports")
+    assert res["items"][next(iter(res["items"]))]["outcome"] == "miss"
+
+
+# ---------------------------------------------------------------- round C: a per-anchor ENGINE error is a miss `engine-error` (-p1-gate-marker-ml.md §3)
+ENGINE_ERR = {"outcome": "engine-error", "exceptionClass": "ValueError"}
+
+
+def _run_with(w, entry):
+    return {"snapshotId": H.SNAP, "answers": {w.cp: entry}}
+
+
+def test_c_an_engine_error_entry_scores_every_item_of_the_anchor_as_a_miss_with_reason_engine_error():
+    w = H.World()
+    res = G.score_gate([w.rec], _run_with(w, dict(ENGINE_ERR)), w.snap, ())
+    o = res["items"][w.rec["itemId"]]
+    assert o["outcome"] == "miss" and o["reason"] == "engine-error" and o["exceptionClass"] == "ValueError"
+    assert res["engineErrors"] == {"ValueError": 1} and res["harnessErrors"] == {}
+
+
+def test_c_an_engine_error_is_in_the_fail_tier_and_a_harness_error_beside_it_stays_blocked():
+    w = H.World()
+    res = G.score_gate([w.rec], _run_with(w, dict(ENGINE_ERR)), w.snap, ())
+    assert G.decide_gate(res)["verdict"] == "fail" and G.decide_gate(res)["misses"] == 1
+    w2 = H.World()
+    w2.cp2 = "9" * 32
+    rec2 = H.item(2, H.contract("http", "GET /b"), H.sym("svc/c.py::call"))
+    w2.snap.add_node("ContractPoint", rec2["anchorId"])
+    run = {"snapshotId": H.SNAP, "answers": {w2.cp: dict(ENGINE_ERR), rec2["anchorId"]: {"harnessError": "HarnessError"}}}
+    res2 = G.score_gate([w2.rec, rec2], run, w2.snap, ())
+    assert G.decide_gate(res2)["verdict"] == "blocked"
+
+
+def test_c_an_engine_error_entry_that_also_carries_an_answer_is_not_trusted():
+    w = H.World()
+    res = G.score_gate([w.rec], _run_with(w, {**ENGINE_ERR, "answer": w.answer(), "request": w.request()}), w.snap, ())
+    assert res["items"][w.rec["itemId"]]["outcome"] == "error"
+
+
+def test_c_the_exception_class_of_an_engine_error_is_an_identifier_only():
+    w = H.World()
+    res = G.score_gate([w.rec], _run_with(w, {"outcome": "engine-error", "exceptionClass": "bad: /home/x id=1"}), w.snap, ())
+    assert res["items"][w.rec["itemId"]]["exceptionClass"] == "unclassified"
+
+
+def test_c_the_report_gives_engine_errors_on_their_own_line_per_stratum_and_class_apart_from_harness_errors():
+    w = H.World()
+    res = G.score_gate([w.rec], _run_with(w, dict(ENGINE_ERR)), w.snap, ())
+    rep = G.build_report(res, G.decide_gate(res), gated_strata=G.STRATA_GATED)
+    assert rep["engineErrors"] == {"count": 1, "byStratum": {"http": 1}, "byClass": {"ValueError": 1}}
+    assert rep["harnessErrors"] == {} and rep["erroredItems"] == 0

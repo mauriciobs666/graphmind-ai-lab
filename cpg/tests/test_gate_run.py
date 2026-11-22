@@ -385,6 +385,7 @@ class ScoreEnv:
         monkeypatch.setenv("HOME", str(tmp_path))
         self.cust = tmp_path / ".local" / "share" / "ccg-eval" / "e12"
         self.cust.mkdir(parents=True)
+        self.flow_flag, self.withheld = False, {}                  # what the run recorded; a test sets them before set_records/write_run
         self.repo = prepared(tmp_path / "r", **({"kind": "gate"} if record is None else record))
         self.w = H.World(qname="svc/SENTINEL_QNAME.py::SentinelFn")
         self.lists = self.cust / "ac5-http.jsonl"
@@ -400,14 +401,15 @@ class ScoreEnv:
         """The list changes, so its key does: the marker and the run file follow it (as they would for a run of that list)."""
         self.lists.write_text("".join(json.dumps(r) + "\n" for r in recs))
         self.key = G.list_key(recs)
+        self.withheld = G.withhold_strata(recs, G.STRATA if self.flow_flag else G.STRATA_GATED)[1]       # what a run of these lists would have recorded
         self.write_marker("asked")
         self.write_run()
 
     def write_marker(self, state, key=None):
-        (self.cust / f"gate-run-{key or self.key}.marker").write_text(json.dumps({"state": state, "pins": {}}) + "\n")
+        (self.cust / f"gate-run-{key or self.key}.marker").write_text(json.dumps({"state": state, "pins": {"flowFlag": self.flow_flag}}) + "\n")
 
     def write_run(self, pin=H.SNAP, **extra):
-        run = {**self.w.run(snapshot_id=pin), "preflight": self.ctx, "listKey": self.key, **extra}
+        run = {**self.w.run(snapshot_id=pin), "preflight": self.ctx, "listKey": self.key, "flowFlag": self.flow_flag, "withheld": self.withheld, **extra}
         self.run.write_text(json.dumps(run))
 
     def argv(self, **over):
@@ -508,15 +510,14 @@ def test_a2_gate_run_writes_no_harness_error_entry_today(tmp_path):
     assert all(set(v) == {"request", "answer"} for v in run["answers"].values())
 
 
-def test_a2_a_post_marker_harness_error_still_ends_the_whole_run_without_a_run_json(tmp_path):
-    import gate_run as R
+def test_a2_a_post_marker_harness_error_is_recorded_for_its_anchor_and_the_run_is_complete(tmp_path):
+    """Round C: Q1 of the Pass 2 review. The run no longer ends on a per-anchor harness error: the line is persisted, `run.json` written, marker `asked`."""
     from gate_run_helpers import Env
     e = Env(tmp_path)
     e.ask_hook = lambda req, n: (_ for _ in ()).throw(G.HarnessError("planted"))
-    with pytest.raises(R.RunFailed):
-        e.go()
-    assert e.run_files() == [] and e.marker()["state"] == "failed:deterministic"
-    assert not any("harnessError" in l for l in e.answers_file().read_text().splitlines()) if list(e.cust.glob("run-*.answers.jsonl")) else True
+    e.go()
+    assert [json.loads(l) for l in e.answers_file().read_text().splitlines()] == [{"anchorId": e.w.cp, "harnessError": "HarnessError"}]
+    assert json.loads(e.run_files()[0].read_text())["answers"] == {e.w.cp: {"harnessError": "HarnessError"}} and e.marker()["state"] == "asked"
 
 
 def test_a2_score_of_a_run_with_an_errored_anchor_reports_blocked_with_counts_and_a_class_only(tmp_path, monkeypatch, capsys):
@@ -690,6 +691,7 @@ def test_m1_a_committed_true_flow_decision_makes_flow_a_gated_stratum_at_score(t
     dec.write_text(json.dumps({"decision": {"verdict": "TRUE:measured"}}))
     H.git(e.repo, "add", "-A")
     H.git(e.repo, "commit", "-qm", "decision")
+    e.flow_flag = True                                       # the run was made while the committed decision said TRUE
     flow = H.item(2, H.contract("http", "GET /flowonly"), H.sym("svc/f.py::g"), stratum="flow")
     e.set_records([e.w.rec, flow])
     e.main()

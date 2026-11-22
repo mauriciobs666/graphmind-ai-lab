@@ -9,10 +9,17 @@
   anchor IN the graph that does not resolve is a :class:`~gate.HarnessError` (never a synthesized document).
 * :func:`resolve_preflight`: the read-only dry-run ``resolve`` of every asked in-graph anchor before the marker (counts by status only).
 * :func:`run_gate` and the ``run`` verb: refuse unless the preflight is first-contact and clean (``G.run_context``), the list was not run, the probe
-  map and the lists lie under the custodian area, the resolve dry-run passes; build the refresh Target at ``EVAL_COMMIT``; take the marker
-  (``started``); persist every answer (append + fsync) before the next ask; write ``run-<list key>.json`` (what ``gate.py score --run`` reads) and the
-  marker ``asked``. ``--resume`` continues a ``started`` / ``failed:transient`` run under strict equalities and never re-asks a recorded answer.
-  No code path removes the marker.
+  map and the lists lie under the custodian area, the store does not already hold the gate system's live graph, the resolve dry-run passes; build the
+  refresh Target at ``EVAL_COMMIT`` with PRIVATE ``work_root`` / ``keys_root`` / ``audit_dir`` under the custodian root (the developer's ``ccg`` area is
+  never touched); take the marker (``started``: temp file + ``os.link``, so it is never empty or torn) under a per-list ``flock``; persist every answer
+  (append + fsync) before the next ask; write ``run-<list key>.json`` (what ``gate.py score --run`` reads) and the marker ``asked``. The marker pins
+  the flow flag, the withheld counts and the probe map's hash beside the other pins; ``score`` uses the run's flag, never the current decision.
+  ``--resume`` continues a ``started`` / ``failed:transient`` run under strict equalities and never re-asks a recorded entry; a complete ``run.json``
+  under a ``started`` marker (a kill between the two writes) only finalises the marker to ``asked``. No code path removes the marker.
+* **Per-anchor failures** (:func:`ask_failure_entry`, the one policy function): a harness error on one anchor is recorded as
+  ``{"anchorId", "harnessError": <class>}`` and an exception raised inside the engine's ask as ``{"anchorId", "outcome": "engine-error",
+  "exceptionClass": <class>}``; the loop continues, the run completes and ``score`` gives ``blocked`` / a miss respectively. Transient and run-wide
+  faults (credential, store, a refused snapshot, a full disk) still end the run (``failed:transient`` / ``failed:deterministic``).
 
 Stdout and stderr carry counts and refusal reasons only: never gold, ids or item content.
 Exit: 0 ok, 2 refused (incl. a resume refusal), 3 failed after the marker, deterministic (list spent), 4 bad input / failed before the marker (nothing
@@ -22,6 +29,8 @@ transient (resumable with ``--resume``).
 from __future__ import annotations
 
 import argparse
+import errno
+import fcntl
 import hashlib
 import json
 import os
@@ -60,6 +69,12 @@ class RunFailed(RuntimeError):
         super().__init__(f"the run failed after the marker: {state} ({error_class})")
 
 
+class EngineAskError(Exception):
+    """Raised by :func:`make_ask` around the ENGINE's ``ask`` call and nowhere else: an exception that came out of the engine after the harness built and
+    validated the request. ``__cause__`` is the engine's own exception. This wrapper is how the engine-error tier is decided by WHERE an exception was
+    raised, never by its type or message (``docs/plans/connected-code-graph-p1-gate-marker-ml.md`` §3)."""
+
+
 class _Terminated(BaseException):
     """SIGTERM turned into an exception by ``main`` (a transient stop: the marker is written ``failed:transient``)."""
 
@@ -69,10 +84,8 @@ class _Terminated(BaseException):
 # =============================================================================================
 
 def _mask_keypath_as_stored(key_path: str) -> str:
-    """The ``keyPath`` in the form the build STORES (``ccg.assemble.rows``: a screen-failing segment becomes ``[#…]``). Not ``gate.mask_keypath``
-    (``answer.mask_identifier``'s ``[#]``, the form an ANSWER prints): ``resolve_config`` matches the stored form exactly."""
-    from ccg.assemble import rows
-    return rows._mask_key_path(key_path)                        # noqa: SLF001 - the one keyPath masking the loader writes
+    """The ``keyPath`` in the form the build STORES (``gate.stored_keypath``): ``resolve_config`` matches the stored form exactly."""
+    return G.stored_keypath(key_path)
 
 
 def cli_request(req: Mapping) -> dict:
@@ -99,17 +112,46 @@ def make_ask(client, stamp: Mapping | None = None, in_graph: Callable[[Mapping],
     """``ask(gate_request) -> answer`` over ``client`` (a ``clients.common.Client``-shaped object). ``in_graph(request)`` says whether the asked anchor
     exists in the gate graph: an anchor that does NOT resolve and is absent from the graph becomes a marked ``not-resolved`` document (a miss for the
     item, scored with ``stamp``, not a C5 void); one that is in the graph (the default reading, fail closed) is a :class:`HarnessError`."""
-    from clients.common import AnchorNotResolved
+    from clients.common import AnchorNotResolved, BadRequest
 
     def ask(req: dict) -> Mapping:
+        spec = cli_request(req)                                       # the harness's own translation: a fault here is the harness's
         try:
-            return client.ask(cli_request(req))
+            return client.ask(spec)
         except AnchorNotResolved as exc:
             if in_graph is None or in_graph(req):
                 raise HarnessError("an anchor in the gate graph did not resolve") from None
             return {"interpretation": {"status": exc.detail.get("status") or "unresolved", "lookups": list(exc.detail.get("candidates") or [])},
                     "stamp": dict(stamp or {}), "synthesized": exc.code}
+        except BadRequest:                                            # the engine refused the request the harness built
+            raise HarnessError("the engine refused the request the harness built") from None
+        except Exception as exc:
+            if ask_failure_entry(exc) is None:                        # transient or run-wide: the run's to end, not the anchor's
+                raise
+            raise EngineAskError(type(exc).__name__) from exc         # from here on: raised inside the engine's ask
     return ask
+
+
+def ask_failure_entry(exc: BaseException) -> dict | None:
+    """THE policy for one anchor whose ask raised (``-p1-gate-marker-ml.md`` §3; the one place to change it). -> the entry to persist for that anchor, or
+    ``None`` when the exception is not per-anchor and must propagate (the run then ends ``failed:transient`` / ``failed:deterministic``).
+
+    * transient (a connection or timeout error, even one the engine raised) and run-wide faults (a refused credential, an unusable store or model, a
+      :class:`~gate.Refusal` such as a changed snapshot) -> ``None``;
+    * raised inside the engine's ask (:class:`EngineAskError`) -> ``{"outcome": "engine-error", "exceptionClass": <class>}``: a miss for the item, in the
+      ``fail`` tier, never re-asked on a resume;
+    * everything else (a :class:`~gate.HarnessError`, a translation fault, an exception that cannot be placed on the engine's side of the boundary) ->
+      ``{"harnessError": <class>}``: the item is neither hit nor miss and the verdict is ``blocked``.
+
+    Only a class name is ever recorded: a message may embed an id or a path."""
+    from clients.common import ModelUnavailable, NoCredentials, NotBuilt, StoreAuthError
+    inner = exc.__cause__ if isinstance(exc, EngineAskError) and exc.__cause__ is not None else exc
+    if classify(inner) == "transient" or isinstance(exc, (Refusal, NoCredentials, StoreAuthError, ModelUnavailable, NotBuilt)) \
+            or isinstance(inner, (Refusal, NoCredentials, StoreAuthError, ModelUnavailable, NotBuilt)):
+        return None
+    if isinstance(exc, EngineAskError):
+        return {"outcome": G.ENGINE_ERROR, "exceptionClass": type(inner).__name__}
+    return {"harnessError": type(exc).__name__}
 
 
 _ID_KEY = {"symbol": "symbolId", "contract": "cpId", "config": "entryId"}
@@ -167,6 +209,8 @@ def classify(exc: BaseException) -> str:
         return "transient"
     names = {c.__name__ for c in type(exc).__mro__}
     if "AuthenticationError" in names:                                       # redis' is a ConnectionError subclass: a refused credential is not a blip
+        return "deterministic"
+    if isinstance(exc, OSError) and exc.errno in (errno.ENOSPC, errno.EDQUOT):   # a full disk fails the same way on a resume: run-wide, not a blip
         return "deterministic"
     if isinstance(exc, (OSError, ConnectionError, TimeoutError)):           # ConnectionError/TimeoutError are OSErrors; listed for the reader
         return "transient"
@@ -229,9 +273,18 @@ def _append_line(path: Path, obj: Mapping) -> None:
             os.close(dfd)
 
 
+def _valid_line(obj) -> bool:
+    """An answer line: ``{anchorId, request, answer}``, a recorded harness error ``{anchorId, harnessError}`` or a recorded engine error
+    ``{anchorId, outcome: engine-error, exceptionClass}``."""
+    if not isinstance(obj, dict) or not isinstance(obj.get("anchorId"), str):
+        return False
+    return {"request", "answer"} <= set(obj) or "harnessError" in obj or obj.get("outcome") == G.ENGINE_ERROR
+
+
 def load_answers(path: Path) -> dict:
-    """The recorded answers ``{anchor id: {"request", "answer"}}``. A last line that has no trailing newline or is not valid JSON is a torn write:
-    it is cut from the file and its anchor counts as unrecorded. An invalid line anywhere else is a :class:`HarnessError`."""
+    """The recorded entries ``{anchor id: {"request", "answer"} | {"harnessError"} | {"outcome", "exceptionClass"}}``. A last line that has no trailing
+    newline or is not valid JSON is a torn write: it is cut from the file and its anchor counts as unrecorded. An invalid line anywhere else is a
+    :class:`HarnessError`."""
     if not path.exists():
         return {}
     raw = path.read_bytes()
@@ -241,14 +294,14 @@ def load_answers(path: Path) -> dict:
     for i, line in enumerate(complete):
         try:
             obj = json.loads(line.decode("utf-8"))
-            if not isinstance(obj, dict) or not {"anchorId", "request", "answer"} <= set(obj):
+            if not _valid_line(obj):
                 raise ValueError("shape")
         except ValueError:                                          # UnicodeDecodeError is a ValueError
             if i == len(complete) - 1 and not tail:
                 torn = True
                 break
             raise HarnessError("the answers file has an invalid line that is not the last") from None
-        out[obj["anchorId"]] = {"request": obj["request"], "answer": obj["answer"]}
+        out[obj["anchorId"]] = {k: v for k, v in obj.items() if k != "anchorId"}
         good_len += len(line) + 1
     if torn:
         with open(path, "r+b") as fh:
@@ -259,7 +312,8 @@ def load_answers(path: Path) -> dict:
 
 
 class _Persisting:
-    """Wraps ``ask`` so that a recorded answer is returned and never re-asked, and a new one is on disk before it is returned."""
+    """Wraps ``ask`` so that a recorded entry is returned and never re-asked, and a new one is on disk before it is returned. An ask that raises a
+    per-anchor failure (:func:`ask_failure_entry`) is recorded as that entry and the run goes on with the next anchor; any other exception propagates."""
 
     def __init__(self, ask: Callable[[dict], Mapping], path: Path, recorded: dict):
         self.ask, self.path, self.recorded, self.asked_now = ask, path, recorded, 0
@@ -267,12 +321,22 @@ class _Persisting:
     def __call__(self, req: dict) -> Mapping:
         aid = _req_id(req)
         if aid in self.recorded:
-            return self.recorded[aid]["answer"]
-        doc = self.ask(req)
-        _append_line(self.path, {"anchorId": aid, "request": req, "answer": doc})
-        self.recorded[aid] = {"request": req, "answer": doc}
+            return self._returned(self.recorded[aid])
+        try:
+            doc = self.ask(req)
+            entry = {"request": req, "answer": doc}
+        except Exception as exc:                                    # noqa: BLE001 - classified by ask_failure_entry; a run-wide fault is re-raised
+            entry = ask_failure_entry(exc)
+            if entry is None:
+                raise
+        _append_line(self.path, {"anchorId": aid, **entry})
+        self.recorded[aid] = entry
         self.asked_now += 1
-        return doc
+        return self._returned(entry)
+
+    @staticmethod
+    def _returned(entry: Mapping):
+        return entry["answer"] if "answer" in entry else G.AnchorFault(entry)
 
 
 # =============================================================================================
@@ -288,20 +352,79 @@ def _read_lists(lists: Sequence[Path], home: Path | None) -> tuple[list[dict], s
     return records, G.list_key(records)
 
 
-def _pins(ctx: Mapping, snapshot_id: str, obs: Mapping) -> dict:
+def _pins(ctx: Mapping, snapshot_id: str, obs: Mapping, *, flow_flag: bool, withheld: Mapping, probe_map_sha256: str) -> dict:
+    """What a resume must find equal. The flow flag and the withheld counts decide WHICH anchors are asked, and the probe map decides which point a
+    unit anchor is asked from: neither may change between two halves of one run (N3, N6)."""
     return {"recordCommit": ctx["recordCommit"], "harnessSha256": dict(ctx["harnessPin"]["sha256"]), "snapshotId": snapshot_id,
-            "prereg": {k: obs.get(k) for k in G.PREREG_FIELDS}, "coreTreeHash": obs.get("coreTreeHash"), "label": ctx["label"]}
+            "prereg": {k: obs.get(k) for k in G.PREREG_FIELDS}, "coreTreeHash": obs.get("coreTreeHash"), "label": ctx["label"],
+            "flowFlag": bool(flow_flag), "withheld": dict(withheld), "probeMapSha256": probe_map_sha256}
 
 
-def _clean_leftover_build(cust: Path, dest: Path) -> None:
-    """A build directory a failed earlier attempt left (the run died before the marker, so nothing was spent) is removed and rebuilt. Only a direct
-    child of the custodian root named for THIS list, and never a symlink."""
+PRIVATE_AREAS = ("work", "keys", "audit")
+
+
+def _clean_leftover(cust: Path, dest: Path, prefix: str) -> None:
+    """A gate-build directory a failed earlier attempt left (the run died before the marker, so nothing was spent) is removed and rebuilt. Only a direct
+    child of the custodian root with the gate prefix, and never a symlink. Never a marker."""
     if dest.is_symlink():
-        raise Refusal("the build directory is a symlink: refused")
+        raise Refusal("a gate build directory is a symlink: refused")
     if dest.exists():
-        if dest.parent.resolve() != cust.resolve() or not dest.name.startswith("gate-build-"):
-            raise Refusal("the build directory is not a gate build under the custodian root: refused")
+        if dest.parent.resolve() != cust.resolve() or not dest.name.startswith(prefix):
+            raise Refusal("a gate build directory is not under the custodian root: refused")
         shutil.rmtree(dest)
+
+
+def _private_build_areas(cust: Path, key: str) -> dict:
+    """N4: the gate build is the system ``ccg`` (the clone's manifest says so), the same name as the developer's. Its bundles, unit state, HMAC key
+    and sandbox audit therefore go to PRIVATE directories under the custodian root, passed to ``refresh`` as ``work_root`` / ``keys_root`` /
+    ``audit_dir``, so the retention pass and the key store never see the developer's. Fresh per attempt (a leftover of a failed attempt is removed)."""
+    out = {}
+    for name, kw in zip(PRIVATE_AREAS, ("work_root", "keys_root", "audit_dir")):
+        d = cust / f"gate-{name}-{key}"
+        _clean_leftover(cust, d, f"gate-{name}-")
+        d.mkdir(mode=0o700)
+        out[kw] = d
+    return out
+
+
+class _Lock:
+    """One live ``run`` / ``--resume`` per list: an exclusive non-blocking ``flock`` on ``gate-run-<key>.lock`` (never a marker; it holds nothing) for
+    the whole run, so two processes cannot interleave answer lines or marker writes. Released by the OS if the process dies."""
+
+    def __init__(self):
+        self.fd = None
+
+    def take(self, cust: Path, key: str) -> None:
+        fd = os.open(cust / f"gate-run-{key}.lock", os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+            raise Refusal("another run of this list holds the lock: refused (a second live run would interleave the answers)") from None
+        self.fd = fd
+
+    def release(self) -> None:
+        if self.fd is not None:
+            os.close(self.fd)
+            self.fd = None
+
+
+def _finalise_if_complete(cust: Path, key: str, marker: Path, old: Mapping, n_records: int) -> dict | None:
+    """N1: a kill after ``run-<key>.json`` was renamed in and before the marker became ``asked`` leaves a COMPLETE run under a ``started`` marker. A
+    ``run.json`` that parses and whose ``listKey`` and ``snapshotId`` equal the marker's pins only finalises the marker to ``asked`` (nothing is asked,
+    nothing is rebuilt); anything else is not a finalisation (-> ``None``: the ordinary resume checks refuse it)."""
+    path = cust / f"run-{key}.json"
+    if not path.is_file() or old["state"] not in ("started", "failed:transient"):
+        return None
+    try:
+        run = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(run, dict) or not isinstance(run.get("answers"), dict) or run.get("listKey") != key \
+            or run.get("snapshotId") != old["pins"].get("snapshotId"):
+        return None
+    _write_marker(marker, {**old, "state": "asked", "answered": len(run["answers"])})
+    return {"records": n_records, "asked": len(run["answers"]), "label": old["label"], "finalised": True}
 
 
 def _resume_checks(marker: Mapping, pins: Mapping, key: str, cust: Path, recorded: int, cache_len: Callable[[], int]) -> None:
@@ -317,12 +440,22 @@ def _resume_checks(marker: Mapping, pins: Mapping, key: str, cust: Path, recorde
         raise Refusal("resume refused: the cache holds more than the one in-flight entry (C5)")
 
 
-def run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, *, snapshot_factory: Callable[[Path], Any],
+def run_gate(*args, **kw) -> dict:
+    """The AC-5 gate run (:func:`_run_gate`) under the per-list lock."""
+    lock = _Lock()
+    try:
+        return _run_gate(*args, lock=lock, **kw)
+    finally:
+        lock.release()
+
+
+def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, *, snapshot_factory: Callable[[Path], Any],
              ask_factory: Callable[[Path, Any], Callable[[dict], Mapping]], resolve_factory: Callable[[Path, Any], Callable[[dict], Mapping]],
              probe_map: Path | None = None, home: Path | None = None, observed: Mapping | None = None, tree: Mapping | None = None,
              committed_text=None, record_commit_sha: str | None = None, refresh_fn: Callable[..., Any] | None = None,
              cache_len: Callable[[], int] = lambda: 0, system: str = "ccg", engine_snapshot_id: Callable[[], str] | None = None,
-             allow_after_adaptation: bool = False, resume: bool = False, flow_decision: Path | None = None) -> dict:
+             allow_after_adaptation: bool = False, resume: bool = False, flow_decision: Path | None = None,
+              live_graph_present: Callable[[], bool] | None = None, lock: _Lock | None = None) -> dict:
     """The AC-5 gate run: every refusal happens before the marker and the first question. -> counts only."""
     repo = Path(repo)
     cust = G.within_custodian(custodian, home, "--custodian")
@@ -339,16 +472,22 @@ def run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, *
     flag = G.flow_flag(Path(flow_decision) if flow_decision else repo / G.FLOW_DECISION, committed_text)
     records, withheld = G.withhold_strata(all_records, G.STRATA if flag else G.STRATA_GATED)
     marker = _marker_path(cust, key)
+    if lock is not None:
+        lock.take(cust, key)
     if resume and not marker.exists():
         raise Refusal("nothing to resume: this list has no marker")
     if marker.exists() and not resume:
         raise Refusal("this list was already run: a re-run on the same list is refused (EP §12.1 step 7); a new list is required (or --resume of a started run)")
     old = _read_marker(marker) if resume else None
+    if resume and (done := _finalise_if_complete(cust, key, marker, old, len(all_records))) is not None:
+        return done
     eval_commit = (repo / "cpg" / "eval" / "EVAL_COMMIT").read_text(encoding="utf-8").strip()
     built = cust / f"gate-build-{key}"
     if not resume:
-        _clean_leftover_build(cust, built)
-        G.build_at_eval_commit(eval_commit, built, repo=repo, refresh_fn=refresh_fn, system=system)
+        if live_graph_present is not None and live_graph_present():
+            raise Refusal("the store already holds the live graph of the gate system: the gate builds into its own empty throwaway store, never one in use")
+        _clean_leftover(cust, built, "gate-build-")
+        G.build_at_eval_commit(eval_commit, built, repo=repo, refresh_fn=refresh_fn, system=system, **_private_build_areas(cust, key))
     snap = snapshot_factory(built)
     sid = snap.snapshot_id()
     if engine_snapshot_id is not None and engine_snapshot_id() != sid:
@@ -356,7 +495,7 @@ def run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, *
     answers_path = cust / f"run-{key}.answers.jsonl"
     recorded = load_answers(answers_path) if resume else {}
     obs = {**(dict(tree) if tree is not None else G.observe_tree(repo)), **(observed if observed is not None else G.engine_observed())}
-    pins = _pins(ctx, sid, obs)
+    pins = _pins(ctx, sid, obs, flow_flag=flag, withheld=withheld, probe_map_sha256=hashlib.sha256(pmap.read_bytes()).hexdigest())
     if resume:
         _resume_checks(old, pins, key, cust, len(recorded), cache_len)
     else:
@@ -442,6 +581,14 @@ def _default_deps(a, *, connect: Callable[..., Any] | None = None, credential: C
         stamp = {"snapshotId": snap.snapshot_id(), "verdictLogOffset": 0, "verdictLogHash": G.EMPTY_VERDICT_LOG_HASH}
         return make_ask(client(), stamp=stamp, in_graph=lambda req: _anchor_in_graph(snap, req))
 
+    def live_graph_present():
+        if db_factory is None:
+            from falkordb import FalkorDB
+            db = FalkorDB(host=a.host, port=a.port)
+        else:
+            db = db_factory(a.host, a.port)
+        return live_key in list(db.list_graphs())
+
     def resolve_factory(built, snap):
         return client().resolve
 
@@ -452,7 +599,7 @@ def _default_deps(a, *, connect: Callable[..., Any] | None = None, credential: C
         return rows[0][0]
 
     return {"snapshot_factory": snapshot_factory, "ask_factory": ask_factory, "resolve_factory": resolve_factory, "refresh_fn": refresh,
-            "engine_snapshot_id": engine_snapshot, "system": system}
+            "engine_snapshot_id": engine_snapshot, "system": system, "live_graph_present": live_graph_present}
 
 
 def _msg(e: BaseException) -> str:

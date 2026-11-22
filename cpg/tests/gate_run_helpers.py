@@ -71,11 +71,12 @@ class Env:
         H.git(repo, "add", "-A")
         H.git(repo, "commit", "-qm", "eval commit")
         t = G.observe_tree(repo)
-        rec = {"schema": "ccg-prereg-v1", "stratum": GATE, "packSetHash": t["packSetHash"], "coreTreeHash": t["coreTreeHash"], **OBS}
+        rec = {"schema": "ccg-prereg-v1", "kind": "gate", "stratum": GATE, "packSetHash": t["packSetHash"], "coreTreeHash": t["coreTreeHash"], **OBS}
         (repo / "cpg/eval/preregistration.jsonl").write_text(json.dumps(rec) + "\n")
         H.git(repo, "add", "-A")
         H.git(repo, "commit", "-qm", "record")
         self.events = []
+        self.refresh_kw = None
         self.asked: list[str] = []
         self.resolved: list[dict] = []
         self.table: dict[str, tuple[str, str]] = {}
@@ -103,6 +104,7 @@ class Env:
 
     # -- the injected seams
     def refresh(self, system, repo_root=None, **kw):
+        self.refresh_kw = kw
         self.events.append(("refresh", str(repo_root)))
 
     def resolve(self, spec):

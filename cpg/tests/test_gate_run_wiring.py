@@ -67,10 +67,17 @@ def test_an_anchor_absent_from_the_graph_that_does_not_resolve_becomes_a_not_res
     assert res["stops"] == {}
 
 
-def test_a_store_failure_is_not_swallowed():
+def test_a_store_failure_is_not_swallowed_it_is_the_engines_error_to_record():
     w = H.World()
-    with pytest.raises(StoreError):
+    with pytest.raises(R.EngineAskError) as ei:
         R.make_ask(FakeClient(exc=StoreError("down")), stamp=H.stamp())(G.build_request(w.rec, w.cp))
+    assert isinstance(ei.value.__cause__, StoreError) and "down" not in str(ei.value)
+
+
+def test_a_connection_error_from_the_engine_is_not_wrapped_it_stays_transient():
+    w = H.World()
+    with pytest.raises(ConnectionError):
+        R.make_ask(FakeClient(exc=ConnectionError("c")), stamp=H.stamp())(G.build_request(w.rec, w.cp))
 
 
 def test_an_anchor_in_the_graph_that_does_not_resolve_is_a_harness_error_never_a_synthesized_document():

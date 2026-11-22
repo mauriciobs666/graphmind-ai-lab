@@ -110,6 +110,8 @@ def test_live_the_resolve_dry_run_and_the_whole_run_verb_over_the_default_wiring
     a = types.SimpleNamespace(host="127.0.0.1", port=store.port, graph=None, system=SYSTEM2)
     deps = R._default_deps(a, client_factory=lambda system, host, port: store.client)
     deps["refresh_fn"] = e.refresh                                   # the build is the throwaway's own graph above; the Target wiring is tested offline
+    assert deps["live_graph_present"]() is True                      # round C (N4): the real probe sees that graph, so the guard would refuse a real build here
+    deps["live_graph_present"] = lambda: False                       # this test stands the graph up itself and replaces the build with a no-op
     deps["engine_snapshot_id"] = None                                # needs the raw ACL role
     out = R.run_gate(e.repo, "ac5-gate-1", [e.lists], e.cust, home=e.home, observed={"algorithm": {"id": "bfs-v1", "version": "1.2"}, "defaultDepthBound": 2},
                      probe_map=e.probes, **deps)

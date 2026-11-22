@@ -13,7 +13,7 @@ from gate_helpers import G
 from gate_run_helpers import Env, Killed, many_world, GATE, OBS
 
 import gate_run as R
-from clients.common import AnchorNotResolved, NoCredentials, StoreError
+from clients.common import AnchorNotResolved, NoCredentials, StoreAuthError, StoreError
 
 
 def killing_at(k):
@@ -44,7 +44,7 @@ def test_the_marker_payload_holds_every_pin_the_resume_compares(tmp_path):
     e = Env(tmp_path)
     e.go()
     m = e.marker()
-    assert set(m["pins"]) == {"recordCommit", "harnessSha256", "snapshotId", "prereg", "coreTreeHash", "label"}
+    assert set(m["pins"]) == {"recordCommit", "harnessSha256", "snapshotId", "prereg", "coreTreeHash", "label", "flowFlag", "withheld", "probeMapSha256"}
     assert m["pins"]["snapshotId"] == H.SNAP and set(m["pins"]["prereg"]) == set(G.PREREG_FIELDS) and m["pins"]["label"] == "first-contact"
     assert m["head"] == H.head(e.repo) and m["startedAt"] and m["gateId"] == GATE and m["records"] == 1 and m["resumes"] == []
 
@@ -366,8 +366,8 @@ def test_a_transient_failure_after_the_marker_writes_failed_transient_and_is_res
     assert len(e.asked) == 2 and e.marker()["state"] == "asked"
 
 
-@pytest.mark.parametrize("exc", [ValueError("v"), KeyError("k"), G.HarnessError("h"), StoreError("answer invalid"), RuntimeError("?")], ids=repr)
-def test_a_deterministic_failure_after_the_marker_writes_failed_deterministic_and_is_not_resumable(tmp_path, exc):
+@pytest.mark.parametrize("exc", [NoCredentials("n"), StoreAuthError("a"), G.Refusal("the snapshot changed")], ids=repr)
+def test_a_run_wide_deterministic_failure_after_the_marker_writes_failed_deterministic_and_is_not_resumable(tmp_path, exc):
     e = Env(tmp_path)
     many_world(e, 3)
     failing_at(e, 2, exc)
@@ -380,12 +380,12 @@ def test_a_deterministic_failure_after_the_marker_writes_failed_deterministic_an
     assert e.asked == []
 
 
-def test_an_in_graph_anchor_that_does_not_resolve_after_the_marker_is_a_deterministic_failure_not_a_miss(tmp_path):
+def test_an_in_graph_anchor_that_does_not_resolve_after_the_marker_is_a_recorded_harness_error_not_a_miss(tmp_path):
     e = Env(tmp_path)
     exc = AnchorNotResolved("x", status="unresolved", detail={"status": "unresolved", "candidates": []})
-    with pytest.raises(R.RunFailed):
-        e.go(ask_factory=lambda built, snap: R.make_ask(__import__("gate_run_helpers").FakeClient(exc=exc), stamp=H.stamp(), in_graph=lambda req: True))
-    assert e.marker()["state"] == "failed:deterministic" and not e.run_files()
+    e.go(ask_factory=lambda built, snap: R.make_ask(__import__("gate_run_helpers").FakeClient(exc=exc), stamp=H.stamp(), in_graph=lambda req: True))
+    run = json.loads(e.run_files()[0].read_text())
+    assert list(run["answers"].values()) == [{"harnessError": "HarnessError"}] and e.marker()["state"] == "asked"
 
 
 def test_no_failure_class_ever_removes_the_marker(tmp_path, monkeypatch):
@@ -395,7 +395,7 @@ def test_no_failure_class_ever_removes_the_marker(tmp_path, monkeypatch):
         monkeypatch.setattr(os, name, lambda p, *a, _r=real, **k: (removed.append(str(p)), _r(p, *a, **k))[1])
     real_rmtree = shutil.rmtree
     monkeypatch.setattr(shutil, "rmtree", lambda p, *a, **k: (removed.append(str(p)), real_rmtree(p, *a, **k))[1])
-    for i, exc in enumerate([ValueError("v"), ConnectionError("c"), Killed()]):
+    for i, exc in enumerate([NoCredentials("n"), ConnectionError("c"), Killed()]):
         sub = tmp_path / f"e{i}"
         sub.mkdir()
         e = Env(sub)
@@ -461,13 +461,13 @@ def test_cli_exit_codes_distinguish_spent_resumable_and_refused(tmp_path, monkey
     assert out["asked"] == 3
 
 
-def test_cli_a_store_error_mid_run_is_caught_with_its_class_and_exit_3(tmp_path, monkeypatch, capsys):
+def test_cli_a_run_wide_error_mid_run_is_caught_with_its_class_and_exit_3(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     e = Env(tmp_path)
-    failing_at(e, 1, StoreError("down"))
+    failing_at(e, 1, StoreAuthError("down"))
     assert R.main(e.argv(), deps=e.deps()) == R.EXIT_SPENT == 3
     cap = capsys.readouterr()
-    assert "failed:deterministic" in cap.err and "StoreError" in cap.err and "Traceback" not in cap.err and "SENTINEL" not in cap.err
+    assert "failed:deterministic" in cap.err and "StoreAuthError" in cap.err and "Traceback" not in cap.err and "SENTINEL" not in cap.err
 
 
 def test_cli_a_resume_refusal_exits_2_without_content(tmp_path, monkeypatch, capsys):

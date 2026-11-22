@@ -25,9 +25,11 @@ import ast
 import hashlib
 import json
 import math
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -495,6 +497,14 @@ def mask_keypath(s: str) -> str:
     return _answer.mask_identifier("keyPath", s)
 
 
+def stored_keypath(key_path: str) -> str:
+    """A ``keyPath`` in the form the build STORES (``ccg.assemble.rows._mask_key_path``: each screen-failing segment ``[#…]``). A value already in
+    that form (it holds the loader's mask) is returned as it is: the loader's function is not idempotent (it masks a stored path whole). Not
+    :func:`mask_keypath` (the ``[#]`` form an ANSWER prints): the store, and so ``real["keyPath"]``, never holds that one."""
+    from ccg.assemble import rows
+    return key_path if rows.MASK in key_path else rows._mask_key_path(key_path)     # noqa: SLF001 - the one keyPath masking the loader writes
+
+
 def _subject_id(subj: Mapping) -> str | None:
     return subj.get("symbolId") or subj.get("entryId") or subj.get("unitId")
 
@@ -531,8 +541,8 @@ def _h1(x: Mapping, rec: Mapping, snap, acc: Acc) -> bool:
                 acc.defects[f"subject-{k}"] += 1
         if real["path"] != e["path"]:
             return False
-        got, want = mask_keypath(real["keyPath"]), mask_keypath(e["keyPath"])
-        if got != real["keyPath"] or want != e["keyPath"]:
+        got, want = stored_keypath(real["keyPath"]), stored_keypath(e["keyPath"])      # N2: both in the stored form, the producer's own
+        if got != real["keyPath"] or want != e["keyPath"] or "[#" in got:
             acc.masked += 1                                  # HA-5: every comparison where masking changed a segment is listed
         return got == want or got.startswith(want + ".") or got.startswith(want + "[")
     return False
@@ -690,7 +700,8 @@ def run_asks(records: Sequence[Mapping], snap, ask: Callable[[dict], Mapping], c
         if rec["anchor"].get("type") in ("contract", "unit") and not snap.node_exists("ContractPoint", aid):
             continue
         req = build_request(rec, aid, locators)
-        answers[aid] = {"request": req, "answer": ask(req)}
+        got = ask(req)
+        answers[aid] = dict(got) if isinstance(got, AnchorFault) else {"request": req, "answer": got}
     units = {r["anchorId"]: r for r in records if r["anchor"].get("type") == "unit"}
     used = {u: ask_id_of(r, probes) for u, r in units.items()}
     differs = sum(1 for u, r in units.items() if r.get("serves") and unit_probe(r, records) != used.get(u))
@@ -698,6 +709,14 @@ def run_asks(records: Sequence[Mapping], snap, ask: Callable[[dict], Mapping], c
 
 
 _CLASS_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
+
+
+ENGINE_ERROR = "engine-error"
+
+
+class AnchorFault(dict):
+    """What an ``ask`` returns (instead of an answer document) for an anchor whose ask failed and was RECORDED as such (``gate_run``'s policy):
+    ``run_asks`` stores it as the anchor's entry in place of ``{"request", "answer"}``, and ``score_gate`` reads it."""
 
 
 def _error_class(value: Any) -> str:
@@ -718,13 +737,24 @@ def score_gate(records: Sequence[Mapping], run: Mapping, snap, patterns: Sequenc
     ``harnessErrors[<class name>]``, and the verdict is ``blocked`` (:func:`decide_gate`). Only the class name is carried: a value that is not an
     identifier of at most 64 characters is reported as ``unclassified`` (a message, an id or a path never reaches the report). An entry that also
     carries an ``answer`` is still an error (fail closed). A deterministic failure of the whole run still ends without a ``run.json``;
-    ``gate_run`` writes no such entry today."""
+    ``gate_run`` records it.
+
+    **The per-anchor engine-error entry** (``-p1-gate-marker-ml.md`` §3): ``{"outcome": "engine-error", "exceptionClass": "<class name>"}`` (no request,
+    no answer). Every item of that anchor is a ``miss`` with reason ``engine-error`` (the ``fail`` tier, in the recall denominator), counted per class in
+    ``engineErrors``; an entry that also carries a request or an answer is a harness error (fail closed)."""
     acc, items, stops = Acc(), {}, Counter()
     pinned, answers = run["snapshotId"], run["answers"]
     anchor_state = {}
+    engine_errors: Counter = Counter()
     for aid, entry in answers.items():
         if "harnessError" in entry:
             anchor_state[aid] = {"harnessError": _error_class(entry["harnessError"])}
+            continue
+        if entry.get("outcome") == ENGINE_ERROR:
+            if "answer" in entry or "request" in entry:                    # a fault entry that also carries an answer is not trusted (fail closed)
+                anchor_state[aid] = {"harnessError": "unclassified"}
+            else:
+                anchor_state[aid] = {"engineError": _error_class(entry.get("exceptionClass"))}
             continue
         bad = check_stamp(entry["answer"], pinned)
         echo = check_request_echo(entry["answer"], entry["request"])
@@ -744,7 +774,11 @@ def score_gate(records: Sequence[Mapping], run: Mapping, snap, patterns: Sequenc
             items[iid] = {**base, "outcome": "miss", "reason": "anchor-not-in-graph"}
             continue
         st = anchor_state[aid]
-        if "harnessError" in st:
+        if "engineError" in st:                                            # a miss in the `fail` tier, in the recall denominator (-p1-gate-marker-ml.md §3)
+            engine_errors[st["engineError"]] += 1
+            items[iid] = {**base, "outcome": "miss", "reason": ENGINE_ERROR, "exceptionClass": st["engineError"], "stage": "none",
+                          "extractionAbsent": False, "depthBoundCut": False}
+        elif "harnessError" in st:
             acc.harness_errors[st["harnessError"]] += 1
             items[iid] = {**base, "outcome": "error", "reason": st["harnessError"]}
         elif st["stamp"]:
@@ -762,7 +796,7 @@ def score_gate(records: Sequence[Mapping], run: Mapping, snap, patterns: Sequenc
                                  else {"reason": "no-qualifying-item", "stage": r["stage"], "extractionAbsent": r["extractionAbsent"],
                                        "depthBoundCut": r["depthBoundCut"]})}
     return {"items": items, "defects": dict(acc.defects), "harnessErrors": dict(acc.harness_errors), "maskedComparisons": acc.masked,
-            "stops": dict(stops)}
+            "stops": dict(stops), "engineErrors": dict(engine_errors)}
 
 
 # =============================================================================================
@@ -883,22 +917,43 @@ def first_run_marker(custodian: Path, list_sha256: str, payload: Mapping) -> Pat
     if not re.fullmatch(r"[0-9a-f]{64}", list_sha256):
         raise Refusal("the list key is not a full 64-hex sha256")
     marker = Path(custodian) / f"gate-run-{list_sha256}.marker"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    # the payload is written and fsynced to a temp file FIRST, then ``os.link``ed onto the name (atomic; refuses an existing name): a process killed at
+    # any point leaves no marker or a complete one, never an empty or torn one (a marker no human may remove would be a permanent deadlock)
+    fd, tmp = tempfile.mkstemp(dir=marker.parent, prefix=".gate-run-", suffix=".tmp")
     try:
-        _ac.take_marker(marker, payload)
-    except _ac.Refusal:
-        raise Refusal("this list was already run: a re-run on the same list is refused (EP §12.1 step 7); a new list is required") from None
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(_ac.canonical_json(payload) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        try:
+            os.link(tmp, marker)
+        except FileExistsError:
+            raise Refusal("this list was already run: a re-run on the same list is refused (EP §12.1 step 7); a new list is required") from None
+    finally:
+        os.unlink(tmp)                                           # the temp name only; a marker is never removed
+    dfd = os.open(marker.parent, os.O_RDONLY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
     return marker
 
 
-def marker_state(custodian: Path, list_sha256: str) -> str | None:
-    """The state of the once-only marker of a list (``started`` | ``asked`` | ``failed:<class>``), or ``None`` when there is no marker, it cannot
-    be read, or it is not a marker (``gate_run`` writes it; this only reads it, so ``score`` never trusts a run file without one)."""
+def read_marker(custodian: Path, list_sha256: str) -> dict | None:
+    """The once-only marker of a list as a dict, or ``None`` when there is none, it cannot be read, or it is not a JSON object with a string ``state``
+    (``gate_run`` writes it; this only reads it, so ``score`` never trusts a run file without one)."""
     try:
         doc = json.loads((Path(custodian) / f"gate-run-{list_sha256}.marker").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    state = doc.get("state") if isinstance(doc, dict) else None
-    return state if isinstance(state, str) else None
+    return doc if isinstance(doc, dict) and isinstance(doc.get("state"), str) else None
+
+
+def marker_state(custodian: Path, list_sha256: str) -> str | None:
+    """The state of the once-only marker of a list (``started`` | ``asked`` | ``failed:<class>``), or ``None`` (see :func:`read_marker`)."""
+    doc = read_marker(custodian, list_sha256)
+    return doc["state"] if doc else None
 
 
 # --- intervals -------------------------------------------------------------------------------
@@ -976,6 +1031,7 @@ def build_report(result: Mapping, decision: Mapping, *, flags: Mapping[str, str]
     miss = [o for _, o in rows if o["outcome"] == "miss"]
     oos = [o for o in result["items"].values() if o["outcome"] == "out-of-scope"]
     errored = sum(1 for o in result["items"].values() if o["outcome"] == "error")
+    eng = [o for o in miss if o.get("reason") == ENGINE_ERROR]                 # its own line, never folded into the harness errors
     rep = {"verdict": decision["verdict"], "kind": decision["kind"], "H": decision["H"], "H_all": len(rows), "scored": len(rows),
            "minimumsMet": decision["minimumsMet"], "blockers": decision["blockers"],
            "recall": {"pooled": _rec_block([o for _, o in rows], cluster_of), "byStratum": per},
@@ -985,6 +1041,7 @@ def build_report(result: Mapping, decision: Mapping, *, flags: Mapping[str, str]
                       "triage": {c: 0 for c in TRIAGE}, "triageNote": "to be filled by the gate runner and the method owner (EP §12.1 step 2)"},
            "outOfScope": {"count": len(oos), "triage": {"key-error": len(oos)}, "outcome": "proposed, unconfirmed"},   # EP §12.1 step 2: the stakeholder confirms
            "erroredItems": errored,
+           "engineErrors": {"count": len(eng), "byStratum": dict(Counter(o["stratum"] for o in eng)), "byClass": dict(Counter(o["exceptionClass"] for o in eng))},
            "voided": decision["voided"], "stops": dict(result.get("stops", {})), "engineDefects": dict(result.get("defects", {})),
            "harnessErrors": dict(result.get("harnessErrors", {})), "maskedComparisons": result.get("maskedComparisons", 0),
            "chainLength": {s: _chain_length([o for _, o in rows if o["stratum"] == s and o["outcome"] == "hit"]) for s in per},
@@ -1210,9 +1267,17 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         if live != run.get("snapshotId"):
             raise Refusal("the live :Snapshot node differs from the run file's pin: score stops")
         em = _load_yaml(repo / "cpg" / "eval" / "eval-manifest.yaml")
-        flag = flow_flag(Path(a.flow_decision) if a.flow_decision else repo / FLOW_DECISION, committed_text)
+        # N3: the RUN's flow flag and withheld set decide what was asked, so they decide what is scored. The current decision record is never read here:
+        # a flip between run and score would score never-asked items as `anchor-not-in-graph` and turn a complete run into a `fail`.
+        flag = run.get("flowFlag")
+        if not isinstance(flag, bool) or not isinstance(run.get("withheld"), dict):
+            raise Refusal("the run file carries no recorded flow flag and withheld set: the run did not record them")
+        if (read_marker(cust, key) or {}).get("pins", {}).get("flowFlag") != flag:
+            raise Refusal("the run file's flow flag differs from the marker's pin: score refuses")
         gated = STRATA if flag else STRATA_GATED
         records, withheld = withhold_strata(records, gated)
+        if withheld != run["withheld"]:
+            raise Refusal("the lists do not reproduce the withheld set the run recorded: score refuses")
         flags = {r["itemId"]: r["flag"] for r in _jsonl(within_custodian(Path(a.flags), None, "--flags"))} if a.flags else None
         expo = _jsonl(within_custodian(Path(a.exposure), None, "--exposure")) if a.exposure else []
         res = score_gate(records, run, snapshot, scope_patterns(em))
