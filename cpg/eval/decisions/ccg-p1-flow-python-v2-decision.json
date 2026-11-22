@@ -1,0 +1,137 @@
+{
+ "D": 3,
+ "adjudicationListSha256": "6f58b5caf028d72a9d4d45dfb9b5f4c92cdbc6768d703b1c106c22abd0757b9d",
+ "cells": {
+  "fixed/new": "296/334",
+  "fixed/old": "260/334",
+  "shipped/new": "223/334",
+  "shipped/old": "204/334"
+ },
+ "consequence": "flowAvailablePython stays false: python flow chains stay possible/flow-unavailable:python at P1; P1-42 AC-25 control half stays open as already recorded; the registry row python.flowAvailable is not edited (U9 not run)",
+ "decides": "ccg-p1-flow-python-v2",
+ "decision": {
+  "discordantPairs": [],
+  "perConfig": {
+   "off": {
+    "19G": 6289,
+    "20y": 5900,
+    "G": 331,
+    "M": -389,
+    "pairsOK": true,
+    "preconditionOK": true,
+    "projectionSuccess": {
+     "19n": 118826,
+     "20k": 125080,
+     "k": 6254,
+     "n": 6254
+    },
+    "recallOK": false,
+    "y": 295
+   },
+   "on": {
+    "19G": 6289,
+    "20y": 5900,
+    "G": 331,
+    "M": -389,
+    "pairsOK": true,
+    "preconditionOK": true,
+    "projectionSuccess": {
+     "19n": 118826,
+     "20k": 125080,
+     "k": 6254,
+     "n": 6254
+    },
+    "recallOK": false,
+    "y": 295
+   }
+  },
+  "row": 4,
+  "verdict": "FALSE:measured"
+ },
+ "decisionCell": "fixed projection (extract.sc 02001899\u2026c00cf) x new join, off and on identical (0 discordant pairs of 334)",
+ "diagnosticDEmpty": {
+  "discordantPairs": [],
+  "perConfig": {
+   "off": {
+    "19G": 6346,
+    "20y": 5920,
+    "G": 334,
+    "M": -426,
+    "pairsOK": true,
+    "preconditionOK": true,
+    "projectionSuccess": {
+     "19n": 118826,
+     "20k": 125080,
+     "k": 6254,
+     "n": 6254
+    },
+    "recallOK": false,
+    "y": 296
+   },
+   "on": {
+    "19G": 6346,
+    "20y": 5920,
+    "G": 334,
+    "M": -426,
+    "pairsOK": true,
+    "preconditionOK": true,
+    "projectionSuccess": {
+     "19n": 118826,
+     "20k": 125080,
+     "k": 6254,
+     "n": 6254
+    },
+    "recallOK": false,
+    "y": 296
+   }
+  },
+  "row": 4,
+  "verdict": "FALSE:measured"
+ },
+ "disclosures": [
+  "draw run by the coordinator as the owner's delegate on the user's instruction (custodian role), no anchor or held-out value read or printed",
+  "labellers worked from the sample source text alone, transcript check recorded as a deviation (docs/reviews/connected-code-graph-p1-flow-labels-ml.md)",
+  "both adjudicators agreed on all 120 rows (117 valid, 3 overturned) and are the same model family: agreement is not independent evidence",
+  "entry value had zero margin (465/481); the decision is on recall 0.8862 vs the 0.95 rule (20y >= 19G): M = -389 after D removal",
+  "residual-miss causes (C8) and the single-edge share are not computed in this record: the verdict is FALSE with margin -389"
+ ],
+ "endpointUnresolved": 5,
+ "fixedFactsSha256": {
+  "off": "e6ac5b8dd2b912f54d158f7ed2e44836ed95ea08be62453272251c4fa269442b",
+  "on": "d537e2baa791deacdcc4b9e762c05cde09c417aa267befbeb44d04dd50a3e09c"
+ },
+ "flowAvailablePython": false,
+ "id": "ccg-p1-flow-python-v2-decision",
+ "lang": "python",
+ "listed": 120,
+ "methodsFullyRecovered": "17/30",
+ "misses": 38,
+ "outcome": "FALSE:measured",
+ "partF": {
+  "F1": "not flagged (0/60 uniform, 0/11 unsure invalid)",
+  "F2": "not flagged (omission 0/104)"
+ },
+ "projectionSuccess": "6254/6254",
+ "recallPooled": {
+  "G": 334,
+  "cluster95": [
+   0.8283,
+   0.9442
+  ],
+  "p": "0.8862",
+  "wilson95": [
+   0.8477,
+   0.916
+  ],
+  "y": 296
+ },
+ "registryFlip": "none (row stays false: flow-unavailable:python)",
+ "rule": "per config: G >= 120, 20y >= 19G, 20k >= 19n; M = 20y - 19G; TRUE iff both configs pass; D removed",
+ "rulingsSha256": {
+  "analyst": "3da2f3f53e9915668bab5db99ca15b26e84ba5452162969f4533c14bb9b3df3c",
+  "ds": "9a607561d69ab761917f6a3ce705e368349d254870282b77739ccda1b9c203af"
+ },
+ "sampleSha256": "6f4e1f985085d1e09783f088da14701af646dd06457b1e66b4db69936a387208",
+ "toolchainImageId": "sha256:a24714d061748948c15b7559fabbf245f29fa39e1310ca8b0ef434d90d9805a0",
+ "truthSha256": "b5d14efea331e262747e0562e32fb33991bd018fba9e6550521f18a40f7bbba5"
+}
