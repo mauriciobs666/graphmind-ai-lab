@@ -131,18 +131,18 @@ Module `cpg/eval/tools/baseline.py` (new; stdlib only, pure, no store access) ho
 (§3; `{t: [record, ...]}`), `naive_over_lister`, `baseline_recall` (§6), `dominance` (§7) and `nc5_view` (§5).
 
 ```python
-def naive_over_lister(snapshot: dict, anchors: list[dict], bound: int = 2, *, direction: str = "impact",
-                      kind_scope: str = "kind", in_scope=None) -> list[dict]
+def naive_over_lister(snapshot: dict, anchors: list[dict], bound: int, *, direction: str = "impact",
+                      kind_scope: str = "kind", in_scope) -> list[dict]
 ```
 
 - `anchors`: **one per answer** (never per gold anchor), `{"anchorId", "type": "symbol" | "contract" | "config" | "unresolved",
   "symbolId" | "cpId" | "entryId"}`, the projection of that answer's resolved `anchor` (answer-v1 `AnchorSymbol`/
   `AnchorContract`/`AnchorConfig`). A `unit` anchor arrives as the contract anchor of its probe (EP §5.1); a `unit`
   type in the input is a `ValueError`, so a unit and its probe cannot both enter. An answer whose anchor did not resolve
-  arrives as `type: "unresolved"`, and only that (the answer's own `anchor` is absent; EP §5.4 concerns items, not anchors). The CLI takes `bound` from the `ac5-gate-1` record's
-  `defaultDepthBound`; the default 2 is for tests only.
+  arrives as `type: "unresolved"`, and only that (the answer's own `anchor` is absent; EP §5.4 concerns items, not anchors). `bound` has no default: the CLI takes it from the
+  `ac5-gate-1` record's `defaultDepthBound`.
 - `kind_scope`: `"kind"` (headline, rule 4) or `"key"` (reported beside it, rule 4).
-- `in_scope`: `None` (everything in scope) or a callable taking a `symbol` record; production passes
+- `in_scope` (required keyword): `None` (everything in scope) or a callable taking a `symbol` record; production passes
   `lambda s: not path_excluded(s["path"], exclusions)` (`noise.py`, the same filter as the system's frame, `-p1-ml.md` §6.3).
 - **Returns**, one dict per anchor in `anchorId` order: `{"anchorId", "type", "count", "countInScope", "countConfirmedOwn",
   "byName": {"resolvedSite", "unresolvedSite"}, "bySeed", "items"}`. `items` is the sorted list of distinct `symbolId`s listed;
@@ -292,7 +292,7 @@ both, recomputed on that set with its own `itemSetSha256`.
 | `system`, `baseline` | `[k, n]` over all scored items (the pre-registered "same hit rule", headline) |
 | `systemSym`, `baselineSym` | `[k, n_sym]` over symbol-type items only, so a baseline's structural zero on `config` items is not read as its listing strategy |
 | `paired` | the 2×2 of the same items: `both`, `systemOnly`, `baselineOnly`, `neither`; reported beside the two Wilson intervals (`oracle.wilson`), never judged by interval overlap |
-| `configGold` | the number of `config` gold items |
+| `configGold` | the number of scored items with `impacted.type == "config"` (in the ex-key-error figure, of that reduced set). A scored item of any other type, `unit` included, is refused (`ValueError`, exit 4): EP §5.2 H1 defines symbol and config items only |
 | `exKeyError` | the same keys over the reduced set |
 
 **Flag, as ratified:** reduction is flagged iff `baseline_k * system_n < system_k * baseline_n` (exact, cross-multiplied).
@@ -315,6 +315,9 @@ answer's `depthBound.bound` equals it. A sensitivity at bound 1 and 3 is optiona
 burden`; never crossed. The headline is in-scope. The baseline lists symbols only, so the report prints the number of non-symbol
 system items (this asymmetry lowers the baseline, conservative against the reduction).
 
+**Trust limit.** The baseline and recall files are custodian-written. `score` recomputes the `system` figures from
+`system-hits.jsonl`, but the baseline `k` is trusted from the custodian file; per-item baseline hits are a P2 hardening.
+
 **Commitment.** The decision record `cpg/eval/decisions/ccg-noise-recall-rule-v1.json` (owner `data-scientist`, committed by `teco`)
 precedes any scored gate answer; `baseline.py` and `snapshot_export.py` join the harness files pinned by `ac5-gate-1`
 (`-p1-ml.md` §6.1). The generator needs only the snapshot and the anchors; whoever can see held-out answers does not run it before
@@ -327,7 +330,8 @@ the record. A rule changed after scoring is "after adaptation".
 1. **Reduction pairing, two places.** `score` builds one `base` list from `baseline[a]` and passes it to both
    `reduction(base, bin_, ...)` and `reduction(base, ball, ...)`; `bootstrap` (via `_agg`) divides `g["base"]` by the in-scope
    `g["burden"]`. Both change: the baseline file rows are `{anchorId, type, count, countInScope, countConfirmedOwn, byName,
-   unresolved?, bound}`; `score` uses `countInScope` for the in-scope reduction and `count` for the all-listed one, and
+   bySeed, bound}`, except an unresolved row, which is `{anchorId, type, count: 0, countInScope: 0, countConfirmedOwn: 0,
+   unresolved: true, bound}` with no `byName` and no `bySeed`; `score` uses `countInScope` for the in-scope reduction and `count` for the all-listed one, and
    `bootstrap` takes a `(base, burden)` per-anchor vector pair per pairing, each pairing with its own interval.
 2. **Refusals (exit 4, counts only):** baseline anchor set differs from the answers'; `0 <= countInScope <= count` fails; an
    `unresolved` row with `count != 0`; `noise-recall.json` with `k > n`, `n <= 0`, or an `itemSetSha256` that differs from
@@ -365,6 +369,9 @@ unsampled stratum; (5) a stratum with `N_h <= 5`, and a frame at or under 100, i
 **Stakeholder question S1 (not blocking gate 1; before the next gate's pre-registration, and before anyone sees the variants'
 reductions):** which reduction carries the ≥ 5× bar: (a) kind-wide, the ratified wording; (b) key-scoped; (c) both (the review's
 recommendation).
+
+**Pin set of the recall-rule record:** this note's §4-§6 hashed together, and `baseline.py`, `noise.py`, `match_keys.py`,
+`snapshot_export.py`.
 
 **Order.** (1) `tdd-engineer` builds `baseline.py` (§4-§6; the tests of §4.1) test-first and `snapshot_export.py` (§1-§3) with a
 live tier on a throwaway holding the §4.1 graph (the texts of §2, §3 and §5 were verified; they are label and relationship scans
