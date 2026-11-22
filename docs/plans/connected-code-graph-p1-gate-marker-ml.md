@@ -62,6 +62,20 @@ EP §10.4's emptiness check is about not scoring a replayed answer. On a resume 
 
 After the marker, an `AnchorNotResolved` or an id mismatch on an in-graph anchor is a **harness error**, not a miss. The `keyPath` mask (`gate.mask_keypath`) is applied before asking, as the build did.
 
+### 2.1 Stored-form http keys (`{?}`, `{#}`, `?query`): the engine's resolve is wrong, not the gold
+
+**Verified in code.** The rewrite is not the harness's: `cli_request` sends `keyNorm` verbatim, and `ccg/engine/anchors.py::resolve_contract` runs `http_key(key, "consumer")` on it first. That function parses its input as a raw URL, so a stored-form key is mangled (`GET /x/{?}` and `GET /x/{#}/y` become `GET /x/{`; `GET /x?y=1` becomes `GET /x`) and the exact read misses; provider form is the identity. The 14 `{?}` points are in the store, so the gold is resolvable: the engine cannot be asked for a contract point by the key it stores and prints. That is a round-trip defect of the product (the key an answer returns cannot be re-asked), and a real consumer or provider key in the masked form is a legitimate AC-5 anchor.
+
+**Ruling.**
+1. **Fix it in the engine, before the gate, on dev evidence.** `resolve_contract`: if the consumer-normalised key has no exact hit, retry the key verbatim as a stored key (exact read, same `kind` filter) before the template fallback. A planted dev test over a store holding `{?}`, `{#}` and a `{}` key must resolve each to its own id; an ordinary key resolves exactly as before (the normalised read stays first). The evidence is the build's store and the rehearsal, not held-out data, so this is not contact and needs no re-freeze beyond the usual `coreTreeHash` pin. The harness stays as it is: it has no product-neutral way to fix this (the contract anchor spec carries only a key), and a harness rewrite that ships a different key than the record's would make the gate ask something other than what the custodian drew.
+2. **Rejected: treat such an anchor as a miss or exclude it.** Excluding by key shape after seeing that the product fails on it lets the product shrink its own denominator; scoring it a miss charges the product for a defect found, and fixable, before the marker, and would spend the one-shot list on a known engine bug. Both are choices made on the shape of held-out anchors.
+3. **Rejected: declare the list unusable and re-draw as the normal path.** It is the correct *fallback* only if the engine is not fixed before the gate: the refusal stands (counts only, §2.5), the clusters go to dev, and the cost is the ~20 min build plus a stratum shortfall (SQ-P0-1). With the fix this refusal does not occur on this cause.
+4. **`?query` keys.** A gold key carrying a query is not a stored form (the build strips it), so its node is absent: `anchor-not-in-graph`, a counted miss under HA-3, as already ruled. No change; the custodian should not draw such keys, and a draw that holds any reports them as that count.
+
+**To state before the held-out run (prereg text):** no resolution exception by key shape; a preflight refusal on any cause is a contact event handled by §2.5; post-marker, an in-graph anchor that does not resolve is a harness error (§2, last paragraph), never a miss.
+
+**Stakeholder decision:** not needed (a defect fix against the live contract and rules already ruled). The engine owner owns the change; the gate does not start until the planted test passes and the dry-run, rerun on a built store holding those key shapes, exits 0.
+
 ## 3. `blocked` vs `fail`, and what is spent
 
 **Vocabulary** (confirmed): `stopped` (C5 stamp or void), `fail` (at least one miss; triggers EP §12.1 steps 2–3), `blocked` (the verdict cannot be given or cannot be a pass), `pass`, plus the re-gate outcomes.
@@ -104,6 +118,7 @@ Source: `docs/plans/connected-code-graph-p1-gates.md` P1-32 step 1: the `flow` s
 - `SIGKILL` at ask k of n: k lines on disk; `--resume` asks n−k; a torn last line is discarded and re-asked; a harness file edited, a different `snapshotId`, a different `recordCommit` between the two: refused.
 - A `ValueError` after the marker: `failed:deterministic`, `--resume` refused; a connection error: `failed:transient`, resume allowed.
 - `score` on `started` or `failed:*`: refused.
+- Preflight (stored-form keys, after §2.1): planted `{?}`, `{#}` and `{}` http keys that exist in the store resolve `ok`; a planted `?query` key is absent and counted as a miss without resolve.
 - Preflight: an anchor with two candidates, none, and a different id each refuse before the marker with counts only and no ids on stdout or stderr.
 - An engine stub raising a `ValueError` on one anchor: miss `engine-error`, verdict `fail`, line recorded, `--resume` does not re-ask; a harness error beside it gives `blocked`.
 - A harness error plus a miss gives `blocked`; a masked comparison plus a miss gives `fail`; a masked comparison alone gives `blocked`.
