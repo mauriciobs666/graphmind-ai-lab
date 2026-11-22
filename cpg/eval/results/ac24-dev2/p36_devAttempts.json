@@ -1,0 +1,63 @@
+[
+ {
+  "model": "qwen/qwen3-4b-2507",
+  "counts": {
+   "unambiguous": 9,
+   "ambiguous": 1
+  },
+  "unusable": 0,
+  "resultSha256": "15338865a41c12e65648887541f71379dcfb9dd1a4b9e8c937382f3acf0a8894",
+  "promptHash": "494fb949e16ca53914dd929ae6d0e3a60d99908b587819abcccbfa5d43bb5e15"
+ },
+ {
+  "model": "mistralai_ministral-3-3b-instruct-2512",
+  "counts": {
+   "unambiguous": 8,
+   "ambiguous": 1
+  },
+  "unusable": 0,
+  "resultSha256": "3d638683928c2c7c2f0695d033136cdbe73212c24b5a05614e88caa22eb1dcaf",
+  "promptHash": "494fb949e16ca53914dd929ae6d0e3a60d99908b587819abcccbfa5d43bb5e15"
+ },
+ {
+  "model": "qwen2.5-3b-instruct",
+  "counts": {
+   "unambiguous": 6,
+   "ambiguous": 0
+  },
+  "unusable": 0,
+  "resultSha256": "d2bf2e07d0cff485f179ddb7605ba8d6a9e1c0b55332c4d065fce6c85ebc75d3",
+  "promptHash": "494fb949e16ca53914dd929ae6d0e3a60d99908b587819abcccbfa5d43bb5e15"
+ },
+ {
+  "model": "qwen/qwen3-4b-2507",
+  "counts": {
+   "unambiguous": 8,
+   "ambiguous": 1
+  },
+  "unusable": 0,
+  "resultSha256": "000249ec0b30f0e7444d3dea6ea83cfc839b96463bbcc31ecba53302262aa262",
+  "promptHash": "f91e01b0cfc333617dd7051353260ed09fec4c37795b6dc4db64695b886d5a45"
+ },
+ {
+  "model": "nvidia/nemotron-3-nano-4b",
+  "counts": {
+   "unambiguous": 0,
+   "ambiguous": 0
+  },
+  "unusable": 0,
+  "resultSha256": null,
+  "promptHash": "f91e01b0cfc333617dd7051353260ed09fec4c37795b6dc4db64695b886d5a45",
+  "note": "failed fx-* probe, no dev run"
+ },
+ {
+  "model": "mistralai_ministral-3-3b-instruct-2512",
+  "counts": {
+   "unambiguous": 5,
+   "ambiguous": 1
+  },
+  "unusable": 0,
+  "resultSha256": "1003f0b50cdafbb3d55374c9b93d34781a09935434b7f1ea5358c77088a00a81",
+  "promptHash": "f91e01b0cfc333617dd7051353260ed09fec4c37795b6dc4db64695b886d5a45"
+ }
+]

@@ -1,0 +1,940 @@
+{
+ "canary": {
+  "digest": "6620e8aaa9c64f2cc7dd0664c6fa6ef7b33a89eeff502652ff463b85d646fb69",
+  "n": 6,
+  "questionsSha256": "d4d4a6f4045a7563f20388b1052bf06ae089a6ef2ca8a4aca578f369f33a25d2"
+ },
+ "capFloor": 5,
+ "interpreterObserved": {
+  "endpoint": "local",
+  "grammarHash": "2f7a1eddc0b1d39fc3b0e49d10321c939455cfa68d8287a0702e561a09dc3b1e",
+  "modelFingerprint": "mistralai_ministral-3-3b-instruct-2512|bartowski|mistral3|Q8_0|16384",
+  "promptHash": "f91e01b0cfc333617dd7051353260ed09fec4c37795b6dc4db64695b886d5a45",
+  "quantization": "Q8_0",
+  "resolverVersion": "1.0",
+  "samplingHash": "b8aec053101d64e35199a6a0371e9c44"
+ },
+ "items": [
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "ambiguity",
+   "parserResolved": false,
+   "qid": "QW-R2-15",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "reconcile_inventory"
+         }
+        ]
+       },
+       {
+        "spans": [
+         {
+          "kindHint": "other",
+          "text": "storefront"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": "unknown-name",
+      "capExceeded": false,
+      "extras": 0,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "asked",
+      "status": "ambiguous",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2-25",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "route",
+          "text": "/shop/api/session"
+         }
+        ]
+       }
+      ],
+      "direction": "depends-on",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2-26",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "route",
+          "text": "GET /health"
+         }
+        ]
+       },
+       {
+        "spans": [
+         {
+          "kindHint": "tool",
+          "text": "falkor-chat"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [
+       {
+        "direction": "depends-on",
+        "useCase": "impact"
+       }
+      ],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": false,
+     "verdict": {
+      "ambiguityKindEmitted": "unknown-name",
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 2,
+      "notBuilt": false,
+      "overAsk": true,
+      "reason": "over-asking",
+      "status": "ambiguous",
+      "understood": false,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2-4",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "check_tool_calling_eligibility"
+         },
+         {
+          "kindHint": "file",
+          "text": "model-bench/lmstudio.py"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2-5",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "tool",
+          "text": "mcp-monitor"
+         },
+         {
+          "kindHint": "symbol",
+          "text": "run_watch"
+         },
+         {
+          "kindHint": "file",
+          "text": "mcp_monitor/watch.py"
+         }
+        ]
+       }
+      ],
+      "direction": "depends-on",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": false,
+     "verdict": {
+      "ambiguityKindEmitted": "unknown-name",
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": true,
+      "reason": "over-asking",
+      "status": "ambiguous",
+      "understood": false,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2-6",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "decide()"
+         },
+         {
+          "kindHint": "file",
+          "text": "decision-models/agents/guard_hook.py"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2-9",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "route",
+          "text": "GET /documents/search?q=..."
+         }
+        ]
+       }
+      ],
+      "direction": "depends-on",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2b-10",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "usePostMessage"
+         },
+         {
+          "kindHint": "file",
+          "text": "hooks.ts"
+         }
+        ]
+       },
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "salesperson"
+         }
+        ]
+       }
+      ],
+      "direction": "depends-on",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": false,
+     "verdict": {
+      "ambiguityKindEmitted": "unknown-name",
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 1,
+      "notBuilt": false,
+      "overAsk": true,
+      "reason": "over-asking",
+      "status": "ambiguous",
+      "understood": false,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2b-2",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "Services._priced_cart_lines"
+         },
+         {
+          "kindHint": "file",
+          "text": "services.py"
+         }
+        ]
+       },
+       {
+        "spans": [
+         {
+          "kindHint": "other",
+          "text": "front do salesperson"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2b-24",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "route",
+          "text": "delete /documents/{document_id}"
+         }
+        ]
+       }
+      ],
+      "direction": "depends-on",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": false,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "wrong-interpretation",
+      "status": "resolved",
+      "understood": false,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2b-26",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "delete_document"
+         }
+        ]
+       },
+       {
+        "spans": [
+         {
+          "kindHint": "tool",
+          "text": "falkor-chat"
+         }
+        ]
+       }
+      ],
+      "direction": "depends-on",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": false,
+     "verdict": {
+      "ambiguityKindEmitted": "unknown-name",
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 8,
+      "notBuilt": false,
+      "overAsk": true,
+      "reason": "over-asking",
+      "status": "ambiguous",
+      "understood": false,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2b-31",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "confirm_match"
+         },
+         {
+          "kindHint": "tool",
+          "text": "tool mcp"
+         }
+        ]
+       }
+      ],
+      "direction": "depends-on",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": false,
+     "verdict": {
+      "ambiguityKindEmitted": "unknown-name",
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": true,
+      "reason": "over-asking",
+      "status": "ambiguous",
+      "understood": false,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-R2b-4",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "apiFetch"
+         },
+         {
+          "kindHint": "file",
+          "text": "salesperson/src/api/client.ts"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": "salesperson",
+      "useCase": "impact"
+     },
+     "error": "not-built",
+     "repeat": 1,
+     "understood": false,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": null,
+      "notBuilt": true,
+      "overAsk": false,
+      "reason": "not-built",
+      "status": null,
+      "understood": false,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "ambiguity",
+   "parserResolved": false,
+   "qid": "QW-R2b-41",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "decide"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": false,
+     "verdict": {
+      "ambiguityKindEmitted": "several-symbols",
+      "capExceeded": true,
+      "extras": 10,
+      "nOptions": 12,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "cap-exceeded",
+      "status": "ambiguous",
+      "understood": false,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  }
+ ],
+ "of": 14,
+ "order": "qid-sorted, item by item",
+ "ran": 14,
+ "repeatsPlanned": 1,
+ "samplerEffective": null,
+ "samplerRequest": {
+  "params": {
+   "frequency_penalty": 0,
+   "max_tokens": 384,
+   "presence_penalty": 0,
+   "repeat_penalty": 1.0,
+   "seed": 0,
+   "temperature": 0,
+   "top_k": 0,
+   "top_p": 1
+  },
+  "samplingHash": "b8aec053101d64e35199a6a0371e9c44"
+ },
+ "stop": null,
+ "summary": {
+  "ambiguousExtras": {
+   "QW-R2-15": {
+    "capExceeded": false,
+    "emittedKind": "unknown-name",
+    "extras": 0,
+    "nOptions": 0
+   },
+   "QW-R2b-41": {
+    "capExceeded": true,
+    "emittedKind": "several-symbols",
+    "extras": 10,
+    "nOptions": 12
+   }
+  },
+  "ambiguousUnderstood": {
+   "k": 1,
+   "n": 2,
+   "wilson95": [
+    0.095,
+    0.905
+   ]
+  },
+  "capExceededQids": [
+   "QW-R2b-41"
+  ],
+  "claim": "smoke result: shows the interpreter is not broken on the impact cells; it does not certify 0.92",
+  "completionsByItem": {
+   "QW-R2-15": [
+    1
+   ],
+   "QW-R2-25": [
+    1
+   ],
+   "QW-R2-26": [
+    1
+   ],
+   "QW-R2-4": [
+    1
+   ],
+   "QW-R2-5": [
+    1
+   ],
+   "QW-R2-6": [
+    1
+   ],
+   "QW-R2-9": [
+    1
+   ],
+   "QW-R2b-10": [
+    1
+   ],
+   "QW-R2b-2": [
+    1
+   ],
+   "QW-R2b-24": [
+    1
+   ],
+   "QW-R2b-26": [
+    1
+   ],
+   "QW-R2b-31": [
+    1
+   ],
+   "QW-R2b-4": [
+    1
+   ],
+   "QW-R2b-41": [
+    1
+   ]
+  },
+  "entryPass": false,
+  "flipRate": {
+   "k": 0,
+   "n": 0,
+   "wilson95": null
+  },
+  "interpreterItems": 14,
+  "mode": "dev",
+  "notBuilt": [
+   "QW-R2b-4"
+  ],
+  "of": 14,
+  "overAskedQids": [
+   "QW-R2-26",
+   "QW-R2-5",
+   "QW-R2b-10",
+   "QW-R2b-26",
+   "QW-R2b-31"
+  ],
+  "overAsking": {
+   "k": 5,
+   "n": 12,
+   "wilson95": [
+    0.193,
+    0.68
+   ]
+  },
+  "parserResolved": {
+   "count": 0,
+   "note": "no provenance, no model call: not interpreter draws, one repeat, no flip rate",
+   "qids": []
+  },
+  "perDrawUnderstood": {
+   "k": 6,
+   "n": 14,
+   "wilson95": [
+    0.214,
+    0.674
+   ]
+  },
+  "perLanguage": {
+   "en": {
+    "k": 3,
+    "n": 5,
+    "wilson95": [
+     0.231,
+     0.882
+    ]
+   },
+   "pt": {
+    "k": 2,
+    "n": 7,
+    "wilson95": [
+     0.082,
+     0.641
+    ]
+   }
+  },
+  "pooledComposition": {
+   "interpreterDrawsUnambiguous": 12,
+   "interpreterOnlyUnderstood": {
+    "k": 5,
+    "n": 12,
+    "wilson95": [
+     0.193,
+     0.68
+    ]
+   },
+   "note": "the pooled k/n mixes parser-resolved and interpreter draws; the interpreter-only rate is beside it",
+   "parserResolvedUnambiguous": 0
+  },
+  "ran": 14,
+  "recommendation": "entry check failed: do not edit the prompt, grammar or resolver after dev2 exists; held-out items are never used for tuning",
+  "recount": {
+   "ambiguous": 2,
+   "en": 5,
+   "pt": 7,
+   "unambiguous": 12
+  },
+  "stop": null,
+  "thresholds": {
+   "ambiguousAll": 2,
+   "unambiguousMin": 11
+  },
+  "unambiguousUnderstood": {
+   "k": 5,
+   "n": 12,
+   "wilson95": [
+    0.193,
+    0.68
+   ]
+  },
+  "unusableObserved": {
+   "count": 0,
+   "observable": "Interpretation.draft is None, recorded per interpret call by recording_interpreter (not inferred from the answer's shape)",
+   "of": 14,
+   "qids": []
+  },
+  "verdict": "dev entry check failed",
+  "voidedRepeats": 0
+ },
+ "treeStamp": {
+  "clean": true,
+  "coreCommitIsAncestorOfHead": null,
+  "coreTreeHash": "c977c4b77afccb6eb03098143308677f9989f78e5108d4c9524a35e10972df55",
+  "dirty": [],
+  "harnessHash": "0798c5a87e50c6ab5e869e8c6eb476078592aad71e79655cc3c364d483e20f26",
+  "head": "bb1fcd4c42341e63a87be3fa0e1bed3d03dc3474",
+  "packSetHash": "1c75686c8d5b429a24f57a2bbb6d7444a10e6948c0a20348d732548ad836ccca"
+ }
+}

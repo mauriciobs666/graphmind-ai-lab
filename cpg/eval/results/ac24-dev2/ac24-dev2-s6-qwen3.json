@@ -1,0 +1,872 @@
+{
+ "canary": {
+  "digest": "7b682c17a19d0075c61c9135205af08c6f8b879aeccb20c9023b35ed9db8c343",
+  "n": 6,
+  "questionsSha256": "d4d4a6f4045a7563f20388b1052bf06ae089a6ef2ca8a4aca578f369f33a25d2"
+ },
+ "capFloor": 5,
+ "interpreterObserved": {
+  "endpoint": "local",
+  "grammarHash": "2f7a1eddc0b1d39fc3b0e49d10321c939455cfa68d8287a0702e561a09dc3b1e",
+  "modelFingerprint": "qwen/qwen3-4b-2507|qwen|qwen3|Q4_K_M|16384",
+  "promptHash": "f91e01b0cfc333617dd7051353260ed09fec4c37795b6dc4db64695b886d5a45",
+  "quantization": "Q4_K_M",
+  "resolverVersion": "1.0",
+  "samplingHash": "b8aec053101d64e35199a6a0371e9c44"
+ },
+ "items": [
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-11",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "route",
+          "text": "POST /threads/{thread_id}/messages"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-13",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "tool",
+          "text": "send_message"
+         },
+         {
+          "kindHint": "server",
+          "text": "falkor-chat"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-17",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "route",
+          "text": "GET /workflow-runs/<run_id>/trace"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "ambiguity",
+   "parserResolved": false,
+   "qid": "QW-19",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "post_message"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": "several-symbols",
+      "capExceeded": false,
+      "extras": 0,
+      "nOptions": 3,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "asked",
+      "status": "ambiguous",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-27",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "line",
+          "text": "falkorchat/api.py:603"
+         }
+        ]
+       }
+      ],
+      "direction": "depends-on",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-3",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "line",
+          "text": "cypher-mcp/server.py:564"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": false,
+     "verdict": {
+      "ambiguityKindEmitted": "no-anchor",
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": true,
+      "reason": "over-asking",
+      "status": "ambiguous",
+      "understood": false,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-30",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "Runner"
+         },
+         {
+          "kindHint": "file",
+          "text": "decisionmodels/runner.py"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-32",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "ServerConnection.call_tool"
+         },
+         {
+          "kindHint": "file",
+          "text": "mcp_monitor/client.py"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-37",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "route",
+          "text": "GET /channels/{channel_id}/threads"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-39",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "route",
+          "text": "POST /workflow-runs/:run_id/input"
+         }
+        ]
+       }
+      ],
+      "direction": "depends-on",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-42",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "route",
+          "text": "GET /workflow-defs/{key}/versions/{version}"
+         }
+        ]
+       }
+      ],
+      "direction": "depends-on",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "pt",
+   "modelCalled": true,
+   "outcome": "ambiguity",
+   "parserResolved": false,
+   "qid": "QW-47",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "tool",
+          "text": "ingest_documents"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": false,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "silent-single-interpretation",
+      "status": "resolved",
+      "understood": false,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-5",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "symbol",
+          "text": "cypher_mcp_image_tag"
+         },
+         {
+          "kindHint": "file",
+          "text": "image-tag.sh"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": true,
+     "verdict": {
+      "ambiguityKindEmitted": null,
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": false,
+      "reason": "match",
+      "status": "resolved",
+      "understood": true,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  },
+  {
+   "lang": "en",
+   "modelCalled": true,
+   "outcome": "unambiguous",
+   "parserResolved": false,
+   "qid": "QW-7",
+   "repeats": [
+    {
+     "cacheBypass": false,
+     "cacheHit": false,
+     "completions": 1,
+     "draft": {
+      "anchors": [
+       {
+        "spans": [
+         {
+          "kindHint": "other",
+          "text": "postMessage()"
+         }
+        ]
+       }
+      ],
+      "direction": "impact",
+      "readings": [],
+      "scope": null,
+      "useCase": "impact"
+     },
+     "error": null,
+     "repeat": 1,
+     "understood": false,
+     "verdict": {
+      "ambiguityKindEmitted": "no-anchor",
+      "capExceeded": false,
+      "extras": null,
+      "nOptions": 0,
+      "notBuilt": false,
+      "overAsk": true,
+      "reason": "over-asking",
+      "status": "ambiguous",
+      "understood": false,
+      "unusable": false
+     },
+     "voided": false
+    }
+   ]
+  }
+ ],
+ "of": 14,
+ "order": "qid-sorted, item by item",
+ "ran": 14,
+ "repeatsPlanned": 1,
+ "samplerEffective": null,
+ "samplerRequest": {
+  "params": {
+   "frequency_penalty": 0,
+   "max_tokens": 384,
+   "presence_penalty": 0,
+   "repeat_penalty": 1.0,
+   "seed": 0,
+   "temperature": 0,
+   "top_k": 0,
+   "top_p": 1
+  },
+  "samplingHash": "b8aec053101d64e35199a6a0371e9c44"
+ },
+ "stop": null,
+ "summary": {
+  "ambiguousExtras": {
+   "QW-19": {
+    "capExceeded": false,
+    "emittedKind": "several-symbols",
+    "extras": 0,
+    "nOptions": 3
+   },
+   "QW-47": {
+    "capExceeded": false,
+    "emittedKind": null,
+    "extras": null,
+    "nOptions": 0
+   }
+  },
+  "ambiguousUnderstood": {
+   "k": 1,
+   "n": 2,
+   "wilson95": [
+    0.095,
+    0.905
+   ]
+  },
+  "capExceededQids": [],
+  "claim": "smoke result: shows the interpreter is not broken on the impact cells; it does not certify 0.92",
+  "completionsByItem": {
+   "QW-11": [
+    1
+   ],
+   "QW-13": [
+    1
+   ],
+   "QW-17": [
+    1
+   ],
+   "QW-19": [
+    1
+   ],
+   "QW-27": [
+    1
+   ],
+   "QW-3": [
+    1
+   ],
+   "QW-30": [
+    1
+   ],
+   "QW-32": [
+    1
+   ],
+   "QW-37": [
+    1
+   ],
+   "QW-39": [
+    1
+   ],
+   "QW-42": [
+    1
+   ],
+   "QW-47": [
+    1
+   ],
+   "QW-5": [
+    1
+   ],
+   "QW-7": [
+    1
+   ]
+  },
+  "entryPass": false,
+  "flipRate": {
+   "k": 0,
+   "n": 0,
+   "wilson95": null
+  },
+  "interpreterItems": 14,
+  "mode": "dev",
+  "notBuilt": [],
+  "of": 14,
+  "overAskedQids": [
+   "QW-3",
+   "QW-7"
+  ],
+  "overAsking": {
+   "k": 2,
+   "n": 12,
+   "wilson95": [
+    0.047,
+    0.448
+   ]
+  },
+  "parserResolved": {
+   "count": 0,
+   "note": "no provenance, no model call: not interpreter draws, one repeat, no flip rate",
+   "qids": []
+  },
+  "perDrawUnderstood": {
+   "k": 11,
+   "n": 14,
+   "wilson95": [
+    0.524,
+    0.924
+   ]
+  },
+  "perLanguage": {
+   "en": {
+    "k": 4,
+    "n": 6,
+    "wilson95": [
+     0.3,
+     0.903
+    ]
+   },
+   "pt": {
+    "k": 6,
+    "n": 6,
+    "wilson95": [
+     0.61,
+     1.0
+    ]
+   }
+  },
+  "pooledComposition": {
+   "interpreterDrawsUnambiguous": 12,
+   "interpreterOnlyUnderstood": {
+    "k": 10,
+    "n": 12,
+    "wilson95": [
+     0.552,
+     0.953
+    ]
+   },
+   "note": "the pooled k/n mixes parser-resolved and interpreter draws; the interpreter-only rate is beside it",
+   "parserResolvedUnambiguous": 0
+  },
+  "ran": 14,
+  "recommendation": "entry check failed: do not edit the prompt, grammar or resolver after dev2 exists; held-out items are never used for tuning",
+  "recount": {
+   "ambiguous": 2,
+   "en": 6,
+   "pt": 6,
+   "unambiguous": 12
+  },
+  "stop": null,
+  "thresholds": {
+   "ambiguousAll": 2,
+   "unambiguousMin": 11
+  },
+  "unambiguousUnderstood": {
+   "k": 10,
+   "n": 12,
+   "wilson95": [
+    0.552,
+    0.953
+   ]
+  },
+  "unusableObserved": {
+   "count": 0,
+   "observable": "Interpretation.draft is None, recorded per interpret call by recording_interpreter (not inferred from the answer's shape)",
+   "of": 14,
+   "qids": []
+  },
+  "verdict": "dev entry check failed",
+  "voidedRepeats": 0
+ },
+ "treeStamp": {
+  "clean": true,
+  "coreCommitIsAncestorOfHead": null,
+  "coreTreeHash": "c977c4b77afccb6eb03098143308677f9989f78e5108d4c9524a35e10972df55",
+  "dirty": [],
+  "harnessHash": "0798c5a87e50c6ab5e869e8c6eb476078592aad71e79655cc3c364d483e20f26",
+  "head": "bb1fcd4c42341e63a87be3fa0e1bed3d03dc3474",
+  "packSetHash": "1c75686c8d5b429a24f57a2bbb6d7444a10e6948c0a20348d732548ad836ccca"
+ }
+}
