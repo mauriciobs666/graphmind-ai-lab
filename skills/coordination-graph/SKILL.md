@@ -29,8 +29,8 @@ the distiller's/`graph-dba`'s, not yours. Never export `COORDGRAPH_EPHEMERAL_POR
 
 ## Status — read before trusting a recipe
 
-Every subcommand below is built and the shared mirror is loaded. **The post-edit hook is built but
-registering it is the stakeholder's step** (`coordination-graph/docs/hook-settings.md`); until it is,
+Every subcommand below is built and the shared mirror is loaded. **The post-edit hook is built and registered
+in `.claude/settings.json`** (`coordination-graph/docs/hook-settings.md`); if it is not, or is disabled,
 nothing mirrors an edit for you, and the header's `Hook:` says so (`registered`, `not registered` or
 `disabled`; only `registered` means settings register both events). The S0 probe (2026-11-21, mode `auto`) saw it fire for Write/Edit/Bash in the main session and in
 foreground, background and worktree subagents; a failing Bash fires `PostToolUseFailure`; **a failed

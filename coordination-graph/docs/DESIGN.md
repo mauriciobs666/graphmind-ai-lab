@@ -386,8 +386,9 @@ holds other components' graphs. Two exact-complement modes, chosen per command b
 
 `coordination-graph/hooks/post-tool-sync.sh` is a `PostToolUse` and `PostToolUseFailure` handler
 (matcher `Write|Edit|Bash`) that mirrors a changed coordination or KB file before the agent reads the
-tool result. **Registration is a stakeholder action**: the settings block is in
-`coordination-graph/docs/hook-settings.md`, and nothing fires the script until it is applied. **Where
+tool result. **It is registered in `.claude/settings.json`**; the settings block and
+how to change it are in `coordination-graph/docs/hook-settings.md`, and nothing fires the script when
+that registration is removed. **Where
 Claude Code fires it was probed 2026-11-21 (`coordination-graph/docs/hook-settings.md` §6): Write/Edit/Bash in main and subagents under `auto`; a failed Edit fires nothing; other permission modes and teammates are unverified**; the
 `Hook:` header state is a static reading (§4.6) and does not prove it fires.
 

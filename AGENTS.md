@@ -44,7 +44,7 @@ engineering** (Claude Code and OpenCode artifacts).
   context, incl. the raw-capture write shape; `claude/CLAUDE.md` is a `@AGENTS.md` import stub.
 - `coordination-graph/` — `coordgraph` CLI mirroring the coordination files (teco ledgers, reviews,
   requirements, `BACKLOG.md`, agent `kaizen/plan.md`, registered KB files) into a FalkorDB `coordination`
-  graph: read views (in flight, unit status, planned, milestone proposal), a post-edit hook (registration is the stakeholder's), KB freshness.
+  graph: read views (in flight, unit status, planned, milestone proposal), a post-edit hook (registered in `.claude/settings.json`), KB freshness.
   Files are the truth.
 - `kiro/` — A checked-in Kiro CLI agent (`falkor-chat-demo`) connecting to `falkor-chat`'s MCP
   server as a client, restricted to `send_message`/`read_messages`, demoing that

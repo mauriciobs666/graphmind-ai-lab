@@ -11,8 +11,8 @@ consumers: `skills/coordination-graph/SKILL.md`.
 
 - **Built:** every subcommand in `README.md`, the shared-instance path (`--confirm`) and the
   post-edit hook (`hooks/post-tool-sync.sh`, `hook-sync`, `retry-failed`). **Loaded:** the shared
-  mirror (S8a step 5, parity ok). **Not done:** registering the hook (the stakeholder applies
-  `cobb`'s settings block).
+  mirror (S8a step 5, parity ok). **Registered:** the hook, in `.claude/settings.json`
+  (`docs/hook-settings.md`).
 - **Tests run with this directory as the working directory**, never from the repo root (rootdir
   and `testpaths` would be wrong). Default run is offline (`-m 'not live'`); `live` needs Docker.
 

@@ -173,9 +173,8 @@ the package's repo), `STATE_DIR` (default `coordination-graph/.state`), `FALKORD
 
 `hooks/post-tool-sync.sh` is the `PostToolUse` and `PostToolUseFailure` handler (matcher
 `Write|Edit|Bash`) that mirrors a coordination file into the graph before the agent reads the tool
-result. **It is built but not registered by this component**: the settings block is applied by the
-stakeholder (plan S8, `claude/docs/plans/coordination-graph.md` §3.2), and until it is, nothing
-fires it. Where it fires (S0 probe result, FR-4): `coordination-graph/docs/hook-settings.md` §6.
+result. **It is registered in `.claude/settings.json`** (settings block and kill switch:
+`coordination-graph/docs/hook-settings.md`); without that registration nothing fires it. Where it fires (S0 probe result, FR-4): `coordination-graph/docs/hook-settings.md` §6.
 
 - **Fast path.** A call that changed nothing runs one pruned `find -newer .state/stamp` over the
   repo (plus the KB registry) and exits 0: no Python, no database. The script needs **bash 5**
@@ -235,6 +234,4 @@ fires it. Where it fires (S0 probe result, FR-4): `coordination-graph/docs/hook-
   50). Live tests use a shim that drops the
   `--confirm coordination` pair, because the guard refuses it on an ephemeral port.
 
-The first load into the shared instance is done (S8a step 5: 548 sources, parity ok); only the KB
-sync is still open. The hook's go-live (the stakeholder registers it, then the stamp is initialised)
-is not part of this component's code and has not been run here.
+The shared instance is loaded and the hook is registered (go-live done).
