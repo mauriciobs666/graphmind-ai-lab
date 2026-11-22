@@ -1,10 +1,11 @@
+import os
 """K-097 mutation runner. Mutates COPIES under mutroot/server/falkorchat only (pristine
 source = the live tree, read-only), runs the targeted tests, restores by copy."""
 import shutil, subprocess, sys, pathlib
-LIVE = pathlib.Path("/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/falkorchat")
+LIVE = pathlib.Path(os.path.expanduser("~/prg/graphmind-ai-lab/falkor-chat/server/falkorchat"))
 ROOT = pathlib.Path(sys.argv[1])
 PKG = ROOT / "server" / "falkorchat"
-PY = "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/.venv/bin/python"
+PY = os.path.expanduser("~/prg/graphmind-ai-lab/falkor-chat/server/.venv/bin/python")
 TESTS = ["tests/test_k097_review_probe.py", "tests/test_workflow_input_cas.py", "tests/test_process_input.py",
          "tests/test_workflow_timers.py", "tests/test_executor.py",
          "tests/test_repository.py"]

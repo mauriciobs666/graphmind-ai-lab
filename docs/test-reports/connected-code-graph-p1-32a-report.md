@@ -105,8 +105,8 @@ One mutant (`fc-hash-len`) was a bad mutant on its first run (pattern did not ma
 
 ## Files
 
-- Changed: `/home/mauricio/prg/graphmind-ai-lab/cpg/eval/tools/capture.py`, `/home/mauricio/prg/graphmind-ai-lab/cpg/eval/tools/split_manifest.py`, `/home/mauricio/prg/graphmind-ai-lab/cpg/eval/tools/s47_scripted_steps.py` (docstring only), `/home/mauricio/prg/graphmind-ai-lab/cpg/tests/test_eval_tools_split.py` (one assertion).
-- New: `/home/mauricio/prg/graphmind-ai-lab/cpg/tests/test_eval_tools_verbs.py`, this report; scratch under `/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/p1-32a/` (gitignored work area: `PROGRESS.md`, `mutate.py`, mutant lists, mutant copies).
+- Changed: `$HOME/prg/graphmind-ai-lab/cpg/eval/tools/capture.py`, `$HOME/prg/graphmind-ai-lab/cpg/eval/tools/split_manifest.py`, `$HOME/prg/graphmind-ai-lab/cpg/eval/tools/s47_scripted_steps.py` (docstring only), `$HOME/prg/graphmind-ai-lab/cpg/tests/test_eval_tools_split.py` (one assertion).
+- New: `$HOME/prg/graphmind-ai-lab/cpg/tests/test_eval_tools_verbs.py`, this report; scratch under `$HOME/prg/graphmind-ai-lab/cpg/.ccg-work/p1-32a/` (gitignored work area: `PROGRESS.md`, `mutate.py`, mutant lists, mutant copies).
 
 ## Gate fixes (analyst gate: B1, M1, minors)
 

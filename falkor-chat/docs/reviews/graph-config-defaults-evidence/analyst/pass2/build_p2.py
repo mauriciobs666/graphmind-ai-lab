@@ -41,4 +41,4 @@ def build_fan(G, F):
 t0=time.time()
 build_deep("ws:r1", 100000, 50000); print("r1", round(time.time()-t0,1), flush=True)
 build_fan("ws:r2", 100000); print("r2", round(time.time()-t0,1), flush=True)
-json.dump(base, open("/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/analyst-k098-p2/base.json","w"))
+json.dump(base, open("/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/analyst-k098-p2/base.json","w"))

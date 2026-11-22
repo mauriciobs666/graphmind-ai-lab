@@ -70,4 +70,4 @@ Every difference has one cause, on the **extraction layer**, not the walk. From 
 
 ## 7. Artifacts
 
-Edited: `cpg/fixtures/system1/expected/fx-svc.yaml`, `fx-web.yaml`, `cross.yaml`, `cpg/tests/test_fixtures.py`, `docs/test-plans/connected-code-graph-fixtures.md` (v1.8, §5.5), `docs/test-plans/connected-code-graph-p1.md` (the "re-derivation owed" paragraph replaced, AC-25 row, P1T-05/17/18). Throwaway instance `ccg-falkordb-tw-16391` removed after the run. Working files (not durable): `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/82bb1fdb-fb53-4f8c-80b5-7bf434adbf7b/scratchpad/derivation.md` and `ask1.out`.
+Edited: `cpg/fixtures/system1/expected/fx-svc.yaml`, `fx-web.yaml`, `cross.yaml`, `cpg/tests/test_fixtures.py`, `docs/test-plans/connected-code-graph-fixtures.md` (v1.8, §5.5), `docs/test-plans/connected-code-graph-p1.md` (the "re-derivation owed" paragraph replaced, AC-25 row, P1T-05/17/18). Throwaway instance `ccg-falkordb-tw-16391` removed after the run. Working files (not durable): `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/82bb1fdb-fb53-4f8c-80b5-7bf434adbf7b/scratchpad/derivation.md` and `ask1.out`.

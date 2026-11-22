@@ -9,4 +9,4 @@ ERR Invalid graph operation on empty key
 1:M 20 Nov 2026 17:23:28.118 * Module 'graph' loaded from /var/lib/falkordb/bin/falkordb.so
 1:M 20 Nov 2026 17:23:28.135 * Creating AOF base file appendonly.aof.1.base.rdb on server start
 1:M 20 Nov 2026 17:23:28.153 * Creating AOF incr file appendonly.aof.1.incr.aof on server start
-files after: /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/k098/aofprobe.CGsp: appendonlydir dump.rdb  /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/k098/aofprobe.CGsp/appendonlydir: appendonly.aof.1.base.rdb appendonly.aof.1.incr.aof appendonly.aof.manifest 
+files after: /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/k098/aofprobe.CGsp: appendonlydir dump.rdb  /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/k098/aofprobe.CGsp/appendonlydir: appendonly.aof.1.base.rdb appendonly.aof.1.incr.aof appendonly.aof.manifest 

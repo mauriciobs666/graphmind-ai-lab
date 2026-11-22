@@ -1,5 +1,6 @@
+import os
 import re, sys
-sys.path.insert(0, "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server")
+sys.path.insert(0, os.path.expanduser("~/prg/graphmind-ai-lab/falkor-chat/server"))
 from falkorchat.repository import Repository, MessageWriteStatus
 cap = {}
 class G:
@@ -19,7 +20,7 @@ def norm(q):
     q = re.sub(r"'[^']*'", "L", q); q = re.sub(r"\$\w+", "L", q); q = re.sub(r"\b\d+\b", "L", q)
     return re.sub(r"\s+", "", q)
 canon = {"first": norm(cap["post_first_message"]), "subseq": norm(cap["post_subsequent_message"])}
-src = open("/home/mauricio/prg/graphmind-ai-lab/falkor-chat/scripts/test_queries.sh").read().splitlines()
+src = open(os.path.expanduser("~/prg/graphmind-ai-lab/falkor-chat/scripts/test_queries.sh")).read().splitlines()
 for i, line in enumerate(src, 1):
     if "FOREACH (mem IN mems" not in line or "seedIds" in line: continue
     m = re.search(r'g[qp] "\$WS" "(.*)"\)\s*$', line)

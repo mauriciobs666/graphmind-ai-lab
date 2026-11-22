@@ -1,4 +1,4 @@
-probe of: /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_pre.sh  (N=1000)
+probe of: /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_pre.sh  (N=1000)
 assert_contains      big    needle=needle         want=pass -> wrong verdicts 1000/1000
 assert_contains      big    needle=zzz            want=fail -> wrong verdicts 0/1000
 assert_contains      small  needle=mn3            want=pass -> wrong verdicts 33/1000

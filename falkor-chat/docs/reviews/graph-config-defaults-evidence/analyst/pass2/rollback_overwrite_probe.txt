@@ -5,8 +5,8 @@ Nodes deleted: 400
 == rollback as written (docker stop):
 count after restart: 600
 == suggested: SHUTDOWN NOSAVE, restore the copy, start:
-cp: cannot create regular file '/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/analyst-k098-p2/rb.vyGt/dump.rdb': Permission denied
-chmod: changing permissions of '/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/analyst-k098-p2/rb.vyGt/dump.rdb': Operation not permitted
+cp: cannot create regular file '/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/analyst-k098-p2/rb.vyGt/dump.rdb': Permission denied
+chmod: changing permissions of '/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/analyst-k098-p2/rb.vyGt/dump.rdb': Operation not permitted
 count after restore: 600
 backup taken after SAVE
 planted bad state: 600 nodes in memory

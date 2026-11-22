@@ -4,7 +4,7 @@
 
 **Lens:** code/app security. **Reviewed:** uncommitted `cpg/extractors/common/writer_rules.py` (`mcp_exec_launch_path`), `cpg/extractors/config/launch.py` (`mcp_drafts(exec_launch=)`), `cpg/extractors/config/extract.py`, `p1_11b` tests (155 pass), against `docs/plans/connected-code-graph-p1-extraction.md` P1-11b, `bundle.gate_argv`/`screen_fails`, and `ccg/linker/bind.py` `_script_of`.
 
-**Verdict: approve with suggestions.** No blocker, no major. All probes ran in `cpg/`, `ulimit -v 1500000`, `timeout -s KILL 45`, script `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/a56a19ba-3e84-44da-9d76-47eef6534cc4/scratchpad/sec-p1-11b/probe.py`. No exploitation, no live targets.
+**Verdict: approve with suggestions.** No blocker, no major. All probes ran in `cpg/`, `ulimit -v 1500000`, `timeout -s KILL 45`, script `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/a56a19ba-3e84-44da-9d76-47eef6534cc4/scratchpad/sec-p1-11b/probe.py`. No exploitation, no live targets.
 
 CPG: considered, not relevant — a ~30-line pure function plus one call site; the path was traced by reading the code and probing it directly.
 

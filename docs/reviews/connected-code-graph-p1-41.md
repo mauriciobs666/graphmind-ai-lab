@@ -13,7 +13,7 @@ CPG: considered, not relevant — the subject is `ccg`'s own pipeline code and t
 ## 1. Findings
 
 ### F1 (minor) — three silent arguments of the `config-derived` reason are unpinned
-*Verified by mutation on a copy (`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/5e0cf103-88e0-4462-8dd5-c8c215259772/scratchpad/an/mut/cpg`, `PYTHONPATH` pointing at it, `tests/test_packrt_unknown_args.py`).* Each mutant left all 14 tests green:
+*Verified by mutation on a copy (`/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/5e0cf103-88e0-4462-8dd5-c8c215259772/scratchpad/an/mut/cpg`, `PYTHONPATH` pointing at it, `tests/test_packrt_unknown_args.py`).* Each mutant left all 14 tests green:
 - M2 `_keyless_reason` ignores the point: `(rec["id"], p) in field_reads` → `any(q == p for _, q in field_reads)`. A `fieldAccess` read on *another call's* `a0` turns this site `config-derived`. The only negative test moves the read to another **path** (`a1`), never another **point**.
 - M7 `Corpus` stores write-mode accesses too (`r["mode"] == "read"` dropped). Spec §1.4 says "a `fieldAccess` **read**"; no test plants a `mode: "write"`.
 - M6 `arg_paths` stops recursing into `firstOf`. Its docstring promises "through `firstOf`"; no test has a `config-derived` slot behind a `firstOf` (no shipped pack does either: `firstOf` appears in the fastmcp/fastapi packs only, with other modes).

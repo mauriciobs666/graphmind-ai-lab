@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # K-098: per-config throwaway container from rdb/dump.rdb (own copy per run), measure, remove. Never touches other containers.
 set -euo pipefail
-W=$(cd "$(dirname "$0")" && pwd); PY=/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/.venv/bin/python
+W=$(cd "$(dirname "$0")" && pwd); PY=$HOME/prg/graphmind-ai-lab/falkor-chat/server/.venv/bin/python
 TC=$1; OMP=$2; NAME=k098-gdba-tc$TC-omp$OMP; PORT=16480
 D=$(mktemp -d "$W/rdbrun.XXXX"); cp "$W/rdb/dump.rdb" "$D/dump.rdb"; chmod -R a+rwx "$D"
 docker run -d --rm --name $NAME -p 127.0.0.1:$PORT:6379 --memory 2g -e BROWSER=0 -v "$D":/var/lib/falkordb/data \

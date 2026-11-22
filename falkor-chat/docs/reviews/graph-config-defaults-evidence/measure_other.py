@@ -1,10 +1,11 @@
+import os
 """K-098: QUERY_MEM_CAPACITY needs of the heaviest NON-RAG read (read_thread, 10k msgs) and the
 heaviest write (create_document at MAX_DOCUMENT_CHARS) — probe container only. Query texts copied
 from repository.py. Also: does a capped write leave partial state?"""
 import json, sys, time, uuid
 from falkordb import FalkorDB
 from redis.exceptions import ResponseError
-sys.path.insert(0, "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server")
+sys.path.insert(0, os.path.expanduser("~/prg/graphmind-ai-lab/falkor-chat/server"))
 from falkorchat.chunking import split_into_chunks
 db = FalkorDB(host="127.0.0.1", port=16479); r = db.connection; g = db.select_graph("ws:synth")
 q = lambda c, p=None: g.query(c, p or {}, timeout=600000)

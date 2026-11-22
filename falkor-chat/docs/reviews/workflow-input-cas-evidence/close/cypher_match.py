@@ -1,10 +1,11 @@
+import os
 """Compare every ```cypher block in QUERIES.md §12 (at a git rev) with repository.py's query
 strings (at a git rev), whitespace-normalised. Usage: cypher_match.py <docs_rev> <code_rev>"""
 import ast, re, subprocess, sys
 docs_rev, code_rev = sys.argv[1], sys.argv[2]
 show = lambda rev, p: subprocess.run(["git", "show", f"{rev}:{p}"], capture_output=True,
                                      text=True, check=True,
-                                     cwd="/home/mauricio/prg/graphmind-ai-lab").stdout
+                                     cwd=os.path.expanduser("~/prg/graphmind-ai-lab")).stdout
 q = show(docs_rev, "falkor-chat/docs/QUERIES.md")
 sec = q[q.index("\n## 12. "): q.index("\n## 13. ")]
 norm = lambda s: re.sub(r"\s+", " ", s).strip()

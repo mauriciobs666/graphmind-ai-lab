@@ -2,33 +2,33 @@ cap ['QUERY_MEM_CAPACITY', 67108864]
 ingest #1 (618 chunks) @64MiB ok autoSuperseded=False 0.01s
 ingest #2 (618 chunks) @64MiB ok autoSuperseded=True 0.01s
 Traceback (most recent call last):
-  File "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/analyst-k098/writes2.py", line 26, in <module>
+  File "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/analyst-k098/writes2.py", line 26, in <module>
     g.query("UNWIND range($s,$e-1) AS i CREATE (u:User {userId:'p'+toString(i), tokenHash:'h'})-[:MEMBER_OF]->(c:Channel {channelId:'c'+toString(i), participantId:'p'+toString(i)})-[:HAS_THREAD]->(t:Thread {threadId:'t'+toString(i)}) "
-  File "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/falkordb/graph.py", line 125, in query
+  File "$HOME/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/falkordb/graph.py", line 125, in query
     return self._query(q, params=params, timeout=timeout, read_only=False)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/falkordb/graph.py", line 97, in _query
+  File "$HOME/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/falkordb/graph.py", line 97, in _query
     response = self.execute_command(*command)
                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/client.py", line 798, in execute_command
+  File "$HOME/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/client.py", line 798, in execute_command
     return self._execute_command(*args, **options)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/client.py", line 820, in _execute_command
+  File "$HOME/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/client.py", line 820, in _execute_command
     result = conn.retry.call_with_retry(
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/retry.py", line 120, in call_with_retry
+  File "$HOME/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/retry.py", line 120, in call_with_retry
     return do()
            ^^^^
-  File "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/client.py", line 821, in <lambda>
+  File "$HOME/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/client.py", line 821, in <lambda>
     lambda: self._send_command_parse_response(
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/client.py", line 764, in _send_command_parse_response
+  File "$HOME/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/client.py", line 764, in _send_command_parse_response
     return self.parse_response(conn, command_name, **options)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/client.py", line 864, in parse_response
+  File "$HOME/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/client.py", line 864, in parse_response
     response = connection.read_response()
                ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/connection.py", line 1402, in read_response
+  File "$HOME/prg/graphmind-ai-lab/falkor-chat/server/.venv/lib/python3.12/site-packages/redis/connection.py", line 1402, in read_response
     raise response
 redis.exceptions.ResponseError: errMsg: Invalid input '[': expected a label, '{', a parameter or ')' line: 1, column: 448, offset: 447 errCtx: ...lect(m) AS ms CREATE (t)-[:HEAD]->(ms[0]) WITH ms UNWIND range(0,size(ms)-... errCtxOffset: 40
 

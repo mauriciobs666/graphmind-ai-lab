@@ -104,7 +104,7 @@ Root `REVIEW.md`, *Always check* (source: B1/B2, this review; recurring class wi
 
 ## Appendix: probe commands
 `probe.py N` (distinct symbols at one position), `probe2.py` (2 M occurrences, 83 MB, 1 195 MB RSS, 10.9 s), the 12/24 MB empty-occurrence files, `tsprobe.py`/`pyprobe.py` (live runs of the two real indexers through `run_indexer`), `mp.py` (the B3 merge), `mut.sh` (mutation harness on a scratch copy): all under
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/a56a19ba-3e84-44da-9d76-47eef6534cc4/scratchpad/`.
+`/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/a56a19ba-3e84-44da-9d76-47eef6534cc4/scratchpad/`.
 
 ## Pass 2 (re-gate)
 

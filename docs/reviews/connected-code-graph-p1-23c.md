@@ -56,7 +56,7 @@ Q1 (architect): fold only an item whose own arrival is the candidate (recommende
 ### A. Mutants (scratch copy; `group.py` restored from the working file between runs)
 Killed: floor 60→0; floor `>=`→`>`; threshold `>=`→`>`; `all`→`any`; empty-verdicts folds; site language read from nothing; status rank inverted; `direct` `<=1` and `==2`; depends-on routed to impact; `root` dropped from key; `unit` before `root`; a fold that drops later members; group sort dropped; member sort dropped; "first possible" → "any possible hop"; `reason` check dropped; unit-item line slot 1; `lang None` folds; section key without `unit`; site units not requested; `ends` ambiguity; chain slice `[i:i+1]` and `[i-1:i]`. Survived: Fraction→float (equivalent), section key without `root` (equivalent), kind slot, `if fold_languages` short-circuit, bool line (F4).
 
-### B. Probes (`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/a56a19ba-3e84-44da-9d76-47eef6534cc4/scratchpad/an/{oracle,p3,p5,p4,p6}.py`)
+### B. Probes (`/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/a56a19ba-3e84-44da-9d76-47eef6534cc4/scratchpad/an/{oracle,p3,p5,p4,p6}.py`)
 F1 graph (impact, flag true): `B` d1 and `C` d2 both `possible/resolution-unverified`, both in group `cB`; depends-on: `B` d1 and `T` d2 in group `cF`. With the narrow `is_self` rule in a scratch copy: groups `cB:[B]`, `cF:[B]`, 94/94 tests green.
 
 ## Pass 2 (light re-gate)

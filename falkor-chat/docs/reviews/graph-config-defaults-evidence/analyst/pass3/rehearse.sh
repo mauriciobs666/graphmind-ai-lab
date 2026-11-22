@@ -2,7 +2,7 @@
 # analyst Pass 3: independent rehearsal of note §5 Step 4 (91c53a2d), commands as written, with a NAMED
 # docker volume standing in for falkordb-data. Own container analyst-k098-p3 on 16597. Never falkordb-dev.
 set -uo pipefail
-REPO=/home/mauricio/prg/graphmind-ai-lab
+REPO=$HOME/prg/graphmind-ai-lab
 ES=$REPO/falkor-chat/docs/reviews/graph-config-defaults-evidence/graph-dba-r2/proto/scripts/start_falkordb.sh
 W=$(cd "$(dirname "$0")" && pwd); IMG=falkordb/falkordb:v4.18.11; C=analyst-k098-p3; VOL=analyst-k098-live
 export FALKORDB_PORT=16597 FALKORDB_WEB_PORT=13097 FALKORDB_CONTAINER_NAME=$C FALKORDB_VOLUME=$VOL

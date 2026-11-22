@@ -1,5 +1,5 @@
 {
- "cwd": "/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server",
+ "cwd": "$HOME/prg/graphmind-ai-lab/falkor-chat/server",
  "cmd": [
   ".venv/bin/python",
   "-m",

@@ -528,7 +528,7 @@ behind one early return can still mask one, which is why P1-14's own mutation pa
 
 ## Appendix A — independent recomputation
 
-Scripts, all under `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/a56a19ba-3e84-44da-9d76-47eef6534cc4/scratchpad/`:
+Scripts, all under `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/a56a19ba-3e84-44da-9d76-47eef6534cc4/scratchpad/`:
 - `vec.py`: HMAC and the EH rows.
 - `bp.py`: the token screen, the §1.7.2 grammar, the name rule, W1, role, W2, §3, §4, W6.
 - `bk.py`: §1 and the §6.4 validator, over the base bundle's fields.

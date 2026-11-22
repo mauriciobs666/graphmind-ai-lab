@@ -1,9 +1,9 @@
 {
- "cwd": "/home/mauricio/prg/graphmind-ai-lab/falkor-chat",
+ "cwd": "$HOME/prg/graphmind-ai-lab/falkor-chat",
  "cmd": [
   "bash",
   "-c",
-  "./scripts/test_queries.sh > /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_mut.out 2>&1; rc=$?; grep -E '\u2717' /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_mut.out | tr '\\n' ';' ; grep Results /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_mut.out; exit $rc"
+  "./scripts/test_queries.sh > /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_mut.out 2>&1; rc=$?; grep -E '\u2717' /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_mut.out | tr '\\n' ';' ; grep Results /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/tq_mut.out; exit $rc"
  ],
  "mutants": [
   {

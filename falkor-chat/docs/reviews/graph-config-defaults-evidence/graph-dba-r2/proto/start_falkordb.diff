@@ -1,4 +1,4 @@
---- /home/mauricio/prg/graphmind-ai-lab/falkor-chat/scripts/start_falkordb.sh	2026-07-09 22:20:02.398077880 -0300
+--- $HOME/prg/graphmind-ai-lab/falkor-chat/scripts/start_falkordb.sh	2026-07-09 22:20:02.398077880 -0300
 +++ scripts/start_falkordb.sh	2026-11-20 15:35:29.572595826 -0300
 @@ -39,18 +39,33 @@
  FALKORDB_PORT="${FALKORDB_PORT:-6379}"

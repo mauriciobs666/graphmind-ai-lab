@@ -15,7 +15,7 @@ On the fixture build `BOUND_BY` 0, `binding-confirmed` 0, `LAUNCHES` 1, `loopbac
 **Ran (offline, no store, no FalkorDB started, `ccg-falkordb:6390` / `falkordb-dev` / existing throwaways untouched):**
 1. `cpg/.venv/bin/python cpg/fixtures/materialize.py --out <scratch>/fx`, then `build_units` (real `build_unit`, Joern, 2m19s) over `fixtures/system1/system.yaml` at the fixture heads, with a scratch `keys_root` (script `<scratch>/build.py`).
 2. The refresh `link` stage verbatim: `run_packs(bundles, DEFAULT_PACKS)`, `Binder(..., units=units)`, `link(...)` (script `<scratch>/link.py`). Result equals QA's offline figures: `links 37` (http 27, mcp_tool 10), by reason `key-match 12, unknown-key 12, partial-key 5, prompt-mention 4, shell-dynamic 4`, `loopback_port_residual 1`, `bind_key_mismatch []`.
-3. Hop-by-hop probes of the `Binder` internals, and three in-memory mutations of the bundle records (`<scratch>/mut.py`: `none`, `dockerfile`, `script`). Scratch dir: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/dd493cce-be51-46f4-9ad3-5b22c2dd9c32/scratchpad`.
+3. Hop-by-hop probes of the `Binder` internals, and three in-memory mutations of the bundle records (`<scratch>/mut.py`: `none`, `dockerfile`, `script`). Scratch dir: `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/dd493cce-be51-46f4-9ad3-5b22c2dd9c32/scratchpad`.
 
 **Read, not run:** the proving store's 114 `BOUND_BY` (QA figure; I did not query 6390), `LAUNCHES` count (derived from `ccg/assemble/rows.py:769-779`: one edge per `launchUnit` fact; I observed one `launchUnit`).
 

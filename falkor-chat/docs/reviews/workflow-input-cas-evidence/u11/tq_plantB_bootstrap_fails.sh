@@ -111,7 +111,7 @@ redis-cli -h "$HOST" -p "$PORT" GRAPH.DELETE "$REF" 2>/dev/null || true
 
 echo ""
 echo "▶ bootstrap schema"
-EMBEDDING_DIM=4 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/stub_bootstrap.sh test 2>&1 | grep -E "done:|ERROR" || true
+EMBEDDING_DIM=4 /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/stub_bootstrap.sh test 2>&1 | grep -E "done:|ERROR" || true
 
 # ── §2: users & membership ───────────────────────────────────────────────────
 

@@ -56,4 +56,4 @@ Target: root `REVIEW.md`, `## Always check`. Source: F1, F2 (this review).
 No prune proposed.
 
 ## Appendix
-Probe script (scratch, not committed): `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/dd493cce-be51-46f4-9ad3-5b22c2dd9c32/scratchpad/mut/test_mut.py`. Per-answer omission results: `CF-DF` deep/shallow/attr all silent; `CF-DF3` deep silent, shallow red, attr silent; `CF-CD`, `RV-1..3` all silent; contract asks all silent; location ask deep silent, shallow red, attr silent.
+Probe script (scratch, not committed): `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/dd493cce-be51-46f4-9ad3-5b22c2dd9c32/scratchpad/mut/test_mut.py`. Per-answer omission results: `CF-DF` deep/shallow/attr all silent; `CF-DF3` deep silent, shallow red, attr silent; `CF-CD`, `RV-1..3` all silent; contract asks all silent; location ask deep silent, shallow red, attr silent.

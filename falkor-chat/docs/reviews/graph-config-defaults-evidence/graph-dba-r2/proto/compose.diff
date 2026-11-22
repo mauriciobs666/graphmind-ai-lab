@@ -1,4 +1,4 @@
---- /home/mauricio/prg/graphmind-ai-lab/falkor-chat/compose.yaml	2026-08-19 19:10:58.882174098 -0300
+--- $HOME/prg/graphmind-ai-lab/falkor-chat/compose.yaml	2026-08-19 19:10:58.882174098 -0300
 +++ proto/compose.yaml	2026-11-20 15:35:03.942606192 -0300
 @@ -12,6 +12,9 @@
  services:

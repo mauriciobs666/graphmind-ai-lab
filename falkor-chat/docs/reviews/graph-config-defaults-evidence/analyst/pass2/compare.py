@@ -4,7 +4,7 @@ from falkordb import FalkorDB
 from redis.exceptions import ResponseError
 from falkorchat.repository import Repository
 db=FalkorDB(host="127.0.0.1",port=16595); r=db.connection; repo=Repository(db)
-base=json.load(open("/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/analyst-k098-p2/base.json"))
+base=json.load(open("/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/aae0e7a7-4212-4b57-9541-3e1dca2fac24/scratchpad/analyst-k098-p2/base.json"))
 def cap(b): r.execute_command("GRAPH.CONFIG","SET","QUERY_MEM_CAPACITY",str(b))
 def bounded(scoped):
     return ("CALL db.idx.vector.queryNodes('Message', 'embedding', $k, vecf32($qVec)) YIELD node AS seed, score "
