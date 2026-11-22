@@ -1,0 +1,37 @@
+{
+ "baselineVariants": [
+  "kind-wide (pre-registered reading, headline)",
+  "key-scoped (reported beside it)"
+ ],
+ "bound": "the baseline's bound is the ac5-gate-1 record's defaultDepthBound; the generator and score refuse unless every answer's depthBound.bound equals it",
+ "burdenPairing": "in-scope reduction = sum(system in-scope burden) over sum(baseline countInScope); all-listed reduction = sum(system all-listed) over sum(baseline count); never crossed",
+ "decides": "AC-5 gate 1 noise: the naive over-lister's item-level recall and reduction (P1-36, -p1-ml.md 5.1 item 3)",
+ "disclosures": [
+  "baseline and recall files are custodian-written; baseline k is trusted from the custodian file (per-item baseline hits are a P2 hardening)",
+  "the coordinator held the custodian role for the P1-34 draw"
+ ],
+ "figures": {
+  "baseline": "[k, n] from this rule",
+  "paired": "2x2 over the same items, plus Wilson intervals",
+  "system": "[k, n] from the harness"
+ },
+ "flag": "reduction is flagged iff baseline_k * system_n < system_k * baseline_n (exact). Reported, not a bar: if baseline recall is higher than the system's the reduction is not at equal recall and is an upper bound.",
+ "id": "ccg-noise-recall-rule-v1",
+ "openStakeholderQuestion": "S1: which variant (kind-wide, key-scoped, both) carries the >=5x bar from the next gate; decided before any variant reduction is seen",
+ "owner": "data-scientist",
+ "population": "n is the set of counting:true gold items the gate harness scores, identical for the system and the baseline, identified by itemSetSha256 (sorted (anchorId, impacted key)); the as-run figure and the ex-key-error figure are each computed on the same item set for both. Items under an anchor that does not resolve stay in n and are misses for both. Also reported: the pair over symbol-type items only.",
+ "reviews": [
+  "docs/reviews/connected-code-graph-p1-noise-export-ml.md Pass 2",
+  "docs/reviews/connected-code-graph-p1-36-impl.md Pass 3"
+ ],
+ "rule": "A gold item g is a baseline hit iff g.impacted.type == 'symbol' and some symbolId in the over-lister's item list for g.anchorId names a snapshot symbol x with match_keys.h1_symbol_credit(x, g.impacted, g.lines) (E(x.qname) == g.impacted.qname and a line of g.lines in [x.lineStart, x.lineEnd] or in one pair of x.ownedRegions, the flat store list re-paired). EP 5.2 H2-H4 are not applied to the baseline. A config gold item is never a baseline hit. Matching is per anchor.",
+ "rulesChangedAfterScoring": "counts as after adaptation and is reported as such",
+ "sha256": {
+  "baseline.py": "d003c0053fa092c2981eb82161092b5a9679494adbf76acbeeff15241cf62b16",
+  "match_keys.py": "4bded3f56486d076d5e83fa5bbf74345dc008f672f19e9fa339d63da8ce19bee",
+  "noise-export-note-sections-4-to-6": "3a20a16408edc0b62ffc71be77dc36cf5fa53e7c233d540eba086291daac2634",
+  "noise.py": "8f12d1ad3c355f7b200d8cc3501dec413ccb19f75ec93b7907d2a4f935c232e1",
+  "snapshot_export.py": "8dd0fc68400eb3f2027d6fd66d0578c27a0d97832956e97c1c5ed99f32048943"
+ },
+ "sha256Definitions": "noise-export-note-sections-4-to-6 = sha256 of the UTF-8 bytes of docs/plans/connected-code-graph-p1-noise-export-graph.md from the line '## 4.' (inclusive) to the line '## 7.' (exclusive); files are sha256 of their bytes at the commit that adds this record"
+}
