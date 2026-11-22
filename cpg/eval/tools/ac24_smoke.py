@@ -24,8 +24,9 @@ Verbs (stdout: counts and the output path only; qids go to the output JSON, neve
               the DERIVED custodian root, ``ac24-heldout-once-<E12>.json``; a ``--custodian-root`` other than the derived one is refused), then the items, which
               are read only from ``<custodian root>/heldout/ac24.jsonl``, re-counted (24 unambiguous 12/12, 6 ambiguous) and run. An existing marker refuses the run
               whatever its state; a human removes it after a harness error.
-  prereg-record --dev-result F --eval-commit SHA --core-commit SHA [--core-tree-hash H --pack-set-hash H --harness-hash H --heldout-list-sha256 H] [--out F]
-              prints the ``ccg-prereg-ac24-v1`` record built from the final dev run (it NEVER appends it, and refuses an ``--out`` that exists).
+  prereg-record --dev-result F --eval-commit SHA --core-commit SHA [--heldout-list-sha256 H] [--out F]
+              prints the ``ccg-prereg-ac24-v1`` record built from the final dev run (it NEVER appends it, and refuses an ``--out`` that exists). The three hashes
+              come only from the dev result's ``treeStamp``; it refuses unless the current tree equals the stamp and both are clean (N1). There are no hash flags.
 
 Scoring (§10.4, mechanical): an unambiguous item is understood iff ``status == resolved`` and the request equals gold (symbol anchors compared as ``E(qname)``,
 EP §10.4's E1, from ``match_keys``); an ambiguous item iff ``status != resolved`` with ``goldOptions == []``, else ``status == ambiguous`` with every gold
@@ -590,16 +591,21 @@ def harness_hash() -> str:
     return _file_sha(Path(__file__).resolve())
 
 
-def observe_tree(core_commit: str | None = None) -> dict[str, Any]:
+def observe_tree(core_commit: str | None = None, repo: Path | None = None) -> dict[str, Any]:
     """What the held-out pre-flight recomputes from the working tree (read-only git): the two hashes, HEAD, the dirty paths under :data:`CLEAN_PATHS`, and whether
-    the record's ``coreCommit`` is an ancestor of HEAD (the record's own commit follows ``coreCommit``, so HEAD cannot equal it)."""
-    repo = _CPG.parent
+    the record's ``coreCommit`` is an ancestor of HEAD (the record's own commit follows ``coreCommit``, so HEAD cannot equal it). ``dirty`` lists the tracked or
+    untracked changes (``git status --porcelain``) and, prefixed ``!! ``, every git-IGNORED file there except bytecode under ``__pycache__``: an ignored file the
+    process could import or load is not hashed, so it makes the tree not clean (N3). ``repo`` is the repository root (default: this one; tests pass a throwaway)."""
+    repo = repo or _CPG.parent
+    cpg_dir = repo / "cpg"
     files = tracked_files(repo)
     dirty = [ln for ln in _git("status", "--porcelain", "--", *CLEAN_PATHS, cwd=repo).splitlines() if ln.strip()]
+    ignored = _git("ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--", *CLEAN_PATHS, cwd=repo)
+    dirty += [f"!! {p}" for p in sorted(ignored.split("\0")) if p and "__pycache__" not in p.split("/")]
     anc = None
     if core_commit:
         anc = subprocess.run(["git", "merge-base", "--is-ancestor", core_commit, "HEAD"], cwd=repo, capture_output=True).returncode == 0
-    return {"coreTreeHash": core_tree_hash(files, _CPG), "packSetHash": pack_set_hash(files, _CPG), "harnessHash": harness_hash(),
+    return {"coreTreeHash": core_tree_hash(files, cpg_dir), "packSetHash": pack_set_hash(files, cpg_dir), "harnessHash": harness_hash(),
             "head": _git("rev-parse", "HEAD", cwd=repo).strip(), "dirty": dirty, "clean": not dirty, "coreCommitIsAncestorOfHead": anc}
 
 
@@ -758,17 +764,24 @@ def sampler_request() -> dict[str, Any]:
     return {"params": dict(interpret.SAMPLING), "samplingHash": interpret.sampling_hash()}
 
 
-def run_dev(dev_items: Path, rig: Rig, out: Path, *, prereg_interpreter: Mapping[str, Any] | None = None, home: Path | None = None) -> dict[str, Any]:
+def run_dev(dev_items: Path, rig: Rig, out: Path, *, prereg_interpreter: Mapping[str, Any] | None = None, home: Path | None = None,
+            tree_state: Callable[[str | None], Mapping[str, Any]] = observe_tree) -> dict[str, Any]:
+    """The dev entry run. The result carries ``treeStamp``: :func:`observe_tree` taken before the run and re-taken after it (a difference is a harness error), the
+    only source ``prereg-record`` takes its three hashes from (N1)."""
     refuse_custodian_path(dev_items, home)
     items = load_items(dev_items)
     counts = recount(items)
     if counts["ambiguous"] != 2 or counts["unambiguous"] != 12:
         raise Refusal(f"the dev set holds {counts['unambiguous']} unambiguous and {counts['ambiguous']} ambiguous items, not 12 and 2")
+    stamp = dict(tree_state(None))
     canary = run_canary(rig.client, rig.log)
     run = run_items(items, rig.client, repeats=1, log=rig.log, cache_len=rig.cache_len, expected_interpreter=prereg_interpreter,
                     sampler_observer=rig.sampler_observer)
+    if dict(tree_state(None)) != stamp:
+        raise HarnessError("the tree (hashes, HEAD or cleanliness) changed during the dev run: no stamp can describe it")
     s = summarize(run, items, mode="dev")
-    result = {**{k: v for k, v in run.items() if k != "items"}, "items": run["items"], "summary": s, "samplerRequest": sampler_request(), "canary": canary}
+    result = {**{k: v for k, v in run.items() if k != "items"}, "items": run["items"], "summary": s, "samplerRequest": sampler_request(), "canary": canary,
+              "treeStamp": stamp}
     _write_json(out, result)
     return result
 
@@ -893,8 +906,7 @@ def main(argv: Sequence[str] | None = None, *, rig_factory: Callable[[str], Rig]
     p.add_argument("--dev-result", type=Path, required=True)
     for k in ("eval-commit", "core-commit"):
         p.add_argument(f"--{k}", required=True)
-    for k in ("core-tree-hash", "pack-set-hash", "harness-hash", "heldout-list-sha256"):
-        p.add_argument(f"--{k}")
+    p.add_argument("--heldout-list-sha256")
     p.add_argument("--out", type=Path)
     try:
         a = ap.parse_args(argv)
@@ -906,7 +918,7 @@ def main(argv: Sequence[str] | None = None, *, rig_factory: Callable[[str], Rig]
             pre = None
             if a.prereg:
                 pre = find_prereg(a.prereg, committed_text=committed_text)["interpreter"]
-            res = run_dev(a.dev_items, rig_factory(a.system), a.out, prereg_interpreter=pre, home=home)
+            res = run_dev(a.dev_items, rig_factory(a.system), a.out, prereg_interpreter=pre, home=home, tree_state=tree_state)
             _print_summary(res["summary"], a.out)
             return 0 if res["summary"]["entryPass"] else 1
         if a.verb == "canary":
@@ -929,12 +941,20 @@ def main(argv: Sequence[str] | None = None, *, rig_factory: Callable[[str], Rig]
         if a.out and (a.out.exists() or a.out.name == "preregistration.jsonl"):
             raise Refusal("--out exists or names preregistration.jsonl: the record is never written over a file (teco appends it)")
         dev = _load_json(a.dev_result, "the dev result")
-        st = None
-        if not (a.core_tree_hash and a.pack_set_hash and a.harness_hash):
-            st = tree_state(None)
+        stamp = dev.get("treeStamp")
+        if not isinstance(stamp, dict) or not all(isinstance(stamp.get(k), str) for k in ("coreTreeHash", "packSetHash", "harnessHash")):
+            raise Refusal("the dev result carries no tree stamp: run the dev verb again from a clean committed tree")
+        st = tree_state(None)
+        problems = [f"{k} differs from the dev run's stamp" for k in ("coreTreeHash", "packSetHash", "harnessHash") if st.get(k) != stamp[k]]
+        if stamp.get("clean") is not True:
+            problems.append("the dev run's tree was not clean")
+        if not st.get("clean"):
+            problems.append("the tree is not clean")
+        if problems:
+            raise Refusal("the record is not built from the tree the dev run ran on: " + "; ".join(problems))
         list_sha = a.heldout_list_sha256 or _file_sha(custodian_root(home=home) / "heldout" / "ac24.jsonl")
-        rec = build_prereg_record(dev, eval_commit=a.eval_commit, core_commit=a.core_commit, core_tree_hash=a.core_tree_hash or st["coreTreeHash"],
-                                  pack_set_hash=a.pack_set_hash or st["packSetHash"], harness_hash=a.harness_hash or st["harnessHash"], heldout_list_sha256=list_sha)
+        rec = build_prereg_record(dev, eval_commit=a.eval_commit, core_commit=a.core_commit, core_tree_hash=stamp["coreTreeHash"],
+                                  pack_set_hash=stamp["packSetHash"], harness_hash=stamp["harnessHash"], heldout_list_sha256=list_sha)
         line = canonical_json(rec)
         if a.out:
             a.out.write_text(line + "\n", encoding="utf-8")

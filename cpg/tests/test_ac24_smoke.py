@@ -831,6 +831,115 @@ def test_tree_differences_name_each_reason():
         assert len(S.tree_differences(rec, {**ok, k: v})) == 1
 
 
+# ------------------------------------------------------------------------------------------------------------------ N1 (dev result bound to the tree) and N3 (ignored files)
+
+import subprocess
+
+STAMP = {"coreTreeHash": "2" * 64, "packSetHash": "3" * 64, "harnessHash": "4" * 64, "head": "h" * 40, "dirty": [], "clean": True, "coreCommitIsAncestorOfHead": None}
+
+
+def test_run_dev_stamps_the_observed_tree_into_its_result(tmp_path):
+    rig, _ = dev_rig()
+    res = S.run_dev(DEV, rig, tmp_path / "d.json", home=tmp_path, tree_state=lambda c: dict(STAMP))
+    assert res["treeStamp"] == STAMP and json.loads((tmp_path / "d.json").read_text())["treeStamp"] == STAMP
+
+
+def test_run_dev_observes_the_tree_again_after_the_run_and_a_change_is_a_harness_error(tmp_path):
+    states = iter([dict(STAMP), {**STAMP, "coreTreeHash": "9" * 64}])
+    rig, _ = dev_rig()
+    with pytest.raises(S.HarnessError, match="changed during the dev run"):
+        S.run_dev(DEV, rig, tmp_path / "d.json", home=tmp_path, tree_state=lambda c: next(states))
+
+
+def test_cli_dev_passes_its_tree_state_through_to_the_stamp(tmp_path):
+    out = tmp_path / "o.json"
+    assert S.main(["dev", "--out", str(out)], rig_factory=lambda s: dev_rig(True)[0], home=tmp_path, tree_state=lambda c: dict(STAMP)) == 0
+    assert json.loads(out.read_text())["treeStamp"] == STAMP
+
+
+def stamped_dev(tmp_path, stamp=STAMP):
+    rig, _ = dev_rig()
+    p = tmp_path / "dev.json"
+    S.run_dev(DEV, rig, p, home=tmp_path, tree_state=lambda c: dict(stamp))
+    return p
+
+
+def record_cli(dev, tree, *extra):
+    return S.main(["prereg-record", "--dev-result", str(dev), "--eval-commit", EVAL, "--core-commit", "1" * 40, "--heldout-list-sha256", "5" * 64, *extra],
+                  tree_state=lambda c: dict(tree))
+
+
+def test_prereg_record_takes_its_three_hashes_from_the_dev_stamp_when_the_tree_still_equals_it(tmp_path, capsys):
+    dev = stamped_dev(tmp_path)
+    assert record_cli(dev, STAMP) == 0
+    rec = json.loads(capsys.readouterr().out)
+    assert (rec["coreTreeHash"], rec["packSetHash"], rec["harnessHash"]) == ("2" * 64, "3" * 64, "4" * 64)
+
+
+@pytest.mark.parametrize("key", ["coreTreeHash", "packSetHash", "harnessHash"])
+def test_prereg_record_refuses_when_the_tree_changed_since_the_dev_run(tmp_path, capsys, key):
+    dev = stamped_dev(tmp_path)
+    assert record_cli(dev, {**STAMP, key: "9" * 64}) == 4
+    assert key in capsys.readouterr().err
+
+
+def test_prereg_record_refuses_a_dirty_tree_a_dirty_stamp_and_a_missing_stamp(tmp_path, capsys):
+    assert record_cli(stamped_dev(tmp_path), {**STAMP, "clean": False, "dirty": [" M cpg/ccg/x.py"]}) == 4 and "not clean" in capsys.readouterr().err
+    dirty = {**STAMP, "clean": False, "dirty": [" M cpg/ccg/x.py"]}
+    assert record_cli(stamped_dev(tmp_path, dirty), STAMP) == 4 and "not clean" in capsys.readouterr().err
+    rig, _ = dev_rig()
+    bare = tmp_path / "bare.json"
+    bare.write_text(json.dumps({k: v for k, v in S.run_dev(DEV, rig, Path(os.devnull), home=tmp_path, tree_state=lambda c: dict(STAMP)).items() if k != "treeStamp"}))
+    assert record_cli(bare, STAMP) == 4 and "stamp" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("flag", ["--core-tree-hash", "--pack-set-hash", "--harness-hash"])
+def test_the_hash_override_flags_no_longer_exist(tmp_path, flag):
+    assert record_cli(stamped_dev(tmp_path), STAMP, flag, "a" * 64) == 2
+
+
+def git(repo, *a):
+    subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", *a], check=True, capture_output=True)
+
+
+def throwaway_repo(tmp_path):
+    repo = tmp_path / "r"
+    (repo / "cpg" / "ccg").mkdir(parents=True)
+    (repo / "cpg" / "clients").mkdir()
+    (repo / "cpg" / "ccg" / "a.py").write_text("a = 1\n")
+    (repo / ".gitignore").write_text("ignored_*.py\n__pycache__/\n")
+    git(repo.parent / "r", "init", "-q")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "c")
+    return repo
+
+
+def test_observe_tree_on_a_throwaway_repo_is_clean_then_dirty_and_passes_its_arguments(tmp_path):
+    repo = throwaway_repo(tmp_path)
+    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    st = S.observe_tree(head, repo=repo)
+    assert st["clean"] is True and st["dirty"] == [] and st["head"] == head and st["coreCommitIsAncestorOfHead"] is True
+    (repo / "cpg" / "ccg" / "a.py").write_text("a = 2\n")
+    st2 = S.observe_tree("0" * 40, repo=repo)
+    assert st2["clean"] is False and st2["coreTreeHash"] != st["coreTreeHash"] and st2["coreCommitIsAncestorOfHead"] is False
+
+
+def test_an_ignored_python_file_under_ccg_or_clients_makes_the_tree_not_clean_but_pycache_does_not(tmp_path):
+    repo = throwaway_repo(tmp_path)
+    (repo / "cpg" / "ccg" / "__pycache__").mkdir()
+    (repo / "cpg" / "ccg" / "__pycache__" / "a.cpython-312.pyc").write_bytes(b"x")
+    assert S.observe_tree(None, repo=repo)["clean"] is True
+    (repo / "cpg" / "clients" / "ignored_shim.py").write_text("x = 1\n")
+    st = S.observe_tree(None, repo=repo)
+    assert st["clean"] is False and any("ignored_shim.py" in d for d in st["dirty"])
+
+
+def test_the_real_tree_has_no_ignored_files_under_the_clean_paths_other_than_bytecode():
+    """N3 on the real tree: whatever is ignored under CLEAN_PATHS is listed in ``dirty`` (this fails with the path named if a stray ignored file exists)."""
+    st = S.observe_tree(None)
+    assert not [d for d in st["dirty"] if d.startswith("!!")], st["dirty"]
+
+
 # ------------------------------------------------------------------------------------------------------------------ the held-out guards (synthetic items, a temp root)
 
 EVAL = "e" * 40
@@ -1150,7 +1259,7 @@ def test_the_custodian_root_is_derived_from_the_eval_commit(tmp_path):
 
 def dev_result():
     rig, _ = dev_rig()
-    return S.run_dev(DEV, rig, Path(os.devnull), home=Path("/nonexistent-home"))
+    return S.run_dev(DEV, rig, Path(os.devnull), home=Path("/nonexistent-home"), tree_state=lambda c: dict(TREE))
 
 
 def build(res, **kw):
@@ -1252,14 +1361,14 @@ def test_cli_heldout_runs_in_the_derived_root_with_the_marker_there_and_the_afte
 def test_cli_a_malformed_dev_result_exits_4_not_with_a_traceback(tmp_path, capsys):
     bad = tmp_path / "dev.json"
     bad.write_text("{oops")
-    code = S.main(["prereg-record", "--dev-result", str(bad), "--eval-commit", EVAL, "--core-commit", "1" * 40, "--core-tree-hash", "2" * 64, "--pack-set-hash", "3" * 64,
-                   "--harness-hash", "4" * 64, "--heldout-list-sha256", "5" * 64])
+    code = S.main(["prereg-record", "--dev-result", str(bad), "--eval-commit", EVAL, "--core-commit", "1" * 40, "--heldout-list-sha256", "5" * 64],
+                  tree_state=lambda c: dict(TREE))
     assert code == 4 and "not valid JSON" in capsys.readouterr().err
 
 
 def record_args(dev, **extra):
-    return ["prereg-record", "--dev-result", str(dev), "--eval-commit", EVAL, "--core-commit", "1" * 40, "--core-tree-hash", "2" * 64, "--pack-set-hash", "3" * 64,
-            "--harness-hash", "4" * 64, "--heldout-list-sha256", "5" * 64, *[x for kv in extra.items() for x in kv]]
+    return ["prereg-record", "--dev-result", str(dev), "--eval-commit", EVAL, "--core-commit", "1" * 40, "--heldout-list-sha256", "5" * 64,
+            *[x for kv in extra.items() for x in kv]]
 
 
 def test_cli_prereg_record_prints_and_does_not_append(tmp_path, capsys):
@@ -1267,7 +1376,7 @@ def test_cli_prereg_record_prints_and_does_not_append(tmp_path, capsys):
     dev.write_text(json.dumps(dev_result()))
     prereg = CPG / "eval" / "preregistration.jsonl"
     before = prereg.read_bytes()
-    code = S.main(record_args(dev))
+    code = S.main(record_args(dev), tree_state=lambda c: dict(TREE))
     line = capsys.readouterr().out.strip()
     assert code == 0 and json.loads(line)["schema"] == "ccg-prereg-ac24-v1" and prereg.read_bytes() == before
 
@@ -1277,13 +1386,13 @@ def test_cli_prereg_record_out_never_overwrites_a_file_or_the_registry(tmp_path,
     dev.write_text(json.dumps(dev_result()))
     existing = tmp_path / "existing.json"
     existing.write_text("keep")
-    assert S.main(record_args(dev, **{"--out": str(existing)})) == 4 and existing.read_text() == "keep"
+    assert S.main(record_args(dev, **{"--out": str(existing)}), tree_state=lambda c: dict(TREE)) == 4 and existing.read_text() == "keep"
     reg = CPG / "eval" / "preregistration.jsonl"
     before = reg.read_bytes()
-    assert S.main(record_args(dev, **{"--out": str(reg)})) == 4 and reg.read_bytes() == before
+    assert S.main(record_args(dev, **{"--out": str(reg)}), tree_state=lambda c: dict(TREE)) == 4 and reg.read_bytes() == before
     fresh_named = tmp_path / "sub" / "preregistration.jsonl"
     fresh_named.parent.mkdir()
-    assert S.main(record_args(dev, **{"--out": str(fresh_named)})) == 4 and not fresh_named.exists()
+    assert S.main(record_args(dev, **{"--out": str(fresh_named)}), tree_state=lambda c: dict(TREE)) == 4 and not fresh_named.exists()
     ok = tmp_path / "new.json"
-    assert S.main(record_args(dev, **{"--out": str(ok)})) == 0 and json.loads(ok.read_text())["schema"] == "ccg-prereg-ac24-v1"
+    assert S.main(record_args(dev, **{"--out": str(ok)}), tree_state=lambda c: dict(TREE)) == 0 and json.loads(ok.read_text())["schema"] == "ccg-prereg-ac24-v1"
     capsys.readouterr()
