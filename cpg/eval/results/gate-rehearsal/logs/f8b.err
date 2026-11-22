@@ -1,0 +1,1 @@
+REFUSED: resume refused: the marker state is failed:deterministic (only started or failed:transient resumes; a spent list needs a new list)
