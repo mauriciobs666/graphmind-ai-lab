@@ -148,3 +148,109 @@ Target: root `REVIEW.md`, `## Always check`, after the "A fail-closed path" bull
 1. M2: does the owner accept P1-37 with reduction and Q-NC5 "not computed" and P1-36 held open, or is the over-lister generator
    to land first? I recommend proceeding, with the recall rule committed beforehand.
 2. m3: pin the draw's hash input and tie rules in the plan text (data-scientist) or in the prereg record?
+
+## Pass 2 (2026-11-21)
+
+**Scope.** Commits `c53b453c` (noise.py, oracle.py edits), `16714712` (`cpg/eval/tools/baseline.py`, `snapshot_export.py`) and
+the ledger commits, `396e87d8..HEAD`, against `docs/plans/connected-code-graph-p1-noise-export-graph.md` (§4 rules, §4.1 graph,
+§6, §7) and `docs/reviews/connected-code-graph-p1-noise-export-ml.md`. Root `REVIEW.md` applied; `cpg/REVIEW.md` does not
+exist. From `cpg/`: `.venv/bin/python -m pytest tests/test_baseline.py tests/test_snapshot_export.py tests/test_noise.py
+tests/test_oracle.py` gave 291 passed, 6 deselected (live tier), exit 0. No store was touched (no throwaway needed; the live
+tier was not run by me); no held-out or custodian data read; probes and mutants ran from scratchpad copies, `git status` clean.
+`CPG: considered, not relevant — the questions are rule arithmetic and file-format composition, answered by execution on a synthetic graph`
+
+**Verdict: needs changes.** The six rules, the §6 recall rule and the §7 burden pairing are implemented and match the §4.1
+numbers exactly. But the baseline output does not compose with `noise.py score` (B1), and `score` accepts recall figures it
+could check against the rows (M1).
+
+### Dispositions of Pass 1
+
+- **M1** fixed: `_require_complete`; one census label removed gives exit 4 (`1 of 3 census ... unlabelled`), re-run on a CLI plant.
+- **M2** partly fixed: baseline, recall, Link and snapshot producers now exist; the glue that writes `noise-baseline.jsonl`
+  and `noise-recall.json` does not (B1).
+- **m1** not fixed, as the docstring rules (function grain `co_name` vs dotted qname); no in-scope function-grain edge at P1.
+- **m2** fixed: Link dump emits the provider `keyNorm`, consumer form kept apart, unprovided rows classify only; `{**}` is still
+  a literal in `oracle.py` but `link_stats` counts it (`keyNormCatchAll`).
+- **m3** pinned in the note §7 (draw choices); the `ac5-gate-1` record that carries them does not exist yet.
+- **m4** fixed: `n = 0` gives `labelsUnstable None` / "not measured"; an empty or wrong-keyed `labels2` exits 4 (planted, both).
+
+### Findings
+
+**B1 (blocker, verified by execution) The baseline's real output cannot be scored.** I built the §4.1 snapshot with
+`baseline_helpers`, wrote it, ran `read_snapshot`, `naive_over_lister` (symbol, contract, config and one `unresolved` anchor)
+and `baseline_recall`, wrote `noise-baseline.jsonl` / `noise-recall.json`, drew with `noise.py draw`, labelled, and ran
+`noise.py score --gate-record`. Results: (a) exit 4 `bad input: 'bound'`: `naive_over_lister` rows carry no `bound`, which
+`_check_baseline` (`noise.py:489`) and note §7.1 require; (b) after adding `bound`, exit 4 `bad input: 'byName'`: the
+`unresolved` row (note §4: "not an error") has no `byName`, and `_variant` indexes `r["byName"]` (`noise.py:556`); §7.1 and §4 disagree on that
+row's shape and the noise fixtures (`test_noise.py:789`) supply fields the producer never emits. (c) `baseline.py` has no
+`main`; nothing writes `noise-baseline*.jsonl` / `noise-recall*.json`, so `bound` and `in_scope` (default `None`: `countInScope`
+silently equals `count`) are glue's to supply. The `itemSetSha256`, `exKeyError` hash and `ensure_ascii` forms **agree byte for
+byte** across `baseline._gold_line`, `noise.item_set_sha256` and my own spec-derived implementation (non-ASCII qname, unsorted
+`lines`, a `config` item with `keyPath`, 5 items and the 4 without key errors). Fix: a `baseline.py` CLI (snapshot, anchors, gate
+record, exclusions, custodian) that stamps `bound` from the record, passes `in_scope`, emits `byName: {0, 0}` on unresolved
+rows, and as its done-condition pipes its own files through `noise.score` (the round trip root `REVIEW.md` already requires);
+or make `_variant` tolerate the §4 unresolved shape.
+
+**M1 (major, verified) `score` trusts recall figures the rows contradict.** On the composed fixture (true `system` 2/5), setting
+`noise-recall.json` `system` to `[5,5]` or `[40,50]` (hash unchanged) exits 0 and moves `flagged` False to True; `paired` set to
+`both: 50` with sums not matching is accepted. `_check_recall` (`noise.py:459`) checks only `0 <= k <= n`, `n > 0` and the hash.
+`system-hits.jsonl` holds every `hit`, so `system` can be recomputed. Fix: require `system == [sum(hit), len(rows)]`,
+`systemSym` over symbol-type rows, `configGold`, the four `paired` cells summing to `n`, `both + systemOnly == system.k` and
+`both + baselineOnly == baseline.k`, for the headline, key-scoped and `exKeyError` blocks. Plants: each of those cells off by one
+must exit 4. (`baseline.k` cannot be recomputed without the snapshot; the 2x2 identities bind it.)
+
+**M2 (major, verified by plant + reading) Contract-anchor consumer seeds omit `via_in:contract`: ruling.** `_seeds`
+(`baseline.py:166`) seeds `consumes` owners only. Rule 2 says "`consumes_in` **and** `via_in:contract`", and the engine reads both
+(`bfs.py:151`, `consumes_in` + `EXTRA_READS` on_in/via_in at `bfs.py:87,400-420`). The §4.1 table agrees with the code (CP1/key has no `Q`,
+though `L3` is ON `CP1` and `Q` is its via owner), so the note is inconsistent with itself; the code follows the table, not the
+rule text. Plant: `X` calls `Q`; contract `CP1`, key scope: the engine would reach `Q` (1) and `X` (2); the baseline lists
+neither (verified: items `A B C E F G H P3 R`). Direction is **not one-way**: it lowers burden (reduction understated, conservative)
+but also lowers baseline recall, which makes the "reduction at lower baseline recall" flag fire more easily (favours the
+product), and it can make a class-A dominance check report violations on the baseline's own bug. It matters only where a
+via site does not also `CONSUME` the link's point; the §4.1 graph contains that shape, the real store is unmeasured. Fix: seed
+owners of `via` rows whose link's `cpId` is the anchor at cost 1 (and count them as `Kind` consumers), update the CP1 rows (add `Q`; key 10),
+or amend rule 2 to say consumes-only and why. Coverage probe over the axes the rule varies: via status {confirmed, possible} x
+link point {= anchor, other, none} x site consumes the point {yes, no} x kind scope {kind, key}, with a caller of the via owner.
+
+**m1 (minor, verified by mutation) Four surviving mutants, all data plumbing**, `-m "not live"` on a copy: (e2) key-scoped
+`reductionAll` bootstrap given the in-scope burden instead of all-listed; (h) `baselineSym` computed from the system's hit vector;
+(p) `symbolOnly` flag built from `system` instead of `systemSym`; (o) `r_all` recall arguments swapped (equivalent today: its
+`flagged` is never read, so also dead). 22 of 26 mutants (recall pooling across anchors, every pairing in `score` and `_agg`, `<`
+vs `<=`, consumer cost 0, config cost 1, `kind`/`key`, `ownedRegions` pairing, `ro_query`, last snapshot read, the `exKeyError` hash)
+were killed. Pin e2/h/p with fixtures whose two hit vectors and two burdens differ per pairing.
+
+**m2 (minor, verified) `run_export` leaves files behind on a late failure.** With the Q-NC5 count planted wrong,
+`ValueError` is raised (exit 4) after `snapshot-adjacency.jsonl`, `links*.jsonl`, `nc5-unbound.jsonl` were written. Write to
+temp names and rename after `read_snapshot` and the count agree. A closed port gives a `redis.ConnectionError` traceback, exit 1,
+not 4 (no secret printed).
+
+**m3 (minor) `--gate-record` is a stand-in with no identity.** It reads `defaultDepthBound` from any JSON; the `ac5-gate-1` record
+does not exist (only `ccg-p1-flow-python-v2-decision.json` is in `cpg/eval/decisions/`), and `defaultDepthBound` occurs in no code
+outside this tool. It cannot fail on the wrong record. Once the record exists: require its `gateId` equals `--gate-id` and pin its hash.
+
+**n1 (nit)** `_check_recall` rejects `n = 0` in `systemSym`/`baselineSym`/`exKeyError` (a legitimate empty symbol set). `snapshot_export`
+defaults to port 6390 (read-only role, but the shared store: make `--port` required). `item_set_sha256` raises `KeyError` on an
+impacted item with neither `qname` nor `keyPath`, `_gold_line` hashes `None`; they differ only there.
+
+### Checks that held
+
+Custodian guard (`snapshot_export`): `<repo>/x`, `cpg/../cpg/y`, `<repo>/..` and a symlink to the repo plus a child exit 2, nothing
+created. `RoRunner` only calls `ro_query` (mutation to `query` killed). Snapshot id read first and last. Kind scope, bound 0/1/3,
+`<=`, anchor removal, name rows, in-scope split and unresolved rows reproduce the §4.1 table on my own run (symbol A 9/5,
+CP1 11/7, CE1 5/4, K 1, D/M 0; key 7/9/3; bound 0/1/3 of A 4/6/10, CP1 5/7/13, CE1 5/5/6).
+
+### Proposed REVIEW.md lines
+
+Target: root `REVIEW.md`, `## Always check`. Source: Pass 2 M1.
+
+- A scorer that takes pre-aggregated figures (`k`, `n`, a 2x2, a hash) beside the rows they summarise recomputes each from the rows;
+  plant each figure off by one and require a non-zero exit. A hash that pins identity does not pin the values.
+
+(Pass 2 B1 is already covered by the existing "validates the shape of a record field that a later unit produces" line; no addition.)
+
+### Open questions
+
+1. M2: does the owner want the engine-faithful union (rule text) or consumes-only (table)? I recommend the union, rerun on the dev anchors
+   with the dominance check before any scored answer, since the recall rule is pinned by hash.
+2. B1: who owns the `baseline.py` CLI (`tdd-engineer`, as the note's §7 order implies)? The `ccg-noise-recall-rule-v1` hash
+   should be taken after it lands, not before.
