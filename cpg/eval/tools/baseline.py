@@ -2,23 +2,28 @@
 """baseline.py - the naive over-lister baseline and its item-level recall (P1-36; ``docs/plans/connected-code-graph-p1-noise-export-graph.md``
 §3-§7, ``docs/plans/connected-code-graph-p1-ml.md`` §5.1 (3)).
 
-Pure and stdlib-only (plus ``match_keys.h1_symbol_credit``, imported, never reimplemented): no store, no clock, no randomness.
+Pure and stdlib-only (plus ``match_keys.h1_symbol_credit`` and ``noise.path_excluded``, imported, never reimplemented): no store, no clock,
+no randomness.
 ``read_snapshot`` loads and validates the custodian-side adjacency export (``snapshot_export.py``); ``naive_over_lister`` lists, per
 anchor, every symbol the baseline would hand a reader (reverse call reach to the bound plus the kind-wide contract members);
-``baseline_recall`` scores the baseline against the harness's gold-item list with the §6 hit rule; ``dominance`` and
+``main`` is the generator: it stamps ``bound`` from the gate record, applies the exclusions as ``in_scope`` and writes the ``noise-baseline*.jsonl`` /
+``noise-recall*.json`` files ``noise.py score`` reads. ``baseline_recall`` scores the baseline against the harness's gold-item list with the §6 hit rule; ``dominance`` and
 ``nc5_view`` are the M1 check and the Q-NC5 projection. Counts only leave this module: ids appear in no error message.
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import heapq
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[2]
 sys.path.insert(0, str(HERE))
 from match_keys import h1_symbol_credit  # noqa: E402
+from noise import path_excluded, read_gate_record  # noqa: E402
 
 EXPORT_VERSION = 1
 GRAPH_MODEL_VERSION = "1.1"
@@ -163,7 +168,8 @@ def _seeds(ix: _Index, anchor: dict):
     if t == "contract":
         cp = anchor["cpId"]
         seeds = [(s, 0, "provider", c) for s, c in ix.provides.get(cp, {}).items()]
-        seeds += [(o, 1, "consumer", c) for o, c in ix.consumes.get(cp, {}).items()]
+        seeds += [(o, 1, "consumer", c) for o, c in ix.consumes.get(cp, {}).items()]                        # consumes_in
+        seeds += [(o, 1, "consumer", ok) for o, lid, ok in ix.vias if o is not None and ix.link_cp.get(lid) == cp]   # via_in:contract
         return seeds, {cp}
     links = ix.bound_links.get(anchor["entryId"], set())
     seeds = [(o, 2, "consumer", conf) for o, lid, conf in ix.vias if lid in links and o is not None]
@@ -268,9 +274,10 @@ def _validate(snapshot: dict, anchors: list, bound, direction: str, kind_scope: 
 
 
 def naive_over_lister(snapshot: dict, anchors: list, bound: int, *, direction: str = "impact",
-                      kind_scope: str = "kind", in_scope=None) -> list:
+                      kind_scope: str = "kind", in_scope) -> list:
     """The baseline's burden, one row per anchor in ``anchorId`` order (§4). ``bound`` has no default: callers read it from the
-    ``ac5-gate-1`` record's ``defaultDepthBound``."""
+    ``ac5-gate-1`` record's ``defaultDepthBound``. ``in_scope`` has none either: ``None`` is "everything in scope", a callable
+    taking a ``symbol`` record is the frame's path filter (production: ``not path_excluded(path, exclusions)``)."""
     _validate(snapshot, anchors, bound, direction, kind_scope)
     ix = _Index(snapshot)
     rows = []
@@ -293,7 +300,9 @@ def naive_over_lister(snapshot: dict, anchors: list, bound: int, *, direction: s
 # ------------------------------------------------------------------------------------------------ item-level recall (§6)
 def _gold_line(g: dict) -> str:
     e = g["impacted"]
-    ident = e["qname"] if "qname" in e else e.get("keyPath")
+    if "qname" not in e and "keyPath" not in e:
+        raise ValueError("a gold item names neither a qname nor a keyPath")
+    ident = e["qname"] if "qname" in e else e["keyPath"]
     return f"{g['anchorId']}|{e['type']}:{e['repoId']}:{e['path']}:{ident}|{','.join(str(l) for l in sorted(g['lines']))}"
 
 
@@ -396,3 +405,60 @@ def nc5_view(snapshot: dict) -> dict:
              for l in snapshot["link"] if l["cpId"] is not None]
     pairs = sorted({(cps[p["cpId"]]["keyNorm"], units[p["symbolId"]]) for p in snapshot["provides"]})
     return {"links": links, "providers": [{"keyNorm": k, "unitId": u} for k, u in pairs]}
+
+
+# ------------------------------------------------------------------------------------------------ generator (§6-§7)
+VARIANTS = (("kind", "noise-baseline.jsonl", "noise-recall.json"), ("key", "noise-baseline-key.jsonl", "noise-recall-key.json"))
+
+
+def build_variants(snapshot: dict, anchors: list, hits: list, bound: int, exclusions: list) -> dict:
+    """``{kind_scope: (rows, recall)}`` for the headline (``kind``) and the key-scoped variant. Every row carries ``bound`` (the record's
+    ``defaultDepthBound``); ``in_scope`` is the frame's own path filter. An unresolved row keeps the note's §4 shape (no ``byName``/``bySeed``)."""
+    out = {}
+    for scope, _, _ in VARIANTS:
+        rows = naive_over_lister(snapshot, anchors, bound, kind_scope=scope,
+                                 in_scope=lambda s: not path_excluded(s["path"], exclusions))
+        rows = [{**r, "bound": bound} for r in rows]
+        out[scope] = (rows, baseline_recall(snapshot, rows, hits))
+    return out
+
+
+def _jsonl(p) -> list:
+    return [json.loads(l) for l in Path(p).read_text(encoding="utf-8").splitlines() if l.strip()]
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    for f in ("--anchors", "--exclusions", "--gate-record", "--gate-id", "--custodian"):
+        ap.add_argument(f, required=True)
+    ap.add_argument("--snapshot", help="default: <custodian>/snapshot-adjacency.jsonl")
+    ap.add_argument("--hits", help="default: <custodian>/system-hits.jsonl")
+    a = ap.parse_args(argv)
+    cust = Path(a.custodian).expanduser().resolve()
+    if cust == REPO or REPO in cust.parents:
+        print(f"REFUSED: --custodian {a.custodian} is inside the repo; held-out-derived files belong under the custodian root", file=sys.stderr)
+        return 2
+    try:
+        bound = read_gate_record(a.gate_record, a.gate_id)
+        exclusions = json.loads(Path(a.exclusions).read_text(encoding="utf-8"))
+        if not isinstance(exclusions, list):
+            raise ValueError("exclusions: not a list of path patterns")
+        snap = read_snapshot(a.snapshot or cust / "snapshot-adjacency.jsonl")
+        built = build_variants(snap, _jsonl(a.anchors), _jsonl(a.hits or cust / "system-hits.jsonl"), bound, exclusions)
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        print(f"bad input: {e}", file=sys.stderr)
+        return 4
+    report = {}
+    for scope, bname, rname in VARIANTS:
+        rows, recall = built[scope]
+        (cust / bname).write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows), encoding="utf-8")
+        (cust / rname).write_text(json.dumps(recall, sort_keys=True), encoding="utf-8")
+        report[scope] = {"anchors": len(rows), "unresolved": sum(bool(r.get("unresolved")) for r in rows),
+                         "count": sum(r["count"] for r in rows), "countInScope": sum(r["countInScope"] for r in rows),
+                         "baselineRecall": recall["baseline"], "systemRecall": recall["system"]}
+    print(json.dumps({"bound": bound, **report}, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

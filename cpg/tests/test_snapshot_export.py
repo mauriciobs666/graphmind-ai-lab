@@ -223,8 +223,10 @@ def test_two_snapshot_nodes_are_refused(tmp_path):
 def test_the_independent_nc5_count_must_equal_the_export_projection(tmp_path):
     with pytest.raises(ValueError, match="nc5"):
         E.run_export(FakeStore(nc5_count=[[2, 0.0]]), "snap-1", tmp_path)
+    assert list(tmp_path.iterdir()) == []                        # m2: a late failure leaves no file behind
     with pytest.raises(ValueError, match="nc5"):
         E.run_export(FakeStore(nc5_count=[[1, 1.0]]), "snap-1", tmp_path)
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_a_closure_break_in_the_export_is_an_error(tmp_path):
@@ -235,6 +237,15 @@ def test_a_closure_break_in_the_export_is_an_error(tmp_path):
                 break
     with pytest.raises(ValueError, match="provides"):
         E.run_export(FakeStore(mutate=bad), "snap-1", tmp_path)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_failed_rerun_leaves_the_previous_complete_export_untouched(tmp_path):
+    E.run_export(FakeStore(), "snap-1", tmp_path)
+    before = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+    with pytest.raises(ValueError, match="nc5"):
+        E.run_export(FakeStore(nc5_count=[[2, 0.0]]), "snap-1", tmp_path)
+    assert {p.name: p.read_bytes() for p in tmp_path.iterdir()} == before
 
 
 def test_ownerless_site_rows_are_counted_in_dropped(tmp_path):
@@ -244,14 +255,32 @@ def test_ownerless_site_rows_are_counted_in_dropped(tmp_path):
 
 
 # ------------------------------------------------------------------------------------------------ main
+ARGS = ["--graph", "ccg_x", "--port", "1"]
+
+
 def test_main_refuses_a_custodian_inside_the_repo():
-    assert E.main(["--graph", "ccg_x", "--snapshot-id", "snap-1", "--custodian", str(E.REPO / "cpg" / "x")], runner=FakeStore()) == 2
+    target = E.REPO / "cpg" / "never-created-export-test"
+    assert E.main([*ARGS, "--snapshot-id", "snap-1", "--custodian", str(target)], runner=FakeStore()) == 2
+    assert not target.exists()
+
+
+def test_the_port_is_a_required_argument_never_a_default_of_the_shared_store():
+    with pytest.raises(SystemExit):
+        E.main(["--graph", "ccg_x", "--snapshot-id", "s", "--custodian", "/nonexistent-custodian"], runner=FakeStore())
+
+
+def test_a_closed_port_is_exit_4_not_a_traceback(tmp_path, capsys):
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    rc = E.main(["--graph", "ccg_x", "--port", str(port), "--snapshot-id", "s", "--custodian", str(tmp_path)])
+    assert rc == 4 and "Traceback" not in capsys.readouterr().err and list(tmp_path.iterdir()) == []
 
 
 def test_main_prints_counts_only_and_no_ids_or_paths(tmp_path):
     buf = io.StringIO()
     with redirect_stdout(buf):
-        rc = E.main(["--graph", "ccg_x", "--snapshot-id", "snap-1", "--custodian", str(tmp_path)], runner=FakeStore())
+        rc = E.main([*ARGS, "--snapshot-id", "snap-1", "--custodian", str(tmp_path)], runner=FakeStore())
     out = buf.getvalue()
     assert rc == 0
     rep = json.loads(out)
@@ -264,7 +293,7 @@ def test_main_prints_counts_only_and_no_ids_or_paths(tmp_path):
 
 
 def test_main_exit_4_on_a_snapshot_mismatch(tmp_path):
-    assert E.main(["--graph", "ccg_x", "--snapshot-id", "nope", "--custodian", str(tmp_path)], runner=FakeStore()) == 4
+    assert E.main([*ARGS, "--snapshot-id", "nope", "--custodian", str(tmp_path)], runner=FakeStore()) == 4
 
 
 # ------------------------------------------------------------------------------------------------ live tier
@@ -371,7 +400,7 @@ def test_live_export_feeds_the_over_lister_with_the_worked_numbers(throwaway, tm
     load_graph(throwaway, "ccg_tw_b")
     E.run_export(E.RoRunner(throwaway.select_graph("ccg_tw_b")), H.SNAPSHOT_ID, tmp_path)
     snap = B.read_snapshot(tmp_path / "snapshot-adjacency.jsonl")
-    r = B.naive_over_lister(snap, [H.anchor("symbol", "A"), H.anchor("contract", "CP1"), H.anchor("config", "CE1")], 2)
+    r = B.naive_over_lister(snap, [H.anchor("symbol", "A"), H.anchor("contract", "CP1"), H.anchor("config", "CE1")], 2, in_scope=None)
     assert {x["anchorId"]: (x["count"], x["countConfirmedOwn"]) for x in r} == {
         "symbol:A": (9, 5), "contract:CP1": (11, 7), "config:CE1": (5, 4)}
 

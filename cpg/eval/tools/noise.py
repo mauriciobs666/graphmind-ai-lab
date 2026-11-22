@@ -408,6 +408,8 @@ def item_set_sha256(rows: list[dict]) -> str:
     lines = []
     for r in rows:
         i = r["impacted"]
+        if "qname" not in i and "keyPath" not in i:
+            raise ValueError("a gold item names neither a qname nor a keyPath")
         who = i["qname"] if "qname" in i else i["keyPath"]
         lines.append(f"{r['anchorId']}|{i['type']}:{i['repoId']}:{i['path']}:{who}|{','.join(str(n) for n in sorted(r['lines']))}")
     return hashlib.sha256("\n".join(sorted(lines)).encode("utf-8")).hexdigest()
@@ -457,20 +459,46 @@ def _require_spot(labels2: dict, spot_path: Path) -> None:
 
 
 def _check_recall(recall: dict, hits: list[dict], label: str) -> None:
-    """Refuse a recall file that cannot be a pair of recalls over the harness's own item list (counts only)."""
-    def pairs(d: dict, where: str) -> None:
+    """Refuse a recall file that cannot be the figures of the harness's own item list (counts only). The hash pins the item set;
+    every figure the rows determine is recomputed from ``system-hits.jsonl``, and ``baseline.k`` is bound by the 2x2 identities."""
+    def block(d: dict, rows: list[dict], where: str, headline: bool) -> None:
+        def bad(what: str):
+            raise ValueError(f"{label}: {where}{what}")
+        sym = [h for h in rows if h["impacted"]["type"] == "symbol"]
+        want = {"system": [sum(bool(h["hit"]) for h in rows), len(rows)]}
+        if "systemSym" in d or "baselineSym" in d:
+            if "systemSym" not in d or "baselineSym" not in d:
+                bad("systemSym and baselineSym come together")
+            want["systemSym"] = [sum(bool(h["hit"]) for h in sym), len(sym)]
         for key in ("system", "baseline", "systemSym", "baselineSym"):
-            if key in d:
-                k, n = d[key]
-                if not (isinstance(k, int) and isinstance(n, int) and n > 0 and 0 <= k <= n):
-                    raise ValueError(f"{label}: {where}pair {key} violates 0 <= k <= n with n > 0")
-    pairs(recall, "")
+            if key not in d:
+                if key in ("system", "baseline"):
+                    bad(f"pair {key} is missing")
+                continue
+            k, n = d[key]
+            if not (isinstance(k, int) and isinstance(n, int) and 0 <= k <= n and (n > 0 or not headline or key.endswith("Sym"))):
+                bad(f"pair {key} violates 0 <= k <= n with n > 0")
+            if key in want and [k, n] != want[key]:
+                bad(f"pair {key} differs from the recomputed one of system-hits.jsonl")
+        if d["baseline"][1] != len(rows) or ("baselineSym" in d and d["baselineSym"][1] != len(sym)):
+            bad("a baseline denominator differs from the item count of system-hits.jsonl")
+        if d.get("configGold") != len(rows) - len(sym) or not isinstance(d.get("configGold"), int):
+            bad("configGold differs from the config items of system-hits.jsonl")
+        p = d.get("paired")
+        cells = ("both", "systemOnly", "baselineOnly", "neither")
+        if not isinstance(p, dict) or any(not isinstance(p.get(c), int) or p[c] < 0 for c in cells):
+            bad("paired is not a 2x2 of non-negative counts")
+        if sum(p[c] for c in cells) != len(rows):
+            bad("the paired cells do not sum to the item count")
+        if p["both"] + p["systemOnly"] != d["system"][0] or p["both"] + p["baselineOnly"] != d["baseline"][0]:
+            bad("the paired cells contradict system.k or baseline.k")
+    block(recall, hits, "", True)
     if recall.get("itemSetSha256") != item_set_sha256(hits):
         raise ValueError(f"{label}: itemSetSha256 differs from the one of system-hits.jsonl")
     if "exKeyError" in recall:
-        ex = recall["exKeyError"]
-        pairs(ex, "exKeyError ")
-        if ex.get("itemSetSha256") != item_set_sha256([h for h in hits if not h["keyError"]]):
+        kept = [h for h in hits if not h["keyError"]]
+        block(recall["exKeyError"], kept, "exKeyError ", False)
+        if recall["exKeyError"].get("itemSetSha256") != item_set_sha256(kept):
             raise ValueError(f"{label}: exKeyError itemSetSha256 differs from the one of system-hits.jsonl without key errors")
 
 
@@ -524,7 +552,7 @@ def _variant(baseline: dict, recall: dict, answers: list[dict], anchors: list[st
     bin_, ball = f["burden"]["inScope"], f["burden"]["allListed"]
     rows = [baseline[a] for a in anchors]
     r_in = reduction([r["countInScope"] for r in rows], bin_, tuple(recall["system"]), tuple(recall["baseline"]))
-    r_all = reduction([r["count"] for r in rows], ball, tuple(recall["system"]), tuple(recall["baseline"]))
+    all_listed = Fraction(sum(r["count"] for r in rows), sum(ball)) if sum(ball) else None       # no recall here: the flag is r_in's
     by_type: dict = {}
     for r, n_in, n_all in zip(rows, bin_, ball):
         t = by_type.setdefault(r["type"], {"anchors": 0, "baselineCount": 0, "baselineInScope": 0, "baselineConfirmedOwn": 0,
@@ -538,7 +566,7 @@ def _variant(baseline: dict, recall: dict, answers: list[dict], anchors: list[st
     for t in by_type.values():
         t["reductionInScope"] = _f(Fraction(t["baselineInScope"], t["systemInScope"])) if t["systemInScope"] else None
         t["reductionAllListed"] = _f(Fraction(t["baselineCount"], t["systemAllListed"])) if t["systemAllListed"] else None
-    red = {"inScope": _f(r_in["reduction"]), "allListed": _f(r_all["reduction"]), "flagged": r_in["flagged"],
+    red = {"inScope": _f(r_in["reduction"]), "allListed": _f(all_listed), "flagged": r_in["flagged"],
            "baselineRecallHigher": r_in["baselineRecallHigher"], "kind": "burden ratio",
            "interval": _ci(boot["reduction"]), "intervalAllListed": _ci(boot["reductionAll"]), "byType": by_type}
     if r_in["baselineRecallHigher"]:
@@ -553,7 +581,7 @@ def _variant(baseline: dict, recall: dict, answers: list[dict], anchors: list[st
         rc["exKeyError"] = _wilson_pairs(recall["exKeyError"])
     non_symbol = sum(it["subject"]["type"] != "symbol" for a in answers for it in _listed(a))
     comp = {"anchors": len(rows), "unresolved": sum(bool(r.get("unresolved")) for r in rows),
-            "byName": {k: sum(r["byName"][k] for r in rows) for k in ("resolvedSite", "unresolvedSite")},
+            "byName": {k: sum(0 if r.get("unresolved") else r["byName"][k] for r in rows) for k in ("resolvedSite", "unresolvedSite")},
             "nonSymbolSystemItems": non_symbol}
     return {"reduction": red, "baseline": comp, "recall": rc}
 
@@ -607,6 +635,17 @@ def score(answers: list[dict], exclusions: list[str], labels: dict, gate_id: str
     return rep
 
 
+def read_gate_record(path, gate_id: str) -> int:
+    """``defaultDepthBound`` of the ``ac5-gate-1`` record: a non-negative int; when the record names a ``gateId`` it must be ``gate_id``."""
+    rec = json.loads(Path(path).read_text(encoding="utf-8"))
+    bound = rec.get("defaultDepthBound") if isinstance(rec, dict) else None
+    if isinstance(bound, bool) or not isinstance(bound, int) or bound < 0:
+        raise ValueError("gate record: defaultDepthBound is missing or not a non-negative int")
+    if "gateId" in rec and rec["gateId"] != gate_id:
+        raise ValueError("gate record: gateId differs from --gate-id")
+    return bound
+
+
 def _jsonl(p: str) -> list[dict]:
     return [json.loads(l) for l in Path(p).read_text(encoding="utf-8").splitlines() if l.strip()]
 
@@ -655,7 +694,7 @@ def _score_cmd(a, cust: Path, answers, exclusions, f) -> int:
         if baseline is not None:
             if not a.gate_record:
                 raise ValueError("a baseline needs --gate-record (the ac5-gate-1 record with defaultDepthBound)")
-            depth = json.loads(Path(a.gate_record).read_text(encoding="utf-8"))["defaultDepthBound"]
+            depth = read_gate_record(a.gate_record, a.gate_id)
             hits = _jsonl(str(cust / "system-hits.jsonl"))
         snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8")) if a.snapshot else None
         rep = score(answers, exclusions, labels, a.gate_id, a.snapshot_id, a.boot, labels2, baseline, recall, snap,

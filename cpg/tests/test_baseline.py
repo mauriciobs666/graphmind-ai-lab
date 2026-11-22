@@ -24,7 +24,8 @@ def S(s):
 
 
 def run(anchors, bound=2, **kw):
-    return B.naive_over_lister(H.snapshot(), anchors, bound, **kw)
+    kw.setdefault("in_scope", None)
+    return B.naive_over_lister(H.snapshot(), anchors, bound, **{"in_scope": None, **kw})
 
 
 def one(kind, ident, bound=2, **kw):
@@ -41,7 +42,8 @@ TABLE = [
     ("symbol", "A", 2, "key", S("B C E F G H P3"), 4),
     ("contract", "CP1", 2, "kind", S("A B C E F G H P2 P3 Q R"), 7),
     ("contract", "CP1", 3, "kind", S("A B C D E F G H P2 P3 Q R S"), 9),
-    ("contract", "CP1", 2, "key", S("A B C E F G H P3 R"), 6),
+    ("contract", "CP1", 2, "key", S("A B C E F G H P3 Q R"), 6),         # Q: via owner of L3 (ON CP1), a cost-1 seed, possible
+    ("contract", "CP1", 3, "key", S("A B C D E F G H P3 Q R S"), 8),
     ("config", "CE1", 2, "kind", S("A H P2 P3 Q"), 4),
     ("config", "CE1", 3, "kind", S("A H P2 P3 Q R"), 5),
     ("config", "CE1", 2, "key", S("A H P3"), 3),
@@ -77,8 +79,8 @@ def test_byname_counts_items_resting_on_name_rows():
 def test_byseed_partitions_the_items_and_sums_to_count():
     want = {
         ("symbol", "A", "kind"): dict(kindWideOnly=4, nameOnly=3, providerOnly=0, consumerOrConfigOnly=0, other=2),
-        ("contract", "CP1", "kind"): dict(kindWideOnly=2, nameOnly=3, providerOnly=4, consumerOrConfigOnly=2, other=0),
-        ("contract", "CP1", "key"): dict(kindWideOnly=0, nameOnly=3, providerOnly=4, consumerOrConfigOnly=2, other=0),
+        ("contract", "CP1", "kind"): dict(kindWideOnly=1, nameOnly=3, providerOnly=4, consumerOrConfigOnly=3, other=0),
+        ("contract", "CP1", "key"): dict(kindWideOnly=0, nameOnly=3, providerOnly=4, consumerOrConfigOnly=3, other=0),
         ("config", "CE1", "kind"): dict(kindWideOnly=4, nameOnly=0, providerOnly=0, consumerOrConfigOnly=1, other=0),
     }
     for (k, i, sc), part in want.items():
@@ -92,21 +94,21 @@ def test_byseed_mixed_reach_is_other():
     snap = H.snapshot()
     snap["site"].append({"siteId": "sRa", "owner": "R", "unitId": "u1", "path": "r.py", "line": 3, "calleeName": "a"})
     snap["call"].append({"site": "sRa", "callee": "A", "status": "confirmed", "reason": "resolved-call"})
-    r = B.naive_over_lister(snap, [A_("contract", "CP1")], 2)[0]
-    assert r["bySeed"]["other"] == 1 and r["bySeed"]["consumerOrConfigOnly"] == 1      # R mixed; H alone
+    r = B.naive_over_lister(snap, [A_("contract", "CP1")], 2, in_scope=None)[0]
+    assert r["bySeed"]["other"] == 1 and r["bySeed"]["consumerOrConfigOnly"] == 2      # R mixed; H and the via owner Q alone
 
 
 def test_confirmed_own_needs_every_call_on_the_chain_confirmed():
     snap = H.snapshot()
     next(c for c in snap["call"] if (c["site"], c["callee"]) == ("sBc", "A"))["status"] = "possible"      # B -> A
-    r = B.naive_over_lister(snap, [A_("symbol", "A")], 2)[0]
+    r = B.naive_over_lister(snap, [A_("symbol", "A")], 2, in_scope=None)[0]
     assert r["count"] == 9 and r["countConfirmedOwn"] == 3       # B (possible call) and C (chain through B) drop out: H P2 P3 remain
 
 
 def test_kind_membership_is_not_seeded_from_the_reached_callers():
     snap = H.snapshot()
     snap["provides"].append({"symbolId": "D", "cpId": "CP3", "status": "confirmed", "reason": "r"})     # D (cost 3) provides the mcp tool
-    r = B.naive_over_lister(snap, [A_("symbol", "A")], 3)[0]
+    r = B.naive_over_lister(snap, [A_("symbol", "A")], 3, in_scope=None)[0]
     assert "D" in r["items"] and "M" not in r["items"]           # A's kind is http only: M (the mcp provider) stays out
 
 
@@ -114,8 +116,55 @@ def test_byseed_name_only_takes_precedence_over_kind_wide_for_a_member_reached_b
     snap = H.snapshot()
     snap["site"].append({"siteId": "sP3n", "owner": "P3", "unitId": "u2", "path": "p3.ts", "line": 1, "calleeName": "a"})
     snap["name"].append({"site": "sP3n", "candidate": "A"})       # P3 is in Kind(http) and a name-row caller of A
-    r = B.naive_over_lister(snap, [A_("symbol", "A")], 2)[0]
+    r = B.naive_over_lister(snap, [A_("symbol", "A")], 2, in_scope=None)[0]
     assert r["bySeed"] == dict(kindWideOnly=3, nameOnly=4, providerOnly=0, consumerOrConfigOnly=0, other=2)
+
+
+# ---- M2 (analyst gate pass 2): a contract anchor's consumers are the union of `consumes` owners and `via` owners of links ON it
+def _via_graph(via_status, link_cp, consumes, via_extra=True):
+    """V (owner of site sVx, an extra via site) with caller X; link Lx ON ``link_cp`` (or None), via V; V optionally also CONSUMES CP1."""
+    snap = H.snapshot()
+    snap["symbol"] += [{**snap["symbol"][0], "symbolId": s, "qname": f"{s.lower()}.py::{s}", "path": f"{s.lower()}.py"} for s in ("V", "X")]
+    snap["site"] += [{"siteId": "sVx", "owner": "V", "unitId": "u1", "path": "v.py", "line": 1, "calleeName": "k"},
+                     {"siteId": "sXv", "owner": "X", "unitId": "u1", "path": "x.py", "line": 1, "calleeName": "v"}]
+    snap["call"].append({"site": "sXv", "callee": "V", "status": "confirmed", "reason": "resolved-call"})
+    snap["link"].append({"linkId": "Lx", "kind": "http", "status": "possible", "reason": "r", "cpId": link_cp, "provider": None})
+    snap["via"].append({"site": "sVx", "linkId": "Lx", "status": via_status, "reason": "r"})
+    if consumes:
+        snap["consumes"].append({"site": "sVx", "cpId": "CP1", "status": "confirmed" if via_status == "confirmed" else "possible", "reason": "r"})
+    return snap
+
+
+@pytest.mark.parametrize("scope", ["kind", "key"])
+@pytest.mark.parametrize("consumes", [False, True])
+@pytest.mark.parametrize("link_cp", ["CP1", "CP2", None])
+@pytest.mark.parametrize("via_status", ["confirmed", "possible"])
+def test_contract_consumer_seeds_are_consumes_owners_union_via_owners_of_links_on_the_point(via_status, link_cp, consumes, scope):
+    snap = _via_graph(via_status, link_cp, consumes)
+    r = B.naive_over_lister(snap, [A_("contract", "CP1")], 2, kind_scope=scope, in_scope=None)[0]
+    seed = consumes or link_cp == "CP1"                       # V is a cost-1 seed: its caller X (cost 2) is reached
+    assert ("V" in r["items"]) == seed and ("X" in r["items"]) == seed
+    if seed:
+        row_conf = {"confirmed": True, "possible": False}[via_status]
+        via_conf = row_conf and link_cp == "CP1"
+        cons_conf = consumes and row_conf
+        assert ("V" in B.naive_over_lister(snap, [A_("contract", "CP1")], 2, kind_scope=scope, in_scope=None)[0]["items"])
+        # V (and X, a confirmed call from V) are confirmed-own iff some seed row of V is confirmed
+        base = B.naive_over_lister(H.snapshot(), [A_("contract", "CP1")], 2, kind_scope=scope, in_scope=None)[0]
+        extra = r["countConfirmedOwn"] - base["countConfirmedOwn"]
+        assert extra == (2 if (via_conf or cons_conf) else 0)
+
+
+def test_dominance_probe_on_the_via_only_consumer_plant():
+    """The engine reaches Q (1) and a caller X of Q (2) from CP1 (key scope); the baseline must list both, or class A reports it."""
+    snap = H.snapshot()
+    snap["symbol"].append({**snap["symbol"][0], "symbolId": "X", "qname": "x.py::X", "path": "x.py"})
+    snap["site"].append({"siteId": "sXq", "owner": "X", "unitId": "u1", "path": "x.py", "line": 1, "calleeName": "q"})
+    snap["call"].append({"site": "sXq", "callee": "Q", "status": "confirmed", "reason": "resolved-call"})
+    base = B.naive_over_lister(snap, [A_("contract", "CP1", "a")], 2, kind_scope="key", in_scope=None)
+    system = [{"anchorId": "a", "symbolId": "Q", "edges": ["VIA"]}, {"anchorId": "a", "symbolId": "X", "edges": ["VIA", "CALLS"]},
+              {"anchorId": "a", "symbolId": "H", "edges": ["CONSUMES"]}]
+    assert B.dominance(system, base)["A"] == {"checked": 3, "violations": 0}
 
 
 def test_result_is_in_anchorid_order_one_row_per_anchor():
@@ -143,9 +192,14 @@ def test_raises_on_negative_bound_direction_scope_unit_duplicate():
         run([A_("symbol", "A", "same"), A_("symbol", "D", "same")])
 
 
+def test_in_scope_is_a_required_keyword_not_a_silent_default():
+    with pytest.raises(TypeError):
+        B.naive_over_lister(H.snapshot(), [A_("symbol", "A")], 2)
+
+
 def test_bound_is_a_required_argument():
     with pytest.raises(TypeError):
-        B.naive_over_lister(H.snapshot(), [A_("symbol", "A")])
+        B.naive_over_lister(H.snapshot(), [A_("symbol", "A")], in_scope=None)
 
 
 @pytest.mark.parametrize("anchor", [A_("symbol", "Z"), A_("contract", "CPX"), A_("config", "CEX")])
@@ -170,7 +224,7 @@ def test_shuffled_records_give_the_identical_result():
     rng = random.Random(7)
     for rows in snap.values():
         rng.shuffle(rows)
-    got = B.naive_over_lister(snap, [A_("config", "CE1"), A_("contract", "CP1"), A_("symbol", "A")], 2)
+    got = B.naive_over_lister(snap, [A_("config", "CE1"), A_("contract", "CP1"), A_("symbol", "A")], 2, in_scope=None)
     assert got == base
 
 
@@ -180,7 +234,7 @@ def test_call_cycle_and_self_call_terminate_and_the_anchor_is_removed():
                      {"siteId": "sAA", "owner": "A", "unitId": "u1", "path": "a.py", "line": 2, "calleeName": "a"}]
     snap["call"] += [{"site": "sAB", "callee": "B", "status": "confirmed", "reason": "resolved-call"},
                      {"site": "sAA", "callee": "A", "status": "confirmed", "reason": "resolved-call"}]
-    r = B.naive_over_lister(snap, [A_("symbol", "A")], 9)[0]
+    r = B.naive_over_lister(snap, [A_("symbol", "A")], 9, in_scope=None)[0]
     assert "A" not in r["items"] and {"B", "C", "D"} <= set(r["items"])
 
 
@@ -188,14 +242,14 @@ def test_a_contract_anchor_symbol_that_provides_and_consumes_takes_cost_zero():
     snap = H.snapshot()
     snap["site"].append({"siteId": "sAk", "owner": "A", "unitId": "u1", "path": "a.py", "line": 4, "calleeName": "x"})
     snap["consumes"].append({"site": "sAk", "cpId": "CP1", "status": "confirmed", "reason": "call"})
-    r = B.naive_over_lister(snap, [A_("contract", "CP1")], 2)[0]
+    r = B.naive_over_lister(snap, [A_("contract", "CP1")], 2, in_scope=None)[0]
     assert r["items"] == sorted(S("A B C E F G H P2 P3 Q R"))      # A at 0, not 1: C, F, G stay inside the bound
 
 
 def test_the_anchor_does_not_mutate_its_input():
     snap = H.snapshot()
     before = copy.deepcopy(snap)
-    B.naive_over_lister(snap, [A_("symbol", "A")], 2)
+    B.naive_over_lister(snap, [A_("symbol", "A")], 2, in_scope=None)
     assert snap == before
 
 
@@ -292,7 +346,7 @@ def test_missing_field_and_unknown_type_raise(tmp_path):
 
 def test_optional_fields_may_be_absent_and_a_read_snapshot_feeds_the_over_lister(tmp_path):
     snap = B.read_snapshot(H.write_snapshot(tmp_path / "s.jsonl"))
-    r = B.naive_over_lister(snap, [A_("symbol", "A")], 2)[0]
+    r = B.naive_over_lister(snap, [A_("symbol", "A")], 2, in_scope=None)[0]
     assert r["count"] == 9
 
 
@@ -300,7 +354,7 @@ def test_an_odd_length_owned_regions_list_is_refused_not_silently_truncated():
     snap = H.snapshot()
     next(x for x in snap["symbol"] if x["symbolId"] == "E")["ownedRegions"] = [7, 9, 11]
     with pytest.raises(ValueError, match="ownedRegions"):
-        B.baseline_recall(snap, B.naive_over_lister(snap, [A_("symbol", "A", "a")], 2), [_gi("a", "e.py", "e.py::E", [8])])
+        B.baseline_recall(snap, B.naive_over_lister(snap, [A_("symbol", "A", "a")], 2, in_scope=None), [_gi("a", "e.py", "e.py::E", [8])])
 
 
 # ------------------------------------------------------------------------------------------------ item-set hash (N2)
@@ -332,7 +386,7 @@ def test_item_set_sha256_of_nothing_is_the_empty_hash():
 
 # ------------------------------------------------------------------------------------------------ §6 recall predicate
 def _rows_for(*anchors, bound=2, **kw):
-    return B.naive_over_lister(H.snapshot(), list(anchors), bound, **kw)
+    return B.naive_over_lister(H.snapshot(), list(anchors), bound, **{"in_scope": None, **kw})
 
 
 def test_owned_regions_are_paired_before_the_h1_credit():
@@ -363,6 +417,26 @@ def test_config_gold_is_never_a_hit_and_is_counted():
     assert r["configGold"] == 1
     assert r["baseline"] == [1, 2] and r["baselineSym"] == [1, 1]
     assert r["system"] == [2, 2] and r["systemSym"] == [1, 1]
+
+
+def test_system_and_baseline_vectors_are_kept_apart_in_every_figure():
+    base = _rows_for(A_("symbol", "A", "a"))
+    items = [_gi("a", "e.py", "e.py::E", [2], hit=False),         # baseline hit, system miss
+             _gi("a", "b.py", "b.py::B", [2], hit=False),         # baseline hit, system miss
+             _gi("a", "zz.py", "zz.py::Z", [2], hit=True),        # system hit, baseline miss
+             {"anchorId": "a", "impacted": {"type": "config", "repoId": "r1", "path": "c.yml", "keyPath": "k"}, "lines": [1],
+              "hit": True, "keyError": False}]
+    r = B.baseline_recall(H.snapshot(), base, items)
+    assert (r["system"], r["baseline"]) == ([2, 4], [2, 4])
+    assert (r["systemSym"], r["baselineSym"]) == ([1, 3], [2, 3])
+    assert r["paired"] == {"both": 0, "systemOnly": 2, "baselineOnly": 2, "neither": 0}
+
+
+def test_a_gold_item_with_neither_qname_nor_keypath_is_a_value_error():
+    bad = _gi("a", "p", "q", [1])
+    del bad["impacted"]["qname"]
+    with pytest.raises(ValueError, match="qname"):
+        B.itemSetSha256([bad])
 
 
 def test_paired_two_by_two_and_exkeyerror_and_flags():

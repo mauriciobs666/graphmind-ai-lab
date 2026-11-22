@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """snapshot_export.py - custodian-side store export for the noise and oracle tooling (P1-36; ``docs/plans/connected-code-graph-p1-noise-export-graph.md`` §1-§3, §5).
 
-    snapshot_export.py --graph ccg_<s> --snapshot-id S --custodian ROOT [--host H --port P --user U --password-file F]
+    snapshot_export.py --graph ccg_<s> --snapshot-id S --custodian ROOT --port P [--host H --user U --password-file F]
 
 Runs the Cypher texts of §2, §3 and §5 as ``GRAPH.RO_QUERY`` (the ``ccg_raw_<s>`` role; no write-capable call exists here) against the
 live key and writes, under ``--custodian`` (refused inside the repo): ``snapshot-adjacency.jsonl`` (the 14-record export, ``baseline.read_snapshot``'s
 input), ``links.jsonl`` and ``links-unprovided.jsonl`` (``oracle.py``'s Link set), ``nc5-unbound.jsonl`` (the Q-NC5 list form).
 ``Snapshot.snapshotId`` is read first and last and must equal ``--snapshot-id`` both times: a refresh during the export is an error and
-nothing is written. The written export is re-read with ``read_snapshot`` (closure) and the independent Q-NC5 count is compared with
+nothing is written; the files are staged under temporary names and published only after every check passes. The written export is re-read with ``read_snapshot`` (closure) and the independent Q-NC5 count is compared with
 ``noise.unbound_multi_unit(nc5_view(...))``. stdout is a counts-only JSON report. Exit: 0 ok, 2 usage/refused, 4 bad input or mismatch.
 """
 from __future__ import annotations
@@ -186,15 +186,22 @@ def run_export(run, snapshot_id: str, out_dir) -> dict:
     if _snapshot_id(run) != snapshot_id:
         raise SnapshotMismatch("snapshot: the snapshotId changed during the export (last read)")
     out.mkdir(parents=True, exist_ok=True)
-    adjacency = out / "snapshot-adjacency.jsonl"
-    _write(adjacency, lines)
-    _write(out / "links.jsonl", [json.dumps(r, sort_keys=True) for r in provided])
-    _write(out / "links-unprovided.jsonl", [json.dumps(r, sort_keys=True) for r in unprovided])
-    _write(out / "nc5-unbound.jsonl", [json.dumps(r, sort_keys=True) for r in nc5["rows"]])
-    snap = baseline.read_snapshot(adjacency)
-    view = unbound_multi_unit(baseline.nc5_view(snap))
-    if (view["unboundMultiUnit"], view["unboundMultiUnitConfirmed"]) != (nc5["unboundMultiUnit"], nc5["unboundMultiUnitConfirmed"]):
-        raise ValueError("nc5: the independent store count differs from the export projection")
+    files = {"snapshot-adjacency.jsonl": lines, "links.jsonl": [json.dumps(r, sort_keys=True) for r in provided],
+             "links-unprovided.jsonl": [json.dumps(r, sort_keys=True) for r in unprovided],
+             "nc5-unbound.jsonl": [json.dumps(r, sort_keys=True) for r in nc5["rows"]]}
+    tmp = {name: out / f".{name}.tmp" for name in files}
+    try:
+        for name, body in files.items():
+            _write(tmp[name], body)
+        snap = baseline.read_snapshot(tmp["snapshot-adjacency.jsonl"])
+        view = unbound_multi_unit(baseline.nc5_view(snap))
+        if (view["unboundMultiUnit"], view["unboundMultiUnitConfirmed"]) != (nc5["unboundMultiUnit"], nc5["unboundMultiUnitConfirmed"]):
+            raise ValueError("nc5: the independent store count differs from the export projection")
+        for name, path in tmp.items():                 # published only after every check passed
+            path.replace(out / name)
+    finally:
+        for path in tmp.values():
+            path.unlink(missing_ok=True)
     return {"records": {t: len(snap[t]) for t in QUERIES}, "dropped": snap["dropped"], **link_stats(provided, unprovided),
             "unboundMultiUnit": nc5["unboundMultiUnit"], "unboundMultiUnitConfirmed": nc5["unboundMultiUnitConfirmed"]}
 
@@ -212,7 +219,7 @@ def main(argv=None, runner=None) -> int:
     ap.add_argument("--snapshot-id", required=True)
     ap.add_argument("--custodian", required=True)
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=6390)
+    ap.add_argument("--port", type=int, required=True, help="no default: the shared store is never the implicit target")
     ap.add_argument("--user")
     ap.add_argument("--password-file")
     a = ap.parse_args(argv)
@@ -221,8 +228,12 @@ def main(argv=None, runner=None) -> int:
         print(f"REFUSED: --custodian {a.custodian} is inside the repo; the export belongs under the custodian root", file=sys.stderr)
         return 2
     try:
+        from redis.exceptions import RedisError
+    except ImportError:                                # the transport library is absent: nothing of its to catch
+        RedisError = OSError                           # noqa: N806
+    try:
         counts = run_export(runner or _connect(a), a.snapshot_id, out)
-    except (ValueError, OSError) as e:                 # SnapshotMismatch is a ValueError; messages carry counts, never ids
+    except (ValueError, OSError, RedisError) as e:                 # SnapshotMismatch is a ValueError; messages carry counts, never ids
         print(f"export refused: {e}", file=sys.stderr)
         return 4
     print(json.dumps(counts, sort_keys=True))

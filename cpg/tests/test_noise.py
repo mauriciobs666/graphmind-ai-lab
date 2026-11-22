@@ -786,9 +786,15 @@ def brow(anchor, count=200, in_scope=100, type_="symbol", bound=2, by_name=(2, 3
     return row
 
 
+def unresolved_row(anchor, bound=2):
+    """Note §4's shape: ``{anchorId, type, count 0, countInScope 0, countConfirmedOwn 0, items [], unresolved}``, no ``byName``; ``bound`` stamped."""
+    return {"anchorId": anchor, "type": "unresolved", "count": 0, "countInScope": 0, "countConfirmedOwn": 0, "items": [],
+            "unresolved": True, "bound": bound}
+
+
 def _baseline():
     return {"SECRET0": brow("SECRET0"), "SECRET1": brow("SECRET1"), "SECRET2": brow("SECRET2", type_="contract"),
-            "SECRET3": brow("SECRET3", 0, 0, type_="unresolved", by_name=(0, 0), unresolved=True, own=0)}
+            "SECRET3": unresolved_row("SECRET3")}
 
 
 def hit_row(anchor, qname, lines, hit=True, key_error=False, type_="symbol", **imp):
@@ -797,7 +803,10 @@ def hit_row(anchor, qname, lines, hit=True, key_error=False, type_="symbol", **i
 
 
 def _hits():
+    """10 gold items: row 0 is a system miss, row 5 a config item (a hit), row 9 a key error (a hit)."""
     rows = [hit_row(f"SECRET{i % 4}", f"q{i}", [i, i + 5]) for i in range(10)]
+    rows[0]["hit"] = False
+    rows[5] = hit_row("SECRET1", "k.v", [5], type_="config")
     rows[9]["keyError"] = True
     return rows
 
@@ -808,6 +817,7 @@ def _recall(hits=None):
             "paired": {"both": 7, "systemOnly": 2, "baselineOnly": 1, "neither": 0}, "configGold": 1,
             "itemSetSha256": N.item_set_sha256(hits),
             "exKeyError": {"system": [8, 9], "baseline": [7, 9], "systemSym": [7, 8], "baselineSym": [6, 8],
+                           "paired": {"both": 6, "systemOnly": 2, "baselineOnly": 1, "neither": 0}, "configGold": 1,
                            "itemSetSha256": N.item_set_sha256([h for h in hits if not h["keyError"]])}}
 
 
@@ -1071,6 +1081,7 @@ def test_report_names_the_figure_a_burden_ratio_and_says_so_when_the_baseline_re
     assert _run()["reduction"]["kind"] == "burden ratio" and "note" not in _run()["reduction"]
     r = _recall()
     r["baseline"], r["baselineSym"] = [10, 10], [9, 9]
+    r["paired"] = {"both": 9, "systemOnly": 0, "baselineOnly": 1, "neither": 0}           # both + baselineOnly = baseline.k
     rep = _run(recall=r)
     assert rep["reduction"]["baselineRecallHigher"] is True and rep["reduction"]["flagged"] is False
     assert "not at equal recall" in rep["reduction"]["note"] and "upper bound" in rep["reduction"]["note"]
@@ -1081,6 +1092,7 @@ def test_the_key_scoped_variant_is_reported_beside_the_headline_with_its_own_num
     key = {a: dict(r, count=r["count"] // 4, countInScope=r["countInScope"] // 4) for a, r in _baseline().items()}   # 50 / 25
     rk = _recall()
     rk["baseline"] = [9, 10]
+    rk["paired"] = {"both": 8, "systemOnly": 1, "baselineOnly": 1, "neither": 0}
     rep = _run(baseline_key=key, recall_key=rk)
     ks = rep["keyScoped"]
     assert ks["reduction"]["inScope"] == round(75 / 52, 3) and ks["reduction"]["allListed"] == round(150 / 56, 3)
@@ -1089,3 +1101,138 @@ def test_the_key_scoped_variant_is_reported_beside_the_headline_with_its_own_num
     assert rep["reduction"]["inScope"] == round(300 / 52, 3)                                  # the headline is untouched
     assert ks["reduction"]["interval"] != rep["reduction"]["interval"]
     assert "keyScoped" not in _run()
+
+
+# ---------------------------------------------------------------- analyst gate pass 2 (M1, m1, m3, n1): figures recomputed from the rows
+def _plant(path, delta):
+    """Move one figure of the recall file by ``delta`` (``path`` is a key tuple) and return it."""
+    r = _recall()
+    d = r
+    for k in path[:-1]:
+        d = d[k]
+    if isinstance(d[path[-1]], list):
+        d[path[-1]] = [d[path[-1]][0] + delta[0], d[path[-1]][1] + delta[1]]
+    else:
+        d[path[-1]] += delta
+    return r
+
+
+@pytest.mark.parametrize("block", [(), ("exKeyError",)])
+@pytest.mark.parametrize("path,delta", [
+    (("system",), (1, 0)), (("system",), (-1, 0)), (("system",), (0, 1)), (("system",), (0, -1)),
+    (("systemSym",), (1, 0)), (("systemSym",), (-1, 0)), (("systemSym",), (0, 1)), (("systemSym",), (0, -1)),
+    (("baseline",), (0, 1)), (("baseline",), (0, -1)), (("baselineSym",), (0, 1)), (("baselineSym",), (0, -1)),
+    (("configGold",), 1), (("configGold",), -1),
+    (("paired", "both"), 1), (("paired", "both"), -1), (("paired", "systemOnly"), 1), (("paired", "systemOnly"), -1),
+    (("paired", "baselineOnly"), 1), (("paired", "baselineOnly"), -1), (("paired", "neither"), 1)])
+def test_every_recall_figure_the_rows_determine_is_recomputed_and_one_off_is_refused(block, path, delta):
+    r = _plant(block + path, delta)
+    with pytest.raises(ValueError, match="noise-recall"):
+        _run(recall=r)
+
+
+@pytest.mark.parametrize("k", [(1, 0), (-1, 0)])
+@pytest.mark.parametrize("move", [("both", "systemOnly"), ("both", "baselineOnly")])
+def test_the_2x2_identities_bind_baseline_k_and_system_k_even_when_the_cells_still_sum_to_n(k, move):
+    r = _recall()
+    r["paired"][move[0]] += 1                   # shifts mass from `neither` ... sum stays n: take it from the other cell
+    r["paired"][move[1]] -= 1
+    with pytest.raises(ValueError, match="paired cells contradict"):
+        _run(recall=r)
+
+
+def test_a_planted_headline_flag_flip_is_refused_not_scored():
+    r = _recall()
+    r["system"], r["paired"] = [10, 10], {"both": 8, "systemOnly": 2, "baselineOnly": 0, "neither": 0}     # flips nothing true: system k is 9
+    with pytest.raises(ValueError, match="recomputed"):
+        _run(recall=r)
+
+
+def test_the_missing_paired_or_config_figure_is_refused():
+    for key in ("paired", "configGold"):
+        r = _recall()
+        del r[key]
+        with pytest.raises(ValueError, match="noise-recall"):
+            _run(recall=r)
+
+
+def test_a_symbol_set_of_size_zero_is_legitimate():
+    hits = [hit_row("SECRET0", "k.v", [1], type_="config"), hit_row("SECRET1", "k.w", [2], type_="config", hit=False)]
+    r = {"system": [1, 2], "baseline": [0, 2], "systemSym": [0, 0], "baselineSym": [0, 0],
+         "paired": {"both": 0, "systemOnly": 1, "baselineOnly": 0, "neither": 1}, "configGold": 2, "itemSetSha256": N.item_set_sha256(hits),
+         "exKeyError": {"system": [1, 2], "baseline": [0, 2], "systemSym": [0, 0], "baselineSym": [0, 0],
+                        "paired": {"both": 0, "systemOnly": 1, "baselineOnly": 0, "neither": 1}, "configGold": 2,
+                        "itemSetSha256": N.item_set_sha256(hits)}}
+    rep = _run(hits=hits, recall=r)
+    assert rep["recall"]["systemSym"]["n"] == 0 and rep["recall"]["symbolOnly"] == {"flagged": False, "baselineRecallHigher": False}
+
+
+def test_an_item_with_neither_qname_nor_keypath_is_a_value_error():
+    bad = hit_row("SECRET0", "x", [1])
+    del bad["impacted"]["qname"]
+    with pytest.raises(ValueError, match="qname"):
+        N.item_set_sha256([bad])
+
+
+def test_an_unresolved_baseline_row_needs_no_byname_but_a_resolved_one_does():
+    assert _run()["baseline"]["byName"] == {"resolvedSite": 6, "unresolvedSite": 9}
+    b = _baseline()
+    del b["SECRET0"]["byName"]
+    with pytest.raises((KeyError, ValueError)):
+        _run(baseline=b)
+
+
+def test_the_symbol_only_flag_comes_from_the_symbol_pair_not_the_headline_pair():
+    r = _recall()                                              # headline 9/10 vs 8/10 is flagged ...
+    r["baselineSym"] = [8, 9]                                  # ... but the symbol pair is equal (8/9 vs 8/9)
+    rep = _run(recall=r)
+    assert rep["recall"]["flagged"] is True and rep["recall"]["symbolOnly"] == {"flagged": False, "baselineRecallHigher": False}
+
+
+def test_the_key_scoped_all_listed_interval_uses_the_all_listed_burden():
+    answers = _bounded(_scoring_answers())
+    key = {a: r if r.get("unresolved") else dict(r, count=r["count"] // 4 + 9 * i * i, countInScope=r["countInScope"] // 4 + i)
+           for i, (a, r) in enumerate(_baseline().items())}
+    rep = _run(baseline_key=key, recall_key=_recall())
+    f = N.build_frame(answers, EXCL)
+    anchors = sorted(a["anchorId"] for a in answers)
+    ok = N.bootstrap(f["frame"], _labels_for(answers), "g", 30, anchors, key, dict(zip(anchors, f["burden"]["allListed"])))
+    crossed = N.bootstrap(f["frame"], _labels_for(answers), "g", 30, anchors, key, dict(zip(anchors, f["burden"]["inScope"])))
+    assert N._ci(ok["reductionAll"]) != N._ci(crossed["reductionAll"])
+    assert rep["keyScoped"]["reduction"]["intervalAllListed"] == N._ci(ok["reductionAll"])
+    assert rep["keyScoped"]["reduction"]["interval"] == N._ci(ok["reduction"])
+
+
+# ---------------------------------------------------------------- m3: the gate record is read with a shape and, when present, an identity
+@pytest.mark.parametrize("rec", [{}, {"defaultDepthBound": "2"}, {"defaultDepthBound": True}, {"defaultDepthBound": -1}, {"defaultDepthBound": 2.0}])
+def test_the_gate_record_must_carry_a_nonnegative_int_depth_bound(tmp_path, rec):
+    p = tmp_path / "g.json"
+    p.write_text(json.dumps(rec))
+    with pytest.raises(ValueError, match="defaultDepthBound"):
+        N.read_gate_record(p, "g")
+
+
+def test_the_gate_record_gate_id_must_equal_the_gate_when_it_names_one(tmp_path):
+    p = tmp_path / "g.json"
+    p.write_text(json.dumps({"defaultDepthBound": 2, "gateId": "other"}))
+    with pytest.raises(ValueError, match="gateId"):
+        N.read_gate_record(p, "g")
+    p.write_text(json.dumps({"defaultDepthBound": 2, "gateId": "g"}))
+    assert N.read_gate_record(p, "g") == 2
+    p.write_text(json.dumps({"defaultDepthBound": 0}))
+    assert N.read_gate_record(p, "g") == 0
+
+
+def test_an_empty_item_list_cannot_back_a_headline_recall():
+    r = {"system": [0, 0], "baseline": [0, 0], "systemSym": [0, 0], "baselineSym": [0, 0], "configGold": 0,
+         "paired": {"both": 0, "systemOnly": 0, "baselineOnly": 0, "neither": 0}, "itemSetSha256": N.item_set_sha256([])}
+    with pytest.raises(ValueError, match="noise-recall"):
+        _run(hits=[], recall=r)
+
+
+def test_score_cli_refuses_a_gate_record_naming_another_gate(tmp_path, capsys):
+    cust = _draw(tmp_path, _bounded(_scoring_answers()))
+    _label_all(cust)
+    extra = _baseline_files(tmp_path, cust)
+    (tmp_path / "gate.json").write_text(json.dumps({"defaultDepthBound": 2, "gateId": "other"}))
+    assert "gateId" in _refused_with(tmp_path, cust, capsys, extra)
