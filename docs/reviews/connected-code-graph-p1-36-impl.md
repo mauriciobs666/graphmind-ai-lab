@@ -254,3 +254,69 @@ Target: root `REVIEW.md`, `## Always check`. Source: Pass 2 M1.
    with the dominance check before any scored answer, since the recall rule is pinned by hash.
 2. B1: who owns the `baseline.py` CLI (`tdd-engineer`, as the note's §7 order implies)? The `ccg-noise-recall-rule-v1` hash
    should be taken after it lands, not before.
+
+## Pass 3 (2026-11-21)
+
+**Scope.** Fix round `4a3924d1` (`cpg/eval/tools/{baseline,noise,snapshot_export}.py`, `cpg/tests/test_baseline_cli.py` new) and
+note commit `c26eb82f`. From `cpg/`: `pytest tests/test_baseline.py tests/test_baseline_cli.py tests/test_snapshot_export.py
+tests/test_noise.py tests/test_oracle.py` gave 398 passed, 6 live deselected, exit 0. Re-ran each Pass 2 plant against the tree
+(scratchpad copies; no store, no held-out data, no custodian dir).
+`CPG: considered, not relevant — rule arithmetic and file-format composition, answered by execution on a synthetic graph`
+
+**Verdict: approve with suggestions.** Every Pass 2 defect is fixed and re-verified by execution; the new findings are one
+residual forgery path and note/pin hygiene, none silent on honest input.
+
+### Dispositions
+
+- **B1** fixed: `baseline.py` CLI (`--anchors --exclusions --gate-record --gate-id --custodian`) writes both variants; my
+  four-anchor run (symbol, contract, config, `unresolved`) went CLI -> `noise.py draw` -> `score --gate-record`, exit 0, rows carry `bound`,
+  hashes agree (the CLI's `baseline_recall` figures pass `_check_recall`). CLI guard refuses `<repo>/tests` (exit 2).
+- **M1** fixed: `system` 2/5 -> 5/5 or 40/50 with the hash unchanged now exits 4; also refused: `paired` not summing to `n`,
+  `exKeyError.system`, `exKeyError.paired`, `configGold`, `baseline` `[0,5]` against the 2x2. Residual: see N1.
+- **M2** fixed (union seeding): planted `X->Q` on CP1/key now lists `Q` and `X` (items 11, confirmed-own 6; `L3` via confirmed gives 8);
+  `L3` with `cpId` null adds nothing; a via on an ownerless site is dropped; `bySeed` still sums to `count`
+  (key CP1: providerOnly 4, consumerOrConfigOnly 3, nameOnly 3); CP1 kind 11/7, key 10/6, symbol A and CE1 unchanged; dominance A has 0 violations for the
+  system's `Q`/`X` items. Note table recomputed in `c26eb82f` and agrees.
+- **m1** fixed: all four survivors now killed (e2, h, p by assertion on value; `o` removed with its dead code, `allListed` computed directly).
+- **m2** fixed: atomic export verified: with the Q-NC5 count planted wrong, nothing is left and a pre-existing `links.jsonl` is unchanged
+  (staged `.tmp`, replaced after `read_snapshot` and the count agree); a refused port now exits 4 (`RedisError`).
+- **m3** partly fixed: `read_gate_record` checks `defaultDepthBound` (int >= 0, not bool) and refuses a differing `gateId`, but `gateId`
+  is optional and the record is not hash-pinned (the record still does not exist).
+- **Nits** fixed: `--port` required, `in_scope` required keyword, `n = 0` allowed for the Sym/`exKeyError` blocks, a gold item with neither
+  `qname` nor `keyPath` raises in both hashers.
+
+### Same-revision interactions (executed)
+
+Union seeding vs `bySeed`/dominance: consistent (above). Recompute vs `exKeyError`: an unresolved anchor's item marked `keyError`, all symbol
+items `keyError`, and all items `keyError` each regenerate and score at exit 0 (CLI and scorer agree on `n`, including `n = 0`). Atomic
+export vs the custodian guard: the guard runs first; `.tmp` files are removed in `finally`. Required `in_scope`/`--port`: omission fails at
+call/argparse. Mutation on a fresh copy: the 26 Pass 2 mutants plus 19 new ones (each seed cost and status, each recompute and 2x2 check,
+publish-before-check, `gateId`, unresolved `byName`, CLI `bound`, `in_scope`, key variant, both guards, port default) all killed; N3/N9
+died on a crash rather than the intended assertion, so I ran the atomic-export and guard cases directly (above).
+
+**Unresolved-row choice.** Following note §4 (no `byName`/`bySeed`) and changing the consumer (`r.get("unresolved")`) is right: §4 is the
+contract the generator already honours, the row has no sites to count, and the alternative would put fabricated zeros in a pinned record.
+
+### New findings
+
+**N1 (minor, verified) `baseline.k` is still forgeable consistently.** Setting `baseline`/`baselineSym`/`exKeyError` k and the 2x2 together
+(`baseline` 1/5, `baselineOnly` 0, `neither` 3) exits 0 and moves `reduction.flagged` False -> True; the hash pins identity, not
+`baseline.k`. It is custodian-written and `system.*` is now bound, so the risk is tamper-only. Fix: the generator also writes per-item
+baseline hits (hashed with the item set) and `score` checks their sum and the 2x2 per item; or accept and say so in §6.
+
+**N2 (minor) Stale note text before hashing.** §4's signature still reads `bound: int = 2` and `in_scope=None` (code: neither has a default);
+§7.1's baseline-row list names `byName` without saying the `unresolved` row has none. Fix in §4/§7.1 before the hash.
+
+**N3 (nit) `configGold` has two definitions:** the generator counts `type == "config"`, the scorer `len(rows) - len(symbol rows)`. A `unit`-typed
+gold item (none in `cpg/eval/dev`: 115 symbol, 11 config) is refused loudly (exit 4). Align on one.
+
+### Can §4-§6 + `baseline.py` be pinned by hash for `ccg-noise-recall-rule-v1`?
+
+Yes, after N2, with one change to the pin set: `baseline.py` now imports `noise.path_excluded`, `noise.read_gate_record` and
+`match_keys.h1_symbol_credit`, so its hash alone no longer pins the rule's behaviour. Pin `noise.py` and `match_keys.py` beside it (or
+confirm `ac5-gate-1` already does, `-p1-ml.md` §6.1). N1 may be fixed first or ruled accepted; it changes `baseline.py`'s output, so it must precede the hash if taken.
+
+### Proposed REVIEW.md lines
+
+None new. Pass 2 M1's proposed line (recompute pre-aggregated figures; plant each off by one) stands; N1 is the case it names for a
+figure the rows cannot determine: add "or state which figure is unbound".

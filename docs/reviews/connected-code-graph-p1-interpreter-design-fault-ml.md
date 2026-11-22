@@ -105,3 +105,15 @@ No `REVIEW.md` line is proposed.
 ## Growth-stops check (root `REVIEW.md`)
 
 The architect's plan states the current design and cites findings by none; no finding-resolution table. Its §2 cites the saved-draft replay and its own scripts. No growth issue.
+
+## Pass 2 — wording re-read of the committed prompt (`2bf875bd`, promptHash `f91e01b0…`)
+
+**Verdict: approve. dev2 authoring may start.** Static read of `cpg/ccg/front/prompts/interpret.txt` and `cpg/tests/test_front_prompt.py`; no held-out or custodian path read.
+
+- **F1 fixed.** Rule 4b is a class rule (`how the anchor connects to the rest of the system, names both directions, or names neither`) with five example cues, `relations of / relações de` among them; example 6 is a PT "conexões" question not in the cue list, so the class is demonstrated beyond the tokens. The 4a split is pinned (the only `calls` in the `depends-on` part is the subject-worded one).
+- **F2 fixed.** Rule 5 is `fx`-only (`(FXQ)`), says what to do (`other` or leave it out); pin 9 covers bare identifiers and acronyms from dev questions and gold anchors. No dev name, anchor or `MCP` in the prompt; the 3-gram pin holds on the final text.
+- **F4 fixed.** Six examples, all `fx-*`, one PT new, ceiling pin updated.
+- **Dev idiom:** no dev phrase or anchor appears. Shared register remains by design: "callers", "renaming ... field" (example 5 echoes the shape of a rename-a-parameter question). Acceptable: it is a rule demonstration over made-up names, and dev1 is spent.
+- **Ambiguities a 3B model may misread (none blocking):** (a) R2 says never add `:`, while a question written "path line N" (the form of dev QW-3, on which qwen2.5 normalised to `path:564`) has no instruction for the line; a model may now emit only the file span and lose the line. Prompt is still editable before dev2 exists; if the owner wants it covered, add one sentence and re-run the pins and the hash, otherwise record it as a known residual. (b) `names neither` widens `null`; the retained "Never answer null when the question implies a direction" is the counterweight, and dev2 measures it. (c) R5 has no worked example, text only.
+- **Pins bite.** On a copy (note: run without `-I`, which ignores the copy's path), baseline 19 passed; mutants: delete R3 sentence, 1 red; `(FXQ)` to `(MCP)`, 2 red (R5 pin and pin 9); remove the null class text keeping the cues, 1 red; remove the `calls` from the impact cue, 1 red. A mutant that deletes only the worked sentence `in "PUT ..." the span is ...` after R1's rule sentence stays green by design (the rule sentence and examples 5/6 carry the pin); not a finding.
+- **Conditions unchanged:** nobody who edited or gated the prompt reads dev2; no prompt edit once dev2 authoring starts (note §2).
