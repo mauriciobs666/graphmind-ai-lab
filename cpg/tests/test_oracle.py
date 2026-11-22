@@ -36,6 +36,15 @@ def spa(method, path):
     ("* /x", "GET", "/x", True),                                                        # any-method verb
     ("GET /shop/api/state", "GET", "/shop/api/state?since=0", True),                    # query is not part of the key
     ("GET /a/b", "GET", "/a/B", False),                                                 # literals compare exactly
+    ("GET /files/{**}", "GET", "/files/a/b/c", True),                                   # catch-all: one or more segments
+    ("GET /files/{**}", "GET", "/files/a", True),
+    ("GET /files/{**}", "GET", "/files", False),
+    ("GET /files/{**}", "GET", "/files/", False),
+    ("GET /files/{**}", "GET", "/other/a", False),
+    ("GET /f/{**}/tail", "GET", "/f/a/b/tail", True),                                   # mid-path catch-all backtracks
+    ("GET /f/{**}/tail", "GET", "/f/a/b/nope", False),
+    ("GET /f/{**}/tail", "GET", "/f/tail", False),                                      # catch-all never matches zero segments
+    ("GET /{?}/shop/api/messages", "GET", "/shop/api/messages", False),                # consumer-form wrapper key: not accepted
 ])
 def test_key_matches_per_segment(static, method, raw, want):
     assert O.key_matches(static, method, raw) is want

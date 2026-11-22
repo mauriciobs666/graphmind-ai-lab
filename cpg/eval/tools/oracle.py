@@ -18,6 +18,14 @@ Rules (P1-47 gate rulings, fixed here before any Link data is seen):
 * Keys. Compared per path segment on the raw runtime path: a static ``{?}``/``{}``/``{#}`` matches any one non-empty
   runtime segment, a literal must be equal; the verb must be equal (``*`` matches any). Method + path-without-query.
   Distinct-key and distinct-edge identity is the capture's own ``match_keys`` keyNorm (UUIDs masked, short ids not).
+  Accepted forms are the provider/join ``keyNorm`` forms of bundle-spec3 §1 (``http`` row): ``{}`` (path param),
+  ``{#}`` (masked provider id), ``{?}`` (unresolved consumer segment), each one segment, and ``{**}`` (catch-all), one
+  or more segments, anywhere in the path. NOT accepted: a consumer-form key with an unresolved wrapper in front
+  (``{?}/shop/api/x`` normalises to ``/{?}/shop/api/x``, one segment too many: the Link dump must emit the Link's
+  provider/join keyNorm), a partial placeholder (``x{?}``), and trailing-``/`` or case or percent-encoding differences.
+* Function grain is exact-element: the shim records ``co_name`` while static elements are dotted qnames, so a method or
+  nested function (``Client.meth``) misses by construction. Limit documented, not widened: the P1-47 ruling fixed exact
+  match, and loosening it to the last qname segment would be a policy change. No in-scope P1 edge is function grain.
 * An in-scope row without a frame file is ``unattributed``: counted, not scored, never guessed.
 * Statistics: observed in-scope distinct edges (element, keyNorm) whose some raw row matches a Link, over observed
   distinct edges; the same over distinct keys; Wilson 95% on each. Reported beside seeded recall, never pooled.
@@ -36,6 +44,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 STOREFRONT_PREFIX = "/shop/api"
 PLACEHOLDERS = frozenset({"{?}", "{}", "{#}"})
+CATCH_ALL = "{**}"
 UNRUN_ENTRY_POINTS = (
     "falkor-chat/web/app.js", "salesperson/scripts/load_demo.py", "salesperson/scripts/swap_bench.py",
     "salesperson/scripts/language_salience_probe.py", "salesperson/scripts/qwen_watch.sh", "salesperson/scripts/install_node.sh")
@@ -73,10 +82,16 @@ def key_matches(static_key: str, method: str, raw_path: str) -> bool:
     verb, _, spath = static_key.partition(" ")
     if verb != "*" and verb.upper() != method.upper():
         return False
-    ss, rs = spath.split("/"), (urlsplit(raw_path).path or "/").split("/")
-    if len(ss) != len(rs):
-        return False
-    return all(r != "" and s in PLACEHOLDERS or s == r for s, r in zip(ss, rs))
+    return _segments_match(spath.split("/"), (urlsplit(raw_path).path or "/").split("/"))
+
+
+def _segments_match(ss: list[str], rs: list[str]) -> bool:
+    if not ss or not rs:
+        return not ss and not rs
+    s, r = ss[0], rs[0]
+    if s == CATCH_ALL:                      # one or more non-empty runtime segments
+        return any(all(rs[:i]) and _segments_match(ss[1:], rs[i:]) for i in range(1, len(rs) + 1))
+    return (r != "" and s in PLACEHOLDERS or s == r) and _segments_match(ss[1:], rs[1:])
 
 
 def _keynorm(row: dict) -> str:

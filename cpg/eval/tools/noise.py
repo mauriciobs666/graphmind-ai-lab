@@ -11,6 +11,20 @@ other held-out-derived file go under ``--custodian`` (§6.4), which is refused i
 Frame (EP §11.1 + §5.1): every listed item and expanded group member; out-of-scope items leave the frame before
 allocation (counted per answer and reason, never labelled); confirmed items are a census; possible items are
 stratified by (reason, distance band 1 / 2 / >=3). Exit: 0 ok, 2 usage/refused, 4 bad input.
+
+``score`` requires complete labels (EP §11.1-11.2): every census item and every drawn item must be labelled, else exit 4
+with counts only. A second-labeller file (``noise-labels2.jsonl``) must carry exactly the keys of ``noise-spot.jsonl``
+(EP §11.4: 20 labels drawn from the labelled set); with no overlap the agreement is "not measured", never "stable".
+The bootstrap drops a resample whose ``RC + Rhat`` is 0; the percentile indices then scale to the resamples kept
+(``int(n*0.025)``, ``int(n*0.975)-1``) and ``used`` reports how many. ``pooledAcrossGrains`` (oracle) is reference only.
+
+Choices not fixed by EP §11 (the code's, for the data-scientist to pin):
+* Draw hash input: ``sha256(f"{seed}|{anchorId}|{itemId}")`` hex, where EP gives only the seed and ``anchorId|itemId``.
+* ``itemId`` is ``"<unitId>:<subjectId>"`` (symbolId / entryId / unitId by subject type), not the bare subject id.
+* The spot-check (§11.4) seed is ``"ccg-noise-v1|<gateId>|<snapshotId>|spot"`` (EP gives none), same hash input form.
+* Allocation remainder ties break by ``(reason, band)`` order; a capped stratum's unspent share goes to the leftover rule
+  (largest unsampled stratum), not to the next remainder.
+* Strata with ``N_h <= 5`` are taken whole; a frame at or under the target is sampled whole.
 """
 from __future__ import annotations
 
@@ -245,8 +259,10 @@ def agreement(first: dict, second: dict) -> dict:
     n = len(keys)
     agree = sum(first[k] == second[k] for k in keys)
     out = {"n": n, "agree": agree, "rawAgreement": round(agree / n, 3) if n else None,
-           "labelsUnstable": agree * 5 < 4 * n, "kappa": None}
-    if n:
+           "labelsUnstable": agree * 5 < 4 * n if n else None, "kappa": None}
+    if not n:
+        out["note"] = "not measured"
+    else:
         pe = sum(Fraction(sum(first[k] == c for k in keys) * sum(second[k] == c for k in keys), n * n) for c in ("real", "false"))
         if pe != 1:
             out["kappa"] = round(float((Fraction(agree, n) - pe) / (1 - pe)), 3)
@@ -362,6 +378,25 @@ def _read_labels(path: Path, allowed: set) -> dict:
     return out
 
 
+def _require_complete(labels: dict, drawn: list[dict], census: list[dict]) -> None:
+    """EP §11.1-11.2: every census item and every drawn item must carry a label. A missing one would drop a real or a
+    false item from the estimate and move the gates the favourable way, so it is an error. Counts only in the message."""
+    miss_c = sum((r["anchorId"], r["itemId"]) not in labels for r in census)
+    miss_d = sum((r["anchorId"], r["itemId"]) not in labels for r in drawn)
+    if miss_c or miss_d:
+        raise ValueError(f"labels incomplete: {miss_c} of {len(census)} census and {miss_d} of {len(drawn)} drawn items unlabelled")
+
+
+def _require_spot(labels2: dict, spot_path: Path) -> None:
+    """EP §11.4: the second labeller relabels exactly the 20 spot keys ``spot`` wrote, no more and no fewer."""
+    if not spot_path.exists():
+        raise ValueError("a second-labeller file needs the noise-spot.jsonl list written by `spot`")
+    spot = {(r["anchorId"], r["itemId"]) for r in _jsonl(str(spot_path))}
+    if set(labels2) != spot:
+        raise ValueError(f"second-labeller keys are not the spot list: {len(set(labels2) & spot)} of {len(spot)} spot keys, "
+                         f"{len(set(labels2) - spot)} other")
+
+
 def score(answers: list[dict], exclusions: list[str], labels: dict, gate_id: str, snapshot_id: str, B: int = 10000,
           labels2: dict | None = None, baseline: dict | None = None, recall: dict | None = None,
           snapshot: dict | None = None) -> dict:
@@ -391,6 +426,8 @@ def score(answers: list[dict], exclusions: list[str], labels: dict, gate_id: str
         rep["labelsUnstable"] = rep["agreement"]["labelsUnstable"]
         if rep["labelsUnstable"]:
             e["possiblePrecisionNote"] = "labels unstable"
+        elif rep["labelsUnstable"] is None:
+            e["possiblePrecisionNote"] = "agreement not measured"
     red = None
     if baseline is not None:
         base = [baseline.get(a, 0) for a in anchors]
@@ -424,8 +461,11 @@ def _score_cmd(a, cust: Path, answers, exclusions, f) -> int:
         drawn = draw(f["frame"], alloc, a.gate_id, a.snapshot_id)
         allowed = {(r["anchorId"], r["itemId"]) for r in drawn + f["census"]}
         labels = _read_labels(cust / "noise-labels.jsonl", allowed)
+        _require_complete(labels, drawn, f["census"])
         l2p = cust / "noise-labels2.jsonl"
         labels2 = _read_labels(l2p, allowed) if l2p.exists() else None
+        if labels2 is not None:
+            _require_spot(labels2, cust / "noise-spot.jsonl")
         bp, rp = cust / "noise-baseline.jsonl", cust / "noise-recall.json"
         baseline = {r["anchorId"]: r["count"] for r in _jsonl(str(bp))} if bp.exists() else None
         recall = json.loads(rp.read_text(encoding="utf-8")) if baseline is not None else None

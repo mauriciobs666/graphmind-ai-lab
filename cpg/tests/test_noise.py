@@ -423,14 +423,134 @@ def test_score_reports_counts_only_with_thresholds_and_the_scope_counts(tmp_path
     assert rep["labelsUnstable"] is None            # no second labeller supplied: nothing to say, not "stable"
 
 
+def _spot(cust):
+    assert N.main(["spot", "--gate-id", "g", "--snapshot-id", "s", "--custodian", str(cust)]) == 0
+    return [json.loads(l) for l in (cust / "noise-spot.jsonl").read_text().splitlines()]
+
+
+def _labels2(cust, spot, flip_all=False, drop=0, extra=None):
+    first = {(r["anchorId"], r["itemId"]): r["label"] for r in (json.loads(l) for l in (cust / "noise-labels.jsonl").read_text().splitlines())}
+    rows = [{"anchorId": s["anchorId"], "itemId": s["itemId"],
+             "label": ({"real": "false", "false": "real"}[first[(s["anchorId"], s["itemId"])]] if flip_all else first[(s["anchorId"], s["itemId"])])}
+            for s in spot][drop:]
+    if extra:
+        rows.append(extra)
+    (cust / "noise-labels2.jsonl").write_text("".join(json.dumps(x) + "\n" for x in rows))
+
+
 def test_score_marks_possible_precision_labels_unstable_below_point_eight_agreement(tmp_path, capsys):
     cust = _draw(tmp_path, _scoring_answers())
     _label_all(cust)
-    _label_all(cust, "noise-labels2.jsonl", flip=set(range(40)))
+    _labels2(cust, _spot(cust), flip_all=True)
     capsys.readouterr()
     assert _score(tmp_path, cust) == 0
     rep = json.loads(capsys.readouterr().out)
     assert rep["agreement"]["labelsUnstable"] is True and rep["estimates"]["possiblePrecisionNote"] == "labels unstable"
+
+
+def test_score_accepts_a_second_labeller_who_relabelled_exactly_the_spot_keys(tmp_path, capsys):
+    cust = _draw(tmp_path, _scoring_answers())
+    _label_all(cust)
+    _labels2(cust, _spot(cust))
+    capsys.readouterr()
+    assert _score(tmp_path, cust) == 0
+    rep = json.loads(capsys.readouterr().out)
+    assert rep["agreement"]["n"] == 20 and rep["labelsUnstable"] is False
+
+
+def test_score_refuses_a_second_labeller_file_that_is_not_the_spot_keys(tmp_path, capsys):
+    cust = _draw(tmp_path, _scoring_answers())
+    lab = _label_all(cust)
+    spot = _spot(cust)
+    spotkeys = {(s["anchorId"], s["itemId"]) for s in spot}
+    other = next(l for l in lab if (l["anchorId"], l["itemId"]) not in spotkeys)
+    _labels2(cust, spot, drop=1, extra={"anchorId": other["anchorId"], "itemId": other["itemId"], "label": "real"})  # same size, wrong key
+    capsys.readouterr()
+    assert _score(tmp_path, cust) == 4
+    assert capsys.readouterr().out == ""
+    _labels2(cust, spot, drop=1)                                                                                  # a subset
+    assert _score(tmp_path, cust) == 4
+
+
+def test_score_refuses_a_second_labeller_file_with_keys_beyond_the_spot_list(tmp_path, capsys):
+    cust = _draw(tmp_path, _scoring_answers())
+    lab = _label_all(cust)
+    spot = _spot(cust)
+    spotkeys = {(s["anchorId"], s["itemId"]) for s in spot}
+    other = next(l for l in lab if (l["anchorId"], l["itemId"]) not in spotkeys)
+    _labels2(cust, spot, extra={"anchorId": other["anchorId"], "itemId": other["itemId"], "label": "real"})
+    capsys.readouterr()
+    assert _score(tmp_path, cust) == 4
+
+
+def test_score_refuses_a_second_labeller_file_without_a_spot_list(tmp_path, capsys):
+    cust = _draw(tmp_path, _scoring_answers())
+    _label_all(cust)
+    _label_all(cust, "noise-labels2.jsonl")
+    assert _score(tmp_path, cust) == 4
+
+
+def test_agreement_without_overlap_is_not_measured_not_stable():
+    g = N.agreement({("A", "x"): "real"}, {})
+    assert g["n"] == 0 and g["labelsUnstable"] is None and g["note"] == "not measured"
+
+
+def test_score_with_an_empty_second_labeller_file_reports_not_measured(tmp_path, capsys):
+    cust = _draw(tmp_path, _scoring_answers())
+    _label_all(cust)
+    _spot(cust)
+    (cust / "noise-labels2.jsonl").write_text("")
+    capsys.readouterr()
+    assert _score(tmp_path, cust) == 4          # an empty file is not the 20 spot keys
+
+
+# ---------------------------------------------------------------- complete label coverage (never a vacuous gate)
+def _drop(cust, pred):
+    rows = [json.loads(l) for l in (cust / "noise-labels.jsonl").read_text().splitlines()]
+    kept = [r for r in rows if not pred(r)]
+    assert len(kept) < len(rows)
+    (cust / "noise-labels.jsonl").write_text("".join(json.dumps(x) + "\n" for x in kept))
+
+
+def _refused(tmp_path, cust, capsys):
+    capsys.readouterr()
+    assert _score(tmp_path, cust) == 4
+    cap = capsys.readouterr()
+    assert cap.out == "" and "SECRET" not in cap.err and "u1:" not in cap.err
+
+
+def test_score_refuses_an_empty_labels_file(tmp_path, capsys):
+    cust = _draw(tmp_path, _scoring_answers())
+    (cust / "noise-labels.jsonl").write_text("")
+    _refused(tmp_path, cust, capsys)
+
+
+def test_score_refuses_labels_missing_one_census_item(tmp_path, capsys):
+    cust = _draw(tmp_path, _scoring_answers())
+    _label_all(cust)
+    census = {json.loads(l)["itemId"] for l in (cust / "noise-census.jsonl").read_text().splitlines()}
+    gone = []
+    _drop(cust, lambda r: r["itemId"] in census and not gone and not gone.append(1))
+    _refused(tmp_path, cust, capsys)
+
+
+def test_score_refuses_labels_missing_one_drawn_item(tmp_path, capsys):
+    cust = _draw(tmp_path, _scoring_answers())
+    _label_all(cust)
+    drawn = {json.loads(l)["itemId"] for l in (cust / "noise-sample.jsonl").read_text().splitlines()}
+    gone = []
+    _drop(cust, lambda r: r["itemId"] in drawn and not gone and not gone.append(1))
+    _refused(tmp_path, cust, capsys)
+
+
+def test_score_refuses_labels_missing_a_whole_stratum(tmp_path, capsys):
+    cust = _draw(tmp_path, _scoring_answers())
+    _label_all(cust)
+    first = json.loads((cust / "noise-sample.jsonl").read_text().splitlines()[0])
+    sample = [json.loads(l) for l in (cust / "noise-sample.jsonl").read_text().splitlines()]
+    ids = {r["itemId"] for r in sample if (r["reason"], r["band"]) == (first["reason"], first["band"])}
+    _drop(cust, lambda r: r["itemId"] in ids)
+    _refused(tmp_path, cust, capsys)
 
 
 def test_score_rejects_a_label_outside_the_draw(tmp_path, capsys):
