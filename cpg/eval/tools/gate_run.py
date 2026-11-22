@@ -19,7 +19,7 @@
 * **Per-anchor failures** (:func:`ask_failure_entry`, the one policy function): a harness error on one anchor is recorded as
   ``{"anchorId", "harnessError": <class>}`` and an exception raised inside the engine's ask as ``{"anchorId", "outcome": "engine-error",
   "exceptionClass": <class>}``; the loop continues, the run completes and ``score`` gives ``blocked`` / a miss respectively. Transient and run-wide
-  faults (credential, store, a refused snapshot, a full disk) still end the run (``failed:transient`` / ``failed:deterministic``).
+  faults (credential, store, a refused snapshot, the host: any OSError, MemoryError, RecursionError) still end the run (``failed:transient`` / ``failed:deterministic``).
 
 Stdout and stderr carry counts and refusal reasons only: never gold, ids or item content.
 Exit: 0 ok, 2 refused (incl. a resume refusal), 3 failed after the marker, deterministic (list spent), 4 bad input / failed before the marker (nothing
@@ -29,7 +29,6 @@ transient (resumable with ``--resume``).
 from __future__ import annotations
 
 import argparse
-import errno
 import fcntl
 import hashlib
 import json
@@ -51,6 +50,11 @@ from gate import Refusal, HarnessError     # noqa: E402,F401
 
 EXIT_OK, EXIT_REFUSED, EXIT_SPENT, EXIT_BAD, EXIT_RESOLVE, EXIT_RESUMABLE = 0, 2, 3, 4, 5, 6
 PROBE_MAP_NAME = "s47-probe-map.json"
+#: the repeat-stall conversion (``-p1-gate-marker-ml.md`` §1.1.3): k consecutive timeouts at one position, the deadline of the host-health canary and
+#: the canary request. All three are pinned in the marker, so a resume with another value is refused.
+STALL_K = 3
+STALL_DEADLINE_S = 30
+CANARY_REQUEST = "MATCH (s:Snapshot) RETURN s.snapshotId"           # fixed, non-held-out: the same read the engine reader's snapshot check uses
 
 
 class ResolveRefusal(Refusal):
@@ -132,11 +136,17 @@ def make_ask(client, stamp: Mapping | None = None, in_graph: Callable[[Mapping],
     return ask
 
 
+#: the host's, never the engine's: any ``OSError`` (a full disk, a quota, a descriptor limit, a permission), memory exhaustion, a blown stack. None of
+#: them is placed on a held-out anchor; the run stops (``OSError`` is ``failed:transient``, resumable once the host is fixed).
+CREDENTIAL_FAULTS = {"AuthenticationError", "AuthorizationError", "AuthenticationWrongNumberOfArgsError"}      # redis': a ConnectionError subclass that is not a blip
+PROCESS_FAULTS = (OSError, MemoryError, RecursionError)
+
+
 def ask_failure_entry(exc: BaseException) -> dict | None:
     """THE policy for one anchor whose ask raised (``-p1-gate-marker-ml.md`` §3; the one place to change it). -> the entry to persist for that anchor, or
     ``None`` when the exception is not per-anchor and must propagate (the run then ends ``failed:transient`` / ``failed:deterministic``).
 
-    * transient (a connection or timeout error, even one the engine raised) and run-wide faults (a refused credential, an unusable store or model, a
+    * transient (a connection or timeout error, even one the engine raised), a host fault (:data:`PROCESS_FAULTS`) and run-wide faults (a refused credential, an unusable store or model, a
       :class:`~gate.Refusal` such as a changed snapshot) -> ``None``;
     * raised inside the engine's ask (:class:`EngineAskError`) -> ``{"outcome": "engine-error", "exceptionClass": <class>}``: a miss for the item, in the
       ``fail`` tier, never re-asked on a resume;
@@ -146,7 +156,9 @@ def ask_failure_entry(exc: BaseException) -> dict | None:
     Only a class name is ever recorded: a message may embed an id or a path."""
     from clients.common import ModelUnavailable, NoCredentials, NotBuilt, StoreAuthError
     inner = exc.__cause__ if isinstance(exc, EngineAskError) and exc.__cause__ is not None else exc
-    if classify(inner) == "transient" or isinstance(exc, (Refusal, NoCredentials, StoreAuthError, ModelUnavailable, NotBuilt)) \
+    if {c.__name__ for c in type(inner).__mro__} & CREDENTIAL_FAULTS:                 # a refused credential is the run's, whoever raised it
+        return None
+    if isinstance(inner, PROCESS_FAULTS) or isinstance(exc, PROCESS_FAULTS) or classify(inner) == "transient" or isinstance(exc, (Refusal, NoCredentials, StoreAuthError, ModelUnavailable, NotBuilt)) \
             or isinstance(inner, (Refusal, NoCredentials, StoreAuthError, ModelUnavailable, NotBuilt)):
         return None
     if isinstance(exc, EngineAskError):
@@ -209,8 +221,6 @@ def classify(exc: BaseException) -> str:
         return "transient"
     names = {c.__name__ for c in type(exc).__mro__}
     if "AuthenticationError" in names:                                       # redis' is a ConnectionError subclass: a refused credential is not a blip
-        return "deterministic"
-    if isinstance(exc, OSError) and exc.errno in (errno.ENOSPC, errno.EDQUOT):   # a full disk fails the same way on a resume: run-wide, not a blip
         return "deterministic"
     if isinstance(exc, (OSError, ConnectionError, TimeoutError)):           # ConnectionError/TimeoutError are OSErrors; listed for the reader
         return "transient"
@@ -311,12 +321,40 @@ def load_answers(path: Path) -> dict:
     return out
 
 
+class _Stall:
+    """The repeat-stall bookkeeping (§1.1.3). ``get``/``set`` read and write the ``stall`` field of the in-memory marker document: it reaches the disk
+    only inside the marker write the run already makes when it stops (``failed:transient``), which is atomic, so no extra write can open a window.
+    ``touched`` says whether THIS stop recorded a count; a stop that did not (any other failure) resets the count."""
+
+    def __init__(self, get: Callable[[], Mapping | None], set_: Callable[[Mapping | None], None], canary: Callable[[], Any] | None, k: int):
+        self.get, self.set, self.canary, self.k, self.touched = get, set_, canary, k, False
+
+    def on_timeout(self, index: int) -> dict | None:
+        """A ``TimeoutError`` inside the engine's ask at position ``index``. -> the entry to record when the k-th consecutive stop is reached with the
+        canary answering; ``None`` for a plain stop (the caller re-raises): the canary failed or is absent (count reset), or the count is below k."""
+        if self.canary is None:
+            return None
+        try:
+            self.canary()
+        except Exception:                                           # noqa: BLE001 - a failed canary is the host's: plain failed:transient, count reset
+            return None
+        prev = self.get() or {}
+        count = prev["count"] + 1 if prev.get("index") == index else 1
+        if count >= self.k:
+            self.set(None)
+            self.touched = True
+            return {"outcome": G.ENGINE_ERROR, "exceptionClass": "TimeoutError", "via": G.REPEAT_STALL, "stalls": count}
+        self.set({"index": index, "count": count})
+        self.touched = True
+        return None
+
+
 class _Persisting:
     """Wraps ``ask`` so that a recorded entry is returned and never re-asked, and a new one is on disk before it is returned. An ask that raises a
     per-anchor failure (:func:`ask_failure_entry`) is recorded as that entry and the run goes on with the next anchor; any other exception propagates."""
 
-    def __init__(self, ask: Callable[[dict], Mapping], path: Path, recorded: dict):
-        self.ask, self.path, self.recorded, self.asked_now = ask, path, recorded, 0
+    def __init__(self, ask: Callable[[dict], Mapping], path: Path, recorded: dict, stall: _Stall | None = None):
+        self.ask, self.path, self.recorded, self.asked_now, self.stall = ask, path, recorded, 0, stall
 
     def __call__(self, req: dict) -> Mapping:
         aid = _req_id(req)
@@ -327,6 +365,8 @@ class _Persisting:
             entry = {"request": req, "answer": doc}
         except Exception as exc:                                    # noqa: BLE001 - classified by ask_failure_entry; a run-wide fault is re-raised
             entry = ask_failure_entry(exc)
+            if entry is None and self.stall is not None and isinstance(exc, TimeoutError) and not isinstance(exc, ConnectionError):
+                entry = self.stall.on_timeout(len(self.recorded))         # the ONE way a timeout becomes an engine error: k stops, canary answering
             if entry is None:
                 raise
         _append_line(self.path, {"anchorId": aid, **entry})
@@ -352,12 +392,12 @@ def _read_lists(lists: Sequence[Path], home: Path | None) -> tuple[list[dict], s
     return records, G.list_key(records)
 
 
-def _pins(ctx: Mapping, snapshot_id: str, obs: Mapping, *, flow_flag: bool, withheld: Mapping, probe_map_sha256: str) -> dict:
+def _pins(ctx: Mapping, snapshot_id: str, obs: Mapping, *, flow_flag: bool, withheld: Mapping, probe_map_sha256: str, stall: Mapping) -> dict:
     """What a resume must find equal. The flow flag and the withheld counts decide WHICH anchors are asked, and the probe map decides which point a
     unit anchor is asked from: neither may change between two halves of one run (N3, N6)."""
     return {"recordCommit": ctx["recordCommit"], "harnessSha256": dict(ctx["harnessPin"]["sha256"]), "snapshotId": snapshot_id,
             "prereg": {k: obs.get(k) for k in G.PREREG_FIELDS}, "coreTreeHash": obs.get("coreTreeHash"), "label": ctx["label"],
-            "flowFlag": bool(flow_flag), "withheld": dict(withheld), "probeMapSha256": probe_map_sha256}
+            "flowFlag": bool(flow_flag), "withheld": dict(withheld), "probeMapSha256": probe_map_sha256, "stall": dict(stall)}
 
 
 PRIVATE_AREAS = ("work", "keys", "audit")
@@ -455,7 +495,8 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
              committed_text=None, record_commit_sha: str | None = None, refresh_fn: Callable[..., Any] | None = None,
              cache_len: Callable[[], int] = lambda: 0, system: str = "ccg", engine_snapshot_id: Callable[[], str] | None = None,
              allow_after_adaptation: bool = False, resume: bool = False, flow_decision: Path | None = None,
-              live_graph_present: Callable[[], bool] | None = None, lock: _Lock | None = None) -> dict:
+              live_graph_present: Callable[[], bool] | None = None, lock: _Lock | None = None, canary: Callable[[], Any] | None = None,
+              stall_k: int = STALL_K, stall_deadline_s: float = STALL_DEADLINE_S, canary_request: str = CANARY_REQUEST) -> dict:
     """The AC-5 gate run: every refusal happens before the marker and the first question. -> counts only."""
     repo = Path(repo)
     cust = G.within_custodian(custodian, home, "--custodian")
@@ -468,7 +509,7 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
         raise Refusal("the S47 probe map is missing under the custodian root: a custodian unit produces it (split_manifest.split(...)['probe']); the run is refused")
     probes = G.read_probe_map(pmap, home)
     all_records, key = _read_lists(lists, home)
-    G.require_clean_renormalize(G.renormalize_stored_gold(all_records))
+    G.score_inputs_check(repo, gate_id, pf, all_records, committed_text=committed_text)       # every refusal `score` already knows, before the marker
     flag = G.flow_flag(Path(flow_decision) if flow_decision else repo / G.FLOW_DECISION, committed_text)
     records, withheld = G.withhold_strata(all_records, G.STRATA if flag else G.STRATA_GATED)
     marker = _marker_path(cust, key)
@@ -495,7 +536,8 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     answers_path = cust / f"run-{key}.answers.jsonl"
     recorded = load_answers(answers_path) if resume else {}
     obs = {**(dict(tree) if tree is not None else G.observe_tree(repo)), **(observed if observed is not None else G.engine_observed())}
-    pins = _pins(ctx, sid, obs, flow_flag=flag, withheld=withheld, probe_map_sha256=hashlib.sha256(pmap.read_bytes()).hexdigest())
+    pins = _pins(ctx, sid, obs, flow_flag=flag, withheld=withheld, probe_map_sha256=hashlib.sha256(pmap.read_bytes()).hexdigest(),
+                 stall={"k": stall_k, "deadlineS": stall_deadline_s, "canaryRequest": canary_request if canary is not None else None})
     if resume:
         _resume_checks(old, pins, key, cust, len(recorded), cache_len)
     else:
@@ -508,9 +550,10 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
         _write_marker(marker, doc)
     else:
         doc = {"state": "started", "gateId": gate_id, "records": len(all_records), "listSha256": key, "pins": pins, "head": ctx["head"],
-               "label": ctx["label"], "startedAt": now, "resumes": [], "transientClasses": [], "withheld": withheld}
+               "label": ctx["label"], "startedAt": now, "resumes": [], "transientClasses": [], "withheld": withheld, "stall": None}
         G.first_run_marker(cust, key, doc)
-    persisting = _Persisting(ask, answers_path, recorded)
+    stall = _Stall(lambda: doc.get("stall"), lambda v: doc.__setitem__("stall", v), canary, stall_k)
+    persisting = _Persisting(ask, answers_path, recorded, stall)
     try:
         run = G.run_asks(records, snap, persisting, lambda: 0, probes=probes)
         run.update({"preflight": ctx, "withheld": withheld, "flowFlag": bool(flag), "listKey": key})
@@ -523,6 +566,8 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
         _write_marker(marker, {**doc, "state": "asked", "answered": len(run["answers"])})
     except (Exception, KeyboardInterrupt, _Terminated) as exc:           # BaseException classes outside this list (a SIGKILL stand-in) write nothing
         klass = classify(exc)
+        if not stall.touched:
+            doc["stall"] = None                                          # any stop that is not a counted timeout resets the count
         if resume:
             doc["resumes"] = [*doc["resumes"][:-1], {**doc["resumes"][-1], "askedAfter": persisting.asked_now}]
         fail = {**doc, "state": f"failed:{klass}", "errorClass": type(exc).__name__,
@@ -589,6 +634,10 @@ def _default_deps(a, *, connect: Callable[..., Any] | None = None, credential: C
             db = db_factory(a.host, a.port)
         return live_key in list(db.list_graphs())
 
+    def canary_factory():
+        """The host-health canary (§1.1.3): the fixed :data:`CANARY_REQUEST` through the engine reader under the pinned deadline."""
+        return lambda: client().raw_query(CANARY_REQUEST, timeout_ms=int(STALL_DEADLINE_S * 1000))
+
     def resolve_factory(built, snap):
         return client().resolve
 
@@ -599,7 +648,8 @@ def _default_deps(a, *, connect: Callable[..., Any] | None = None, credential: C
         return rows[0][0]
 
     return {"snapshot_factory": snapshot_factory, "ask_factory": ask_factory, "resolve_factory": resolve_factory, "refresh_fn": refresh,
-            "engine_snapshot_id": engine_snapshot, "system": system, "live_graph_present": live_graph_present}
+            "engine_snapshot_id": engine_snapshot, "system": system, "live_graph_present": live_graph_present,
+            "canary": canary_factory()}
 
 
 def _msg(e: BaseException) -> str:
@@ -635,7 +685,7 @@ def main(argv=None, deps: Mapping | None = None) -> int:
                        flow_decision=Path(a.flow_decision) if a.flow_decision else None, **kw)
         print(json.dumps(out, sort_keys=True))
         return EXIT_OK
-    except ResolveRefusal as e:
+    except (ResolveRefusal, G.PrecheckRefusal) as e:
         print(f"REFUSED: {_msg(e)}", file=sys.stderr)
         return EXIT_RESOLVE
     except Refusal as e:

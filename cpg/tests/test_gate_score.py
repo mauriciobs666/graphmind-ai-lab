@@ -661,5 +661,6 @@ def test_c_the_report_gives_engine_errors_on_their_own_line_per_stratum_and_clas
     w = H.World()
     res = G.score_gate([w.rec], _run_with(w, dict(ENGINE_ERR)), w.snap, ())
     rep = G.build_report(res, G.decide_gate(res), gated_strata=G.STRATA_GATED)
-    assert rep["engineErrors"] == {"count": 1, "byStratum": {"http": 1}, "byClass": {"ValueError": 1}}
+    assert rep["engineErrors"] == {"count": 1, "byStratum": {"http": 1}, "byClass": {"ValueError": 1},
+                                "repeatStall": {"count": 0, "byStratum": {}}}
     assert rep["harnessErrors"] == {} and rep["erroredItems"] == 0

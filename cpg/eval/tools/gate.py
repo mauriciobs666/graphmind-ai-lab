@@ -712,6 +712,7 @@ _CLASS_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
 
 
 ENGINE_ERROR = "engine-error"
+REPEAT_STALL = "repeat-stall"           # ``via`` of an engine-error entry converted from k consecutive timeouts at one position (-p1-gate-marker-ml.md §1.1.3)
 
 
 class AnchorFault(dict):
@@ -754,7 +755,8 @@ def score_gate(records: Sequence[Mapping], run: Mapping, snap, patterns: Sequenc
             if "answer" in entry or "request" in entry:                    # a fault entry that also carries an answer is not trusted (fail closed)
                 anchor_state[aid] = {"harnessError": "unclassified"}
             else:
-                anchor_state[aid] = {"engineError": _error_class(entry.get("exceptionClass"))}
+                anchor_state[aid] = {"engineError": _error_class(entry.get("exceptionClass")),
+                                     **({"via": REPEAT_STALL, "stalls": entry["stalls"]} if entry.get("via") == REPEAT_STALL and type(entry.get("stalls")) is int else {})}
             continue
         bad = check_stamp(entry["answer"], pinned)
         echo = check_request_echo(entry["answer"], entry["request"])
@@ -777,6 +779,7 @@ def score_gate(records: Sequence[Mapping], run: Mapping, snap, patterns: Sequenc
         if "engineError" in st:                                            # a miss in the `fail` tier, in the recall denominator (-p1-gate-marker-ml.md §3)
             engine_errors[st["engineError"]] += 1
             items[iid] = {**base, "outcome": "miss", "reason": ENGINE_ERROR, "exceptionClass": st["engineError"], "stage": "none",
+                          **({"via": REPEAT_STALL} if "via" in st else {}),
                           "extractionAbsent": False, "depthBoundCut": False}
         elif "harnessError" in st:
             acc.harness_errors[st["harnessError"]] += 1
@@ -1031,7 +1034,9 @@ def build_report(result: Mapping, decision: Mapping, *, flags: Mapping[str, str]
     miss = [o for _, o in rows if o["outcome"] == "miss"]
     oos = [o for o in result["items"].values() if o["outcome"] == "out-of-scope"]
     errored = sum(1 for o in result["items"].values() if o["outcome"] == "error")
-    eng = [o for o in miss if o.get("reason") == ENGINE_ERROR]                 # its own line, never folded into the harness errors
+    eng_all = [o for o in miss if o.get("reason") == ENGINE_ERROR]               # its own line, never folded into the harness errors
+    eng = [o for o in eng_all if o.get("via") != REPEAT_STALL]                   # raised exceptions; the repeat-stall conversions are a sub-line of their own
+    stalled = [o for o in eng_all if o.get("via") == REPEAT_STALL]
     rep = {"verdict": decision["verdict"], "kind": decision["kind"], "H": decision["H"], "H_all": len(rows), "scored": len(rows),
            "minimumsMet": decision["minimumsMet"], "blockers": decision["blockers"],
            "recall": {"pooled": _rec_block([o for _, o in rows], cluster_of), "byStratum": per},
@@ -1041,7 +1046,8 @@ def build_report(result: Mapping, decision: Mapping, *, flags: Mapping[str, str]
                       "triage": {c: 0 for c in TRIAGE}, "triageNote": "to be filled by the gate runner and the method owner (EP §12.1 step 2)"},
            "outOfScope": {"count": len(oos), "triage": {"key-error": len(oos)}, "outcome": "proposed, unconfirmed"},   # EP §12.1 step 2: the stakeholder confirms
            "erroredItems": errored,
-           "engineErrors": {"count": len(eng), "byStratum": dict(Counter(o["stratum"] for o in eng)), "byClass": dict(Counter(o["exceptionClass"] for o in eng))},
+           "engineErrors": {"count": len(eng), "byStratum": dict(Counter(o["stratum"] for o in eng)), "byClass": dict(Counter(o["exceptionClass"] for o in eng)),
+                              "repeatStall": {"count": len(stalled), "byStratum": dict(Counter(o["stratum"] for o in stalled))}},
            "voided": decision["voided"], "stops": dict(result.get("stops", {})), "engineDefects": dict(result.get("defects", {})),
            "harnessErrors": dict(result.get("harnessErrors", {})), "maskedComparisons": result.get("maskedComparisons", 0),
            "chainLength": {s: _chain_length([o for _, o in rows if o["stratum"] == s and o["outcome"] == "hit"]) for s in per},
@@ -1185,6 +1191,38 @@ def gate_kind(record: Mapping) -> tuple[str, dict | None]:
     raise Refusal("the committed record does not state a valid gate kind (gate | re-gate)")
 
 
+class PrecheckRefusal(Refusal):
+    """A refusal of :func:`score_inputs_check`: raised by ``run`` before the marker (nothing spent) and by ``score``."""
+
+
+def score_inputs_check(repo: Path, gate_id: str, pf: Mapping, records: Sequence[Mapping], *, flags_given: bool | None = None, committed_text=None) -> dict:
+    """EVERY refusal of ``score`` that depends only on inputs known BEFORE the marker, in one place that both verbs call (``run`` before it takes the
+    marker, exit 5, nothing spent; ``score`` first thing after it has read the lists): the stored gold re-normalises cleanly, the working tree is clean,
+    the committed record states a valid gate kind (and, for a re-gate, usable ``movedOut``), ``--flags`` matches that kind (``flags_given`` is ``None``
+    where the flags file is not known yet, as at ``run``), and the eval manifest parses. -> ``{"kind", "movedOut", "patterns"}``. A refusal that a later
+    command can raise from such an input and the first irreversible step does not is a list spent for nothing."""
+    require_clean_renormalize(renormalize_stored_gold(records))
+    if pf["firstContact"]["dirtyPaths"]:
+        raise PrecheckRefusal(f"the working tree is dirty ({pf['firstContact']['dirtyPaths']} paths under cpg/)")
+    try:
+        _, record = find_prereg_line(Path(repo) / "cpg" / "eval" / "preregistration.jsonl", gate_id, committed_text)
+        kind, moved_out = gate_kind(record)
+    except PrecheckRefusal:
+        raise
+    except Refusal as e:
+        raise PrecheckRefusal(str(e)) from None
+    if flags_given is not None:
+        if kind == "re-gate" and not flags_given:
+            raise PrecheckRefusal("the committed record is a re-gate: --flags is required")
+        if kind == "gate" and flags_given:
+            raise PrecheckRefusal("the committed record is gate 1: --flags is refused")
+    try:
+        patterns = scope_patterns(_load_yaml(Path(repo) / "cpg" / "eval" / "eval-manifest.yaml"))
+    except Exception as e:                                       # noqa: BLE001 - an unreadable manifest is a refusal, whatever the parser raised
+        raise PrecheckRefusal(f"the eval manifest is unusable ({type(e).__name__})") from None
+    return {"kind": kind, "movedOut": moved_out, "patterns": patterns}
+
+
 FORBIDDEN_PORTS = (6379, 6390, 16390, 16400)          # falkordb-dev, the ccg dev store and the other services of this lab: the gate never reads them
 
 
@@ -1242,7 +1280,9 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         records = []
         for f in a.lists.split(","):
             records += _jsonl(within_custodian(Path(f), None, "--lists"))
-        require_clean_renormalize(renormalize_stored_gold(records))
+        pf = (preflight_fn or preflight)(repo, a.gate_id)
+        chk = score_inputs_check(repo, a.gate_id, pf, records, flags_given=bool(a.flags), committed_text=committed_text)      # what run checked before its marker
+        kind, moved_out = chk["kind"], chk["movedOut"]
         run = json.loads(within_custodian(Path(a.run), None, "--run").read_text(encoding="utf-8"))
         ctx = require_run_context(run)
         key = list_key(records)                           # over every record of --lists, withheld strata included (the key gate_run took the marker under)
@@ -1250,15 +1290,6 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
             raise Refusal("the run file is not the run of these lists (its list key differs or is missing)")
         if marker_state(cust, key) != "asked":            # -p1-gate-marker-ml.md §1.1.7: a started or failed run, or none, is never scored
             raise Refusal("the run has no marker in state `asked` for this list: score refuses")
-        pf = (preflight_fn or preflight)(repo, a.gate_id)
-        if pf["firstContact"]["dirtyPaths"]:
-            raise Refusal(f"the working tree is dirty ({pf['firstContact']['dirtyPaths']} paths under cpg/): score refuses")
-        _, record = find_prereg_line(repo / "cpg" / "eval" / "preregistration.jsonl", a.gate_id, committed_text)
-        kind, moved_out = gate_kind(record)
-        if kind == "re-gate" and not a.flags:
-            raise Refusal("the committed record is a re-gate: --flags is required")
-        if kind == "gate" and a.flags:
-            raise Refusal("the committed record is gate 1: --flags is refused")
         if snapshot is None:
             sys.path.insert(0, str(_HERE))
             from snapshot_export import RoRunner
@@ -1266,7 +1297,6 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         live = snapshot.snapshot_id()
         if live != run.get("snapshotId"):
             raise Refusal("the live :Snapshot node differs from the run file's pin: score stops")
-        em = _load_yaml(repo / "cpg" / "eval" / "eval-manifest.yaml")
         # N3: the RUN's flow flag and withheld set decide what was asked, so they decide what is scored. The current decision record is never read here:
         # a flip between run and score would score never-asked items as `anchor-not-in-graph` and turn a complete run into a `fail`.
         flag = run.get("flowFlag")
@@ -1280,7 +1310,7 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
             raise Refusal("the lists do not reproduce the withheld set the run recorded: score refuses")
         flags = {r["itemId"]: r["flag"] for r in _jsonl(within_custodian(Path(a.flags), None, "--flags"))} if a.flags else None
         expo = _jsonl(within_custodian(Path(a.exposure), None, "--exposure")) if a.exposure else []
-        res = score_gate(records, run, snapshot, scope_patterns(em))
+        res = score_gate(records, run, snapshot, chk["patterns"])
         dec = decide_gate(res, flags, moved_out, gated_strata=gated)
         label = "first-contact" if ctx["label"] == "first-contact" and pf["label"] == "first-contact" else "after-adaptation"
         rep = build_report(res, dec, flags=flags, exposure=expo, gated_strata=gated, withheld=withheld, flow_flag=flag,

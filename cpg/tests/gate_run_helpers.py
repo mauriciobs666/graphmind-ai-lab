@@ -15,6 +15,9 @@ OBS = {"algorithm": {"id": "bfs-v1", "version": "1.2"}, "defaultDepthBound": 2}
 GATE = "ac5-gate-1"
 
 
+DROP = object()                      # ``Env(record_extra={'kind': DROP})``: the committed record lacks that field
+
+
 class Killed(BaseException):
     """A planted SIGKILL: no handler of the run may write anything on it (it is not an ``Exception``)."""
 
@@ -46,7 +49,7 @@ def spec_key(spec) -> str:
 class Env:
     """A throwaway repo with a committed prereg record and EVAL_COMMIT, a home with the custodian area, and the synthetic world."""
 
-    def __init__(self, tmp_path):
+    def __init__(self, tmp_path, record_extra=None):
         self.tmp = tmp_path
         self.home = tmp_path / "home"
         self.cust = self.home / ".local" / "share" / "ccg-eval" / "e12"
@@ -71,7 +74,9 @@ class Env:
         H.git(repo, "add", "-A")
         H.git(repo, "commit", "-qm", "eval commit")
         t = G.observe_tree(repo)
-        rec = {"schema": "ccg-prereg-v1", "kind": "gate", "stratum": GATE, "packSetHash": t["packSetHash"], "coreTreeHash": t["coreTreeHash"], **OBS}
+        rec = {"schema": "ccg-prereg-v1", "kind": "gate", "stratum": GATE, "packSetHash": t["packSetHash"], "coreTreeHash": t["coreTreeHash"], **OBS,
+               **(record_extra or {})}
+        rec = {k: v for k, v in rec.items() if v is not DROP}
         (repo / "cpg/eval/preregistration.jsonl").write_text(json.dumps(rec) + "\n")
         H.git(repo, "add", "-A")
         H.git(repo, "commit", "-qm", "record")

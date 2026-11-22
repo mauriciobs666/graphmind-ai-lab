@@ -531,26 +531,264 @@ def test_n4_a_real_refresh_through_the_gate_build_writes_nothing_outside_the_cus
     assert gate_files and all(e.cust.resolve() in p.resolve().parents for p in gate_files)
 
 
-# ================================================================================================ a full disk is run-wide and deterministic, not a transient blip
-@pytest.mark.parametrize("code", [28, 122])                                  # ENOSPC, EDQUOT
-def test_a_disk_full_while_recording_an_answer_is_failed_deterministic(tmp_path, monkeypatch, code):
+# ================================================================================================ round D, P3-1: an environment fault is never an engine error
+import errno  # noqa: E402
+
+
+@pytest.mark.parametrize("code", [errno.ENOSPC, errno.EDQUOT, errno.EIO, errno.EACCES, errno.EMFILE, None])
+def test_p31_any_oserror_while_recording_an_answer_is_failed_transient_and_resumable(tmp_path, monkeypatch, code):
     e = Env(tmp_path)
     many_world(e, 2)
-
-    def full(path, obj):
-        raise OSError(code, "no space")
-    monkeypatch.setattr(R, "_append_line", full)
-    with pytest.raises(R.RunFailed) as ei:
-        e.go()
-    assert ei.value.state == "failed:deterministic" and e.marker()["state"] == "failed:deterministic"
-
-
-def test_another_os_error_while_recording_stays_transient(tmp_path, monkeypatch):
-    e = Env(tmp_path)
+    real = R._append_line
 
     def broken(path, obj):
-        raise OSError(5, "io")
+        raise OSError(code, "x") if code else OSError("x")
     monkeypatch.setattr(R, "_append_line", broken)
     with pytest.raises(R.RunFailed) as ei:
         e.go()
+    assert ei.value.state == "failed:transient" == e.marker()["state"]
+    monkeypatch.setattr(R, "_append_line", real)                                   # space freed: the resume goes through
+    e.go(resume=True)
+    assert e.marker()["state"] == "asked"
+
+
+FAMILIES = {                                                                        # one plant per environment family, raised INSIDE the engine's ask
+    "oserror-enospc": lambda: OSError(errno.ENOSPC, "no space"), "oserror-edquot": lambda: OSError(errno.EDQUOT, "quota"),
+    "oserror-eio": lambda: OSError(errno.EIO, "io"), "oserror-eacces": lambda: PermissionError(errno.EACCES, "perm"),
+    "oserror-plain": lambda: OSError("x"), "memory": lambda: MemoryError(), "recursion": lambda: RecursionError("deep"),
+}
+
+
+@pytest.mark.parametrize("family", sorted(FAMILIES))
+def test_p31_an_environment_fault_inside_an_ask_is_never_recorded_as_an_engine_error_the_run_stops(tmp_path, family):
+    e, c = engine_env(tmp_path, {2: FAMILIES[family]()})
+    with pytest.raises(R.RunFailed):
+        e.go(ask_factory=e.engine_ask)
+    assert not e.run_files() and e.marker()["state"].startswith("failed:")
+    assert all("outcome" not in json.loads(l) and "harnessError" not in json.loads(l) for l in e.answers_file().read_text().splitlines())
+    assert len(e.answers_file().read_text().splitlines()) == 1
+
+
+@pytest.mark.parametrize("family", ["oserror-enospc", "oserror-eio", "oserror-plain"])
+def test_p31_an_oserror_inside_an_ask_is_failed_transient_and_the_resume_re_asks_that_anchor(tmp_path, family):
+    plan = {2: FAMILIES[family]()}
+    e, c = engine_env(tmp_path, plan)
+    with pytest.raises(R.RunFailed) as ei:
+        e.go(ask_factory=e.engine_ask)
     assert ei.value.state == "failed:transient"
+    plan.clear()
+    c.calls.clear()
+    e.go(ask_factory=e.engine_ask, resume=True)
+    assert len(c.calls) == 2 and e.marker()["state"] == "asked"
+
+
+@pytest.mark.parametrize("family", sorted(FAMILIES))
+def test_p31_the_policy_returns_none_for_every_environment_family_wrapped_or_bare(family):
+    assert R.ask_failure_entry(FAMILIES[family]()) is None and R.ask_failure_entry(engine(FAMILIES[family]())) is None
+
+
+# ================================================================================================ round D, P3-2: `run` evaluates every refusal `score` can already know
+from gate_run_helpers import DROP  # noqa: E402
+
+
+@pytest.mark.parametrize("extra", [{"kind": DROP}, {"kind": "re-gate"}, {"kind": "re-gate", "movedOut": {"http": -1}}, {"kind": "nonsense"}],
+                         ids=["no-kind", "re-gate-without-movedOut", "re-gate-bad-movedOut", "unknown-kind"])
+def test_p32_a_committed_record_that_score_would_refuse_stops_run_before_the_marker_with_nothing_spent(tmp_path, extra):
+    e = Env(tmp_path, record_extra=extra)
+    with pytest.raises(G.PrecheckRefusal, match="gate kind|movedOut"):
+        e.go()
+    assert e.markers() == [] and e.events == [] and not list(e.cust.glob("run-*")) and not [p for p in e.cust.iterdir() if p.name.startswith("gate-")]
+
+
+def test_p32_the_cli_exits_5_for_such_a_record_and_prints_no_content(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    e = Env(tmp_path, record_extra={"kind": DROP})
+    assert R.main(e.argv(), deps=e.deps()) == R.EXIT_RESOLVE == 5
+    cap = capsys.readouterr()
+    assert cap.err.count("REFUSED") == 1 and "SENTINEL" not in cap.err and e.markers() == []
+
+
+def test_p32_a_valid_record_still_runs_and_the_same_function_is_what_score_calls(tmp_path, monkeypatch, capsys):
+    e = Env(tmp_path)
+    e.go()
+    assert score(e, monkeypatch, capsys)[1] is not None
+    import inspect
+    assert "score_inputs_check" in inspect.getsource(G.main) and "score_inputs_check" in inspect.getsource(R._run_gate)
+
+
+# ================================================================================================ round D, P3-3: the repeat-stall conversion (-p1-gate-marker-ml.md §1.1.3)
+def store_timeout():
+    """A store error that WRAPS a timeout: transient (the cause is), but not a ``TimeoutError`` itself, so it never converts."""
+    try:
+        raise StoreError("the store timed out") from TimeoutError("t")
+    except StoreError as e:
+        return e
+
+
+def stall_env(tmp_path, stalls_on=lambda spec: spec["key"] == "GET /a0", exc=lambda: TimeoutError("deadline"), n=3):
+    """A client that raises ``exc()`` whenever the first anchor is asked while ``stalls_on`` says so, and answers every other ask."""
+    e = Env(tmp_path)
+    many_world(e, n)
+    box = {"on": True, "exc": exc}
+
+    class C(FakeClient):
+        def ask(self, request=None, **kw):
+            self.calls.append(request)
+            if box["on"] and stalls_on(request["anchor"]):
+                raise box["exc"]()
+            return self.doc
+    c = C(doc=e.w.answer())
+    stamp = {"snapshotId": H.SNAP, "verdictLogOffset": 0, "verdictLogHash": G.EMPTY_VERDICT_LOG_HASH}
+    e.stall_ask = lambda b, s: R.make_ask(c, stamp=stamp, in_graph=lambda req: True)
+    e.canary_calls = []
+    e.canary_ok = True
+
+    def canary():
+        e.canary_calls.append(1)
+        if not e.canary_ok:
+            raise TimeoutError("canary deadline")
+    e.canary = canary
+    e.box, e.client = box, c
+    return e
+
+
+def answers_text(e) -> str:
+    return "".join(f.read_text() for f in e.cust.glob("run-*.answers.jsonl"))
+
+
+def stop(e, **kw):
+    """One process lifetime of the run: it stops on the stalled anchor (or, after the conversion, completes)."""
+    first = not e.markers()
+    try:
+        e.go(ask_factory=e.stall_ask, canary=e.canary, resume=not first, **kw)
+    except R.RunFailed as exc:
+        return exc.state
+    return "done"
+
+
+def test_p33_stops_one_and_two_are_failed_transient_stop_three_with_the_canary_answering_is_an_engine_error_and_the_run_completes(tmp_path, monkeypatch, capsys):
+    e = stall_env(tmp_path)
+    assert stop(e) == "failed:transient" and e.marker()["stall"] == {"index": 0, "count": 1}
+    assert stop(e) == "failed:transient" and e.marker()["stall"] == {"index": 0, "count": 2}
+    assert stop(e) == "done" and e.marker()["state"] == "asked" and len(e.canary_calls) == 3
+    assert e.marker()["stall"] is None                                               # the count is spent with the conversion
+    lines = [json.loads(l) for l in e.answers_file().read_text().splitlines()]
+    assert {"anchorId": lines[0]["anchorId"], "outcome": "engine-error", "exceptionClass": "TimeoutError", "via": "repeat-stall", "stalls": 3} in lines
+    assert len(lines) == 3
+    rc, rep, err = score(e, monkeypatch, capsys)
+    assert rep["verdict"] == "fail" and rep["misses"]["byReason"]["engine-error"] == 1
+    assert rep["engineErrors"]["repeatStall"] == {"count": 1, "byStratum": {"http": 1}} and rep["engineErrors"]["count"] == 0
+
+
+def test_p33_a_failed_canary_is_plain_transient_and_resets_the_count(tmp_path):
+    e = stall_env(tmp_path)
+    assert stop(e) == "failed:transient" and stop(e) == "failed:transient"
+    e.canary_ok = False
+    assert stop(e) == "failed:transient" and e.marker()["stall"] is None
+    e.canary_ok = True
+    assert stop(e) == "failed:transient" and e.marker()["stall"] == {"index": 0, "count": 1}      # the count starts over
+
+
+@pytest.mark.parametrize("other", [lambda: ConnectionError("c"), lambda: ConnectionResetError("r"), lambda: OSError(errno.EIO, "io"),
+                                   lambda: OSError(errno.ENOSPC, "full"), lambda: store_timeout()])
+def test_p33_only_a_timeout_converts_any_other_stop_resets_the_count_and_is_never_recorded(tmp_path, other):
+    e = stall_env(tmp_path)
+    assert stop(e) == "failed:transient" and stop(e) == "failed:transient" and e.marker()["stall"]["count"] == 2
+    e.box["exc"] = other
+    assert stop(e) in ("failed:transient", "failed:deterministic") and e.marker()["stall"] is None
+    e.box["exc"] = lambda: TimeoutError("t")
+    assert stop(e) == "failed:transient" and e.marker()["stall"]["count"] == 1
+    assert answers_text(e) == ""
+
+
+@pytest.mark.parametrize("exc", [lambda: ConnectionError("c"), lambda: OSError(errno.EIO, "io"), lambda: OSError(errno.ENOSPC, "full"), lambda: store_timeout()])
+def test_p33_a_non_timeout_failure_never_converts_however_often_it_repeats(tmp_path, exc):
+    e = stall_env(tmp_path, exc=exc)
+    for _ in range(6):
+        stop(e)
+    assert e.marker()["state"].startswith("failed:") and not e.run_files() and answers_text(e) == ""
+
+
+def test_p33_progress_resets_the_count(tmp_path):
+    e = stall_env(tmp_path, stalls_on=lambda spec: spec["key"] in ("GET /a0", "GET /a1"))
+    assert stop(e) == "failed:transient" and stop(e) == "failed:transient" and e.marker()["stall"] == {"index": 0, "count": 2}
+    stalling = e.client.ask
+
+    def ask(request=None, **kw):                                                     # the first anchor answers from now on, the second one stalls
+        if request["anchor"]["key"] == "GET /a0":
+            e.client.calls.append(request)
+            return e.client.doc
+        return stalling(request, **kw)
+    e.client.ask = ask
+    assert stop(e) == "failed:transient" and e.marker()["stall"] == {"index": 1, "count": 1}   # progress: the second anchor's count starts at 1, not 3
+
+
+def test_p33_without_a_canary_the_conversion_never_happens(tmp_path):
+    e = stall_env(tmp_path)
+    for i in range(5):
+        try:
+            e.go(ask_factory=e.stall_ask, resume=bool(i))
+        except R.RunFailed:
+            pass
+    assert e.marker()["state"] == "failed:transient" and not e.run_files()
+
+
+@pytest.mark.parametrize("field,value", [("k", 2), ("deadlineS", 1), ("canaryRequest", "RETURN 2")])
+def test_p33_k_the_deadline_and_the_canary_request_are_pinned_a_resume_with_another_value_is_refused(tmp_path, field, value):
+    e = stall_env(tmp_path)
+    assert stop(e) == "failed:transient"
+    assert set(e.marker()["pins"]["stall"]) == {"k", "deadlineS", "canaryRequest"}
+    over = {"stall_k": value} if field == "k" else {"stall_deadline_s": value} if field == "deadlineS" else {"canary_request": value}
+    with pytest.raises(G.Refusal, match="stall"):
+        stop(e, **over)
+
+
+def test_p33_a_sigkill_before_the_stall_write_keeps_the_previous_marker_whole_and_the_count_resumes_from_it(tmp_path):
+    e = stall_env(tmp_path)
+    assert stop(e) == "failed:transient"
+    real = R._write_marker
+
+    def kill_on_stall(path, doc):
+        if doc["state"] == "failed:transient":
+            suicide()
+        return real(path, doc)
+
+    def child():
+        R._write_marker = kill_on_stall
+        stop(e)
+    assert was_sigkilled(in_child(child))
+    m = e.marker()                                                                   # complete, parseable: the atomic rewrite never half-happened
+    assert m["state"] == "started" and m["stall"] == {"index": 0, "count": 1}
+    assert stop(e) == "failed:transient" and e.marker()["stall"] == {"index": 0, "count": 2}
+
+
+def test_p33_a_sigkill_after_the_stall_write_keeps_the_count_and_the_conversion_still_happens(tmp_path):
+    e = stall_env(tmp_path)
+    assert stop(e) == "failed:transient"
+    real = R._write_marker
+
+    def kill_after_stall(path, doc):
+        real(path, doc)
+        if doc["state"] == "failed:transient":
+            suicide()
+
+    def child():
+        R._write_marker = kill_after_stall
+        stop(e)
+    assert was_sigkilled(in_child(child))
+    assert e.marker()["state"] == "failed:transient" and e.marker()["stall"] == {"index": 0, "count": 2}
+    assert stop(e) == "done" and e.marker()["state"] == "asked"
+
+
+def test_p33_the_conversion_leaves_the_finalise_path_intact_a_kill_after_run_json_still_finalises(tmp_path):
+    e = stall_env(tmp_path)
+    assert stop(e) == "failed:transient" and stop(e) == "failed:transient"
+    key = e.marker()["listSha256"]
+    assert was_sigkilled(in_child(lambda: (kill_after_rename_of(f"run-{key}.json"), stop(e))))
+    assert e.marker()["state"] == "started" and len(e.run_files()) == 1                  # the stalled anchor was converted, the run completed, the kill hit last
+    e.client.calls.clear()
+    assert e.go(resume=True)["finalised"] is True and e.marker()["state"] == "asked" and e.client.calls == []
+
+
+def test_p33_a_timeout_is_still_not_placed_by_the_policy_function(tmp_path):
+    assert R.ask_failure_entry(TimeoutError("t")) is None and R.ask_failure_entry(engine(TimeoutError("t"))) is None
