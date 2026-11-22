@@ -1,0 +1,409 @@
+"""P1-32b gate harness, C5 assertions and the hit rule H1-H4 (EP §5.2, §5.2.1 HA-1..HA-5). Offline, synthetic, in-memory gate snapshot.
+
+Every refusal has a planted input that must turn it red, with the expected outcome written here and not taken from the engine."""
+import copy
+
+import pytest
+
+import gate_helpers as H
+from gate_helpers import G
+
+
+@pytest.fixture
+def w():
+    return H.World()
+
+
+def hit(o):
+    return o["outcome"] == "hit"
+
+
+# ---------------------------------------------------------------- positive control and H1
+def test_baseline_is_a_hit_with_chain_length(w):
+    o, res = w.outcome()
+    assert hit(o) and o["hops"] == 4 and o["interFunctionHops"] == 1
+    assert res["defects"] == {} and res["harnessErrors"] == {} and res["stops"] == {}
+
+
+def test_h1_wrong_qname_is_a_miss(w):
+    other = w.snap.add_symbol("4" * 32, "svc/other.py::g", 5, 20)
+    sub = H.sym_subject(other, "svc/other.py::g", 5, 20)
+    chain = w.chain()[:-1] + [H.hopn("Symbol", other, "HAS_CALL", "<-")]
+    w.snap.add_edge("HAS_CALL", ("Symbol", other), ("CallSite", w.cs))
+    o, _ = w.outcome(w.answer([H.ans_item(sub, chain)]))
+    assert o["outcome"] == "miss" and o["stage"] == "none"
+
+
+def test_h1_right_qname_span_off_the_line_is_a_miss_no_id_only_branch():
+    w = H.World(lines=(30,), span=(5, 20))                  # the symbol is e by qname, but no line of L lies in its span
+    o, _ = w.outcome()
+    assert o["outcome"] == "miss" and o["stage"] == "none"
+
+
+def test_h1_owned_region_credits_a_line_outside_the_span():
+    w = H.World(lines=(30,), span=(5, 20))
+    w.snap.symbols[w.sid]["ownedRegions"] = [[28, 32]]
+    o, _ = w.outcome(w.answer([ans := H.ans_item(H.sym_subject(w.sid, w.qname, 5, 20, ownedRegions=[[28, 32]]), w.chain())]))
+    assert hit(o)
+
+
+def test_h1_eligible_ancestor_credits_a_duplicate_suffix_symbol():
+    w = H.World(qname="svc/c.py::C.x#2.check")
+    w.rec = H.item(1, w.anchor, H.sym("svc/c.py::C.x.check"), lines=(10,))      # the key holds E(qname)
+    o, _ = w.outcome()
+    assert hit(o)
+
+
+def test_h1_anon_symbol_is_credited_to_its_enclosing_eligible_function():
+    w = H.World(qname="svc/c.py::run.<anon>#1")
+    w.rec = H.item(1, w.anchor, H.sym("svc/c.py::run"), lines=(10,))
+    assert hit(w.outcome()[0])
+
+
+# ---------------------------------------------------------------- H2
+@pytest.mark.parametrize("status", ["dismissed", "stale", None])
+def test_h2_status_other_than_confirmed_or_possible_is_a_miss(w, status):
+    it = w.item()
+    it["status"] = status
+    o, _ = w.outcome(w.answer([it]))
+    assert o["outcome"] == "miss" and o["stage"] == "H1"
+
+
+def test_h2_possible_counts(w):
+    assert hit(w.outcome(w.answer([w.item(status="possible")]))[0])
+
+
+# ---------------------------------------------------------------- H3 shape
+def test_h3_empty_chain_is_a_miss(w):
+    it = w.item()
+    it["chain"] = []
+    assert w.outcome(w.answer([it]))[0]["outcome"] == "miss"
+
+
+def test_h3_first_hop_not_the_asked_anchor_is_a_miss(w):
+    it = w.item()
+    it["chain"][0] = H.hop0("ContractPoint", "9" * 32)
+    w.snap.add_node("ContractPoint", "9" * 32)
+    assert w.outcome(w.answer([it]))[0]["outcome"] == "miss"
+
+
+def test_h3_last_hop_not_the_item_is_a_miss(w):
+    it = w.item()
+    it["chain"] = it["chain"][:-1]
+    assert w.outcome(w.answer([it]))[0]["outcome"] == "miss"
+
+
+# ---------------------------------------------------------------- H4
+def test_h4_group_member_is_enumerated_individually_and_hits(w):
+    assert hit(w.outcome(w.answer([], groups=[H.group([w.item(status="possible")])]))[0])
+
+
+def test_h4_a_group_header_with_a_count_only_is_never_x(w):
+    g = H.group([])
+    g["count"] = 1
+    assert w.outcome(w.answer([], groups=[g]))[0]["outcome"] == "miss"
+
+
+# ---------------------------------------------------------------- HA-1 chain replay, planted inputs (a)-(h)
+def test_ha1a_middle_hop_id_absent_from_the_snapshot_is_a_miss(w):
+    it = w.item()
+    it["chain"][2]["id"] = "f" * 32
+    o, res = w.outcome(w.answer([it]))
+    assert o["outcome"] == "miss" and o["stage"] == "H2" and res["harnessErrors"] == {}
+
+
+def test_ha1b_middle_hop_real_node_with_no_edge_to_either_neighbour_is_a_miss(w):
+    stray = w.snap.add_node("CallSite", "5" * 32)
+    it = w.item()
+    it["chain"][2]["id"] = stray
+    assert w.outcome(w.answer([it]))[0]["outcome"] == "miss"
+
+
+def test_ha1c_reversed_dir_is_a_miss(w):
+    it = w.item()
+    it["chain"][1]["dir"] = "->"
+    assert w.outcome(w.answer([it]))[0]["outcome"] == "miss"
+
+
+def test_ha1d_edgetype_that_does_not_join_the_pair_is_a_miss(w):
+    it = w.item()
+    it["chain"][2]["edgeType"] = "CONSUMES"         # allow-listed, kind pair (CallSite, ContractPoint) is not (CallSite, Link)
+    assert w.outcome(w.answer([it]))[0]["outcome"] == "miss"
+
+
+def test_ha1d2_allowlisted_pair_type_with_no_stored_edge_is_a_miss(w):
+    w.snap.edges.discard(("VIA", ("CallSite", w.cs), ("Link", w.link)))
+    assert w.outcome()[0]["outcome"] == "miss"
+
+
+@pytest.mark.parametrize("bad", ["CALLS; MATCH (n) DETACH DELETE n", "calls", "TO_UNIT", ""])
+def test_ha1e_edgetype_outside_the_allowlist_is_a_harness_error_and_never_queried(w, bad):
+    it = w.item()
+    it["chain"][1]["edgeType"] = bad
+    before = w.snap.queries
+    o, res = w.outcome(w.answer([it]))
+    assert o["outcome"] == "miss" and res["harnessErrors"] == {"edgeType-not-allowed": 1}
+    assert w.snap.queries == before                      # rejected before any query
+
+
+def test_ha1e_bad_dir_is_a_harness_error(w):
+    it = w.item()
+    it["chain"][1]["dir"] = "=>"
+    assert w.outcome(w.answer([it]))[1]["harnessErrors"] == {"dir": 1}
+
+
+def test_ha1f_name_matched_call_via_calls_name_resolves_to_is_a_hit():
+    w = H.World()
+    cs2, callee = "6" * 32, "7" * 32
+    w.snap.add_node("CallSite", cs2)
+    w.snap.add_symbol(callee, w.qname, 5, 20)             # callee symbol is e (same qname, other id): E equal, span holds the line
+    w.snap.add_edge("CALLS_NAME", ("CallSite", cs2), ("Symbol", callee))
+    chain = w.chain()[:3] + [H.hopn("CallSite", cs2, "HAS_CALL", "<-")]
+    w.snap.add_edge("HAS_CALL", ("Symbol", w.sid), ("CallSite", cs2))
+    chain = w.chain()[:-1] + [H.hopn("Symbol", w.sid, "HAS_CALL", "<-", ), H.hopn("CallSite", cs2, "HAS_CALL", "->"),
+                              H.hopn("Symbol", callee, "CALLS_NAME", "->", status="possible", reason="name-match")]
+    it = H.ans_item(H.sym_subject(callee, w.qname, 5, 20), chain, status="possible")
+    assert hit(w.outcome(w.answer([it]))[0])
+
+
+def test_ha1g_class_d_row_against_a_snapshot_with_no_such_edges_is_a_harness_error(w):
+    it = w.item()
+    it["chain"][2]["edgeType"] = "READS"
+    o, res = w.outcome(w.answer([it]))
+    assert o["outcome"] == "miss" and res["harnessErrors"] == {"class-D-not-loaded": 1}
+
+
+def test_ha1g_class_d_row_is_replayed_once_the_snapshot_loads_it(w):
+    w.snap.add_edge("READS", ("CallSite", w.cs), ("ContractPoint", w.cp))
+    it = w.item()
+    it["chain"] = [H.hop0("ContractPoint", w.cp), H.hopn("CallSite", w.cs, "READS", "<-"), H.hopn("Symbol", w.sid, "HAS_CALL", "<-")]
+    o, res = w.outcome(w.answer([it]))
+    assert hit(o) and res["harnessErrors"] == {}
+
+
+@pytest.mark.parametrize("etype", ["LAUNCHES", "DEFINED_BY", "DEPENDS_ON", "FROM_DEP"])
+def test_ha1h_class_x_row_is_a_harness_error(w, etype):
+    it = w.item()
+    it["chain"][1]["edgeType"] = etype
+    assert w.outcome(w.answer([it]))[1]["harnessErrors"] == {"class-X": 1}
+
+
+def test_ha1_fabricated_chain_item_is_a_miss_positive_control():
+    """A fabricated chain between real nodes (no edge joins them) scores a miss, however plausible its shape."""
+    w = H.World()
+    fab = [H.hop0("ContractPoint", w.cp), H.hopn("Symbol", w.sid, "PROVIDES", "<-")]    # allow-listed pair, but no PROVIDES edge stored
+    it = H.ans_item(H.sym_subject(w.sid, w.qname, 5, 20), fab)
+    o, _ = w.outcome(w.answer([it]))
+    assert o["outcome"] == "miss"
+
+
+def test_ha1_replay_function_directly():
+    w = H.World()
+    assert G.replay_chain(w.chain(), w.snap) == ("ok", "")
+    assert G.replay_chain([], w.snap)[0] == "fail"
+    assert G.replay_chain([H.hop0("Unit", "x")], w.snap) == ("error", "hop-kind")
+
+
+def test_edge_allowlist_is_the_21_types_of_the_spec():
+    assert len(G.EDGES) == 21
+    assert {t for t, (c, _) in G.EDGES.items() if c == "X"} == {"DEFINED_BY", "LAUNCHES", "DEPENDS_ON", "FROM_DEP"}
+    assert {t for t, (c, _) in G.EDGES.items() if c == "D"} == {"READS", "WRITES", "BOUND_BY", "RAN"}
+
+
+# ---------------------------------------------------------------- HA-2 subject read from the snapshot
+def test_ha2_moved_lines_list_a_mismatch_while_h1_decides_on_the_snapshot_span(w):
+    it = w.item()
+    it["subject"]["lineStart"], it["subject"]["lineEnd"] = 100, 110            # answer copy moved off the recorded line
+    o, res = w.outcome(w.answer([it]))
+    assert hit(o) and res["defects"] == {"subject-lineStart": 1, "subject-lineEnd": 1}
+
+
+def test_ha2_altered_qname_lists_a_mismatch_and_h1_still_uses_the_snapshot(w):
+    it = w.item()
+    it["subject"]["qname"] = "svc/other.py::zzz"
+    o, res = w.outcome(w.answer([it]))
+    assert hit(o) and res["defects"] == {"subject-qname": 1}
+
+
+def test_ha2_answer_span_that_would_credit_is_not_trusted():
+    w = H.World(lines=(30,), span=(5, 20))
+    it = w.item()
+    it["subject"]["lineStart"], it["subject"]["lineEnd"] = 25, 35               # the answer's copy would hold line 30
+    o, res = w.outcome(w.answer([it]))
+    assert o["outcome"] == "miss" and res["defects"]["subject-lineStart"] == 1
+
+
+def test_ha2_subject_absent_from_the_snapshot_is_a_listed_defect_and_a_miss(w):
+    it = w.item()
+    it["subject"]["symbolId"] = "e" * 32
+    o, res = w.outcome(w.answer([it]))
+    assert o["outcome"] == "miss" and res["defects"] == {"subject-not-in-snapshot": 1}
+
+
+# ---------------------------------------------------------------- HA-3 request echo
+def _echo(w, mutate):
+    ans = w.answer()
+    mutate(ans["interpretation"])
+    return w.outcome(ans)
+
+
+def test_ha3_second_anchor_added_is_a_miss_and_a_listed_defect(w):
+    o, res = _echo(w, lambda i: i["request"]["anchors"].append({"type": "contract", "cpId": "8" * 32, "kind": "http", "keyNorm": "x"}))
+    assert o["outcome"] == "miss" and o["reason"] == "request-unequal" and res["defects"] == {"request-echo": 1}
+
+
+def test_ha3_scope_present_is_a_miss(w):
+    o, res = _echo(w, lambda i: i["request"].update(scope={"repoIds": ["r"]}))
+    assert o["reason"] == "request-unequal" and res["defects"] == {"request-echo": 1}
+
+
+def test_ha3_direction_flipped_is_a_miss(w):
+    o, _ = _echo(w, lambda i: i["request"].update(direction="depends-on"))
+    assert o["reason"] == "request-unequal"
+
+
+def test_ha3_ambiguous_status_is_a_miss_reported_with_lookups_and_no_defect(w):
+    ans = w.answer(status="ambiguous")
+    o, res = w.outcome(ans)
+    assert o["outcome"] == "miss" and o["reason"] == "not-resolved" and res["defects"] == {}
+
+
+# ---------------------------------------------------------------- HA-4 stamp
+@pytest.mark.parametrize("mutate,field", [
+    (lambda a: a["stamp"].update(snapshotId="a" * 31 + "b"), "snapshotId"),
+    (lambda a: a["stamp"].update(verdictLogOffset=1), "verdictLogOffset"),
+    (lambda a: a["stamp"].update(verdictLogHash=G.EMPTY_VERDICT_LOG_HASH[:-1] + "0"), "verdictLogHash"),
+    (lambda a: a["stamp"].update(verdictLogOffset=False), "verdictLogOffset")])
+def test_ha4_each_stamp_failure_voids_the_answer_and_stops_the_run(w, mutate, field):
+    ans = w.answer()
+    mutate(ans)
+    o, res = w.outcome(ans)
+    assert o["outcome"] == "void" and res["stops"] == {f"C5:stamp:{field}": 1}
+
+
+def test_ha4_the_hash_is_the_literal_not_the_engines_constant():
+    from ccg import answer as A
+    assert G.EMPTY_VERDICT_LOG_HASH == "c482b1cf54631b37eb4572dc86a68fb1" == A.EMPTY_VERDICT_LOG_HASH
+
+
+def test_ha4_stamp_is_checked_against_the_pinned_id_read_from_the_snapshot(w):
+    assert w.outcome(snapshot_id="b" * 32)[0]["outcome"] == "void"
+
+
+# ---------------------------------------------------------------- HA-5 masking (config)
+def _cfg_world(answer_key, gold_key):
+    snap = H.DictSnapshot()
+    cp = "c" * 32
+    snap.add_node("ContractPoint", cp)
+    entry = snap.add_entry("e" * 32, "deploy/compose.yaml", answer_key)
+    rec = H.item(1, {"type": "contract", "kind": "http", "keyNorm": "GET /a"}, H.cfg("deploy/compose.yaml", gold_key), lines=(3,))
+    rec["anchorId"] = cp
+    chain = [H.hop0("ContractPoint", cp), H.hopn("ConfigEntry", entry, "WRITES", "<-")]
+    snap.add_edge("WRITES", ("ConfigEntry", entry), ("ContractPoint", cp))
+    subj = {"type": "config", "entryId": entry, "path": "deploy/compose.yaml", "line": 3, "keyPath": answer_key}
+    ans = H.answer(H.request([cp]), [H.ans_item(subj, chain)])
+    run = {"snapshotId": H.SNAP, "answers": {cp: {"request": H.request([cp]), "answer": ans}}}
+    return G.score_gate([rec], run, snap, ())
+
+
+def test_ha5_config_prefix_rule_without_masking_is_listed_nowhere():
+    res = _cfg_world("services.web.ports[0]", "services.web")
+    assert res["items"][next(iter(res["items"]))]["outcome"] == "hit" and res["maskedComparisons"] == 0
+
+
+def test_ha5_failing_segments_mask_to_the_same_string_and_are_listed():
+    # a 24-character run fails the token screen (T2): two different keys under one parent mask to the same string, and the comparison is listed
+    a, b = "services." + "a" * 24, "services." + "b" * 24
+    assert G.mask_keypath(a) == G.mask_keypath(b) == "services.[#]"
+    res = _cfg_world(a, b)
+    assert res["items"][next(iter(res["items"]))]["outcome"] == "hit" and res["maskedComparisons"] == 1
+
+
+def test_ha5_a_listed_masked_comparison_blocks_the_verdict():
+    d = G.decide_gate({"items": {"i": {"outcome": "hit", "stratum": "http", "counting": True, "anchorId": "a"}}, "defects": {},
+                       "harnessErrors": {}, "maskedComparisons": 2, "stops": {}})
+    assert d["verdict"] == "blocked" and "masked-comparisons" in d["blockers"]
+
+
+# ---------------------------------------------------------------- tests added from the mutation table
+def test_ha1_each_hop_node_is_checked_for_existence_even_where_an_edge_is_recorded(w):
+    """The spec lists the existence check separately; the in-memory snapshot can hold an edge whose end node is gone."""
+    for idx in range(4):
+        snap = H.World().snap
+        label, nid = [(h["kind"], h["id"]) for h in w.chain()][idx]
+        snap.nodes.discard((label, nid))
+        assert G.replay_chain(w.chain(), snap) == ("fail", "node-absent"), idx
+
+
+def test_ha1_a_stored_edge_between_a_kind_pair_the_type_cannot_join_still_fails():
+    w = H.World()
+    w.snap.add_edge("CONSUMES", ("CallSite", w.cs), ("Link", w.link))              # CONSUMES joins CallSite to ContractPoint, not to Link
+    chain = w.chain()
+    chain[2]["edgeType"] = "CONSUMES"
+    assert G.replay_chain(chain, w.snap) == ("fail", "kind-pair")
+
+
+def test_h3_first_hop_must_be_the_asked_anchor_even_when_the_chain_is_otherwise_real():
+    w = H.World()
+    cp2, link2 = "8" * 32, "9" * 32
+    w.snap.add_node("ContractPoint", cp2)
+    w.snap.add_node("Link", link2)
+    w.snap.add_edge("ON", ("Link", link2), ("ContractPoint", cp2))
+    w.snap.add_edge("VIA", ("CallSite", w.cs), ("Link", link2))
+    chain = [H.hop0("ContractPoint", cp2), H.hopn("Link", link2, "ON", "<-"), H.hopn("CallSite", w.cs, "VIA", "<-"), H.hopn("Symbol", w.sid, "HAS_CALL", "<-")]
+    assert G.replay_chain(chain, w.snap) == ("ok", "")                              # a real chain, but from another anchor
+    o, _ = w.outcome(w.answer([H.ans_item(H.sym_subject(w.sid, w.qname, *w.span), chain)]))
+    assert o["outcome"] == "miss"
+
+
+def test_h3_last_hop_must_be_the_item_even_when_the_chain_is_otherwise_real():
+    w = H.World()
+    other = w.snap.add_symbol("4" * 32, "svc/other.py::g", 5, 20)
+    w.snap.add_edge("HAS_CALL", ("Symbol", other), ("CallSite", w.cs))
+    chain = w.chain()[:-1] + [H.hopn("Symbol", other, "HAS_CALL", "<-")]
+    o, _ = w.outcome(w.answer([H.ans_item(H.sym_subject(w.sid, w.qname, *w.span), chain)]))     # the item is w.sid, the chain ends at another symbol
+    assert o["outcome"] == "miss"
+
+
+def test_h4_a_group_header_carrying_a_subject_and_a_chain_is_still_never_x(w):
+    g = H.group([])
+    g.update(count=1, subject=H.sym_subject(w.sid, w.qname, *w.span), chain=w.chain(), status="possible")
+    assert w.outcome(w.answer([], groups=[g]))[0]["outcome"] == "miss"
+
+
+def test_ha3_use_case_must_equal_the_submitted_one(w):
+    o, res = _echo(w, lambda i: i["request"].update(useCase="other"))
+    assert o["reason"] == "request-unequal" and res["defects"] == {"request-echo": 1}
+
+
+@pytest.mark.parametrize("answer_key,hit_expected", [
+    ("services.web[0]", True), ("services.web.ports", True), ("services.webapp", False), ("services.web", True), ("services.we", False)])
+def test_h1_config_keypath_equal_or_prefix_at_a_segment_boundary(answer_key, hit_expected):
+    res = _cfg_world(answer_key, "services.web")
+    assert (res["items"][next(iter(res["items"]))]["outcome"] == "hit") is hit_expected
+
+
+def test_h1_config_in_another_file_is_a_miss():
+    snap = H.DictSnapshot()
+    cp = "c" * 32
+    snap.add_node("ContractPoint", cp)
+    entry = snap.add_entry("e" * 32, "deploy/other.yaml", "services.web")
+    rec = H.item(1, H.contract("http", "GET /a"), H.cfg("deploy/compose.yaml", "services.web"), lines=(3,))
+    rec["anchorId"] = cp
+    snap.add_edge("WRITES", ("ConfigEntry", entry), ("ContractPoint", cp))
+    subj = {"type": "config", "entryId": entry, "path": "deploy/other.yaml", "line": 3, "keyPath": "services.web"}
+    chain = [H.hop0("ContractPoint", cp), H.hopn("ConfigEntry", entry, "WRITES", "<-")]
+    ans = H.answer(H.request([cp]), [H.ans_item(subj, chain)])
+    res = G.score_gate([rec], {"snapshotId": H.SNAP, "answers": {cp: {"request": H.request([cp]), "answer": ans}}}, snap, ())
+    assert res["items"][rec["itemId"]]["outcome"] == "miss"
+
+
+def test_ha5_listing_when_only_the_answer_side_is_masked():
+    a = "services." + "a" * 24
+    res = _cfg_world(a, "services.[#]")                                              # the gold key is already the masked form
+    assert res["items"][next(iter(res["items"]))]["outcome"] == "hit" and res["maskedComparisons"] == 1
+
+
+def test_ha5_listing_when_only_the_gold_side_is_masked():
+    res = _cfg_world("services.[#]", "services." + "b" * 24)
+    assert res["items"][next(iter(res["items"]))]["outcome"] == "hit" and res["maskedComparisons"] == 1
