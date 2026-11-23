@@ -49,7 +49,9 @@ def spec_key(spec) -> str:
 class Env:
     """A throwaway repo with a committed prereg record and EVAL_COMMIT, a home with the custodian area, and the synthetic world."""
 
-    def __init__(self, tmp_path, record_extra=None):
+    def __init__(self, tmp_path, record_extra=None, late_manifest=False, system_yaml=YAML_SYS):
+        """``late_manifest``: the system manifest is committed AFTER ``EVAL_COMMIT`` (as in the real repository, where ``cpg/ccg/system.yaml`` was added
+        after the pinned commit): the clone at ``EVAL_COMMIT`` does not hold it."""
         self.tmp = tmp_path
         self.home = tmp_path / "home"
         self.cust = self.home / ".local" / "share" / "ccg-eval" / "e12"
@@ -66,11 +68,14 @@ class Env:
             f.write_text(f"# {rel}\n")
         (repo / "cpg/eval/eval-manifest.yaml").write_text(YAML_EM)
         (repo / "cpg/ccg").mkdir(exist_ok=True)
-        (repo / "cpg/ccg/system.yaml").write_text(YAML_SYS)
+        if not late_manifest:
+            (repo / "cpg/ccg/system.yaml").write_text(system_yaml)
         H.git(repo, "add", "-A")
         H.git(repo, "commit", "-qm", "harness")
         self.eval_commit = H.head(repo)
         (repo / "cpg/eval/EVAL_COMMIT").write_text(self.eval_commit + "\n")
+        if late_manifest:
+            (repo / "cpg/ccg/system.yaml").write_text(system_yaml)
         H.git(repo, "add", "-A")
         H.git(repo, "commit", "-qm", "eval commit")
         t = G.observe_tree(repo)
@@ -111,6 +116,7 @@ class Env:
     def refresh(self, system, repo_root=None, **kw):
         self.refresh_kw = kw
         self.events.append(("refresh", str(repo_root)))
+        return H.clean_report(system)                                                       # the REAL report type: a complete build
 
     def resolve(self, spec):
         self.events.append(("resolve",))

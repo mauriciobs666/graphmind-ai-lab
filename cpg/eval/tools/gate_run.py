@@ -46,6 +46,7 @@ for _p in (str(_HERE), str(_HERE.parents[1])):
         sys.path.insert(0, _p)
 
 import gate as G                           # noqa: E402
+from ccg.engine import config as _engine_config   # noqa: E402
 from gate import Refusal, HarnessError     # noqa: E402,F401
 
 EXIT_OK, EXIT_REFUSED, EXIT_SPENT, EXIT_BAD, EXIT_RESOLVE, EXIT_RESUMABLE = 0, 2, 3, 4, 5, 6
@@ -53,7 +54,8 @@ PROBE_MAP_NAME = "s47-probe-map.json"
 #: the repeat-stall conversion (``-p1-gate-marker-ml.md`` §1.1.3): k consecutive timeouts at one position, the deadline of the host-health canary and
 #: the canary request. All three are pinned in the marker, so a resume with another value is refused.
 STALL_K = 3
-STALL_DEADLINE_S = 30
+STALL_DEADLINE_S = _engine_config.QUERY_TIMEOUT_MS / 1000      # the engine's own per-query limit = the pinned store's TIMEOUT_MAX; ``raw_query`` refuses a larger one (D4):
+#                                                                a store that cannot run this canary cannot run the engine's own asks either
 CANARY_REQUEST = "MATCH (s:Snapshot) RETURN s.snapshotId"           # fixed, non-held-out: the same read the engine reader's snapshot check uses
 
 
@@ -62,7 +64,8 @@ class ResolveRefusal(Refusal):
 
     def __init__(self, counts: Mapping[str, int]):
         self.counts = dict(counts)
-        super().__init__("the resolve dry-run refused: " + " ".join(f"{k}={self.counts[k]}" for k in ("ok", "none", "ambiguous", "id-mismatch", "total")))
+        super().__init__("the resolve dry-run refused: " + " ".join(f"{k}={self.counts[k]}" for k in ("ok", "none", "ambiguous", "id-mismatch", "total"))
+                         + ". " + G.STORE_REMEDY + "; fix the cause of the counts above (an anchor the engine cannot resolve) before the next run")
 
 
 class RunFailed(RuntimeError):
@@ -392,12 +395,14 @@ def _read_lists(lists: Sequence[Path], home: Path | None) -> tuple[list[dict], s
     return records, G.list_key(records)
 
 
-def _pins(ctx: Mapping, snapshot_id: str, obs: Mapping, *, flow_flag: bool, withheld: Mapping, probe_map_sha256: str, stall: Mapping) -> dict:
+def _pins(ctx: Mapping, snapshot_id: str, obs: Mapping, *, flow_flag: bool, withheld: Mapping, probe_map_sha256: str, manifest_sha256: str,
+          stall: Mapping) -> dict:
     """What a resume must find equal. The flow flag and the withheld counts decide WHICH anchors are asked, and the probe map decides which point a
     unit anchor is asked from: neither may change between two halves of one run (N3, N6)."""
     return {"recordCommit": ctx["recordCommit"], "harnessSha256": dict(ctx["harnessPin"]["sha256"]), "snapshotId": snapshot_id,
             "prereg": {k: obs.get(k) for k in G.PREREG_FIELDS}, "coreTreeHash": obs.get("coreTreeHash"), "label": ctx["label"],
-            "flowFlag": bool(flow_flag), "withheld": dict(withheld), "probeMapSha256": probe_map_sha256, "stall": dict(stall)}
+            "flowFlag": bool(flow_flag), "withheld": dict(withheld), "probeMapSha256": probe_map_sha256,
+            "manifestSha256": manifest_sha256, "stall": dict(stall)}
 
 
 PRIVATE_AREAS = ("work", "keys", "audit")
@@ -508,6 +513,12 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     if not pmap.is_file():
         raise Refusal("the S47 probe map is missing under the custodian root: a custodian unit produces it (split_manifest.split(...)['probe']); the run is refused")
     probes = G.read_probe_map(pmap, home)
+    manifest = repo / G.SYSTEM_MANIFEST
+    if not manifest.is_file():
+        raise Refusal("the system manifest cpg/ccg/system.yaml is missing from the working tree: the build cannot be given one (at EVAL_COMMIT there is none)")
+    declared = G.manifest_system(repo)
+    if declared is not None and declared != system:
+        raise Refusal("the system disagrees with the system manifest's own: pass the manifest's system, or none")
     all_records, key = _read_lists(lists, home)
     G.score_inputs_check(repo, gate_id, pf, all_records, committed_text=committed_text)       # every refusal `score` already knows, before the marker
     flag = G.flow_flag(Path(flow_decision) if flow_decision else repo / G.FLOW_DECISION, committed_text)
@@ -526,9 +537,11 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     built = cust / f"gate-build-{key}"
     if not resume:
         if live_graph_present is not None and live_graph_present():
-            raise Refusal("the store already holds the live graph of the gate system: the gate builds into its own empty throwaway store, never one in use")
+            raise Refusal("the store already holds the live graph of the gate system (an earlier run built it, or the store is in use): the gate builds into its own "
+                          "empty throwaway store only. Provision a new empty store (create its ACL users again) and rebuild; if an earlier run of this list was refused "
+                          "after its build, the list is not spent (no marker was taken) and runs on the new store")
         _clean_leftover(cust, built, "gate-build-")
-        G.build_at_eval_commit(eval_commit, built, repo=repo, refresh_fn=refresh_fn, system=system, **_private_build_areas(cust, key))
+        G.build_at_eval_commit(eval_commit, built, repo=repo, refresh_fn=refresh_fn, system=system, manifest=manifest, **_private_build_areas(cust, key))
     snap = snapshot_factory(built)
     sid = snap.snapshot_id()
     if engine_snapshot_id is not None and engine_snapshot_id() != sid:
@@ -537,6 +550,7 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     recorded = load_answers(answers_path) if resume else {}
     obs = {**(dict(tree) if tree is not None else G.observe_tree(repo)), **(observed if observed is not None else G.engine_observed())}
     pins = _pins(ctx, sid, obs, flow_flag=flag, withheld=withheld, probe_map_sha256=hashlib.sha256(pmap.read_bytes()).hexdigest(),
+                 manifest_sha256=hashlib.sha256(manifest.read_bytes()).hexdigest(),
                  stall={"k": stall_k, "deadlineS": stall_deadline_s, "canaryRequest": canary_request if canary is not None else None})
     if resume:
         _resume_checks(old, pins, key, cust, len(recorded), cache_len)
@@ -588,7 +602,9 @@ def _default_deps(a, *, connect: Callable[..., Any] | None = None, credential: C
     """The production seams, none of them injected by the caller: a refresh that loads into a ``Target`` of the system's ``build`` and ``verdict`` users
     on the explicit store ``--host``/``--port`` (``G.snapshot_graph``'s guard: loopback only, no missing or forbidden port, ``--graph`` equal to the
     system's live key, all BEFORE any connection), the snapshot reader, the engine ``Client`` for ask and resolve, and the engine-side ``:Snapshot`` id."""
-    system = a.system or "ccg"
+    repo = Path(getattr(a, "repo", None) or _HERE.parents[2])
+    system = a.system or G.manifest_system(repo) or "ccg"             # the manifest's own system name (D2), never a guess
+    reader_db = db_factory or G.reader_db_factory(system, credential)    # the read-only ``raw`` role of the system, never the default user (D1)
     live_key = G.snapshot_graph(a.host, a.port, a.graph, system, db_factory=lambda h, p: type("_Guard", (), {"select_graph": staticmethod(lambda k: k)})())
     box: dict[str, Any] = {}
 
@@ -615,11 +631,11 @@ def _default_deps(a, *, connect: Callable[..., Any] | None = None, credential: C
         build_db, verdict_db = (conn(a.host, a.port, username=sysname.acl_user(role, sys_name), password=cred(sys_name, role)) for role in ("build", "verdict"))
         root = Path(repo_root)
         return rm.refresh(sys_name, target=rm.Target(L.LiveStore(build_db, sys_name), build_db, verdict_db), repo_root=root,
-                          manifest=root / "cpg" / "ccg" / "system.yaml", **kw)
+                          **kw)
 
     def snapshot_factory(built):
         from snapshot_export import RoRunner
-        graph = G.snapshot_graph(a.host, a.port, a.graph, system, db_factory=db_factory)
+        graph = G.snapshot_graph(a.host, a.port, a.graph, system, db_factory=reader_db)
         return G.StoreSnapshot(RoRunner(graph))
 
     def ask_factory(built, snap):
@@ -627,16 +643,20 @@ def _default_deps(a, *, connect: Callable[..., Any] | None = None, credential: C
         return make_ask(client(), stamp=stamp, in_graph=lambda req: _anchor_in_graph(snap, req))
 
     def live_graph_present():
-        if db_factory is None:
-            from falkordb import FalkorDB
-            db = FalkorDB(host=a.host, port=a.port)
-        else:
-            db = db_factory(a.host, a.port)
-        return live_key in list(db.list_graphs())
+        """A read-only probe as the ``raw`` role: no reader role may run ``GRAPH.LIST``, and the server answers ``GRAPH.RO_QUERY`` on an absent key with
+        "empty key". Any other failure (a refused credential, a dead store) is raised, never read as "absent"."""
+        graph = reader_db(a.host, a.port).select_graph(live_key)
+        try:
+            graph.ro_query("MATCH (s:Snapshot) RETURN count(s)", None, _engine_config.QUERY_TIMEOUT_MS)
+        except Exception as exc:                                   # noqa: BLE001 - classified below, never swallowed
+            if type(exc).__name__ == "ResponseError" and "empty key" in str(exc):
+                return False
+            raise
+        return True
 
     def canary_factory():
         """The host-health canary (§1.1.3): the fixed :data:`CANARY_REQUEST` through the engine reader under the pinned deadline."""
-        return lambda: client().raw_query(CANARY_REQUEST, timeout_ms=int(STALL_DEADLINE_S * 1000))
+        return lambda: client().raw_query(CANARY_REQUEST, timeout_ms=round(STALL_DEADLINE_S * 1000))
 
     def resolve_factory(built, snap):
         return client().resolve

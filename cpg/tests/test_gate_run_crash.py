@@ -450,7 +450,7 @@ def test_n4_the_build_gets_a_private_work_root_keys_root_and_audit_dir_under_the
     e = Env(tmp_path)
     e.go()
     kw = e.refresh_kw
-    assert set(kw) == {"work_root", "keys_root", "audit_dir"}
+    assert set(kw) == {"work_root", "keys_root", "audit_dir", "manifest"}
     key = e.marker()["listSha256"]
     cust = e.cust.resolve()
     paths = [Path(kw[k]).resolve() for k in ("work_root", "keys_root", "audit_dir")]
@@ -486,18 +486,25 @@ def test_n4_an_empty_store_passes_and_a_resume_does_not_ask_the_question(tmp_pat
 
 
 def test_n4_the_default_deps_probe_the_store_for_the_live_graph_before_building(tmp_path):
+    """The probe is a read-only query as the ``raw`` role (no reader role may run ``GRAPH.LIST``): the server's "empty key" answer is the absence (D1; the
+    real store is ``test_gate_rehearsal_defects_live.py``)."""
     import argparse
+    from redis.exceptions import ResponseError
     seen = {}
 
     class DB:
         def __init__(self, graphs):
             self.graphs = graphs
 
-        def list_graphs(self):
-            return self.graphs
-
         def select_graph(self, k):
-            return k
+            graphs = self.graphs
+
+            class Graph:
+                def ro_query(self, cypher, params=None, timeout=None):
+                    if k not in graphs:
+                        raise ResponseError("Invalid graph operation on empty key")
+                    return [[1]]
+            return Graph()
     for graphs, expect in ((["ccg_ccg"], True), (["other"], False)):
         a = argparse.Namespace(system="ccg", host="127.0.0.1", port=16420, graph=None)
         deps = R._default_deps(a, db_factory=lambda h, p, g=graphs: (seen.setdefault("hp", (h, p)), DB(g))[1])
@@ -524,7 +531,7 @@ def test_n4_a_real_refresh_through_the_gate_build_writes_nothing_outside_the_cus
 
     def real_refresh(system, repo_root=None, **kw):
         e.refresh_kw = kw
-        return RF.refresh(system, target=target, manifest=world.manifest, repo_root=world.root, built_at="2027-01-01T00:00:00Z", now=TR.NOW, **kw)
+        return RF.refresh(system, target=target, repo_root=world.root, built_at="2027-01-01T00:00:00Z", now=TR.NOW, **{**kw, "manifest": world.manifest})
     e.go(refresh_fn=real_refresh, system=TR.SYSTEM)
     assert not list(dev.rglob("*.json")) and not [p for p in dev.rglob("*") if p.is_file()]                       # the developer's area is untouched
     gate_files = [p for k in ("work_root", "keys_root", "audit_dir") for p in Path(e.refresh_kw[k]).rglob("*") if p.is_file()]

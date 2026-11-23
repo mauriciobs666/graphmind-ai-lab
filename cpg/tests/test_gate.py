@@ -318,7 +318,7 @@ def test_build_at_eval_commit_clones_checks_out_and_calls_refresh(tmp_path):
     calls = []
     dest = tmp_path / "custodian" / "build"
     dest.parent.mkdir()
-    out = G.build_at_eval_commit(ev, dest, repo, refresh_fn=lambda system, repo_root, **kw: calls.append((system, Path(repo_root))))
+    out = G.build_at_eval_commit(ev, dest, repo, refresh_fn=lambda system, repo_root, **kw: (calls.append((system, Path(repo_root))), H.clean_report())[1])
     assert out == dest and H.head(dest) == ev and (dest / "cpg/ccg/a.py").read_text() == "A = 1\n"
     assert calls == [("ccg", dest)]
     assert (repo / "cpg/ccg/a.py").read_text() == "A = 9\n"                 # the user's tree is untouched

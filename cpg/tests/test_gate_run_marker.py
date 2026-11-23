@@ -44,7 +44,7 @@ def test_the_marker_payload_holds_every_pin_the_resume_compares(tmp_path):
     e = Env(tmp_path)
     e.go()
     m = e.marker()
-    assert set(m["pins"]) == {"recordCommit", "harnessSha256", "snapshotId", "prereg", "coreTreeHash", "label", "flowFlag", "withheld", "probeMapSha256", "stall"}
+    assert set(m["pins"]) == {"recordCommit", "harnessSha256", "snapshotId", "prereg", "coreTreeHash", "label", "flowFlag", "withheld", "probeMapSha256", "manifestSha256", "stall"}
     assert m["pins"]["snapshotId"] == H.SNAP and set(m["pins"]["prereg"]) == set(G.PREREG_FIELDS) and m["pins"]["label"] == "first-contact"
     assert m["head"] == H.head(e.repo) and m["startedAt"] and m["gateId"] == GATE and m["records"] == 1 and m["resumes"] == []
 

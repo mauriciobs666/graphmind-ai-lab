@@ -221,3 +221,12 @@ class LoaderRunner:
         if "(s:Symbol {path: $p})" in cypher:
             return [self._row(p) for p in sorted(self.symbols, key=lambda p: p["symbolId"]) if p["path"] == params["p"]]
         raise AssertionError(f"unexpected query: {cypher}")
+
+
+def clean_report(system: str = "ccg", n: int = 1):
+    """The REAL ``ccg.refresh.RefreshReport`` of a complete build: ``n`` units, every one ``fresh`` (what the gate build requires of ``refresh``)."""
+    from ccg.refresh import RefreshReport, UnitReport
+    rep = RefreshReport(system)
+    for i in range(n):
+        rep.units.append(UnitReport(unit_id=f"u{i}", repo_id="r", root_path=f"p{i}", language="python", status="fresh", built_commit="c" * 40))
+    return rep

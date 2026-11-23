@@ -25,6 +25,7 @@ import ast
 import hashlib
 import json
 import math
+import contextlib
 import os
 import re
 import subprocess
@@ -289,10 +290,55 @@ def item_out_of_scope(rec: Mapping, patterns: Sequence[str]) -> bool:
     return any(p and _noise.path_excluded(p, list(patterns)) for p in paths)
 
 
+#: what an operator must do about the store once a build has loaded the live graph into it and the run was refused afterwards (D6): the list is untouched
+#: (no marker), the store is not reusable. Counts and instructions only; shared by every refusal that can follow the build.
+STORE_REMEDY = ("the list is not spent (no marker was taken), but the built graph stays in this store and the store refuses every later fresh run: "
+                "for the next run provision a new empty store (create its ACL users again) and rebuild (a fresh build takes 16-21 minutes)")
+SYSTEM_MANIFEST = Path("cpg") / "ccg" / "system.yaml"
+
+
+def manifest_system(repo: Path) -> str | None:
+    """The ``system`` the working tree's manifest (``cpg/ccg/system.yaml``) declares; ``None`` when it declares none. The manifest is read from the
+    working tree: at ``EVAL_COMMIT`` it does not exist (it was added later), and the gate's preflight has already required ``cpg/`` clean."""
+    doc = _load_yaml(Path(repo) / SYSTEM_MANIFEST)
+    name = doc.get("system") if isinstance(doc, dict) else None
+    return name if isinstance(name, str) else None
+
+
+@contextlib.contextmanager
+def _audit_dir_env(audit_dir):
+    """The sandbox runner (``cpg/sandbox/offline-run.sh``, reached through ``extractors.indexers.run`` and ``extractors.joern.run``) appends to
+    ``$CCG_AUDIT_DIR`` and reads no argument for it: re-point the variable at the private audit directory for the build, then restore it (D3)."""
+    if audit_dir is None:
+        yield
+        return
+    had = os.environ.get("CCG_AUDIT_DIR")
+    os.environ["CCG_AUDIT_DIR"] = str(audit_dir)
+    try:
+        yield
+    finally:
+        if had is None:
+            os.environ.pop("CCG_AUDIT_DIR", None)
+        else:
+            os.environ["CCG_AUDIT_DIR"] = had
+
+
+def require_complete_build(report) -> None:
+    """A gate graph with a unit that is not ``fresh`` (``not-mapped`` or ``stale-kept``) is not the graph the held-out keys were written against: refuse, counts only."""
+    units = getattr(report, "units", None)
+    if not isinstance(units, list) or not units:
+        raise Refusal("the build returned no unit report, so its completeness is unknown: refused. " + STORE_REMEDY)
+    bad = Counter(getattr(u, "status", "?") for u in units if getattr(u, "status", None) != "fresh")
+    if bad:
+        raise Refusal(f"the build is incomplete: {sum(bad.values())} of {len(units)} units are not fresh ("
+                      + ", ".join(f"{n} {k}" for k, n in sorted(bad.items())) + "): refused. " + STORE_REMEDY)
+
+
 def build_at_eval_commit(eval_commit: str, dest: Path, repo: Path | None = None, refresh_fn: Callable[..., Any] | None = None,
                          system: str = "ccg", **refresh_kw) -> Path:
     """The gate build: a LOCAL CLONE of the repository at ``EVAL_COMMIT`` under ``dest`` (the custodian root; never the user's tree),
-    then the P1-20 refresh (``ccg.refresh.refresh``) with that clone as ``repo_root``. ``refresh_fn`` is injected in tests."""
+    then the P1-20 refresh (``ccg.refresh.refresh``) with that clone as ``repo_root``. ``refresh_fn`` is injected in tests. A private ``audit_dir`` in
+    ``refresh_kw`` is also exported to the sandbox runner for the duration (D3), and the build is refused unless every unit came out ``fresh``."""
     if not re.fullmatch(r"[0-9a-f]{40}", eval_commit):
         raise Refusal("EVAL_COMMIT is not a full 40-hex id")
     repo, dest = Path(repo) if repo else _CPG.parent, Path(dest)
@@ -306,7 +352,9 @@ def build_at_eval_commit(eval_commit: str, dest: Path, repo: Path | None = None,
     if refresh_fn is None:
         from ccg import refresh as _r
         refresh_fn = _r.refresh
-    refresh_fn(system, repo_root=dest, **refresh_kw)
+    with _audit_dir_env(refresh_kw.get("audit_dir")):
+        report = refresh_fn(system, repo_root=dest, **refresh_kw)
+    require_complete_build(report)
     return dest
 
 
@@ -1226,9 +1274,26 @@ def score_inputs_check(repo: Path, gate_id: str, pf: Mapping, records: Sequence[
 FORBIDDEN_PORTS = (6379, 6390, 16390, 16400)          # falkordb-dev, the ccg dev store and the other services of this lab: the gate never reads them
 
 
-def snapshot_graph(host: str, port: int | None, graph: str | None, system: str, db_factory: Callable[[str, int], Any] | None = None):
+def reader_db_factory(system: str, credential: Callable[[str, str], str] | None = None) -> Callable[[str, int], Any]:
+    """``(host, port) -> FalkorDB`` opened as the system's READ-ONLY ``raw`` role (``ccg_raw_<system>``: ``GRAPH.RO_QUERY`` on the live key, nothing
+    else; ``ccg.store.acl``), with the credential of the credentials directory. Never the default user (a password-protected store refuses it, D1) and
+    never a role that can write."""
+    from ccg import sysname
+
+    def factory(host: str, port: int):
+        from falkordb import FalkorDB
+        cred = credential
+        if cred is None:
+            from clients.common import _credential as cred
+        return FalkorDB(host=host, port=port, username=sysname.acl_user("raw", system), password=cred(system, "raw"))
+    return factory
+
+
+def snapshot_graph(host: str, port: int | None, graph: str | None, system: str, db_factory: Callable[[str, int], Any] | None = None,
+                   credential: Callable[[str, str], str] | None = None):
     """The read-only graph handle for the gate snapshot. Refuses (before any connection) a missing or forbidden port, a non-loopback host, and an
-    explicit ``graph`` that is not the system's live key; the graph is derived from ``system`` when not given."""
+    explicit ``graph`` that is not the system's live key; the graph is derived from ``system`` when not given. Without a ``db_factory`` the connection is
+    :func:`reader_db_factory`'s."""
     from ccg import sysname
     if host not in ("127.0.0.1", "localhost", "::1"):
         raise Refusal("the gate reads a store on the loopback host only")
@@ -1238,8 +1303,7 @@ def snapshot_graph(host: str, port: int | None, graph: str | None, system: str, 
     if graph is not None and graph != key:
         raise Refusal("--graph and --system disagree")
     if db_factory is None:
-        from falkordb import FalkorDB
-        db_factory = lambda h, p: FalkorDB(host=h, port=p)      # noqa: E731
+        db_factory = reader_db_factory(system, credential)
     return db_factory(host, port).select_graph(key)
 
 
@@ -1268,7 +1332,7 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
     sc.add_argument("--host", default="127.0.0.1")
     sc.add_argument("--port", type=int)
     sc.add_argument("--graph")
-    sc.add_argument("--system", default="ccg")
+    sc.add_argument("--system", help="default: the system the repository's manifest (cpg/ccg/system.yaml) declares")
     a = ap.parse_args(argv)
     try:
         if a.cmd == "verify":
@@ -1283,17 +1347,17 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         pf = (preflight_fn or preflight)(repo, a.gate_id)
         chk = score_inputs_check(repo, a.gate_id, pf, records, flags_given=bool(a.flags), committed_text=committed_text)      # what run checked before its marker
         kind, moved_out = chk["kind"], chk["movedOut"]
+        key = list_key(records)                           # over every record of --lists, withheld strata included (the key gate_run took the marker under)
+        if marker_state(cust, key) != "asked":            # -p1-gate-marker-ml.md §1.1.7: a started or failed run, or none, is never scored; first, so a run that
+            raise Refusal("the run has no marker in state `asked` for this list: score refuses")    # never completed (no run file) is this refusal (D7)
         run = json.loads(within_custodian(Path(a.run), None, "--run").read_text(encoding="utf-8"))
         ctx = require_run_context(run)
-        key = list_key(records)                           # over every record of --lists, withheld strata included (the key gate_run took the marker under)
         if run.get("listKey") != key:
             raise Refusal("the run file is not the run of these lists (its list key differs or is missing)")
-        if marker_state(cust, key) != "asked":            # -p1-gate-marker-ml.md §1.1.7: a started or failed run, or none, is never scored
-            raise Refusal("the run has no marker in state `asked` for this list: score refuses")
         if snapshot is None:
             sys.path.insert(0, str(_HERE))
             from snapshot_export import RoRunner
-            snapshot = StoreSnapshot(RoRunner(snapshot_graph(a.host, a.port, a.graph, a.system)))
+            snapshot = StoreSnapshot(RoRunner(snapshot_graph(a.host, a.port, a.graph, a.system or manifest_system(repo) or "ccg")))
         live = snapshot.snapshot_id()
         if live != run.get("snapshotId"):
             raise Refusal("the live :Snapshot node differs from the run file's pin: score stops")

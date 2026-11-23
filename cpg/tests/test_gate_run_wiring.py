@@ -436,8 +436,8 @@ def test_the_default_deps_build_a_real_refresh_target_without_any_injection(tmp_
     dest = tmp_path / "clone"
     (dest / "cpg/ccg").mkdir(parents=True)
     (dest / "cpg/ccg/system.yaml").write_text("x")
-    deps["refresh_fn"]("gt1", repo_root=dest)
-    assert seen["system"] == "gt1" and seen["repo_root"] == dest and seen["manifest"] == dest / "cpg" / "ccg" / "system.yaml"
+    deps["refresh_fn"]("gt1", repo_root=dest, manifest=tmp_path / "head-manifest.yaml")
+    assert seen["system"] == "gt1" and seen["repo_root"] == dest and seen["manifest"] == tmp_path / "head-manifest.yaml"      # the caller's (the working tree's), never the clone's (D2)
     t = seen["target"]
     assert t.build_conn.user == "ccg_build_gt1" and t.verdict_conn.user == "ccg_verdict_gt1" and t.store.db is t.build_conn
     assert {c[:2] for c in conns} == {("127.0.0.1", 16421)}

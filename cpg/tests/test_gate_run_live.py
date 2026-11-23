@@ -1,7 +1,7 @@
 """P1-32b ``gate_run``, live tier (``pytest -m live``): the ask translation and the ``run`` verb's default wiring against the real engine reader over a
 loader-built graph on a throwaway FalkorDB of this module's own (``test_gate_live.throwaway``: local image, ``--pull never``, 127.0.0.1, labels
 ``ccg-falkordb=1`` ``ccg-falkordb.throwaway=1``, a port from 16420 up, removed afterwards; never 6379/6390/16390/16400). No ACL users: the engine reader and
-the snapshot reader are the default user's; the ``raw`` role snapshot cross-check is injected. Invented data (``engine_helpers.mini_rows``)."""
+the snapshot reader are the default user's (injected; the ACL-role reader on a password-protected store is ``test_gate_rehearsal_defects_live.py``); the ``raw`` role snapshot cross-check is injected. Invented data (``engine_helpers.mini_rows``)."""
 import json
 import types
 
@@ -108,7 +108,7 @@ def test_live_the_resolve_dry_run_and_the_whole_run_verb_over_the_default_wiring
     rec = H.item(1, X, imp, lines=[17])
     e.set_records([rec])
     a = types.SimpleNamespace(host="127.0.0.1", port=store.port, graph=None, system=SYSTEM2)
-    deps = R._default_deps(a, client_factory=lambda system, host, port: store.client)
+    deps = R._default_deps(a, client_factory=lambda system, host, port: store.client, db_factory=lambda h, p: store.db)       # this throwaway has no ACL users: the default user stands in (the role path is test_gate_rehearsal_defects_live.py)
     deps["refresh_fn"] = e.refresh                                   # the build is the throwaway's own graph above; the Target wiring is tested offline
     assert deps["live_graph_present"]() is True                      # round C (N4): the real probe sees that graph, so the guard would refuse a real build here
     deps["live_graph_present"] = lambda: False                       # this test stands the graph up itself and replaces the build with a no-op
@@ -130,7 +130,7 @@ def test_live_a_wrong_id_is_refused_by_the_dry_run_with_counts_only(store, tmp_p
     rec = H.item(1, ghost, H.sym("x.py::g"))
     e.set_records([rec])
     a = types.SimpleNamespace(host="127.0.0.1", port=store.port, graph=None, system=SYSTEM)
-    deps = R._default_deps(a, client_factory=lambda system, host, port: store.client)
+    deps = R._default_deps(a, client_factory=lambda system, host, port: store.client, db_factory=lambda h, p: store.db)       # this throwaway has no ACL users: the default user stands in (the role path is test_gate_rehearsal_defects_live.py)
     snap = deps["snapshot_factory"](None)
     fake = types.SimpleNamespace(node_exists=lambda label, nid: True, symbol=lambda i: {}, config_entry=lambda i: {})
     with pytest.raises(R.ResolveRefusal) as exc:
