@@ -382,6 +382,48 @@ def test_a_url_shaped_http_key_is_normalized_before_the_exact_read():
     assert got.anchors[0].cp_id == "cp1" and r.calls[0] == ("cp_by_key", {"key": "GET /shop/api/health"})
 
 
+STORED_FORM = [("s1", "http", "GET /x/{?}"), ("s2", "http", "GET /y/{#}/z"), ("s3", "http", "GET /w/{}"), ("s4", "http", "GET /x/{")]
+
+
+def _stored_form_reader(rows=STORED_FORM):
+    return ScriptedReader({"cp_by_key": lambda p: [r for r in rows if r[2] == p["key"]],
+                           "cp_keys": lambda p: [(c, k) for c, kd, k in rows if kd == p["kind"]]})
+
+
+@pytest.mark.parametrize("key,cp", [("GET /y/{#}/z", "s2"), ("GET /w/{}", "s3")])
+def test_a_stored_form_http_key_resolves_to_its_own_point_by_the_key_the_store_prints(key, cp):
+    got = A.resolve_contract(_stored_form_reader(), key, kind="http")
+    assert got.status == "resolved" and got.anchors[0].cp_id == cp and got.via == "exact"
+
+
+def test_a_stored_form_key_the_normaliser_mangles_resolves_verbatim_after_the_normalised_read_misses():
+    r = _stored_form_reader([c for c in STORED_FORM if c[0] != "s4"])
+    got = A.resolve_contract(r, "GET /x/{?}", kind="http")
+    assert got.status == "resolved" and got.anchors[0].cp_id == "s1" and got.via == "exact"
+    assert [c[1]["key"] for c in r.calls if c[0] == "cp_by_key"] == ["GET /x/{", "GET /x/{?}"]         # normalised first, then verbatim; no key scan
+
+
+def test_when_the_normalised_and_the_verbatim_key_both_hit_the_normalised_point_wins_deterministically():
+    got = A.resolve_contract(_stored_form_reader(), "GET /x/{?}", kind="http")                       # s4 is stored as "GET /x/{", s1 as "GET /x/{?}"
+    assert got.status == "resolved" and got.anchors[0].cp_id == "s4"
+
+
+def test_a_verbatim_hit_in_another_kind_is_not_a_hit():
+    r = _stored_form_reader([("t1", "topic", "GET /x/{?}")])
+    assert A.resolve_contract(r, "GET /x/{?}", kind="http").status == "unresolved"
+
+
+def test_a_query_gold_key_stays_unresolved_when_no_such_key_is_stored():
+    got = A.resolve_contract(_stored_form_reader(), "GET /x?y=1", kind="http")
+    assert got.status == "unresolved" and got.detail == "no-contract-point"
+
+
+def test_an_unmangled_key_with_no_exact_hit_does_not_repeat_the_same_read():
+    r = _cp_reader()
+    A.resolve_contract(r, "GET /shop/api/items/42", kind="http")
+    assert [c[0] for c in r.calls] == ["cp_by_key", "cp_keys"]
+
+
 def test_contract_options_are_in_cp_id_order_whatever_the_read_order():
     r = _cp_reader([c for c in reversed(CPS)])
     got = A.resolve_contract(r, "GET /shop/api/items/42", kind="http")

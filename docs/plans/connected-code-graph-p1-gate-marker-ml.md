@@ -128,3 +128,16 @@ Source: `docs/plans/connected-code-graph-p1-gates.md` P1-32 step 1: the `flow` s
 
 - §1.3 depends on the engine's cache semantics (answer-spec owner).
 - The `kept` treatment of clusters in a spent `blocked` run (§3) is the conservative reading; the stakeholder may relax it only through a recorded decision.
+
+## Scripts/wiring scope
+
+Verified from the repo (not held-out): P1 defers shell launch/exec facts, the shell URL source, `LAUNCHES` beyond `launchUnit` and the script hop to P2 (`docs/plans/connected-code-graph-p1.md` close list; `-p1-linking.md` P1-17 (6), lines ~563, 954), while `STRATA_GATED` (`cpg/eval/tools/gate.py:56`; §4 item 3 above) still gates `scripts` and `wiring`. The dev gold mirrors the held-out writers' definitions (dev: http 18, mcp 20, scripts 49, wiring 11), so scripts is about half of the non-flow items and a held-out http+mcp subset is unlikely to reach the pooled `H ≥ 75` (held-out stratum counts not read; the custodian states them).
+
+**Ruling: neither A nor C as stated; narrow by withholding (B, mechanism of §4), and do not spend the held-out list until the stakeholder rules.**
+- A is a scope reversal of rulings the stakeholder already took for P2 (reopens P1-10/11b/17, new goldens and answer-spec version, new pre-registered measurements); not a gate-round fix.
+- C as stated spends the one-shot list to confirm a known zero: AC-5 says any miss means a fix and a new blind list, so a pre-stated expected-zero cannot make the verdict anything but `fail`, and the run exposes held-out scripts/wiring items for nothing. Rejected.
+- B by withholding: `scripts` and `wiring` held-out items are not asked, scored or resolved (like flow, §4 rule 2), so they stay blind for P2, when linking exists. Reported as "not delivered at P1, counted at P2" with counts only.
+
+**Consequences.** (1) It is a requirements change (AC-5 reads "at least 75 ... every one appears", AC-2 wiring half, AC-4), so the stakeholder decides via `tico`/`teco`; the harness change (`STRATA_GATED`, `decide_gate`, the `test_gate_fail.py:371` assertion) waits for it. (2) A http+mcp run can be a P1 **interim certificate** only: never reported as "AC-5 passed". If http+mcp counting items are under 75 it is `minimums-not-met`/"present, not gated" and a held-out spend buys only a bound, not a verdict; then the better use is to defer the held-out gate to P2 (one combined gate over all four strata, one spend) and close P1 on dev plus the rehearsal. (3) Reuse: a spent http/mcp list contaminates those items for P2 (the engine changes after it), so P2 needs fresh http/mcp items anyway.
+
+**Pre-register before any run:** the gated set (`http, mcp`) and the withheld set with the reason; the withheld counts per stratum; the expected-nonzero claim only for the gated strata; the interim label and the wording "AC-2/AC-4/AC-5 scripts and wiring halves: not delivered at P1"; Wilson bounds computed over gated items only (no pooled 159); the 75 and 8 floors stated against the gated set, with the `minimums-not-met` outcome pre-declared as "not a pass, not a miss". Separately and independently of the choice: add a dev-gold pre-gate probe (a gated stratum with 0 dev hits blocks the preflight unless listed as expected-zero), which would have caught this before the rehearsal.

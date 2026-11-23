@@ -297,17 +297,24 @@ def resolve_contract(reader: Reader, key: str, kind: str | None = None) -> Resol
 
     An ``http`` key is normalized first (``ccg.linker.matchers.http_key``, the consumer form), as the linker normalizes a consumer's. Without a ``kind`` an unstored key
     is unresolved: the key scan reads one kind.
+
+    A key in *stored* form (what an answer prints: ``GET /x/{?}``, ``GET /x/{#}/y``) is not a raw URL and normalization mangles it (``GET /x/{``), so when the
+    normalized read has no exact hit and differs from the asked key, the asked key is read verbatim as a stored key (same kind filter) before the template fallback.
+    Order is fixed: normalized, then verbatim, then templates. If both reads would hit different points the normalized one wins and the verbatim one is never read.
+    A ``?query`` stored-form key is not stored (the build drops the query), so it stays ``unresolved`` (``no-contract-point``).
     """
     key, kind = _text(key, "key"), _kind(kind)
+    asked = key
     if kind == "http":
         try:
             key = http_key(key, "consumer")
         except ValueError:
             raise AnchorError("key is not a usable http key") from None
-    exact = [ContractAnchor(*_row("cp_by_key", r, "sss")) for r in reader.read("cp_by_key", {"key": key})]
-    exact = sorted((a for a in exact if kind is None or a.kind == kind), key=lambda a: a.cp_id)
-    if exact:
-        return _decide(exact, via="exact")
+    for read_key in (key,) if key == asked else (key, asked):         # normalized first; the verbatim stored-form retry only when normalization changed the key
+        exact = [ContractAnchor(*_row("cp_by_key", r, "sss")) for r in reader.read("cp_by_key", {"key": read_key})]
+        exact = sorted((a for a in exact if kind is None or a.kind == kind), key=lambda a: a.cp_id)
+        if exact:
+            return _decide(exact, via="exact")
     if kind is None:
         return Resolution("unresolved", detail="no-contract-point")
     matcher = contract_matcher(kind)
