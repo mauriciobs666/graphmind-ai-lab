@@ -246,8 +246,14 @@ def _check_relative(path: str, what: str) -> None:
 
 
 def load_manifest(path: str | Path) -> Manifest:
+    return load_manifest_text(Path(path).read_text())
+
+
+def load_manifest_text(text: str) -> Manifest:
+    """Parse and check a manifest from its text; `load_manifest` reads a path and delegates here. The broker calls it
+    with bytes it already verified (``docs/plans/connected-code-graph-egress-spec5.md`` section 1), never re-reading."""
     try:
-        doc = yaml.load(Path(path).read_text(), Loader=_StrictLoader)
+        doc = yaml.load(text, Loader=_StrictLoader)
     except yaml.YAMLError as exc:
         raise ManifestError(f"manifest is not valid YAML: {exc}") from None
     if not isinstance(doc, dict):

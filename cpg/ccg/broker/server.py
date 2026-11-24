@@ -2,10 +2,12 @@
 section 2.0-2.6, 3, 5.
 
     python -m ccg.broker.server --system <manifest.yaml> [--system ...] [--socket <path>]
+        [--require-owner-protected] [--key-holder-socket <path> --holder-uid <uid> [--holder-cred <file>]]
 
-Environment: ``CCG_AUDIT_DIR`` only. Exit codes: 0 clean stop, 64 usage or configuration error, 69 precondition
-failure (lock held, live socket, directory or audit-file check). `Broker` is the socket-free core (``handle`` maps one
-request message to one reply); `BrokerServer` is the Unix-socket listener; `main` is the process.
+Environment: ``CCG_AUDIT_DIR`` only. Exit codes: 0 clean stop, 64 usage or configuration error (incl. a malformed
+credential), 69 precondition failure (lock held, live socket, directory, audit-file, owner-protection or credential-file
+check). `Broker` is the socket-free core (``handle`` maps one request message to one reply); `BrokerServer` is the
+Unix-socket listener; `main` is the process. The hosted forward's start-up is ``docs/plans/connected-code-graph-egress-spec5.md`` s1.
 """
 # The closed-environment re-exec must run before anything else is imported, so a planted module in the working
 # directory or on PYTHONPATH can never be imported by the broker (section 2.0). Hence the early block, and E402 below.
@@ -50,6 +52,7 @@ import argparse
 import base64
 import fcntl
 import hashlib
+import re
 import signal
 import socket
 import stat
@@ -63,8 +66,9 @@ from urllib.parse import urlsplit
 from ccg import manifest as manifest_mod
 from ccg.broker import addr as addr_mod
 from ccg.broker import audit as audit_mod
-from ccg.broker import framing, policy, structured
+from ccg.broker import framing, ownerprot, policy, structured
 from ccg.broker.audit import AuditUnwritable, AuditWriter, PreconditionError
+from ccg.broker.holderclient import HolderClient
 from ccg.broker.runs import RunTable
 
 EXIT_OK, EXIT_USAGE, EXIT_PRECONDITION = 0, 64, 69
@@ -350,18 +354,58 @@ class _Parser(argparse.ArgumentParser):
         return EXIT_USAGE
 
 
-def load_systems(paths: list[str], iface: Callable[[], addr_mod.IfaceData]) -> dict[str, policy.LoadedSystem]:
-    """Each manifest through ``load_manifest`` (S1-S5), then S6; `manifest_mod.ManifestError` names the file."""
+class UsageError(Exception):
+    """A start-up argument or credential content error: the broker exits 64."""
+
+
+def _check_hosted_entries(egress, iface: Callable[[], addr_mod.IfaceData]) -> list[str]:
+    """Resolution-free static check of ``egress.hosted[]`` (spec5 s1): https, and an IP-literal host not forbidden by
+    ``addr._forbidden`` with ``private_ok`` false (``privateAddress`` has no effect on R7, the holder's ``allow_private``
+    governs). A name host passes: only the holder can resolve it. One message per violation."""
+    bad, data, local_addrs = [], None, None
+    for e in egress["hosted"]:
+        parts = urlsplit(e["endpoint"])
+        if parts.scheme != "https":
+            bad.append(f"hosted endpoint {e['endpoint']} ({e['id']}) must be https")
+            continue
+        ip = addr_mod._literal(parts.hostname or "")
+        if ip is None:
+            continue
+        if data is None:  # the interface data is read only for a hosted IP literal
+            data = iface()
+            local_addrs = {a for a in (addr_mod._literal(urlsplit(le["endpoint"]).hostname or "")
+                                       for le in egress["local"]) if a is not None}
+        if addr_mod._forbidden(ip, data, local_addrs, False):
+            bad.append(f"hosted endpoint {e['endpoint']} ({e['id']}) is a forbidden address literal")
+    return bad
+
+
+def load_systems(paths: list[str], iface: Callable[[], addr_mod.IfaceData], *, require_owner_protected: bool = False,
+                 trusted_uids: "frozenset[int]" = frozenset({0}), check_hosted_entries: bool = True,
+                 ) -> dict[str, policy.LoadedSystem]:
+    """Each manifest through the manifest checks (S1-S5), then S6 and, unless ``check_hosted_entries`` is False (a
+    Python keyword seam for loopback-hosted test fixtures; no option or variable reaches it), the static hosted-entry
+    check. With ``require_owner_protected`` the manifest is read once through `ownerprot` and parsed from those verified
+    bytes; a failure there is `PreconditionError` (exit 69). `manifest_mod.ManifestError` names the file."""
     systems: dict[str, policy.LoadedSystem] = {}
     for p in paths:
         try:
-            m = manifest_mod.load_manifest(p)
+            if require_owner_protected:
+                raw = ownerprot.require_owner_file(p, trusted_uids)
+                try:
+                    m = manifest_mod.load_manifest_text(raw.decode("utf-8"))
+                except UnicodeDecodeError:
+                    raise manifest_mod.ManifestError("manifest is not valid UTF-8") from None
+            else:
+                m = manifest_mod.load_manifest(p)
             bad = addr_mod.check_local_entries(m.egress, iface)
+            if check_hosted_entries:
+                bad += _check_hosted_entries(m.egress, iface)
             if bad:
                 raise manifest_mod.ManifestError("; ".join(bad))
             ls = policy.LoadedSystem.from_manifest(m)
         except addr_mod.IfaceUnavailable as exc:
-            raise manifest_mod.ManifestError(f"{p}: S6 needs the interface data: {exc}") from None
+            raise manifest_mod.ManifestError(f"{p}: the checks need the interface data: {exc}") from None
         except (manifest_mod.ManifestError, OSError) as exc:
             raise manifest_mod.ManifestError(f"{p}: {exc}") from None
         if ls.system in systems:
@@ -370,20 +414,92 @@ def load_systems(paths: list[str], iface: Callable[[], addr_mod.IfaceData]) -> d
     return systems
 
 
-def main(argv: list[str] | None = None) -> int:
-    argv = sys.argv[1:] if argv is None else argv
+_HEX64 = re.compile(r"[0-9a-fA-F]{64}")
+
+
+def default_holder_cred() -> str:
+    return str(Path(passwd_home()) / ".config" / "llmgateway" / "callers" / "broker.cred")
+
+
+def read_credential(path: str) -> bytes:
+    """The broker's holder credential (spec5 s1): read here, once, by `main`, never again. Opened ``O_NOFOLLOW``, a
+    regular file owned by this uid, ``mode & 0o077 == 0``, one link (else `PreconditionError`, exit 69); content is the
+    hex of exactly 32 bytes (else `UsageError`, exit 64). No message carries any byte of the content."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError as exc:
+        raise PreconditionError(f"{path}: cannot open the holder credential: {exc.strerror}") from None
+    try:
+        st = os.fstat(fd)
+        for ok, why in ((stat.S_ISREG(st.st_mode), "is not a regular file"),
+                        (st.st_uid == os.getuid(), "is not owned by the broker's uid"),
+                        (not st.st_mode & 0o077, "is accessible to group or other (mode must be 0600)"),
+                        (st.st_nlink == 1, "has more than one link")):
+            if not ok:
+                raise PreconditionError(f"{path}: the holder credential {why}")
+        raw = os.read(fd, 4097)
+    except OSError as exc:
+        raise PreconditionError(f"{path}: cannot read the holder credential: {exc.strerror}") from None
+    finally:
+        os.close(fd)
+    try:
+        text = raw.decode("ascii").strip() if len(raw) <= 4096 else ""
+    except UnicodeDecodeError:
+        text = ""
+    if not _HEX64.fullmatch(text):
+        raise UsageError(f"{path}: the holder credential must be the hex of exactly 32 bytes")
+    return bytes.fromhex(text)
+
+
+def _parse(argv: list[str]) -> argparse.Namespace:
     ap = _Parser(prog="ccg-broker", description=__doc__.split("\n\n")[0])
     ap.add_argument("--system", action="append", required=True, metavar="MANIFEST")
     ap.add_argument("--socket", metavar="PATH")
+    ap.add_argument("--key-holder-socket", metavar="PATH")
+    ap.add_argument("--holder-uid", type=int, metavar="UID")
+    ap.add_argument("--holder-cred", metavar="FILE")
+    ap.add_argument("--require-owner-protected", action="store_true")
+    args = ap.parse_args(argv)
+    if args.key_holder_socket is None:
+        for given, name in ((args.holder_uid is not None, "--holder-uid"), (args.holder_cred is not None, "--holder-cred")):
+            if given:
+                ap.error(f"{name} is valid only with --key-holder-socket")
+    else:
+        if args.holder_uid is None:
+            ap.error("--key-holder-socket needs --holder-uid")
+        if not args.require_owner_protected:
+            ap.error("--key-holder-socket needs --require-owner-protected")
+        if args.holder_uid < 0 or args.holder_uid == os.getuid():
+            ap.error("--holder-uid must be a uid other than the broker's own")
+    return args
+
+
+def main(argv: list[str] | None = None, *, trusted_uids: "frozenset[int]" = frozenset({0}),
+         check_hosted_entries: bool = True) -> int:
+    """``trusted_uids`` and ``check_hosted_entries`` are Python keyword seams for tests: no option or environment
+    variable reaches either, and the process entry point always runs with ``{0}`` and the check on."""
+    argv = sys.argv[1:] if argv is None else argv
     try:
-        args = ap.parse_args(argv)
+        args = _parse(argv)
     except SystemExit as exc:
         return exc.code if isinstance(exc.code, int) else EXIT_USAGE
+    hosted = None
     try:
-        systems = load_systems(args.system, addr_mod.read_interfaces)
+        if args.key_holder_socket is not None:  # once, here: `reexec_if_needed` ran in the `__main__` guard before `main`
+            secret = read_credential(args.holder_cred or default_holder_cred())
+            hosted = HolderClient(args.key_holder_socket, args.holder_uid, secret)
+            del secret
+        systems = load_systems(args.system, addr_mod.read_interfaces, require_owner_protected=args.require_owner_protected,
+                               trusted_uids=trusted_uids, check_hosted_entries=check_hosted_entries)
+    except UsageError as exc:
+        print(f"ccg-broker: usage error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
     except manifest_mod.ManifestError as exc:
         print(f"ccg-broker: configuration error: {exc}", file=sys.stderr)
         return EXIT_USAGE
+    except PreconditionError as exc:
+        print(f"ccg-broker: precondition failed: {exc}", file=sys.stderr)
+        return EXIT_PRECONDITION
     lock_fd = -1
     try:
         bdir = Path(args.socket).parent if args.socket else Path(passwd_home()).joinpath(*STATE_REL)
@@ -398,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
         except OSError:
             raise PreconditionError(f"another broker holds {bdir / 'broker.lock'}") from None
         audit = AuditWriter(os.environ.get("CCG_AUDIT_DIR") or audit_mod.DEFAULT_AUDIT_DIR)
-        server = BrokerServer(Broker(systems, audit), sock_path)
+        server = BrokerServer(Broker(systems, audit, hosted_exchanger=hosted), sock_path)
     except PreconditionError as exc:
         print(f"ccg-broker: precondition failed: {exc}", file=sys.stderr)
         return EXIT_PRECONDITION
