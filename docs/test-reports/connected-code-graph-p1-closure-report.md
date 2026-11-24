@@ -8,19 +8,17 @@ Plan: `docs/plans/connected-code-graph-p1-gates.md` section "P1-38 · phase exit
 
 ## 1. How to read this report
 
-- **Observed** = a command run for this report (section 3, with exit status, cwd `cpg/`, HEAD `dacc6958`). **Cited** = read from the named file and not re-derived; the file owns the figure. Every figure below is one of the two, and cited figures say so.
-- Status vocabulary: **closed**; **closed for a stated sub-scope**; **reported not closed, because ...**. No AC is marked closed by step completion alone.
-- The live tiers (throwaway FalkorDB, Docker sandbox, real model) were **not** re-run here: that would start containers and models (environment mutation) and is hours of wall time. Their figures are cited from the reports of the runs that executed them.
-- This report decides nothing. The forks that need a stakeholder or `teco` decision are in section 6.
+- **Observed** = a command run for this report (section 3, exit status, cwd `cpg/`, HEAD `dacc6958`). **Cited** = read from the named file and not re-derived; the file owns the figure. This includes the live runs (closing items, AC-8 harness, fixture and AC-level drivers) and the coordinator's full-suite run: they were executed by other agents and I re-ran nothing live.
+- Status vocabulary: **closed**; **closed for a stated sub-scope**; **reported not closed, because ...**. Stakeholder decisions are recorded in the words the coordinator gave them.
+- This report decides nothing; decisions already taken are recorded in section 6, what stays open is stated there.
 
 ## 2. Verdict
 
-**Of the 16 AC rows: 2 closed (AC-18, AC-21); 7 closed for a stated sub-scope (AC-6 three of four kinds, AC-9 code-snapshot half, AC-9b bound crossings, AC-11 renderers, AC-16 with a sufficiency-only raw leg, AC-17 two of four groups, AC-25 data-flow half); 7 reported not closed (AC-1, AC-2, AC-4, AC-5 in every stratum, AC-8 part 1 not run, AC-10 unobserved, AC-24 local model not met).** AC-5's held-out gate is deferred to P2 by stakeholder decision (2026-11-23). No new red in R1 to R8; the full-suite run was incomplete (section 3). Details per AC in section 4.
+**Of the 16 AC rows: 4 closed (AC-10 flagged "behaviour unobserved", AC-11, AC-18 with its reading recorded, AC-21); 8 closed for a stated sub-scope (AC-1 17/18, AC-2 MCP half, AC-6, AC-9, AC-9b, AC-16 with a sufficiency-only raw leg, AC-17 two of four groups, AC-25 data-flow half); 4 reported not closed (AC-4, AC-5 in every stratum, AC-8 part 1, AC-24 local model).** AC-5's held-out gate is deferred to P2 (user, 2026-11-23). No new red: R1 to R8 observed green, and the coordinator's full default suite (R9, cited) has exactly the nine known reds. Details per AC in section 4.
 
 ## 3. Runs observed for this report
 
 All from `cpg/` with `.venv/bin/python -m pytest -q -p no:cacheprovider`, default markers (live tier deselected), HEAD `dacc6958` (the work tree differs from HEAD only in three untracked `docs/` files of another feature). Output logs: session scratchpad `cl/*.log` (not committed).
-
 | Run | Files | Exit | Last line |
 |---|---|---|---|
 | R1 AC driver (offline tier) | `tests/test_fixture_gate_p1_ac.py tests/test_fixture_gate_p1.py` | 0 | `11 passed, 120 deselected` (the 120 are the live tier) |
@@ -31,43 +29,41 @@ All from `cpg/` with `.venv/bin/python -m pytest -q -p no:cacheprovider`, defaul
 | R6 ACL and at-rest | `tests/test_acl_unit.py tests/test_atrest.py` | 0 | `273 passed` |
 | R7 fixtures and manifests | `tests/test_fixtures.py` | 0 | `80 passed, 3 deselected` |
 | R8 AC-5 gate harness | `tests/test_gate.py test_gate_score.py test_gate_run.py test_gate_fail.py` | 0 | `309 passed` |
-| R9 full default suite | `cpg/` whole | 143 (terminated by me at about 42%, after about 15 min, on a host shared with other agents' suites) | progress lines only; no summary line exists |
+| R9 full default suite (**cited**, run by the coordinator on the committed tree, not by me) | `cpg/`, `pytest tests`, live tiers deselected | 1 | 9 failed, 17330 passed, 10 skipped, 531 deselected, 1 xfailed, 2026-11-24 22:01 (ledger 2026-11-24) |
 
-R9 is therefore **not a result**: its progress log shows one `F` at about 29% of the collected tests, not identified (no failure summary was produced, so it could be a known red or a new one). Rerun on a quiet host to attribute it. R1 to R8 are complete and green.
-
-**New reds: none seen in R1 to R8; R9 incomplete (one unidentified `F`).** The known reds the brief lists (`test_p1_11b_*`, leaf-harness survivor-tell, package-data-glob, `test_scip_parse` x4, `test_units` golden, `test_ac8_lib` flake, `test_queries.sh` section 14.8) are not P1's. `test_queries.sh` (falkor-chat, live FalkorDB) was not run: out of this component and needs the shared instance.
+My own earlier attempt at R9 was stopped at about 42% and is superseded by the coordinator's complete run. The nine reds are, per the ledger entry (names cited, not re-observed by me): the `test_ac8_lib` signal flake, `test_p1_11b_*` (the `.mcp.json` `ccg` entry), the leaf-harness survivor-tell, the package-data-glob, `test_scip_parse` x4, the `test_units` golden. That is exactly the known list: **no new red**. A concurrent devops build touched `ac8` files during that run (ledger). `test_queries.sh` (falkor-chat, shared FalkorDB) was not run: out of this component.
 
 ## 4. AC-closure table
 
 Closing steps are the plan's step ids (`docs/plans/connected-code-graph-p1.md` §3 table, `-p1-gates.md`). Evidence paths are repo paths; "cited" figures are not re-derived here.
 
-### AC-1 (HTTP): **reported not closed, because the plan's own closing item (P1T-20 on dev anchors) was never executed**
+### AC-1 (HTTP): **closed for a stated sub-scope: 17 of 18 dev items listed; the one miss (DEF-1) is carried to P2**
 
-- Closing step per plan: P1-42, item P1T-20 ("closed on P1-42 alone", `docs/test-plans/connected-code-graph-p1.md` §5, §7). The P1-42 driver `cpg/tests/test_fixture_gate_p1_ac.py` does not contain P1T-19/P1T-20; the report says so: `docs/test-reports/connected-code-graph-p1-report.md` P1-42 O-4 ("Not run ... P1T-19/P1T-20").
-- Indicative evidence only (cited, dev anchors, optimistic by the plan's own words): proving-repo store, the 8 dev script-to-endpoint items link to their gold provider symbol 8 of 8 on both instruments (`docs/test-reports/connected-code-graph-p1-report.md` §3; strict gold-line span 3 of 8 = gold drift D7, not an engine miss). Gate-harness rehearsal on dev anchors, real engine, http hits 16/17 (healthy runs) and 17/18 (flow-true plant) (`docs/test-reports/connected-code-graph-p1-gate-rehearsal-report.md` item 4; this was before round E and the D5 engine fix).
-- Fixture-level (cited): the HTTP walk and Link rows pass, 81 of 81 P1 rows, closed world 0 unplanted (`docs/test-reports/connected-code-graph-p1-report.md` "P1-41 dispatch C"; test file `cpg/tests/test_fixture_gate_p1.py`; offline tier observed R1).
-- Fork: section 6 Q1.
+- Closing step: P1-42, item P1T-20. Cited, executed (`docs/test-reports/connected-code-graph-p1-closing-items-report.md` §3, qa `a35970ea267d82d24`, committed `d1542439`; HEAD `57be01a2`, own throwaway store, proving-system build 1335 of 1335 units `fresh`, 1772 s): 12 dev anchors, **17 of 18** items listed (`confirmed` 6, `possible` 11, all distance 1), 0 chain violations over the 17 hits; results `cpg/eval/results/p1t-20/p1t20.json`; two runs gave identical per-item outcomes. Dev anchors were used for development: not AC-5 evidence.
+- Under the plan's pass rule (every dev item, no recall floor) this is a fail. Stakeholder decision (2026-11-24): AC-1 closed for sub-scope, DEF-1 carried to P2. DEF-1: the miss is a shell/Markdown `curl` URL source (`claude/teco/coordination-techniques.md` line 25, anchor `GET /health`), the P2-deferred class (ledger characterisation; the closing-items report itself made no root-cause claim, only that no http Link starts from that file).
+- Fixture-level (cited): HTTP rows pass, 81 of 81 P1 rows, closed world 0 unplanted (`docs/test-reports/connected-code-graph-p1-report.md` "P1-41 dispatch C"; `cpg/tests/test_fixture_gate_p1.py`, offline tier observed R1).
 
-### AC-2 (MCP + wiring): **reported not closed — MCP half not executed under its pass rule, wiring half an engine gap deferred to P2**
+### AC-2 (MCP + wiring): **closed for a stated sub-scope: MCP half closed (20 of 20); wiring half not closed (P2)**
 
-- MCP half: same P1T-20 gap as AC-1. Indicative (cited): rehearsal mcp hits 20/20 and 19/19 on dev anchors (`-gate-rehearsal-report.md` item 4); fixture MCP Links pass in the 81 rows.
-- Wiring half: dev wiring 0/11 (cited, `docs/reviews/connected-code-graph-p1-gate-zero-hit-rca.md`: engine builds no `config` item for a config entry that names a tool/server and no hook-launches-script hop at P1; `LAUNCHES` beyond `launchUnit` is P2). The `kiro/`, `mcp-monitor/` configuration wiring in the AC text is therefore not listed. Stakeholder decision 2026-11-23 (ledger): carried to P2.
+- MCP half, cited (closing-items report §3): 3 anchors, **20 of 20** dev items listed (`possible`, distance 1), PASS.
+- Wiring half: 0 of 3 in the plan's filtered sample, 0 of 7 asked in the stratum (4 items of one unit anchor not asked: that needs the custodian-side probe); no `config` item is ever listed (cited; `docs/reviews/connected-code-graph-p1-gate-zero-hit-rca.md`: engine gap, `LAUNCHES` beyond `launchUnit` is P2). The `kiro/`, `mcp-monitor/` wiring in the AC text is not listed. Carried to P2 (stakeholder 2026-11-23).
 
-### AC-4 (scripts): **reported not closed, because shell script-by-path invocation and prompt-to-script links are not built at P1**
+### AC-4 (scripts): **reported not closed, because shell script-by-path invocation and prompt-to-script links are not built at P1 (P2)**
 
-- Dev scripts 0/49 items (0/46 counting, 0/21 anchors) on the rehearsal (cited: `-gate-rehearsal-report.md` item 4; RCA above: 0 of 1703 answer items are non-`symbol`; the same RCA says the root cause is an engine gap plus a plan inconsistency, not a harness defect). Same P1T-20 gap. Carried to P2 by the 2026-11-23 stakeholder decision. The launch-chain mechanism itself works on fixtures (`BOUND_BY` 10 on the fixture build, cited from `docs/test-reports/connected-code-graph-p1-report.md` §2).
+- Cited (closing-items report §3): 0 of 1 in the plan's filtered sample, **0 of 49** in the scripts stratum (22 of 22 anchors asked); 20 of 22 script anchors answer with zero items; no `config` item and no `Link.bound[]` in the 54 answer items (DEF-2, the known engine gap, reproduced on HEAD). The launch-chain mechanism works on fixtures (`BOUND_BY` 10 on the fixture build, `docs/test-reports/connected-code-graph-p1-report.md` §2).
 
 ### AC-5 (never miss), per stratum: **reported not closed at P1 — the held-out gate is deferred to P2 by stakeholder decision (2026-11-23)**
 
 No held-out item has been exposed to the gate: no `ac5-gate-1` record exists in `cpg/eval/preregistration.jsonl` (grep count 0, observed), P1-37 was not run and P1-43 does not apply (ledger 2026-11-23). The AC text requires >= 75 counting items; the http+mcp pair has **72** counting items in 19 clusters (3 short), scripts and wiring are not linkable at P1 (cited: `docs/test-reports/connected-code-graph-p1-heldout-strata-counts-report.md`; manifest `cpg/eval/heldout-manifest.json`, `verify` exit 0, checked 77, mismatches 0, cited).
 
-| Stratum | Held-out items (cited) | Dev items and dev hits on the rehearsal (cited, optimistic, dev was used for development) | Status |
+| Stratum | Held-out items (cited) | Dev items and dev hits, P1T-20 on the HEAD build (cited, optimistic, dev was used for development) | Status |
 |---|---|---|---|
-| http | 26 (15 clusters) | 18; hits 16/17 healthy, 17/18 flow-true | not measured at P1 (gate deferred); dev only |
-| mcp | 46 (4 clusters; lumpy) | 20; hits 20/20 healthy, 19/19 flow-true | not measured at P1; dev only |
+| http | 26 (15 clusters) | 18; **17/18** | not measured at P1 (gate deferred); dev only |
+| mcp | 46 (4 clusters; lumpy) | 20; **20/20** | not measured at P1; dev only |
 | scripts | 79 (36 clusters) | 49; **0/49** | engine gap (RCA); not delivered at P1, P2 |
-| wiring | 8 (5 clusters; exactly the floor of 8, "screened" not "certified") | 11; **0/11** | engine gap (RCA); not delivered at P1, P2 |
-| flow | 99 (12 clusters; 0 counting under flag false) | 28; hits 9/28 only in the flow-true plant | **withheld**: `python.flowAvailable` false (`FALSE:measured`), see below |
+| wiring | 8 (5 clusters; exactly the floor of 8, "screened" not "certified") | 11 in the file; **0/7** asked | engine gap (RCA); not delivered at P1, P2 |
+| flow | 99 (12 clusters; 0 counting under flag false) | 28; not run (flag false) | **withheld**: `python.flowAvailable` false (`FALSE:measured`), see below |
+
 
 - Flow stratum: reported not closed, flow-unavailable. P1-34 concluded `FALSE:measured`: decision cell 296/334 = 0.8862, Wilson 95% [0.8477, 0.9160], rule 20y >= 19G failed (M = -389), no registry flip (cited: `cpg/eval/decisions/ccg-p1-flow-python-v2-decision.json`; review `docs/reviews/connected-code-graph-p1-34-impl.md`). JavaScript was not measured (plan).
 - Closing steps that did complete (harness, not the gate): P1-32a verbs (`docs/test-reports/connected-code-graph-p1-32a-report.md`), P1-32b `gate.py`/`gate_run.py` gated at P1 (analyst Pass 5, approve with suggestions; `docs/reviews/connected-code-graph-p1-32b-impl.md`), dress rehearsal RED then fixed by rounds E and F (`-gate-rehearsal-report.md`, ledger 2026-11-22/23). Harness tests observed green: R8, 309 passed. Not re-run after round E: the no-workaround dev rehearsal (the delegate's own rerun only), as the ledger says it is P2's when the list is spent.
@@ -78,13 +74,14 @@ No held-out item has been exposed to the gate: no `ac5-gate-1` record exists in 
 
 - Closing steps: P1-41, P1-42 (+ P1-55, P1-56, P1-57). Evidence: `cpg/tests/test_fixture_gate_p1_ac.py`, `cpg/tests/test_fixture_gate_p1.py`; `docs/test-reports/connected-code-graph-p1-report.md` "P1-42" table (cited, live run on a throwaway): URL 3 of 3 (`possible`/`unknown-key`), example config 2 of 2 (`possible`/`example-config`), prompt mention 3 of 3 (`possible`/`prompt-mention`); none `confirmed`, none with a `flow-unavailable` reason. Offline checkers observed green (R1).
 - Dynamic import: 0 `library_api` contract points, 0 Links, 0 `CONSUMES` from `plugins/loader.py::load_plugin`; `AC6-DYN-1..3` and `TW-1` moved to P2 (user decision Q-DYN B, 2026-11-21): **not met at P1**.
-- User decision Q-AC6 (2026-11-20): PM-3 = B (Markdown list item, floor 3 kept); EX-1 = B' (a Markdown mention `mcp__fx-svc-remote__list_orders` bound through a second `.mcp.example.json` URL entry, floor 2 kept, no engine change). Caveat: the reason shows only because the same document's plain mention shares the Link (ledger 2026-11-20; `docs/reviews/connected-code-graph-p1-56-impl.md` observes the two added Links, 84 to 86). The launch x possible matrix cell is empty at P1 (an exception recorded; P2 re-adds). Example config has 2 instances at P1 (EX-1, EX-4); the ledger of 2026-11-10 cites the evaluation protocol §12.2 floor as >= 3 instances in 3 shapes (the third, AC6-EX-3, gates P3): stated, not hidden.
+- User decision Q-AC6 (2026-11-20): PM-3 = B (Markdown list item, floor 3 kept); EX-1 = B' (a Markdown mention `mcp__fx-svc-remote__list_orders` bound through a second `.mcp.example.json` URL entry, floor 2 kept, no engine change). Caveat: the reason shows only because the same document's plain mention shares the Link (ledger 2026-11-20; `docs/reviews/connected-code-graph-p1-56-impl.md` observes the two added Links, 84 to 86). The launch x possible matrix cell is empty at P1 (an exception recorded; P2 re-adds). Example config has 2 instances at P1 (EX-1, EX-4); the ledger of 2026-11-10 cites the evaluation protocol §12.2 floor as >= 3 instances in 3 shapes (the third, AC6-EX-3, gates P3): stated, not hidden. Stakeholder decision (2026-11-24 ledger): AC-6 example config at 2 instances accepted at P1.
 
-### AC-8 part 1 (configurable): **reported not run: host-probe allowance declined for now (stakeholder, 2026-11-23: "no, later"); carried until the user allows it. P1-40 has NOT been run; harness built, vacuous rows by design**
+### AC-8 part 1 (configurable): **reported not closed: harness live-tested 72/72 including the authorised host probes; the real-component run (P1-40) is carried to P2**
 
-- P1-40 needs the user's explicit allowance for the host-address probes `test_ac8.sh` 3 to 5; the stakeholder declined it for now (coordinator message, 2026-11-23, "no, later"; earlier ledger 2026-11-12: "ok go ahead" was not treated as it). Nothing in this report ran `test_ac8.sh` or any host-address or `.invalid` DNS probe; only the offline Python files of R3 ran. No P1-40 report exists in `docs/test-reports/`, no results directory for it under `cpg/eval/results/` (observed `ls`), and the ledger has no delivery entry for it.
-- What closed: P1-29 broker core (`docs/reviews/connected-code-graph-p1-29.md`, `-29-security.md`) and the P1-31 harness (`docs/reviews/connected-code-graph-p1-31.md` Pass 2, approve with suggestions; `-31-security.md`; `cpg/sandbox/ac8/`). Harness unit tier observed green: R3, 360 passed. Stand-in runs only (delegate-reported, cited from the ledger 2026-11-12): live subsets 1, 2, 6; the analyst's N-A: a pass is unreachable from `run.sh` with the store stand-in, so "passes only with zero connections" is met at the incomplete level only.
-- Vacuous or not exercised under option C (git-fetch deferred, Q1 = C): the `R2` clauses and the proxied rows are vacuous and must be reported as such; the git-remote fetch, hosted-default dependency download and "hosted override refused in a mixed system" paths have no run behind them. Q-E (how AC-8 closes without the fetch path) is unanswered (section 6).
+- Cited (`docs/test-reports/connected-code-graph-p1-ac8-report.md`, devops `a2d545b24797ca5b0`, committed `4a83e430`; I did not re-run `test_ac8.sh` or any host probe): `cpg/sandbox/tests/test_ac8.sh` in full, **72 passed, 0 failed, 0 not run**, exit 0, with the user-authorised host-address probes (cases 3 to 5) and `.invalid` DNS; 0 `conn` records, no leak, cleanup verified. (History: "no, later" on 2026-11-23, then the user ran them after all, ledger 2026-11-23.) Observed here: the offline Python tier, R3, 360 passed.
+- The real P1-40 run was not possible: `cpg/sandbox/ac8/run.sh` lacks the four spec §8.1 features (a real store with `REPLICAOF`/`MIGRATE`/`MODULE` disabled, probing the real P1-25/P1-26 containers, a fixed-address probe container, an exit-0 `selfTest == []` run); the real components have no container image and the local model is not reachable from a no-route network (ledger 2026-11-24). Stakeholder decision: carry P1-40 to P2.
+- Rows (cited, §3 of that report): 0 computed on real components, rows 8.2/8.4/8.12 vacuous (8.13 mostly), 13 rows unrun; the test-3 "pass" column is stand-in evidence that the harness computes rows, not a result for the real components. Under option C (git fetch deferred) the `R2` clauses and proxied rows are vacuous. The hosted-default dependency download, git-remote fetch and mixed-system local-model paths have no real run behind them. **Q-E (how AC-8 closes without the fetch path) is still unanswered.**
+- Also closed: P1-29 broker core (`docs/reviews/connected-code-graph-p1-29.md`, `-29-security.md`) and the P1-31 harness (`docs/reviews/connected-code-graph-p1-31.md` Pass 2; `-31-security.md`; `cpg/sandbox/ac8/`).
 
 ### AC-9 (staleness, code-snapshot stamp): **closed for a stated sub-scope (code-snapshot half); decision-state half vacuous until P4**
 
@@ -94,13 +91,13 @@ No held-out item has been exposed to the gate: no `ac5-gate-1` record exists in 
 
 - Closing steps: P1-20, P1-41 (rows AB-1, AB-2, LNK-42, LNK-43), P1-57. Evidence (cited): 81 of 81 rows pass live incl. these four (`-p1-report.md` "P1-41 dispatch C"; `cpg/tests/test_fixture_gate_p1.py`); LNK-42/43 assert `possible`/`target-not-mapped`, provider None, `TO_UNIT` `not-mapped`. AB-3/AB-4 gate P3. The residual is the architect's disclosed limit (P1-57), recorded in the ledger 2026-11-21 ("flag at close"); it was not observed by any run I read.
 
-### AC-10 (in the flow, impact stages): **reported not closed — reviewed at prompt level, behaviour unobserved; closure by review alone awaits stakeholder question Q-4**
+### AC-10 (in the flow, impact stages): **closed at P1 on the analyst's review, flagged "behaviour unobserved"**
 
-- Closing step: P1-27 (`claude/teco/teco.md`, `skills/cpg-analysis/SKILL.md`, `.mcp.json`; `docs/reviews/connected-code-graph-p1-27-impl.md`, Pass 3 approve with suggestions; `test_atrest` allowlist, observed R6 273 passed). Item P1T-39 has no recorded finding file, no real architect/implementer brief on a covered system was inspected, and Q-4 (`docs/test-plans/connected-code-graph-p1.md` §13) is unanswered in the requirements and the ledger. The plan says: until answered, state "reviewed at prompt level, behaviour unobserved", and do not state AC-10 closed.
+- Closing step: P1-27 (`claude/teco/teco.md`, `skills/cpg-analysis/SKILL.md`, `.mcp.json`; `docs/reviews/connected-code-graph-p1-27-impl.md`, Pass 3 approve with suggestions; allowlist test observed R6, 273 passed). Stakeholder decision (Q-4 answered, ledger 2026-11-23): AC-10 closes at P1 on the analyst's review, flagged "behaviour unobserved". No real architect or implementer brief on a covered system was inspected (P1T-39 has no finding file); the closure rests on prompt-level review alone.
 
-### AC-11 (answer forms, impact): **closed for a stated sub-scope: grouped text and Markdown renderers and CLI modes; the end-to-end item P1T-19 was not executed**
+### AC-11 (answer forms, impact): **closed (P1T-19 executed, pass); one-repository answer and a self-written render check are the stated limits**
 
-- Closing steps: P1-24, P1-24b, P1-26 (reviews `docs/reviews/connected-code-graph-p1-24.md`, `-24b-impl.md`). Observed: R5 290 passed (`cpg/tests/test_render.py` goldens for text and Markdown; `cpg/tests/test_clients.py::test_the_cli_text_and_markdown_modes_are_the_renderers_and_carry_the_notice`). Not done: P1T-19 as an item (ask one parser-resolved question, render both forms) is not in the P1-42 driver and no report records it (`-p1-report.md` P1-42 O-4). Plain-language model interpretation is AC-24's.
+- Closing steps: P1-24, P1-24b, P1-26, P1T-19. Cited (closing-items report §4, `cpg/eval/results/p1t-20/p1t19.json`): a parser-resolved question (no model call, no `provenance`) returns 599 items, grouped by repository, component, distance in both text and Markdown (0 differences against `ccg.render.common.component_groups`; 599 of 599 items in the text and in the Markdown; 0 located hops without a line; interpretation line first); CLI `--format text` and `--format markdown` exit 0 with bytes equal to the library renderings; 3 planted render failures each caught in both forms. Limits: the proving system is one repository (no repository-order mutant), the check is the executor's own and compares with the engine's grouping function, and the F-3 plant used an item `qname` because no `Cond` hop exists at P1. Observed: R5 290 passed (`cpg/tests/test_render.py`, `test_clients.py`).
 
 ### AC-16 (clients): **closed for MCP, CLI, engine and the parser-path plain-language client; the raw-recipe leg closes as sufficiency only, with narrow coverage**
 
@@ -113,7 +110,7 @@ No held-out item has been exposed to the gate: no `ac5-gate-1` record exists in 
 
 ### AC-18 (evidence): **closed (for the impact answers asked), with a reading of "each step"**
 
-- Closing steps: P1-22, P1-23, P1-24, P1-42. Cited, live: 51 items on 9 answers, 0 violations; every `Symbol` (116 hops), `CallSite` (76) and `ConfigEntry` (1) hop carries file and line, checked against the materialized fixture tree (file exists, line in range, call-site line names the callee); 26 `Link` hops carry `lifted` entries with file and line or an adjacent code hop. The 11 `ContractPoint` hops carry a key, not a file: P1-42 read "file and line at each step" as not applying to a contract point (see section 5, item 3).
+- Closing steps: P1-22, P1-23, P1-24, P1-42. Cited, live: 51 items on 9 answers, 0 violations; every `Symbol` (116 hops), `CallSite` (76) and `ConfigEntry` (1) hop carries file and line, checked against the materialized fixture tree (file exists, line in range, call-site line names the callee); 26 `Link` hops carry `lifted` entries with file and line or an adjacent code hop. The 11 `ContractPoint` hops carry a key, not a file: P1-42 read "file and line at each step" as not applying to a contract point (see section 5, item 3). Stakeholder decision (ledger 2026-11-23): "each step" excludes contract-point hops; closed with that reading recorded.
 
 ### AC-21 (read-only): **closed**
 
@@ -131,29 +128,35 @@ No held-out item has been exposed to the gate: no `ac5-gate-1` record exists in 
 
 ## 5. Items found contradicting the AC text (for the owner to judge)
 
-1. **AC-5 floor.** AC text: >= 75 individual known impacts. The narrowed http+mcp pair is 72 counting items, 3 short (cited counts report); scripts/wiring cannot be linked at P1. The deferral decision treats the 75 floor as applying to the P2 combined gate.
-2. **AC-5 wording vs the proposal.** The proposal's P1 row (`docs/plans/connected-code-graph.md` §4) says AC-1 ✓, AC-2 ✓, AC-4 ✓, AC-5 on HTTP/MCP/scripts/flow, AC-25 ✓ at P1, and `-p1-gates.md` P1-38 lists "AC-1, AC-2, AC-4 closed": all contradict the 2026-11-23 deferral and the per-AC statuses above. The ledger of 2026-11-22 records an AC-25 "data-flow half only" wording fix; I did not recheck every plan line for the stale form.
-3. **AC-18 "file and line at each step".** `ContractPoint` hops carry a key, not a file and line (11 of 51 items' chains). P1-42 read this as the AC not applying to a contract point; the AC text does not say so.
-4. **AC-16 "returns the same facts".** The raw leg cannot detect an omitted item past level 1 nor a changed status/distance/grouping, so "same facts" is demonstrated for three of four clients and for sufficiency only on the fourth.
+1. **AC-5 floor.** AC text: >= 75 individual known impacts. The narrowed http+mcp pair is 72 counting items, 3 short (cited counts report); scripts/wiring cannot be linked at P1. The deferral treats the 75 floor as applying to the P2 combined gate.
+2. **Plan wording still saying AC-1/2/4 closed.** The proposal's P1 row (`docs/plans/connected-code-graph.md` §4: AC-1 ✓, AC-2 ✓, AC-4 ✓, AC-5 on HTTP/MCP/scripts/flow, AC-25 ✓) and `-p1-gates.md` P1-38 ("AC-1, AC-2, AC-4 closed") contradict the recorded statuses (AC-1 sub-scope, AC-2 MCP half only, AC-4 not closed, AC-5 deferred, AC-25 data-flow half). A **plan-wording fix is owed**. The ledger of 2026-11-22 records an AC-25 "data-flow half only" fix; I did not recheck every plan line.
+3. **AC-18 "file and line at each step".** `ContractPoint` hops carry a key, not a file and line (11 hops). Decided: excluded from the reading (section 6); the AC text does not say so.
+4. **AC-16 "returns the same facts".** The raw leg cannot detect an omitted item past level 1 nor a changed status/distance/grouping: "same facts" is shown for three of four clients and for sufficiency only on the fourth.
 5. **AC-17 "each of the four groups".** Two groups answered; branch and stack trace `NotBuilt`; queue name not asked.
-6. **AC-25 "both effects are listed".** The control-dependency effect is not listed for CD-1/3/4; data-flow items are `possible`, not the AC's implied confirmed.
-7. **AC-6 "dynamic import".** The P1 row names four kinds; three are met, dynamic import is not (Q-DYN B); example config stands at 2 instances where the evaluation-protocol floor was cited as 3.
-8. **AC-9 "which decision state".** At P1 the decision state is an empty log (`verdictLogOffset` 0): the clause is vacuously met.
-9. **AC-8 clauses on git-remote fetch, dependency download and hosted override.** No built path exists to exercise them at P1 (option C) and no P1-40 run exists.
-10. **AC-5 gold drift.** The strict gold provider line span matches 3 of 8 dev items because `api.py`/`storefront_api.py` changed after the gold was pinned (D7); symbol identity matches 8 of 8. Gold files were not repinned (ledger 2026-11-20): a held-out set with the same drift would score misses under a strict-span reading.
-11. **Dev optimism.** Every dev figure in this report was used for development; the plan states a dev pass is not AC-5 evidence.
+6. **AC-25 "both effects are listed".** The control-dependency effect is not listed for CD-1/3/4; data-flow items are `possible`.
+7. **AC-6 "dynamic import".** Three of the four P1 kinds met; dynamic import not (Q-DYN B). Example config has 2 instances where the evaluation-protocol floor was cited as 3 (accepted at P1, section 6).
+8. **AC-9 "which decision state".** At P1 an empty log (`verdictLogOffset` 0): vacuously met.
+9. **AC-8 clauses on git-remote fetch, dependency download and hosted override.** No built path to exercise them at P1; no real-component run exists.
+10. **AC-1 "listed".** 17 of 18: one dev item, a prompt-embedded `curl` URL, is not listed (DEF-1).
+11. **AC-5 gold drift.** The strict gold provider line span matches 3 of 8 dev items (`api.py`/`storefront_api.py` changed after the gold was pinned, D7); symbol identity 8 of 8. Gold not repinned (ledger 2026-11-20).
+12. **Dev optimism.** Every dev figure here was used for development; a dev pass is not AC-5 evidence.
 
-## 6. Decisions and questions returned (not decided here)
+## 6. Stakeholder decisions recorded, and what stays open
 
-- **Q1 (AC-1, AC-2 MCP half, AC-4):** the plan closes these "on P1-42 alone by P1T-20's pass rule", but P1T-20 (one structured impact request per sampled dev anchor, every dev item listed with a chain) was never executed; only the gate-rehearsal's dev scoring exists (http 16/17, mcp 20/20, scripts 0/49, wiring 0/11, pre-fix, pre-round E). Options: run P1T-20 (a ~20-37 minute proving-system build on a throwaway plus the asks), or accept the rehearsal as the AC-1/AC-2 MCP-half evidence and say so, or leave them reported not closed as above.
-- **Q2 (AC-8 part 1):** P1-40 stays not run until the user allows the host-address probes (declined for now). Q-E (how AC-8 closes without the git-fetch path) is also unanswered.
-- **Q3 (AC-10, Q-4):** may AC-10 close on the P1-27 review alone, or does it wait for an observed `teco` brief on a covered system?
-- **Q4 (AC-11):** P1T-19 end-to-end (one parser-resolved question rendered as text and Markdown) is cheap but was not run; run it, or accept the renderer tests?
-- **Q5 (AC-6):** is example config at a floor of 2 (EP §12.2 says 3 shapes) an accepted P1 form? Q-AC6 B' keeps floor 2.
-- **Q6 (AC-18):** is "file and line at each step" read as excluding contract-point hops?
+Recorded exactly as the coordinator stated them (ledger 2026-11-23/24):
+- AC-10 closes at P1 on the analyst's review, flagged "behaviour unobserved" (Q-4 answered).
+- AC-6 example-config at 2 instances accepted at P1.
+- AC-18 "each step" excludes contract-point hops (closed with that reading recorded).
+- AC-1 closed for sub-scope: 17/18 on dev; the one miss is a shell/Markdown `curl` URL source (the P2-deferred class), carried as DEF-1.
+- AC-2 MCP half closed, wiring half not (P2). AC-4 not closed (P2).
+- AC-8 part 1 = harness live-tested 72/72 incl. host probes; the real-component run (component image + in-scenario local-model path, spec §8.1 features 1-4) carried to P2; rows 8.2/8.4/8.12 vacuous and 13 rows unrun.
+- AC-5 held-out gate deferred to P2 (user, 2026-11-23). AC-24 not met for the local model (user, 2026-11-22).
+
+Still open: Q-E (AC-8 closure without the git-fetch path); the P2 backlog items named under AC-5; the plan-wording fix of section 5 item 2.
 
 ## 7. Coverage, gaps, recommendations
 
-- Not covered by any run in this report: the live tiers (cited only), P1T-19, P1T-20, P1T-39, P1-40, the held-out gate, the queue-name starting point, flakiness of the live tiers (one run each), a completed full-suite run (R9 stopped at about 42%).
-- Recommendations: fix the stale proposal and `-p1-gates.md` P1-38 AC wording (section 5, items 2) at the close; before P2 spends the held-out list, land P5-1..P5-3, repoint `STRATA_GATED`/`MIN_COUNTING`, add the dev-gold pre-gate probe, and rerun the no-workaround rehearsal; keep the `REVIEW.md` lines the ledger holds for the close (replay checks are sufficiency only; guard tests must plant every named untouchable).
-- Parallel P1-38 deliverables not covered here: spike dispositions (`docs/test-reports/connected-code-graph-p1-spike-dispositions-report.md`), the `analyst` whole-phase review `docs/reviews/connected-code-graph-p1-impl.md` (not yet written when this report was produced).
+- Not covered by any run of mine: all live tiers (cited only), the held-out gate, P1T-39 (no brief inspected), the queue-name starting point, the wiring `unit`-anchor items (custodian probe), live-tier flakiness (one run each; the closing items ran twice with identical results on one store), build-to-build determinism (one build).
+- Feedback from the closing-items run (cited): the plan's AC-4 and wiring filters select 1 anchor/1 item and 1 anchor/3 items, far smaller than the strata; the P1T-19 render check and its F-3 `Cond.code` plant need a shipped checker and a flow-true fixture; the HEAD build took 29.5 min on this host against the 16 to 21 minute estimate (one sample).
+- Recommendations: fix the stale proposal and `-p1-gates.md` P1-38 wording at the close; before P2 spends the held-out list, land P5-1..P5-3, repoint `STRATA_GATED`/`MIN_COUNTING`, add the dev-gold pre-gate probe, rerun the no-workaround rehearsal; keep the `REVIEW.md` lines the ledger holds for the close (replay checks are sufficiency only; guard tests plant every named untouchable).
+- Parallel P1-38 deliverables not covered here: spike dispositions (`docs/test-reports/connected-code-graph-p1-spike-dispositions-report.md`), the `analyst` whole-phase review `docs/reviews/connected-code-graph-p1-impl.md`.
