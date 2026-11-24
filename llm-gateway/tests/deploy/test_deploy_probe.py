@@ -183,14 +183,6 @@ def test_agent_account_has_no_docker_access(holder_account):
     assert exposure == [], f"{exposure}: see RUNBOOK step 0"
 
 
-def _has_group(name: str) -> bool:
-    try:
-        grp.getgrnam(name)
-        return True
-    except KeyError:
-        return False
-
-
 def test_sudo_into_the_holder_account_is_refused(holder_account):
     """No sudoers rule: `-n` never prompts, `-k` ignores a cached ticket from the human's sudo.
     No own-uid positive control exists (a successful sudo needs privilege); the message check is
