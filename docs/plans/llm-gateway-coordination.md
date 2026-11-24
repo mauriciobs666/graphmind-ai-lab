@@ -40,7 +40,7 @@ Note: D3 ∥ D7 file-disjoint (D7 does not touch records/policy); `llm-gateway/A
 
 Open for stakeholder (from D5): Anthropic adapter refuses `tools` (OpenAI-style tool-call translation not built) — FR-1 says chat completions with tool calls; ccg does not use tools, falkor-chat follow-on will. `min_p` unsupported on lmstudio/openai_compat and Ollama frequency/presence penalties unsupported (vendor docs do not list them; ccg does not send them). Unverified vendor facts listed in D5 report: LM Studio `stats`/`runtime` on /v1, `/v1/decisions` shape, Anthropic temperature family and thinking-token inclusion, Ollama `eval_count` thinking and `num_ctx` effect.
 | Gate D1–D6 | `analyst` | `aa88268ad17048330` | in-flight | `docs/reviews/llm-gateway.md` Pass 10 | — → — | — |
-| U-S5 | `architect` | `a6c231652670eed13` | delivered | `docs/plans/connected-code-graph-egress-spec5.md` | `analyst` + `security-expert` → — | — |
+| U-S5 | `architect` | `a6c231652670eed13` | accepted (analyst Pass 11-12 approve w/ suggestions, security Pass 6 approve w/ suggestions; committed) | `docs/plans/connected-code-graph-egress-spec5.md` | `analyst` + `security-expert` → — | — |
 | Gate D7 + spec5 (security) | `security-expert` | `a7b80d0ec280cf976` | in-flight | `docs/reviews/llm-gateway-security.md` Pass 5, 6 | — → — | — |
 | Gate D7 + spec5 (analyst) | `analyst` | `aa88268ad17048330` | queued | after Pass 10; `docs/reviews/llm-gateway.md` | — → — | — |
 
