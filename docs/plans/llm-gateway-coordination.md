@@ -67,3 +67,4 @@ D9a notes for D9b/D10/D13: default-port hosted test cannot listen on 443 so asse
 | D9a gate (security) | `security-expert` | `a7b80d0ec280cf976` | in-flight | `docs/reviews/llm-gateway-security.md` Pass 8 | — → — | — |
 | spec5 amend (D9a lessons) | `architect` | `a6c231652670eed13` | delivered (4,212 words; committed) | `docs/plans/connected-code-graph-egress-spec5.md` | — → — | — |
 | D9b | `coder` | `a03ff974185d6bebb` | in-flight | `cpg/ccg/broker/{ownerprot,server}.py`, `cpg/ccg/manifest.py` + tests (ccg impact: unavailable) | `analyst` + `security-expert` → — | — |
+| D8 gates | `analyst` `aa88268ad17048330` (Pass 15), `security-expert` `a7b80d0ec280cf976` (Pass 9) | — | queued behind D9a gates | `docs/reviews/…` | — → — | — |
