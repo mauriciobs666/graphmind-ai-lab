@@ -45,3 +45,7 @@ Open for stakeholder (from D5): Anthropic adapter refuses `tools` (OpenAI-style 
 | Gate D7 + spec5 (analyst) | `analyst` | `aa88268ad17048330` | queued | after Pass 10; `docs/reviews/llm-gateway.md` | — → — | — |
 
 Known defect carried from spec5 review: holder matches `endpoint` to raw `base_url`; broker sends canonical `https://host:443` — fix in D7 follow-up (after security says where). `service-unit` writes `ExecStart=… /opt/llmgateway/bin/service.py`; D8 must ship that shim. D9 needs 5 files (spec5 §8), not 2.
+| D7b holder fixes | `coder` | `a2a53606d76208971` | in-flight | security Pass 5 P5-1..P5-5 (endpoint canonicalisation, install.sh preview/read-as-user, code-root precheck, reserve/release cap, service-unit guard) | `security-expert` re-check → — | — |
+| U-S5 rev | `architect` | `a6c231652670eed13` | in-flight | spec5 revised for security Pass 6 | `analyst` → — | — |
+
+2026-11-24 security Pass 5 (D7 code) and Pass 6 (spec5): both approve with suggestions; P5-1 and P5-2 majors routed to D7b.
