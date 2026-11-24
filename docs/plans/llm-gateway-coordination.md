@@ -50,7 +50,10 @@ Known defect carried from spec5 review: holder matches `endpoint` to raw `base_u
 
 2026-11-24 security Pass 5 (D7 code) and Pass 6 (spec5): both approve with suggestions; P5-1 and P5-2 majors routed to D7b.
 | D1–D6 gate | `analyst` | `aa88268ad17048330` | gated: approve with suggestions (Pass 10; F1–F3 majors) | `docs/reviews/llm-gateway.md` Pass 10 | → fixes in D456fix | — |
-| D456fix | `coder` | `a790ddded54ac051a` | in-flight | Pass 10 F1–F7 (run_id validation, map_settings tests, docs, overrides, is_hosted unify) | `analyst` re-check → — | — |
+| D456fix | `coder` | `a790ddded54ac051a` | delivered (968 tests green at the time; 17 mutants killed per report; committed 7456b430) | Pass 10 F1–F7 (run_id validation, map_settings tests, docs, overrides, is_hosted unify) | `analyst` re-check → — | — |
 | spec5 gate (analyst) | `analyst` | `aa88268ad17048330` | gated: approve with suggestions (Pass 11; F1–F3 majors → spec5 revision `a6c231652670eed13`) | `docs/reviews/llm-gateway.md` Pass 11 | — → — | — |
 | plan absorb (shapes, grammar note) | `architect` | `a5d2d6277492067da` | in-flight | `docs/plans/llm-gateway.md` | — → — | — |
 | FR-18 reword | `tico` | `a5d4e249e30706097` | delivered (ccg checked: json_schema only) | `docs/requirements/llm-gateway.md` | — → — | — |
+| D7b | `coder` | `a2a53606d76208971` | delivered (972 tests re-run green; ~21 mutants killed per report; keyed-local-origin refuses start; committed f9aaf0d1) | security Pass 5 fixes + wire vectors | `security-expert` Pass 7 + `analyst` Pass 13 in-flight | — |
+| D8 | `coder` | `a815b5fa2b9c9815c` | in-flight | `service.py`, `client.py`, `transport.py` (HolderTransport), `bin/service.py` + tests | `analyst` → — | — |
+| D9a | `coder` | `a3b35093dc5e27523` | in-flight | `cpg/ccg/broker/{holderclient,policy,server}.py`, `cpg/pyproject.toml` + tests (ccg impact: unavailable, anchor-unresolved) | `analyst` + `security-expert` → — | — |
