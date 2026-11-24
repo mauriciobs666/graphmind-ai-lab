@@ -14,8 +14,10 @@ closed, for what scope, and which did not, with the closing step and evidence fi
 `docs/test-reports/connected-code-graph-p1-closure-report.md` (§2 verdict, §4 per AC, §5 items contradicting the AC
 text); the later runs that table cites are `docs/test-reports/connected-code-graph-p1-closing-items-report.md` (P1T-19,
 P1T-20, P1T-38) and `docs/test-reports/connected-code-graph-p1-ac8-report.md` (P1-40 part 1).** Not restated here.
-The whole-phase `analyst` review is `docs/reviews/connected-code-graph-p1-impl.md` (not yet written when this entry was
-drafted; its verdict gates this close). Open work: `docs/BACKLOG.md` C-1001.
+The whole-phase `analyst` review is `docs/reviews/connected-code-graph-p1-impl.md` (first verdict: needs changes; its
+findings are folded into this entry and the other close documents). The work P1 did not close is a **P1 close-out unit
+scheduled before P3** (stakeholder decision on review Q1): scripts and wiring linking, the held-out AC-5 gate, the AC-8
+real-component run and the AC-24 retry. Open work: `docs/BACKLOG.md` C-1001.
 
 **Stakeholder decisions** (all from the ledger, `docs/plans/connected-code-graph-coordination.md`):
 
@@ -25,13 +27,13 @@ drafted; its verdict gates this close). Open work: `docs/BACKLOG.md` C-1001.
   (`docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md`); FR-8 is not met for flag-false flow, accepted.
 - **Q-AC6 B'** (2026-11-20): PM-3 = Markdown list item, floor 3 kept; EX-1 = a Markdown mention bound through a second
   `.mcp.example.json` URL entry, floor 2 kept. **AC-6 two instances** accepted at P1 for example config (2026-11-23).
-- **Q-DYN B** (2026-11-21): dynamic import (`library_api`) is not met at P1 (AC6-DYN-1..3, TW-1 to P2).
-- **AC-24 not met** for the local model, carried to P2 (2026-11-22): see the AC-24 row of the closure report.
-- **Narrow the gate to http+mcp** (2026-11-23), then **defer the held-out AC-5 gate to P2** (2026-11-23): P1-37 not run,
+- **Q-DYN B** (2026-11-21): dynamic import (`library_api`) is not met at P1 (AC6-DYN-1..3, TW-1 to P2, generality).
+- **AC-24 not met** for the local model (2026-11-22), carried and retried in the close-out unit: see the AC-24 row of the closure report.
+- **Narrow the gate to http+mcp** (2026-11-23), then **defer the held-out AC-5 gate to the close-out unit** (2026-11-23): P1-37 not run,
   P1-43 does not apply, the held-out list is unspent; scripts and wiring are "not delivered at P1" (RCA
   `docs/reviews/connected-code-graph-p1-gate-zero-hit-rca.md`).
-- **AC-8 carry** (2026-11-24): P1-40's real-component run is carried to P2 (the component image and an in-scenario
-  local-model path do not exist); P1 records the harness live-tested, `test_ac8.sh` 72 passed, 0 failed with the
+- **AC-8 carry** (2026-11-24): P1-40's real-component run goes to the close-out unit (the component image and an
+  in-scenario local-model path do not exist), with Q-E; P1 records the harness live-tested, `test_ac8.sh` 72 passed, 0 failed with the
   authorised host probes (`docs/test-reports/connected-code-graph-p1-ac8-report.md` §1).
 - **AC-10 closes on review**, flagged "behaviour unobserved" (2026-11-23, Q-4). **AC-18 reading:** "file and line at each
   step" excludes contract-point hops (2026-11-23). **AC-1 sub-scope** (2026-11-24): closed for a stated sub-scope,
@@ -50,17 +52,29 @@ drafted; its verdict gates this close). Open work: `docs/BACKLOG.md` C-1001.
 - **AC-24 prompt revised and dev2 shape.** The prompt was revised after the first dev check failed; dev2
   (`cpg/eval/dev/ac24-r2.jsonl`) has no `two-use-cases` item, and its contract-point split is 2 en + 4 pt
   (`docs/test-reports/connected-code-graph-p1-ac24-dev2-report.md`, ledger 2026-11-22).
+- **Oracle capture limits** (`docs/reviews/connected-code-graph-p1-47-impl.md`): no `mcp_tool` oracle edge exists at P1;
+  SPA edges are at file grain; `salesperson/tests/e2e` was not run; `/order/advance` is one key for three transitions; the
+  second `/session` join was not driven (the S10 defect). The noise bar and the AC-5 per-kind breakdown inherit them.
+- **P1-34 flow decision** (`cpg/eval/decisions/ccg-p1-flow-python-v2-decision.json`): the labellers worked from the
+  sample's source text alone, the entry value had zero margin, and the two adjudicators (120 of 120 agreed) are one model
+  family.
+- **AC-8 host probes.** `test_ac8.sh`'s host-address and `.invalid` probes were authorised by the user (after "no, later",
+  "sorry, actually i want to run"), and the user confirmed that reading on 2026-11-24.
 - **A denied `ls`.** The dev2 custodian's `ls` of the held-out custodian directory was denied by the classifier
   (ledger 2026-11-21); no held-out content was read.
 - **`raw_query` memory limit (a documented P1 limit, stakeholder decision 2026-11-19).** A raw query can exhaust instance
-  memory and drop the no-persistence snapshot: `GRAPH.RO_QUERY` is not gated by `maxmemory`, only the 2g container cap
+  memory and drop the no-persistence snapshot (graphs, ACL users and runtime config; recovery is `ccg-falkordb.sh up`,
+  `create_users`, then `refresh`): `GRAPH.RO_QUERY` is not gated by `maxmemory`, only the 2g container cap
   bounds it, and `QUERY_MEM_CAPACITY` exists but is off; per-user limits are P4 (FR-24)
   (`docs/plans/connected-code-graph-p1-raw-query-memory-graph.md`). This is not a safety claim.
 - **Suite state.** The full default suite on the committed tree (ledger 2026-11-24): 9 failed, 17330 passed, 10 skipped,
-  531 deselected, 1 xfailed; the 9 are the known reds, none P1's: `test_ac8_lib` signal flake, `test_p1_11b_*` (mcp.json),
-  leaf-harness survivor-tell, package-data-glob, `test_scip_parse` x4, `test_units` golden. The falkor-chat
-  `test_queries.sh` §14.8 failure is also not P1's (`docs/reviews/connected-code-graph-p1-47-impl.md` m3). The throwaway
-  `ccg-falkordb-tw-16390` is still up; its teardown needs the user's `--yes`.
+  531 deselected, 1 xfailed. Two reds are **P1's own** and are being fixed: `test_p1_11b_*` (P1-27 added the `ccg` entry
+  with a `bash -c` launcher to `.mcp.json`) and the package-data-glob test (P1-26's interpreter prompt and grammar files
+  have no `pyproject.toml` glob, so a non-editable install would ship without them). Not P1's: the `test_units` golden.
+  Not traced: the `test_ac8_lib` signal flake, the leaf-harness survivor-tell, `test_scip_parse` x4 (did not reproduce
+  in isolation) (`docs/reviews/connected-code-graph-p1-impl.md` M1). The falkor-chat `test_queries.sh` §14.8 failure is
+  not P1's (`docs/reviews/connected-code-graph-p1-47-impl.md` m3). The throwaway `ccg-falkordb-tw-16390` is still up; its
+  teardown needs the user's `--yes`.
 
 **Spike dispositions (index D7).** `cpg/spikes/vertical-slice/` is frozen, not deleted: 60 tracked hits in 39 files were
 ruled one by one in `docs/test-reports/connected-code-graph-p1-spike-dispositions-report.md`; the directory carries a
@@ -85,7 +99,7 @@ model target not met (`docs/reviews/connected-code-graph-p1-35-impl.md`,
 ledger 2026-11-21). **Gate harness (P1-32a/b):** verbs, `gate.py` and `gate_run.py`, gated at Pass 5, approve with
 suggestions (`docs/reviews/connected-code-graph-p1-32b-impl.md`); the dress rehearsal was RED and was fixed by rounds E and
 F (`docs/test-reports/connected-code-graph-p1-gate-rehearsal-report.md`). The gate itself was not run: the held-out AC-5
-gate is deferred to P2 (the P1 close entry above; held-out counts `docs/test-reports/connected-code-graph-p1-heldout-strata-counts-report.md`).
+gate is deferred to the close-out unit (the P1 close entry above; held-out counts `docs/test-reports/connected-code-graph-p1-heldout-strata-counts-report.md`).
 **Exit runs (P1-38, P1-40):** the closing items run (proving-system build 1335 of 1335 units fresh), `test_ac8.sh` 72
 passed with the authorised host probes, and the spike dispositions are in the reports cited above.
 
@@ -108,7 +122,7 @@ triaged into P1-53..57 (`docs/reviews/connected-code-graph-p1-51-53.md` through 
 81 of 81 P1 rows on the live tier, closed world 0 unplanted (`docs/test-reports/connected-code-graph-p1-report.md`,
 "P1-41 dispatch C"). The proving-system build links 934 Links (http 376, mcp_tool 558; confirmed 104, possible 830) over
 1335 fresh units (`docs/test-reports/connected-code-graph-p1-closing-items-report.md` §2). **Not delivered:** shell
-exec/URL/script-hop facts and a shell URL source, so scripts and wiring link nothing (engine gap, carried to P2; RCA
+exec/URL/script-hop facts and a shell URL source, so scripts and wiring link nothing (engine gap, the close-out unit's; RCA
 `docs/reviews/connected-code-graph-p1-gate-zero-hit-rca.md`).
 
 ## 2026-11-20 — C-1001 P1 wave W1: extraction ✅

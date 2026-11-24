@@ -30,7 +30,7 @@ engineering** (Claude Code and OpenCode artifacts).
   `ccg-falkordb` store (`127.0.0.1:6390`, no persistence: a restart means a rebuild, `cpg/infra/`), plus fixtures and eval
   data (`cpg/README.md`). What bites: P1 answers impact and depends-on only; python flow is unavailable, so data-flow items
   are `possible`; **`raw_query` has no memory cap** (documented limit); `cpg/spikes/vertical-slice/` is frozen, do not edit;
-  which ACs closed is `docs/test-reports/connected-code-graph-p1-closure-report.md`; no live spec yet (owed after P2).
+  which ACs closed is `docs/test-reports/connected-code-graph-p1-closure-report.md`; open ACs go to a P1 close-out unit before P3; no live spec yet (owed after P2).
   The MCP server for `cpg_*` graphs is **not** here — it's the top-level `cypher-mcp/`, generic rather than
   CPG-specific. **Root `docs/HISTORY.md`/`docs/BACKLOG.md` are this component's own** (their own
   headers say so) though they sit at the repo root — a
