@@ -53,3 +53,4 @@ Known defect carried from spec5 review: holder matches `endpoint` to raw `base_u
 | D456fix | `coder` | `a790ddded54ac051a` | in-flight | Pass 10 F1–F7 (run_id validation, map_settings tests, docs, overrides, is_hosted unify) | `analyst` re-check → — | — |
 | spec5 gate (analyst) | `analyst` | `aa88268ad17048330` | in-flight | `docs/reviews/llm-gateway.md` Pass 11 | — → — | — |
 | plan absorb (shapes, grammar note) | `architect` | `a5d2d6277492067da` | in-flight | `docs/plans/llm-gateway.md` | — → — | — |
+| FR-18 reword | `tico` | `a5d4e249e30706097` | in-flight | `docs/requirements/llm-gateway.md` | — → — | — |
