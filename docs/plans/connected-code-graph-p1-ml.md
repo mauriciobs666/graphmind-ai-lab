@@ -535,6 +535,14 @@ only those repeats.
 It is committed after the last prompt change and before the held-out run. The run's outputs live
 under the custodian root (§6.4).
 
+### 4.4 AC-24 retry: model choice and the lower local target
+
+A larger local model first, then a lower target from the same measurement, is sound only if the target is not read off the measurement that selected the model. Rules (pre-register in `ccg-prereg-ac24-v1`):
+1. Selection and the entry check (11/12, 2/2) run on a **new** dev set written by a blind custodian; the spent dev2 set is not reused (R4b was designed against it). At most three candidates, named before the run, one prompt per candidate fixed in advance.
+2. **The lower target is not the dev point estimate.** The best of several candidates on a small set is inflated (winner's curse), and a held-out target equal to it passes only by luck. The stakeholder sets a minimum acceptable local target a priori, independent of any measurement (decision needed). If the winner's dev Wilson lower bound is under that minimum, AC-24 is recorded "not met for local-only codebases" without spending held-out; if above, the held-out target is the minimum, and a measured value only informs whether to spend.
+3. A held-out run of about 100 questions cannot separate 0.85 from 0.97 (92/100 has a Wilson lower bound of 0.85); report the interval, and read "target met" as a point-estimate statement.
+4. The held-out AC-24 list stays unspent until the record is committed after the last prompt change.
+
 ## 5. Question 4 — noise (P1-36) and its thresholds
 
 ### 5.1 Additions to EP §11
