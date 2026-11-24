@@ -44,6 +44,7 @@ from llmgateway.config import (
     ConfigError,
     ConfigSource,
     GatewayConfig,
+    is_hosted_config,
 )
 from llmgateway.failures import HOLDER_REFUSALS
 from llmgateway.ledger import Ceilings, Ledger, LedgerLocked, Refusal, positive_int
@@ -54,6 +55,11 @@ HOLDER_ACCOUNT = "llmholder"
 MAX_SKEW_SECONDS = 30
 CALLER_NAME = re.compile(r"[a-z0-9_-]{1,32}")
 MAX_RUN_ID_CHARS = 256
+_LOCAL_KINDS = frozenset({"lmstudio", "ollama", "openai_compat"})  # config.py's local kinds
+# The broker's reply cap, `ccg.broker.framing.MAX_RESPONSE_BYTES` (cpg/ccg/broker/framing.py),
+# hard-coded: llm-gateway imports no ccg. A larger holder reply would be undeliverable (the broker
+# closes the connection with no reply); `tests/test_holder_endpoint.py` pins the number to the source.
+MAX_BROKER_RESPONSE_BYTES = 16 * 1024 * 1024
 
 
 class HolderStartError(Exception):
@@ -385,10 +391,45 @@ def https_upstream(
 
 # --- configuration -> policy ---
 
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def canonical_origin(url: str) -> str:
+    """`scheme://host:port`: lowercase scheme and host, explicit port, no path, query or user-info,
+    RFC 5952 IPv6. The same rules as the ccg broker's `manifest.canonical_endpoint` (copied, not
+    imported; `tests/test_holder_endpoint.py` pins the two together), because the broker sends
+    that form while an owner writes `base_url` in any spelling. Raises `ValueError`."""
+    if not isinstance(url, str) or not url:
+        raise ValueError("empty url")
+    if any(ord(c) <= 0x1F or ord(c) == 0x7F or c == " " for c in url):
+        raise ValueError("control character or space")
+    try:
+        parts = urllib.parse.urlsplit(url)
+        host, port = parts.hostname, parts.port
+    except ValueError as exc:
+        raise ValueError(f"unparseable url: {exc}") from None
+    scheme = parts.scheme.lower()
+    if scheme not in _DEFAULT_PORTS:
+        raise ValueError("scheme must be http or https")
+    if not host:
+        raise ValueError("no host")
+    if not host.isascii() or "%" in host:
+        raise ValueError("host must be plain ASCII without a zone id")
+    if port is None:
+        port = _DEFAULT_PORTS[scheme]
+    if not 1 <= port <= 65535:
+        raise ValueError("port out of range")
+    if ":" in host:
+        try:
+            host = f"[{ipaddress.IPv6Address(host).compressed}]"
+        except ValueError:
+            raise ValueError("invalid IPv6 literal") from None
+    return f"{scheme}://{host}:{port}"
+
 
 @dataclass(frozen=True, slots=True)
 class Policy:
-    providers: dict[str, Provider]  # keyed by base_url (the request's `endpoint`)
+    providers: dict[str, Provider]  # keyed by canonical_origin(base_url) (the request's `endpoint`)
     ceilings: Ceilings | None
     unmatched: str
     default_bound: int | None
@@ -441,6 +482,17 @@ def build_policy(cfg: GatewayConfig) -> Policy:
     """The holder's view of one protected configuration; raises `HolderStartError`."""
     if not cfg.protected:
         raise HolderStartError(f"configuration is not owner-protected: {cfg.reason}")
+    for pid, raw in cfg.providers.items():
+        if (
+            is_hosted_config(raw)
+            and raw.get("kind") in _LOCAL_KINDS
+            and cfg.is_local(raw.get("base_url"))
+        ):
+            # A keyed provider on a local origin would be routed direct, never through the holder.
+            raise HolderStartError(
+                f"providers.{pid}: has a key_ref but a local kind and a local_endpoints origin; "
+                "remove key_ref (local) or move base_url off local_endpoints (hosted)"
+            )
     providers = {
         pid: _provider(pid, dict(raw))
         for pid, raw in cfg.providers.items()
@@ -479,10 +531,20 @@ def build_policy(cfg: GatewayConfig) -> Policy:
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
         raise HolderStartError("holder.upstream_timeout_seconds must be positive")
     try:
-        max_response = positive_int(max_response, "max_response_bytes")
+        max_response = positive_int(max_response, "max_response_bytes", MAX_BROKER_RESPONSE_BYTES)
     except ValueError as exc:
         raise HolderStartError(str(exc)) from None
-    by_url = {p.base_url: p for p in providers.values()}
+    by_url: dict[str, Provider] = {}
+    for p in providers.values():
+        try:
+            origin = canonical_origin(p.base_url)
+        except ValueError as exc:
+            raise HolderStartError(f"providers.{p.id}: invalid base_url ({exc})") from None
+        if origin in by_url:
+            raise HolderStartError(
+                f"providers.{p.id} and providers.{by_url[origin].id} share the origin {origin}"
+            )
+        by_url[origin] = p
     return Policy(
         by_url,
         ceilings,
@@ -615,8 +677,9 @@ class Holder:
             return self._answer(secret, hdr, "replayed_nonce")
         tokens = 0
         status = framing.REFUSAL_STATUS
+        connected: list[str] = []  # the one address a connection was attempted to, if any
         try:
-            reply, status, tokens = self._serve(secret, hdr, body)
+            reply, status, tokens = self._serve(secret, hdr, body, connected)
         except Refusal as exc:
             reply = self._answer(secret, hdr, exc.code)
         except BodyRefused as exc:
@@ -624,7 +687,7 @@ class Holder:
         except Exception as exc:  # never a traceback or message: the type name only
             self._diag(f"internal error {type(exc).__name__}")
             reply = self._answer(secret, hdr, "body_invalid")
-        self._log_call(now, hdr, status, tokens)
+        self._log_call(now, hdr, status, tokens, connected[0] if connected else None)
         return reply
 
     def _answer(self, secret: bytes, hdr: framing.RequestHeader, code: str) -> bytes:
@@ -643,13 +706,16 @@ class Holder:
         )
 
     def _serve(
-        self, secret: bytes, hdr: framing.RequestHeader, body: bytes
+        self, secret: bytes, hdr: framing.RequestHeader, body: bytes, connected: list[str]
     ) -> tuple[bytes, int, int]:
         try:
             policy = self._policy_now()
         except (HolderStartError, ConfigError):
             raise Refusal("endpoint_unknown") from None
-        provider = policy.providers.get(hdr.endpoint)
+        try:
+            provider = policy.providers.get(canonical_origin(hdr.endpoint))
+        except ValueError:
+            raise Refusal("endpoint_unknown") from None
         if provider is None or policy.ceilings is None:
             raise Refusal("endpoint_unknown")
         if hdr.method != "POST" or hdr.path not in provider.spec.paths:
@@ -689,6 +755,7 @@ class Holder:
             run_bound=run_bound,
             cap_bound=cap_bound,
         )
+        connected.append(addresses[0])
         try:
             result = self.s.upstream(
                 host=host,
@@ -769,8 +836,20 @@ class Holder:
 
     # -- logs --------------------------------------------------------------------------------
 
-    def _log_call(self, now: float, hdr: framing.RequestHeader, status: int, tokens: int) -> None:
-        """`calls.log`: ts, caller, run_id, endpoint, status, tokens; no body, no key."""
+    def _log_call(
+        self,
+        now: float,
+        hdr: framing.RequestHeader,
+        status: int,
+        tokens: int,
+        resolved_addr: str | None,
+    ) -> None:
+        """`calls.log`: ts, caller, run_id, endpoint, status, tokens, resolved_addr (the pinned
+        address connected to; null when no connection was attempted); no body, no key.
+
+        Known limit: neither `calls.log` nor the ledger's `reservations` rows are ever pruned or
+        rotated, so a credential holder's call volume grows `/var/lib/llmholder` without bound
+        (review P5-4); the holder's own disk, under the human's watch, is the only bound."""
         line = json.dumps(
             {
                 "ts": int(now),
@@ -779,6 +858,7 @@ class Holder:
                 "endpoint": hdr.endpoint[:256],
                 "status": status,
                 "tokens": tokens,
+                "resolved_addr": resolved_addr,
             },
             separators=(",", ":"),
         )

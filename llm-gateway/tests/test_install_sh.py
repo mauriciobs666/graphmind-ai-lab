@@ -264,6 +264,8 @@ def test_caller_and_service_unit_end_to_end_then_check_passes_and_each_break_is_
     assert secret not in res.stdout + res.stderr
     assert (tr / "var/lib/llmholder/registry/broker.secret").read_text().strip() == secret
     unit = home / ".config/systemd/user/llmgateway.service"
+    (tr / "opt/llmgateway/bin/service.py").write_text("# the D8 shim\n")
+    (tr / "opt/llmgateway/bin/service.py").chmod(0o644)
     assert sh(tr, "service-unit", str(UID), str(home)).returncode == 0
     assert "ExecStart=/usr/bin/python3 -I /opt/llmgateway/" in unit.read_text()
 
@@ -467,3 +469,128 @@ def test_bootstrap_pipeline_extracts_exactly_the_committed_tree_despite_a_hostil
         env={"PATH": "/usr/bin:/bin"},
     )
     assert marker.exists(), "the planted filter must be live, or this test proves nothing"
+
+
+# --- review P5-2 .. P5-5 ---
+
+
+def run_owner_files(tr, toml, manifest, *, answers="y\ny\n", extra_env=None, flags=None):
+    return sh(
+        tr, "owner-files", "--gateway-toml", str(toml), "--manifest", str(manifest), stdin=answers
+    )
+
+
+def test_owner_files_shows_the_whole_file_visibly_with_its_hash_and_installs_those_bytes(
+    tr, tmp_path
+):
+    toml, manifest = tmp_path / "g.toml", tmp_path / "system.yaml"
+    tail = "local_endpoints = [\"http://127.0.0.1:1\"]  # HIDDEN-TAIL"
+    body = (b"# pad\n" * 3000) + tail.encode() + b"\n\x1b[2J\x1b]0;evil\x07\r\n"
+    assert len(body) > 4000
+    toml.write_bytes(body)
+    manifest.write_bytes(b"systems: []\n")
+    res = run_owner_files(tr, toml, manifest)
+    assert res.returncode == 0, res.stderr
+    assert tail in res.stdout  # beyond the old 4000-byte preview
+    assert "\x1b" not in res.stdout and "\x07" not in res.stdout and "\r" not in res.stdout
+    assert "^[[2J" in res.stdout and "^M" in res.stdout
+    assert hashlib.sha256(body).hexdigest() in res.stdout
+    assert (tr / "etc/llmgateway/gateway.toml").read_bytes() == body
+
+
+def test_owner_files_diff_against_an_installed_file_is_control_byte_safe(tr, tmp_path):
+    toml, manifest = tmp_path / "g.toml", tmp_path / "system.yaml"
+    manifest.write_bytes(b"systems: []\n")
+    toml.write_bytes(b"a = 1\n")
+    assert run_owner_files(tr, toml, manifest).returncode == 0
+    toml.write_bytes(b"a = 2\x1b[31m\n")
+    res = run_owner_files(tr, toml, manifest)
+    assert "\x1b" not in res.stdout and "+a = 2^[[31m" in res.stdout
+
+
+def test_owner_files_refuses_an_oversized_source_and_installs_nothing(tr, tmp_path):
+    toml, manifest = tmp_path / "g.toml", tmp_path / "system.yaml"
+    toml.write_bytes(b"x" * 65537)
+    manifest.write_bytes(b"systems: []\n")
+    res = run_owner_files(tr, toml, manifest)
+    assert res.returncode == 1 and "larger than" in res.stderr
+    assert not (tr / "etc/llmgateway/gateway.toml").exists()
+    toml.write_bytes(b"x" * 65536)  # exactly the cap is accepted
+    assert run_owner_files(tr, toml, manifest).returncode == 0
+
+
+def test_owner_files_installs_nothing_if_the_scratch_bytes_change_after_they_were_shown(
+    tr, tmp_path
+):
+    toml, manifest = tmp_path / "g.toml", tmp_path / "system.yaml"
+    toml.write_bytes(b"a = 1\n")
+    manifest.write_bytes(b"systems: []\n")
+    scratch_dir = tmp_path / "scratch"
+    scratch_dir.mkdir(mode=0o700)
+    script = tr / "opt" / "llmgateway" / "deploy" / "install.sh"
+    proc = subprocess.Popen(
+        [BASH, str(script), "--test-root", str(tr), "owner-files", "--gateway-toml", str(toml),
+         "--manifest", str(manifest)],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        env={"PATH": "/usr/bin:/bin", "TMPDIR": str(scratch_dir)},
+    )
+    seen = ""
+    while "--- end (sha256" not in seen:
+        ch = proc.stdout.read(1)
+        assert ch, proc.stderr.read()
+        seen += ch
+    (scratched,) = scratch_dir.glob("*/gateway.toml")
+    scratched.write_bytes(b"a = 1\nlocal_endpoints = ['http://evil']\n")  # a swap after display
+    proc.stdin.write("y\n")
+    proc.stdin.close()  # EOF: a second confirmation (the manifest) would be refused
+    err = proc.stderr.read()
+    assert proc.wait(30) == 1 and "changed after they were shown" in err
+    assert not (tr / "etc/llmgateway/gateway.toml").exists()
+
+
+def test_the_source_is_read_as_the_invoking_user_in_production_mode():
+    text = (REPO / "deploy" / "install.sh").read_text()
+    assert 'runuser -u "$SUDO_USER" -- head -c' in text
+    assert "cat -- \"$src\"" not in text and "head -c 4000" not in text
+
+
+def test_a_code_root_owned_or_writable_by_another_is_refused_before_any_python_runs(tr, tmp_path):
+    code = tr / "opt" / "llmgateway"
+    marker = tmp_path / "PYTHON-RAN"
+    # the planted code would create the marker if it ran (as root, in production)
+    (code / "src" / "llmgateway" / "keyholder.py").write_text(
+        f"import pathlib; pathlib.Path({str(marker)!r}).write_text('x')\n"
+    )
+    (code / "src" / "llmgateway" / "keyholder.py").chmod(0o666)
+    res = sh(tr, "holder-account")
+    assert res.returncode == 1 and "not protected" in res.stderr and not marker.exists()
+    (code / "src" / "llmgateway" / "keyholder.py").chmod(0o644)
+    (code / "src" / "llmgateway" / "extra.py").symlink_to("/etc/hostname")
+    res = sh(tr, "holder-account")
+    assert res.returncode == 1 and "not a regular file" in res.stderr and not marker.exists()
+    (code / "src" / "llmgateway" / "extra.py").unlink()
+    (code / "src" / "llmgateway" / "keyholder.py").write_text(
+        f"import pathlib; pathlib.Path({str(marker)!r}).write_text('x')\n"
+    )
+    (tr / "opt").chmod(0o777)  # a writable ancestor
+    res = sh(tr, "holder-account")
+    assert res.returncode == 1 and "ancestor" in res.stderr and not marker.exists()
+
+
+def test_the_shim_refuses_without_isolated_mode(tr, tmp_path):
+    shim = tr / "opt" / "llmgateway" / "bin" / "keyholder.py"
+    res = subprocess.run(
+        ["/usr/bin/python3", str(shim), "log"], capture_output=True, text=True,
+        env={"PATH": "/usr/bin:/bin", "PYTHONPATH": str(tmp_path)}, cwd="/",
+    )
+    assert res.returncode != 0 and "-I" in res.stderr and "Traceback" not in res.stderr
+
+
+def test_service_unit_refuses_until_the_service_shim_exists(tr, tmp_path):
+    home = tmp_path / "home"
+    assert sh(tr, "holder-account").returncode == 0
+    res = sh(tr, "service-unit", str(UID), str(home))
+    assert res.returncode == 1 and "service.py does not exist" in res.stderr
+    assert not (home / ".config/systemd/user/llmgateway.service").exists()
+    dry = sh(tr, "service-unit", str(UID), str(home), flags=["--dry-run", "--test-root", str(tr)])
+    assert dry.returncode == 1

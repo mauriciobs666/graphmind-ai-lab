@@ -115,6 +115,7 @@ def test_real_https_exchange_sends_the_exact_body_with_the_key_and_settles_usage
             "endpoint": env.endpoint,
             "status": 200,
             "tokens": 26,
+            "resolved_addr": "127.0.0.1",
         }
     ]
     h.close()
@@ -658,13 +659,28 @@ def test_writable_code_root_stops_the_holder(env, clock):
 
 
 def test_local_providers_are_not_served_by_the_holder(env, clock):
+    local = env.provider(kind="lmstudio", base_url="http://127.0.0.1:1234")
+    del local["key_ref"]  # a local provider has no key: DirectTransport serves it
     env.write_config(
-        providers={"loc": env.provider(kind="lmstudio", base_url="http://127.0.0.1:1234")},
+        providers={"loc": local},
         deployment={"local_endpoints": ["http://127.0.0.1:1234"]},
     )
     h = env.holder(clock=clock)
     assert build_policy(h.s.config_source.get()).providers == {}
     h.close()
+
+
+@pytest.mark.parametrize("kind", ["lmstudio", "ollama", "openai_compat"])
+def test_a_keyed_provider_on_a_local_origin_fails_the_start_naming_it(env, clock, kind):
+    env.write_config(
+        providers={"loc": env.provider(kind=kind, base_url="http://127.0.0.1:1234")},
+        deployment={"local_endpoints": ["http://127.0.0.1:1234"]},
+    )
+    with pytest.raises(HolderStartError, match="providers.loc"):
+        env.holder(clock=clock)
+    # off local_endpoints the same table is an ordinary hosted provider
+    env.write_config(providers={"loc": env.provider(kind=kind, base_url="http://127.0.0.1:1234")})
+    env.holder(clock=clock).close()
 
 
 # --- key hygiene (§5.2 FR-8 (1)-(4)) ---

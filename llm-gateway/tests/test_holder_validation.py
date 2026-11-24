@@ -363,7 +363,7 @@ def cfg(providers=None, holder=None, run_bounds=(), protected=True):
 
 def test_policy_builds_for_a_valid_config():
     pol = build_policy(cfg())
-    assert set(pol.providers) == {"https://api.example"}
+    assert set(pol.providers) == {"https://api.example:443"}
     assert pol.ceilings.window_seconds == 60 and pol.unmatched == "refuse"
 
 

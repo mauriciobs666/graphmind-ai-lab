@@ -9,6 +9,9 @@ code root on `sys.path` (from the path it was started by, deliberately not resol
 import os
 import sys
 
+if not sys.flags.isolated:  # without -I, PYTHONPATH and the script directory would be honoured
+    sys.exit("keyholder.py must be run as: /usr/bin/python3 -I keyholder.py")
+
 sys.dont_write_bytecode = (
     True  # the code root stays exactly what was installed (root runs this too)
 )

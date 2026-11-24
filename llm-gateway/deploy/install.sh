@@ -73,6 +73,26 @@ PY=/usr/bin/python3
 kh() { "$PY" -I "$CODE_ROOT/bin/keyholder.py" "$@"; }
 
 # --- the code-root guard: this exact file, installed, and nothing writable around it ---------------
+# Pure shell, run BEFORE any Python from the code root: if the tree was extracted wrongly (owned by
+# or writable for another uid) `keyholder check-deployment` would otherwise execute that code as root.
+precheck_code_root() {
+  local top="/" bad p stat_out
+  [ -z "$TEST_ROOT" ] || top="$TEST_ROOT"
+  [ -d "$CODE_ROOT" ] && [ ! -L "$CODE_ROOT" ] || die "$CODE_ROOT is missing or a symlink"
+  bad="$(find "$CODE_ROOT" \( ! -uid "$TRUSTED_UID" -o -perm /022 -o \( ! -type f ! -type d \) \) -print -quit)"
+  [ -z "$bad" ] || die "the code root is not protected: $(printf '%q' "$bad") is not a regular file or directory owned by uid $TRUSTED_UID and not group/other-writable"
+  p="$CODE_ROOT"
+  while :; do
+    stat_out="$(stat -L -c '%u %a' -- "$p")" || die "cannot stat $p"
+    # shellcheck disable=SC2086
+    set -- $stat_out
+    [ "$1" = "$TRUSTED_UID" ] && [ $((8#$2 & 8#022)) -eq 0 ] ||
+      die "the code root is not protected: ancestor $(printf '%q' "$p") is not owned by uid $TRUSTED_UID or is group/other-writable"
+    [ "$p" != "$top" ] && [ "$p" != "/" ] || break
+    p="$(dirname -- "$p")"
+  done
+}
+
 guard_code_root() {
   local here self
   [ ! -L "$0" ] || die "refusing to run through a symlink"
@@ -82,6 +102,7 @@ guard_code_root() {
     die "not running from the installed code root ($CODE_ROOT/deploy/install.sh); got $self"
   [ -f "$CODE_ROOT/bin/keyholder.py" ] && [ ! -L "$CODE_ROOT/bin/keyholder.py" ] ||
     die "$CODE_ROOT/bin/keyholder.py is missing or a symlink"
+  precheck_code_root
   local args=(check-deployment --code-only --root "$CODE_ROOT")
   [ -z "$TEST_ROOT" ] || args+=(--anchor "$TEST_ROOT" --trusted-uid "$TRUSTED_UID")
   local out
@@ -185,15 +206,44 @@ cmd_owner_files() {
   copy_confirm_install "$manifest" "$WORK/system.yaml" "$ETC_DIR/ccg/system.yaml"
 }
 
-# Read the source ONCE into a root-owned scratch file; show the diff against what is installed;
-# write exactly those bytes. No re-read after the confirmation, no ccg code, no validation as root.
+MAX_OWNER_FILE_BYTES=65536
+
+# Read the source as the invoking (human) user: root never opens an agent-chosen path, so a swapped
+# path or a symlink cannot make root read a file the human could not. At most MAX+1 bytes are read.
+read_source() {
+  if [ -n "$TEST_ROOT" ]; then
+    head -c $((MAX_OWNER_FILE_BYTES + 1)) -- "$1"
+  else
+    [[ "${SUDO_USER:-}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] && [ "$SUDO_USER" != root ] ||
+      die "run through sudo from the human's own account (SUDO_USER is unset or root)"
+    runuser -u "$SUDO_USER" -- head -c $((MAX_OWNER_FILE_BYTES + 1)) -- "$1"
+  fi
+}
+
+# Read the source ONCE into a root-owned scratch file; show the WHOLE file (control bytes made
+# visible by `cat -v`) with its sha256, and the diff against what is installed; after the human
+# confirms, install exactly those bytes (the hash is checked again). No ccg code, no validation as root.
 copy_confirm_install() {
-  local src="$1" scratch="$2" dest="$3"
-  [ -f "$src" ] && [ ! -L "$src" ] || die "$src must be a regular file, not a symlink"
-  cat -- "$src" >"$scratch"
-  if [ -e "$dest" ]; then diff -u "$dest" "$scratch" || true; else echo "(new file) $dest"; head -c 4000 "$scratch"; fi
+  local src="$1" scratch="$2" dest="$3" sha sha_now qsrc
+  qsrc="$(printf '%q' "$src")"
+  [ -f "$src" ] && [ ! -L "$src" ] || die "$qsrc must be a regular file, not a symlink"
+  read_source "$src" >"$scratch" || die "cannot read $qsrc as the invoking user"
+  [ "$(stat -c %s -- "$scratch")" -le "$MAX_OWNER_FILE_BYTES" ] ||
+    die "$qsrc is larger than $MAX_OWNER_FILE_BYTES bytes; refusing"
+  sha="$(sha256sum <"$scratch")"; sha="${sha%% *}"
+  if [ -e "$dest" ]; then
+    echo "--- diff of $dest (control bytes shown as ^X / M-x) ---"
+    diff -u <(cat -v -- "$dest") <(cat -v -- "$scratch") || true
+  else
+    echo "(new file) $dest"
+  fi
+  echo "--- whole file as it will be installed (sha256 $sha) ---"
+  cat -v -- "$scratch"
+  echo "--- end (sha256 $sha) ---"
   if [ "$DRY" = 1 ]; then echo "DRY-RUN: would ask, then install $dest"; return 0; fi
-  confirm "Install $dest from $src?" || die "not confirmed; nothing installed for $dest"
+  confirm "Install $dest from $qsrc?" || die "not confirmed; nothing installed for $dest"
+  sha_now="$(sha256sum <"$scratch")"
+  [ "${sha_now%% *}" = "$sha" ] || die "the bytes changed after they were shown; nothing installed"
   install -d -m 0755 "${OWN_ROOT[@]}" "$(dirname "$dest")"
   install -m 0644 "${OWN_ROOT[@]}" "$scratch" "$dest"
 }
@@ -225,6 +275,8 @@ cmd_service_unit() {
   valid_uid "$uid" || die "caller uid must be a number"
   [[ "$home" = /* ]] || die "HOME must be an absolute path"
   guard_code_root
+  [ -f "$CODE_ROOT/bin/service.py" ] && [ ! -L "$CODE_ROOT/bin/service.py" ] ||
+    die "$CODE_ROOT/bin/service.py does not exist yet (the service ships with a later release); refusing to write a unit that would crash-loop"
   local out="$home/.config/systemd/user/llmgateway.service" extra=()
   [ -z "$TEST_ROOT" ] || extra=(--home "${TEST_HOME:-$home}")
   if [ "$DRY" = 1 ]; then
