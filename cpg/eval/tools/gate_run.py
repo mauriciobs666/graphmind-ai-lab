@@ -29,6 +29,7 @@ transient (resumable with ``--resume``).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fcntl
 import hashlib
 import json
@@ -142,31 +143,91 @@ def make_ask(client, stamp: Mapping | None = None, in_graph: Callable[[Mapping],
 #: the host's, never the engine's: any ``OSError`` (a full disk, a quota, a descriptor limit, a permission), memory exhaustion, a blown stack. None of
 #: them is placed on a held-out anchor; the run stops (``OSError`` is ``failed:transient``, resumable once the host is fixed).
 CREDENTIAL_FAULTS = {"AuthenticationError", "AuthorizationError", "AuthenticationWrongNumberOfArgsError"}      # redis': a ConnectionError subclass that is not a blip
+#: the store's own state, not the product's (``-p1-gate-marker-ml.md`` §3 rows 6-8): a refused credential, a role without the permission it was provisioned
+#: with (``NOPERM``), a topology that is not the pinned one (``READONLY``, a failover). Each ends the run ``failed:deterministic`` with nothing recorded.
+RUN_WIDE_FAULTS = CREDENTIAL_FAULTS | {"NoPermissionError", "ReadOnlyError"}
 PROCESS_FAULTS = (OSError, MemoryError, RecursionError)
+CHAIN_LIMIT = 16
+
+
+def exception_chain(exc: BaseException) -> list[BaseException]:
+    """``exc`` and what it was raised from or while handling (``__cause__``, else ``__context__``: the real ``Client`` raises ``from None``, which clears the cause
+    and keeps the original in the context), outermost first, bounded and cycle-safe. The one walk every rule over a failure reads."""
+    out: list[BaseException] = []
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen and len(out) < CHAIN_LIMIT:
+        seen.add(id(cur))
+        out.append(cur)
+        cur = cur.__cause__ if cur.__cause__ is not None else cur.__context__
+    return out
+
+
+def _placed(exc: BaseException) -> list[BaseException]:
+    """The links whose type says WHERE the failure happened. A ``StoreError`` is the client's wrapper (it carries what the store did, in its chain), so its
+    whole chain counts; any other type is the raiser's own and stands for itself: an engine that raised its own ``ValueError`` while handling an
+    ``OSError`` handled it. (A run-wide fault is read over the whole chain whatever the outer type: :func:`_is_run_wide`.)"""
+    from clients.common import StoreError
+    chain = exception_chain(exc)
+    return chain if isinstance(exc, StoreError) else chain[:1]
+
+
+def _names(exc: BaseException) -> set[str]:
+    return {c.__name__ for c in type(exc).__mro__}
+
+
+def _is_redis(exc: BaseException) -> bool:
+    return "redis" in (type(exc).__module__ or "")
+
+
+def _is_run_wide(exc: BaseException) -> bool:
+    from clients.common import ModelUnavailable, NoCredentials, NotBuilt, StoreAuthError
+    return bool(_names(exc) & RUN_WIDE_FAULTS) or isinstance(exc, (Refusal, NoCredentials, StoreAuthError, ModelUnavailable, NotBuilt))
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    """A hang: the socket's builtin ``TimeoutError`` or redis' own (by class name and module: ``redis`` stays a lazy import)."""
+    return isinstance(exc, TimeoutError) or (_is_redis(exc) and "TimeoutError" in _names(exc))
+
+
+def _is_host_fault(exc: BaseException) -> bool:
+    """A connection or OS fault that is not the timeout itself: ``OSError`` (``ConnectionError`` included), redis' ``ConnectionError`` and ``BusyLoadingError``."""
+    return not _is_timeout(exc) and (isinstance(exc, OSError) or (_is_redis(exc) and bool(_names(exc) & {"ConnectionError", "BusyLoadingError"})))
+
+
+def _is_transient_leaf(exc: BaseException) -> bool:
+    return isinstance(exc, (KeyboardInterrupt, _Terminated)) or _is_timeout(exc) or _is_host_fault(exc)
 
 
 def ask_failure_entry(exc: BaseException) -> dict | None:
     """THE policy for one anchor whose ask raised (``-p1-gate-marker-ml.md`` §3; the one place to change it). -> the entry to persist for that anchor, or
-    ``None`` when the exception is not per-anchor and must propagate (the run then ends ``failed:transient`` / ``failed:deterministic``).
+    ``None`` when the exception is not per-anchor and must propagate (the run then ends ``failed:transient`` / ``failed:deterministic``). Decided on the
+    whole cause chain, never on the outer type (the real ``Client`` wraps every fault in ``StoreError``); precedence: run-wide > connection/OS/host > rest.
 
-    * transient (a connection or timeout error, even one the engine raised), a host fault (:data:`PROCESS_FAULTS`) and run-wide faults (a refused credential, an unusable store or model, a
-      :class:`~gate.Refusal` such as a changed snapshot) -> ``None``;
-    * raised inside the engine's ask (:class:`EngineAskError`) -> ``{"outcome": "engine-error", "exceptionClass": <class>}``: a miss for the item, in the
-      ``fail`` tier, never re-asked on a resume;
+    * run-wide faults anywhere on the chain (a refused credential, ``NOPERM``, ``READONLY``, an unusable store or model, a :class:`~gate.Refusal` such as a
+      changed snapshot), a host fault (:data:`PROCESS_FAULTS`) and a transient one (:func:`classify`; a timeout included) -> ``None``;
+    * raised inside the engine's ask (:class:`EngineAskError`) -> ``{"outcome": "engine-error", "exceptionClass": <the chain's innermost class>}``: a miss for the
+      item, in the ``fail`` tier, never re-asked on a resume;
     * everything else (a :class:`~gate.HarnessError`, a translation fault, an exception that cannot be placed on the engine's side of the boundary) ->
       ``{"harnessError": <class>}``: the item is neither hit nor miss and the verdict is ``blocked``.
 
     Only a class name is ever recorded: a message may embed an id or a path."""
-    from clients.common import ModelUnavailable, NoCredentials, NotBuilt, StoreAuthError
-    inner = exc.__cause__ if isinstance(exc, EngineAskError) and exc.__cause__ is not None else exc
-    if {c.__name__ for c in type(inner).__mro__} & CREDENTIAL_FAULTS:                 # a refused credential is the run's, whoever raised it
-        return None
-    if isinstance(inner, PROCESS_FAULTS) or isinstance(exc, PROCESS_FAULTS) or classify(inner) == "transient" or isinstance(exc, (Refusal, NoCredentials, StoreAuthError, ModelUnavailable, NotBuilt)) \
-            or isinstance(inner, (Refusal, NoCredentials, StoreAuthError, ModelUnavailable, NotBuilt)):
+    subject = exc.__cause__ if isinstance(exc, EngineAskError) and exc.__cause__ is not None else exc
+    chain = exception_chain(subject)
+    if any(_is_run_wide(c) for c in chain) or any(isinstance(c, PROCESS_FAULTS) for c in _placed(subject)) or isinstance(exc, PROCESS_FAULTS) \
+            or classify(subject) == "transient":
         return None
     if isinstance(exc, EngineAskError):
-        return {"outcome": G.ENGINE_ERROR, "exceptionClass": type(inner).__name__}
+        return {"outcome": G.ENGINE_ERROR, "exceptionClass": type(chain[-1]).__name__}
     return {"harnessError": type(exc).__name__}
+
+
+def converts_on_repeat_stall(exc: BaseException) -> bool:
+    """Whether a stop that ended the run on ``exc`` is a stall the repeat-stall rule may count (§1.1.3 (b)): a timeout is on the chain and nothing of a higher
+    precedence is: no run-wide fault, no connection/OS/host fault (an ``OSError`` other than the timeout itself), no process fault, no interrupt."""
+    chain = exception_chain(exc)                       # whole chain, both ways: a conversion is the irreversible direction, so any doubt keeps the stop plain
+    return any(_is_timeout(c) for c in chain) and not any(
+        _is_run_wide(c) or _is_host_fault(c) or isinstance(c, (MemoryError, RecursionError, KeyboardInterrupt, _Terminated)) for c in chain)
 
 
 _ID_KEY = {"symbol": "symbolId", "contract": "cpId", "config": "entryId"}
@@ -219,23 +280,14 @@ def resolve_preflight(records: Sequence[Mapping], probes: Mapping | None, snap, 
 
 def classify(exc: BaseException) -> str:
     """``transient`` is only a connection or timeout error to the store or engine, an ``OSError``, or an interrupt (``-p1-gate-marker-ml.md`` §1.1.3);
-    a ``StoreError`` is transient only when what it wrapped was. EVERYTHING else, an unknown class included, is ``deterministic`` (fail closed)."""
-    if isinstance(exc, (KeyboardInterrupt, _Terminated)):
-        return "transient"
-    names = {c.__name__ for c in type(exc).__mro__}
-    if "AuthenticationError" in names:                                       # redis' is a ConnectionError subclass: a refused credential is not a blip
+    a ``StoreError`` is transient only when something on its cause chain is. A run-wide fault anywhere on the chain (a refused credential, ``NOPERM``,
+    ``READONLY``: redis' ``AuthenticationError`` is a ``ConnectionError`` subclass, not a blip) outranks everything. EVERYTHING else, an unknown class
+    included, is ``deterministic`` (fail closed)."""
+    chain = exception_chain(exc)
+    if any(_is_run_wide(c) for c in chain):
         return "deterministic"
-    if isinstance(exc, (OSError, ConnectionError, TimeoutError)):           # ConnectionError/TimeoutError are OSErrors; listed for the reader
+    if any(_is_transient_leaf(c) for c in _placed(exc)):
         return "transient"
-    if names & {"ConnectionError", "TimeoutError", "BusyLoadingError"} and "redis" in (type(exc).__module__ or ""):
-        return "transient"
-    from clients.common import StoreError
-    if isinstance(exc, StoreError):
-        inner = exc.__cause__ or exc.__context__
-        while inner is not None:
-            if classify(inner) == "transient":
-                return "transient"
-            inner = inner.__cause__ or inner.__context__
     return "deterministic"
 
 
@@ -368,7 +420,7 @@ class _Persisting:
             entry = {"request": req, "answer": doc}
         except Exception as exc:                                    # noqa: BLE001 - classified by ask_failure_entry; a run-wide fault is re-raised
             entry = ask_failure_entry(exc)
-            if entry is None and self.stall is not None and isinstance(exc, TimeoutError) and not isinstance(exc, ConnectionError):
+            if entry is None and self.stall is not None and converts_on_repeat_stall(exc):
                 entry = self.stall.on_timeout(len(self.recorded))         # the ONE way a timeout becomes an engine error: k stops, canary answering
             if entry is None:
                 raise
@@ -485,6 +537,18 @@ def _resume_checks(marker: Mapping, pins: Mapping, key: str, cust: Path, recorde
         raise Refusal("resume refused: the cache holds more than the one in-flight entry (C5)")
 
 
+@contextlib.contextmanager
+def _stranded_on_exit(active: bool):
+    """Marks whatever leaves the block (an exception or an interrupt) as one that leaves the built graph in the store (``exc.strandedStore``); :func:`main`
+    then appends :data:`gate.STORE_REMEDY` to its line. ``active`` is false on a resume (no build ran in this process)."""
+    try:
+        yield
+    except BaseException as exc:                                    # noqa: BLE001 - re-raised unchanged
+        if active:
+            exc.strandedStore = True
+        raise
+
+
 def run_gate(*args, **kw) -> dict:
     """The AC-5 gate run (:func:`_run_gate`) under the per-list lock."""
     lock = _Lock()
@@ -515,7 +579,7 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     probes = G.read_probe_map(pmap, home)
     manifest = repo / G.SYSTEM_MANIFEST
     if not manifest.is_file():
-        raise Refusal("the system manifest cpg/ccg/system.yaml is missing from the working tree: the build cannot be given one (at EVAL_COMMIT there is none)")
+        raise Refusal("the system manifest cpg/ccg/system.yaml is missing from the working tree: the build is given the working tree's manifest, because the clone at EVAL_COMMIT may hold none")
     declared = G.manifest_system(repo)
     if declared is not None and declared != system:
         raise Refusal("the system disagrees with the system manifest's own: pass the manifest's system, or none")
@@ -542,30 +606,31 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
                           "after its build, the list is not spent (no marker was taken) and runs on the new store")
         _clean_leftover(cust, built, "gate-build-")
         G.build_at_eval_commit(eval_commit, built, repo=repo, refresh_fn=refresh_fn, system=system, manifest=manifest, **_private_build_areas(cust, key))
-    snap = snapshot_factory(built)
-    sid = snap.snapshot_id()
-    if engine_snapshot_id is not None and engine_snapshot_id() != sid:
-        raise Refusal("the engine reader's :Snapshot id differs from the snapshot reader's: the store or system is not the one the run reads")
-    answers_path = cust / f"run-{key}.answers.jsonl"
-    recorded = load_answers(answers_path) if resume else {}
-    obs = {**(dict(tree) if tree is not None else G.observe_tree(repo)), **(observed if observed is not None else G.engine_observed())}
-    pins = _pins(ctx, sid, obs, flow_flag=flag, withheld=withheld, probe_map_sha256=hashlib.sha256(pmap.read_bytes()).hexdigest(),
-                 manifest_sha256=hashlib.sha256(manifest.read_bytes()).hexdigest(),
-                 stall={"k": stall_k, "deadlineS": stall_deadline_s, "canaryRequest": canary_request if canary is not None else None})
-    if resume:
-        _resume_checks(old, pins, key, cust, len(recorded), cache_len)
-    else:
-        G.check_cache_empty(cache_len)
-    resolve_preflight(records, probes, snap, resolve_factory(built, snap))
-    ask = ask_factory(built, snap)
-    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    if resume:
-        doc = {**old, "state": "started", "resumes": [*old["resumes"], {"answersBefore": len(recorded), "askedAfter": None}]}
-        _write_marker(marker, doc)
-    else:
-        doc = {"state": "started", "gateId": gate_id, "records": len(all_records), "listSha256": key, "pins": pins, "head": ctx["head"],
-               "label": ctx["label"], "startedAt": now, "resumes": [], "transientClasses": [], "withheld": withheld, "stall": None}
-        G.first_run_marker(cust, key, doc)
+    with _stranded_on_exit(not resume):                          # the build has loaded the live graph: every exit before the marker leaves the store stranded
+        snap = snapshot_factory(built)
+        sid = snap.snapshot_id()
+        if engine_snapshot_id is not None and engine_snapshot_id() != sid:
+            raise Refusal("the engine reader's :Snapshot id differs from the snapshot reader's: the store or system is not the one the run reads")
+        answers_path = cust / f"run-{key}.answers.jsonl"
+        recorded = load_answers(answers_path) if resume else {}
+        obs = {**(dict(tree) if tree is not None else G.observe_tree(repo)), **(observed if observed is not None else G.engine_observed())}
+        pins = _pins(ctx, sid, obs, flow_flag=flag, withheld=withheld, probe_map_sha256=hashlib.sha256(pmap.read_bytes()).hexdigest(),
+                     manifest_sha256=hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                     stall={"k": stall_k, "deadlineS": stall_deadline_s, "canaryRequest": canary_request if canary is not None else None})
+        if resume:
+            _resume_checks(old, pins, key, cust, len(recorded), cache_len)
+        else:
+            G.check_cache_empty(cache_len)
+        resolve_preflight(records, probes, snap, resolve_factory(built, snap))
+        ask = ask_factory(built, snap)
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        if resume:
+            doc = {**old, "state": "started", "resumes": [*old["resumes"], {"answersBefore": len(recorded), "askedAfter": None}]}
+            _write_marker(marker, doc)
+        else:
+            doc = {"state": "started", "gateId": gate_id, "records": len(all_records), "listSha256": key, "pins": pins, "head": ctx["head"],
+                   "label": ctx["label"], "startedAt": now, "resumes": [], "transientClasses": [], "withheld": withheld, "stall": None}
+            G.first_run_marker(cust, key, doc)
     stall = _Stall(lambda: doc.get("stall"), lambda v: doc.__setitem__("stall", v), canary, stall_k)
     persisting = _Persisting(ask, answers_path, recorded, stall)
     try:
@@ -677,6 +742,11 @@ def _msg(e: BaseException) -> str:
     return text[len("REFUSED: "):] if text.startswith("REFUSED: ") else text
 
 
+def _remedy(e: BaseException, text: str) -> str:
+    """The operator's remedy for a store the build stranded (:func:`_stranded_on_exit`), unless ``text`` already carries it."""
+    return "" if not getattr(e, "strandedStore", False) or G.STORE_REMEDY in text else ". " + G.STORE_REMEDY
+
+
 def main(argv=None, deps: Mapping | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -706,19 +776,19 @@ def main(argv=None, deps: Mapping | None = None) -> int:
         print(json.dumps(out, sort_keys=True))
         return EXIT_OK
     except (ResolveRefusal, G.PrecheckRefusal) as e:
-        print(f"REFUSED: {_msg(e)}", file=sys.stderr)
+        print(f"REFUSED: {_msg(e)}{_remedy(e, str(e))}", file=sys.stderr)
         return EXIT_RESOLVE
     except Refusal as e:
-        print(f"REFUSED: {_msg(e)}", file=sys.stderr)
+        print(f"REFUSED: {_msg(e)}{_remedy(e, str(e))}", file=sys.stderr)
         return EXIT_REFUSED
     except RunFailed as e:
         print(str(e), file=sys.stderr)
         return EXIT_RESUMABLE if e.state == "failed:transient" else EXIT_SPENT
-    except (KeyboardInterrupt, _Terminated):
-        print("interrupted: the run is failed:transient (resumable with --resume) if the marker was taken", file=sys.stderr)
+    except (KeyboardInterrupt, _Terminated) as e:
+        print(f"interrupted: the run is failed:transient (resumable with --resume) if the marker was taken{_remedy(e, '')}", file=sys.stderr)
         return EXIT_RESUMABLE
     except Exception as e:                                        # before the marker: nothing is spent (a failure after it is a RunFailed)
-        print(f"bad input: {type(e).__name__}", file=sys.stderr)
+        print(f"bad input: {type(e).__name__}{_remedy(e, '')}", file=sys.stderr)
         return EXIT_BAD
     finally:
         if old_term is not None:

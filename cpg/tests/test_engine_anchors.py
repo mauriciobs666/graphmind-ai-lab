@@ -408,6 +408,29 @@ def test_when_the_normalised_and_the_verbatim_key_both_hit_the_normalised_point_
     assert got.status == "resolved" and got.anchors[0].cp_id == "s4"
 
 
+def test_the_verbatim_read_comes_before_the_template_fallback_so_a_stored_form_key_is_not_ambiguous_with_a_template_that_also_serves_it():
+    """P4-4: stored ``GET /api/items/{}`` and ``GET /api/items/{#}``; asked ``GET /api/items/{#}``. The normaliser mangles the asked key (no exact hit), the
+    verbatim read finds ``{#}`` itself. With the verbatim read after the template fallback the template ``{}`` also serves it: ``ambiguous``."""
+    r = _stored_form_reader([("t1", "http", "GET /api/items/{}"), ("t2", "http", "GET /api/items/{#}")])
+    got = A.resolve_contract(r, "GET /api/items/{#}", kind="http")
+    assert got.status == "resolved" and got.anchors[0].cp_id == "t2" and got.via == "exact"
+    assert [c[0] for c in r.calls] == ["cp_by_key", "cp_by_key"]                                 # normalised, verbatim; the key scan is never reached
+
+
+def test_a_stored_form_key_that_a_template_used_to_serve_now_resolves_to_its_own_point_exactly():
+    """P4-4: asked ``GET /{#}/shop/api`` used to be mangled and template-matched to the unrelated stored ``GET /{}``; it resolves to its own point, ``via`` exact."""
+    r = _stored_form_reader([("t1", "http", "GET /{}"), ("t2", "http", "GET /{#}/shop/api")])
+    got = A.resolve_contract(r, "GET /{#}/shop/api", kind="http")
+    assert got.status == "resolved" and got.anchors[0].cp_id == "t2" and got.via == "exact"
+
+
+def test_a_stored_form_key_with_no_point_of_its_own_still_falls_back_to_the_template_that_serves_it():
+    r = _stored_form_reader([("t1", "http", "GET /api/items/{}")])
+    got = A.resolve_contract(r, "GET /api/items/{#}", kind="http")
+    assert [c[0] for c in r.calls] == ["cp_by_key", "cp_by_key", "cp_keys"]                      # normalised, verbatim, then the templates
+    assert got.status == "resolved" and got.anchors[0].cp_id == "t1" and got.via == "path-template"
+
+
 def test_a_verbatim_hit_in_another_kind_is_not_a_hit():
     r = _stored_form_reader([("t1", "topic", "GET /x/{?}")])
     assert A.resolve_contract(r, "GET /x/{?}", kind="http").status == "unresolved"

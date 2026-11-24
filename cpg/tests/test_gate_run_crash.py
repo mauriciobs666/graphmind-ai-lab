@@ -624,12 +624,21 @@ def test_p32_a_valid_record_still_runs_and_the_same_function_is_what_score_calls
 
 
 # ================================================================================================ round D, P3-3: the repeat-stall conversion (-p1-gate-marker-ml.md §1.1.3)
-def store_timeout():
-    """A store error that WRAPS a timeout: transient (the cause is), but not a ``TimeoutError`` itself, so it never converts."""
+def store_error_over(cause):
+    """What the real ``Client`` raises for a fault of the db: a ``StoreError`` ``from None`` (the original stays in ``__context__``). Hand-made here for the
+    unit rows; ``tests/test_gate_run_fault_grid.py`` produces the same shape by injecting the fault at the reader's db."""
     try:
-        raise StoreError("the store timed out") from TimeoutError("t")
+        try:
+            raise cause
+        except Exception:                                                              # noqa: BLE001
+            raise StoreError("the store failed") from None
     except StoreError as e:
         return e
+
+
+def store_timeout():
+    """A store error that WRAPS a timeout, as the real ``Client`` raises one for a hang: the outer type is not ``TimeoutError``; it converts (§1.1.3 (b), P4-1)."""
+    return store_error_over(TimeoutError("t"))
 
 
 def stall_env(tmp_path, stalls_on=lambda spec: spec["key"] == "GET /a0", exc=lambda: TimeoutError("deadline"), n=3):
@@ -697,7 +706,8 @@ def test_p33_a_failed_canary_is_plain_transient_and_resets_the_count(tmp_path):
 
 
 @pytest.mark.parametrize("other", [lambda: ConnectionError("c"), lambda: ConnectionResetError("r"), lambda: OSError(errno.EIO, "io"),
-                                   lambda: OSError(errno.ENOSPC, "full"), lambda: store_timeout()])
+                                   lambda: OSError(errno.ENOSPC, "full"), lambda: store_error_over(ConnectionError("c")),
+                                   lambda: store_error_over(OSError(errno.ENOSPC, "full"))])
 def test_p33_only_a_timeout_converts_any_other_stop_resets_the_count_and_is_never_recorded(tmp_path, other):
     e = stall_env(tmp_path)
     assert stop(e) == "failed:transient" and stop(e) == "failed:transient" and e.marker()["stall"]["count"] == 2
@@ -708,12 +718,22 @@ def test_p33_only_a_timeout_converts_any_other_stop_resets_the_count_and_is_neve
     assert answers_text(e) == ""
 
 
-@pytest.mark.parametrize("exc", [lambda: ConnectionError("c"), lambda: OSError(errno.EIO, "io"), lambda: OSError(errno.ENOSPC, "full"), lambda: store_timeout()])
+@pytest.mark.parametrize("exc", [lambda: ConnectionError("c"), lambda: OSError(errno.EIO, "io"), lambda: OSError(errno.ENOSPC, "full"),
+                                 lambda: store_error_over(ConnectionError("c")), lambda: store_error_over(OSError(errno.ENOSPC, "full"))])
 def test_p33_a_non_timeout_failure_never_converts_however_often_it_repeats(tmp_path, exc):
     e = stall_env(tmp_path, exc=exc)
     for _ in range(6):
         stop(e)
     assert e.marker()["state"].startswith("failed:") and not e.run_files() and answers_text(e) == ""
+
+
+def test_p33_a_store_error_that_wraps_a_timeout_converts_like_the_timeout(tmp_path):
+    """P4-1: the real ``Client`` wraps the hang in ``StoreError``; the rule reads the cause chain, so the third stop converts."""
+    e = stall_env(tmp_path, exc=store_timeout)
+    assert stop(e) == "failed:transient" and stop(e) == "failed:transient" and e.marker()["stall"] == {"index": 0, "count": 2}
+    assert stop(e) == "done"
+    lines = [json.loads(l) for l in e.answers_file().read_text().splitlines()]
+    assert {k: v for k, v in lines[0].items() if k != "anchorId"} == {"outcome": "engine-error", "exceptionClass": "TimeoutError", "via": "repeat-stall", "stalls": 3}
 
 
 def test_p33_progress_resets_the_count(tmp_path):

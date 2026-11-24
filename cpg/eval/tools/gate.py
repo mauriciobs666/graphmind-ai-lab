@@ -317,10 +317,18 @@ def _audit_dir_env(audit_dir):
     try:
         yield
     finally:
-        if had is None:
-            os.environ.pop("CCG_AUDIT_DIR", None)
-        else:
-            os.environ["CCG_AUDIT_DIR"] = had
+        pending = None
+        for _ in range(2):                                          # a signal handler can raise between the two statements of the restore: retry once, then re-raise it
+            try:
+                if had is None:
+                    os.environ.pop("CCG_AUDIT_DIR", None)
+                else:
+                    os.environ["CCG_AUDIT_DIR"] = had
+                break
+            except BaseException as exc:                            # noqa: BLE001 - re-raised below, after the variable is restored
+                pending = pending or exc
+        if pending is not None:
+            raise pending
 
 
 def require_complete_build(report) -> None:
@@ -1332,6 +1340,7 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
     sc.add_argument("--host", default="127.0.0.1")
     sc.add_argument("--port", type=int)
     sc.add_argument("--graph")
+    sc.add_argument("--repo", help="the repository whose manifest names the default system and whose tree is preflighted (default: this checkout's)")
     sc.add_argument("--system", help="default: the system the repository's manifest (cpg/ccg/system.yaml) declares")
     a = ap.parse_args(argv)
     try:
@@ -1340,7 +1349,7 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
             print(json.dumps(rep, sort_keys=True))
             return 0 if rep["label"] == "first-contact" else 1
         cust = within_custodian(Path(a.custodian), None, "--custodian")
-        repo = Path(repo) if repo else _CPG.parent
+        repo = Path(repo) if repo else Path(a.repo) if a.repo else _CPG.parent
         records = []
         for f in a.lists.split(","):
             records += _jsonl(within_custodian(Path(f), None, "--lists"))

@@ -256,7 +256,7 @@ def test_grid2_a_base_exception_is_never_recorded_as_an_anchors_entry(tmp_path, 
 def test_grid2_every_redis_exception_class():
     import redis.exceptions as RE
     transient = {"ConnectionError", "TimeoutError", "BusyLoadingError"}
-    auth = {"AuthenticationError", "AuthorizationError", "AuthenticationWrongNumberOfArgsError"}
+    auth = {"AuthenticationError", "AuthorizationError", "AuthenticationWrongNumberOfArgsError", "NoPermissionError", "ReadOnlyError"}      # rows 6-8 of the ruling's table
     seen = 0
     for name, cls in sorted(vars(RE).items()):
         if not (isinstance(cls, type) and issubclass(cls, Exception)) or cls.__module__ != RE.__name__:

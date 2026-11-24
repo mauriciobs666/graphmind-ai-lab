@@ -301,6 +301,7 @@ def resolve_contract(reader: Reader, key: str, kind: str | None = None) -> Resol
     A key in *stored* form (what an answer prints: ``GET /x/{?}``, ``GET /x/{#}/y``) is not a raw URL and normalization mangles it (``GET /x/{``), so when the
     normalized read has no exact hit and differs from the asked key, the asked key is read verbatim as a stored key (same kind filter) before the template fallback.
     Order is fixed: normalized, then verbatim, then templates. If both reads would hit different points the normalized one wins and the verbatim one is never read.
+    A stored-form key that a template used to resolve now resolves exactly to its own point (``via`` ``exact``); in the analyst's 50,000-pair old-versus-new comparison, 74 resolved to a different point and 91 changed only ``via`` (see ``docs/reviews/connected-code-graph-p1-32b-impl.md`` Pass 4, P4-4).
     A ``?query`` stored-form key is not stored (the build drops the query), so it stays ``unresolved`` (``no-contract-point``).
     """
     key, kind = _text(key, "key"), _kind(kind)
