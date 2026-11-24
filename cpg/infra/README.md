@@ -14,7 +14,7 @@ touches. The sandbox images (`toolchain/`, incl. the P1 `indexer` image) are des
 | Binding | `127.0.0.1:6390` only (`falkordb-dev` publishes `0.0.0.0`, so don't copy its `-p` form) |
 | Memory | `maxmemory 1536mb`, `maxmemory-policy noeviction` |
 | Persistence | none: `save ""`, `appendonly no`, no volume, so the first query after a restart is a rebuild |
-| Module config (P1) | `GRAPH.CONFIG SET TIMEOUT_MAX 10000`, `MAX_INFO_QUERIES 0`, applied by `up` (`-p0-graph.md` §6 rows 5, 12) |
+| Module config (P1) | `GRAPH.CONFIG SET TIMEOUT_MAX 10000`, `MAX_INFO_QUERIES 0`, applied by `up` (`-p0-graph.md` §6 rows 5, 12); `QUERY_MEM_CAPACITY 268435456` (256 MiB, module-wide, per query; what it bounds and what it does not: `docs/plans/connected-code-graph-p1-raw-query-memory-graph.md`) |
 | Container memory | `--memory 2g --memory-swap 2g` (cap, no swap; see below) |
 | Web console | off (`BROWSER=0`), which saves RAM on the 6 GB WSL host |
 | Admin password | `~/.config/ccg/falkordb-admin.pass` (mode 600, outside the repo, created on first `up`) |
@@ -22,7 +22,7 @@ touches. The sandbox images (`toolchain/`, incl. the P1 `indexer` image) are des
 ## Commands
 
 ```bash
-cpg/infra/ccg-falkordb.sh up        # start if not running (no-op if it is); reports TIMEOUT_MAX / MAX_INFO_QUERIES
+cpg/infra/ccg-falkordb.sh up        # start if not running (no-op if it is); reports TIMEOUT_MAX / MAX_INFO_QUERIES / QUERY_MEM_CAPACITY
 cpg/infra/ccg-falkordb.sh status    # state, binding, D7 config, P1 hygiene, module version, key count
 cpg/infra/ccg-falkordb.sh down      # stop and remove; refuses a non-empty keyspace
 cpg/infra/ccg-falkordb.sh down --force
@@ -46,7 +46,7 @@ cpg/infra/ccg-falkordb.sh --throwaway list
   - auth is off (an unauthenticated `PING` must get `NOAUTH`);
   - any of the four D7 values;
   - the P1 steady state: `GRAPH.CONFIG TIMEOUT_MAX` must be nonzero (`up` sets 10000; P1-19
-    re-derives it), and `MAX_INFO_QUERIES` must be `0`;
+    re-derives it), `MAX_INFO_QUERIES` must be `0`, and `QUERY_MEM_CAPACITY` must be `268435456` (a restart behind `up`'s back turns it off, and `up` on that running instance refuses until `down --force` + `up`);
   - the ACL users: every user must be `default` or `ccg_<role>_<system>`, with role `build`,
     `verdict`, `engine` or `raw`. `<system>` must match the system-name whitelist of
     `docs/plans/connected-code-graph-p1-graph.md` §7. Any other user is drift, including a bare

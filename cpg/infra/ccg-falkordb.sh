@@ -9,7 +9,7 @@ set -euo pipefail
 # Regression test (stubbed docker/redis-cli, never real containers): tests/test-ccg-falkordb.sh
 #
 #   up        start the instance if it is not running (idempotent; a running instance is a no-op),
-#             set the P1 module config, and report TIMEOUT_MAX / MAX_INFO_QUERIES from GRAPH.CONFIG GET
+#             set the P1 module config, and report TIMEOUT_MAX / MAX_INFO_QUERIES / QUERY_MEM_CAPACITY from GRAPH.CONFIG GET
 #   status    print state, binding, the D7 config, image/module, memory cap, P1 steady-state
 #             hygiene and key count (read-only; non-zero exit if the instance is down or drifted)
 #   down      stop and remove the container (refuses if its keyspace is non-empty unless
@@ -47,7 +47,7 @@ set -euo pipefail
 #    nothing that was not already lost the moment it stopped, and the first query after a
 #    restart is a rebuild. `down --force` + `up` is therefore the full clean start (keyspace, ACL
 #    users and runtime config all reset).
-#  - P1 module config (TIMEOUT_MAX, MAX_INFO_QUERIES) is set at runtime by `up` with GRAPH.CONFIG
+#  - P1 module config (TIMEOUT_MAX, MAX_INFO_QUERIES, QUERY_MEM_CAPACITY) is set at runtime by `up` with GRAPH.CONFIG
 #    SET right after the container starts; FALKORDB_ARGS is never passed, so the image's other
 #    module defaults stay as they are on falkordb-dev. An instance restarted behind this script's
 #    back loses them, and `status` reports that as drift.
@@ -118,6 +118,10 @@ TIMEOUT_MAX_UP=10000
 # (ccg/engine/config.py RESULTSET_SIZE) takes a reply shorter than this as complete, so a lower server value would cut silently.
 RESULTSET_SIZE_IMAGE=10000
 MAX_INFO_QUERIES_UP=0
+# QUERY_MEM_CAPACITY (bytes, module-wide): one query that grows past it is refused with a memory error.
+# Without it a read-only GRAPH.RO_QUERY is outside maxmemory (no denyoom flag), so only the container cap bounds it
+# (docs/plans/connected-code-graph-p1-raw-query-memory-graph.md). 256 MiB; bounds ONE query, not several concurrent ones.
+QUERY_MEM_CAPACITY_UP=268435456
 # The P1 steady-state ACL user set (P1-19's create_users): default plus, per system <s>, the four
 # users ccg_<role>_<s> with role build|verdict|engine|raw; any other user is drift. <s> follows the
 # system-name whitelist of docs/plans/connected-code-graph-p1-graph.md §7 (^[a-z0-9]+(?:[-_][a-z0-9]+)*$,
@@ -139,7 +143,7 @@ Usage: ccg-falkordb.sh <up|status|down [--force]|reset-p0 --yes|-h>
        ccg-falkordb.sh --throwaway [up|status|down|list]
 
   up        start $SHARED_NAME on $HOST:$SHARED_PORT if not running (idempotent); sets and reports
-            TIMEOUT_MAX $TIMEOUT_MAX_UP and MAX_INFO_QUERIES $MAX_INFO_QUERIES_UP
+            TIMEOUT_MAX $TIMEOUT_MAX_UP, MAX_INFO_QUERIES $MAX_INFO_QUERIES_UP and QUERY_MEM_CAPACITY $QUERY_MEM_CAPACITY_UP
   status    report state + D7 config + P1 hygiene; non-zero exit if down or drifted
   down      stop and remove $SHARED_NAME (refuses a non-empty keyspace without --force)
   reset-p0  FLUSHALL the keyspace of $SHARED_NAME (needs --yes; approval-gated)
@@ -261,7 +265,7 @@ graph_config_get() { cli GRAPH.CONFIG GET "$1" | sed -n 2p; }
 # Applied only to a container this run just started (ownership is implied: our own docker run).
 apply_module_config() {
   local k v r
-  for kv in "TIMEOUT_MAX $TIMEOUT_MAX_UP" "MAX_INFO_QUERIES $MAX_INFO_QUERIES_UP"; do
+  for kv in "TIMEOUT_MAX $TIMEOUT_MAX_UP" "MAX_INFO_QUERIES $MAX_INFO_QUERIES_UP" "QUERY_MEM_CAPACITY $QUERY_MEM_CAPACITY_UP"; do
     k="${kv% *}"; v="${kv#* }"
     r="$(cli GRAPH.CONFIG SET "$k" "$v")"
     [ "$r" = OK ] || die "GRAPH.CONFIG SET $k $v replied '$r'"
@@ -269,16 +273,16 @@ apply_module_config() {
 }
 
 module_config_ok() {
-  local tmax miq
-  tmax="$(graph_config_get TIMEOUT_MAX)"; miq="$(graph_config_get MAX_INFO_QUERIES)"
+  local tmax miq qmc
+  tmax="$(graph_config_get TIMEOUT_MAX)"; miq="$(graph_config_get MAX_INFO_QUERIES)"; qmc="$(graph_config_get QUERY_MEM_CAPACITY)"
   case "$tmax" in ''|*[!0-9]*|0) return 1 ;; esac
-  [ "$miq" = "$MAX_INFO_QUERIES_UP" ]
+  [ "$miq" = "$MAX_INFO_QUERIES_UP" ] && [ "$qmc" = "$QUERY_MEM_CAPACITY_UP" ]
 }
 
 report_module_config() {
-  local tmax miq
-  tmax="$(graph_config_get TIMEOUT_MAX)"; miq="$(graph_config_get MAX_INFO_QUERIES)"
-  log "GRAPH.CONFIG GET: TIMEOUT_MAX $tmax, MAX_INFO_QUERIES $miq"
+  local tmax miq qmc
+  tmax="$(graph_config_get TIMEOUT_MAX)"; miq="$(graph_config_get MAX_INFO_QUERIES)"; qmc="$(graph_config_get QUERY_MEM_CAPACITY)"
+  log "GRAPH.CONFIG GET: TIMEOUT_MAX $tmax, MAX_INFO_QUERIES $miq, QUERY_MEM_CAPACITY $qmc"
 }
 
 port_listening() { # <port>
@@ -489,7 +493,7 @@ cmd_status() {
     echo "config:    DRIFTED from D7"; return 1
   fi
 
-  local mm pol save aof modver tmax miq rsz acl u bad_users="" keys
+  local mm pol save aof modver tmax miq rsz qmc acl u bad_users="" keys
   mm="$(cli CONFIG GET maxmemory | sed -n 2p)"
   pol="$(cli CONFIG GET maxmemory-policy | sed -n 2p)"
   save="$(cli CONFIG GET save | sed -n 2p)"
@@ -510,14 +514,17 @@ cmd_status() {
   tmax="$(graph_config_get TIMEOUT_MAX)"
   miq="$(graph_config_get MAX_INFO_QUERIES)"
   rsz="$(graph_config_get RESULTSET_SIZE)"
+  qmc="$(graph_config_get QUERY_MEM_CAPACITY)"
   acl="$(cli ACL USERS | paste -sd' ' -)"
   echo "TIMEOUT_MAX:      $tmax (up sets $TIMEOUT_MAX_UP; must be nonzero)"
   echo "MAX_INFO_QUERIES: $miq (must be $MAX_INFO_QUERIES_UP)"
   echo "RESULTSET_SIZE:   $rsz (image default $RESULTSET_SIZE_IMAGE, not set by up; the engine reader assumes it)"
+  echo "QUERY_MEM_CAPACITY: $qmc (up sets $QUERY_MEM_CAPACITY_UP; a restart behind up's back turns it off)"
   echo "ACL users:   $acl (allowed: default, ccg_{build,verdict,engine,raw}_<system>)"
   case "$tmax" in ''|*[!0-9]*|0) drift "GRAPH.CONFIG TIMEOUT_MAX is '${tmax}', not a nonzero value (restarted behind up's back?)" ;; esac
   [ "$miq" = "$MAX_INFO_QUERIES_UP" ] || drift "GRAPH.CONFIG MAX_INFO_QUERIES is '$miq', not $MAX_INFO_QUERIES_UP"
   [ "$rsz" = "$RESULTSET_SIZE_IMAGE" ] || drift "GRAPH.CONFIG RESULTSET_SIZE is '$rsz', not the image default $RESULTSET_SIZE_IMAGE (the engine reader would take a cut reply as complete)"
+  [ "$qmc" = "$QUERY_MEM_CAPACITY_UP" ] || drift "GRAPH.CONFIG QUERY_MEM_CAPACITY is '$qmc', not $QUERY_MEM_CAPACITY_UP (a read-only query would be bounded only by the container cap)"
   for u in $acl; do
     acl_user_ok "$u" || bad_users+="$u "
   done

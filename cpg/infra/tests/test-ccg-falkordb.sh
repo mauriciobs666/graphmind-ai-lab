@@ -169,7 +169,7 @@ case "$cmd" in
     esac ;;
   MODULE) printf 'name\ngraph\nver\n%s\npath\n/var/lib/falkordb/bin/falkordb.so\nargs\nMAX_QUEUED_QUERIES\n25\n' "$(cat "$d/modver")" ;;
   GRAPH.CONFIG)
-    f=""; case "${3:-}" in TIMEOUT_MAX) f=tmax ;; MAX_INFO_QUERIES) f=miq ;; RESULTSET_SIZE) f=rsz ;; esac
+    f=""; case "${3:-}" in TIMEOUT_MAX) f=tmax ;; MAX_INFO_QUERIES) f=miq ;; RESULTSET_SIZE) f=rsz ;; QUERY_MEM_CAPACITY) f=qmc ;; esac
     if [ -z "$f" ]; then echo "ERR unknown config ${3:-}"; exit 0; fi
     case "$(echo "$2" | tr a-z A-Z)" in
       GET) printf '%s\n%s\n' "$3" "$(cat "$d/$f")" ;;
@@ -209,7 +209,7 @@ mkc() { # name state label hostport keys [ports-file-content]
   echo "$4" >"$d/hostport"; echo "$1" >"$W/p/$4"
   if [ -n "${6:-}" ]; then printf '%s\n' "$6" >"$d/ports"; else echo "6379/tcp -> 127.0.0.1:$4" >"$d/ports"; fi
   echo 1 >"$d/auth"; echo falkordb/falkordb:v4.18.11 >"$d/image"; echo 41811 >"$d/modver"
-  echo 10000 >"$d/tmax"; echo 0 >"$d/miq"; echo 10000 >"$d/rsz"; echo default >"$d/acl"; : >"$d/twlabel"
+  echo 10000 >"$d/tmax"; echo 0 >"$d/miq"; echo 10000 >"$d/rsz"; echo 268435456 >"$d/qmc"; echo default >"$d/acl"; : >"$d/twlabel"
   echo 2147483648 >"$d/mem"; echo 2147483648 >"$d/memswap"
 }
 new_world() {
@@ -323,6 +323,7 @@ st_case() { # description setup-command
 }
 new_world; mkc ccg-falkordb running 1 6390 0; run_s -- status
 check "S0 clean instance -> status passes" '[ $RC = 0 ]'
+check "S0c status reports QUERY_MEM_CAPACITY" 'echo "$OUT" | grep -q "QUERY_MEM_CAPACITY:.*268435456"'
 check "S0b status reports RESULTSET_SIZE" 'echo "$OUT" | grep -q "RESULTSET_SIZE:.*10000"'
 st_case "no password"        'echo 0 >"$W/c/ccg-falkordb/auth"'
 st_case "label missing"      ': >"$W/c/ccg-falkordb/label"'
@@ -333,6 +334,9 @@ st_case "no binding"         ': >"$W/c/ccg-falkordb/ports"'
 st_case "TIMEOUT_MAX 0 (restarted behind up's back)" 'echo 0 >"$W/c/ccg-falkordb/tmax"'
 st_case "MAX_INFO_QUERIES default 1000" 'echo 1000 >"$W/c/ccg-falkordb/miq"'
 st_case "RESULTSET_SIZE below the image default 10000 (the engine reader would take a cut reply as whole)" 'echo 5000 >"$W/c/ccg-falkordb/rsz"'
+st_case "QUERY_MEM_CAPACITY 0 (off: the image default, or a restart behind up's back)" 'echo 0 >"$W/c/ccg-falkordb/qmc"'
+st_case "QUERY_MEM_CAPACITY other than 268435456" 'echo 536870912 >"$W/c/ccg-falkordb/qmc"'
+st_case "QUERY_MEM_CAPACITY unreadable" ': >"$W/c/ccg-falkordb/qmc"'
 st_case "RESULTSET_SIZE unreadable" ': >"$W/c/ccg-falkordb/rsz"'
 st_case "ACL probe user left" 'printf "default\nprobe\n" >"$W/c/ccg-falkordb/acl"'
 st_case "ACL user beside the P1 set" 'printf "default\nccg_build\nccg_buildx\n" >"$W/c/ccg-falkordb/acl"'
@@ -355,6 +359,7 @@ check "R2 reset-p0 fails on a wrong password (NOAUTH is not 'done')" '[ $RC != 0
 # ------------------------------------------------------------------ P1 instance flags (P1-48 (1), (2))
 new_world; run_s -- up
 check "U1 up sets TIMEOUT_MAX 10000 and MAX_INFO_QUERIES 0" '[ $RC = 0 ] && [ "$(cat "$W/c/ccg-falkordb/tmax")" = 10000 ] && [ "$(cat "$W/c/ccg-falkordb/miq")" = 0 ]'
+check "U1c up sets QUERY_MEM_CAPACITY 268435456 (256 MiB) and reports it" '[ "$(cat "$W/c/ccg-falkordb/qmc")" = 268435456 ] && echo "$OUT" | grep -q "QUERY_MEM_CAPACITY 268435456"'
 check "U1b up reports both from GRAPH.CONFIG GET" 'echo "$OUT" | grep -q "GRAPH.CONFIG GET: TIMEOUT_MAX 10000, MAX_INFO_QUERIES 0" && grep -q "redis-cli -p 6390 GRAPH.CONFIG GET MAX_INFO_QUERIES" "$W/log"'
 : >"$W/log"; run_s -- up
 check "U2 up on a running instance sets nothing, still reports" '[ $RC = 0 ] && ! grep -q "GRAPH.CONFIG SET" "$W/log" && echo "$OUT" | grep -q "TIMEOUT_MAX 10000"'
@@ -425,6 +430,8 @@ new_world; mkc ccg-falkordb running 1 6390 0; echo 0 >"$W/c/ccg-falkordb/tmax"; 
 check "U3 up on a running instance whose module config was lost fails and names the remedy" '[ $RC != 0 ] && echo "$OUT" | grep -q "down --force" && [ "$(cat "$W/c/ccg-falkordb/state")" = running ]'
 new_world; mkc ccg-falkordb running 1 6390 0; echo 1000 >"$W/c/ccg-falkordb/miq"; run_s -- up
 check "U3b up fails on MAX_INFO_QUERIES lost too" '[ $RC != 0 ]'
+new_world; mkc ccg-falkordb running 1 6390 0; echo 0 >"$W/c/ccg-falkordb/qmc"; run_s -- up
+check "U3c up fails on QUERY_MEM_CAPACITY lost too (restart behind up's back)" '[ $RC != 0 ] && echo "$OUT" | grep -q "down --force"'
 new_world; touch "$W/noping"; run_s -- --throwaway up
 check "T10 a throwaway that never answers PING is removed, no name printed" '[ $RC != 0 ] && [ -z "$(ls "$W/c" | grep tw)" ] && ! echo "$OUT" | grep -q "^CCG_FALKORDB_PORT="'
 new_world; touch "$W/nocfg"; run_s -- --throwaway up

@@ -149,10 +149,7 @@ CCG_SYSTEM=graphmind-ai-lab .venv/bin/python -m clients.cli.main refresh        
   repo-root `.mcp.json` (`CCG_SYSTEM`, `CCG_FALKORDB_HOST`, `CCG_FALKORDB_PORT`; Claude-Code-only wiring).
 - Every answer carries the snapshot stamp and per-unit staleness; python flow is unavailable at P1, so data-flow items are
   `possible` and the answer carries a flow notice (`docs/plans/connected-code-graph-answer-spec2.md` §5).
-- **`raw_query` has no memory cap** (a documented P1 limit): one query can exhaust the instance's memory, the 2g container
-  cap is the only bound, and an OOM kill drops the no-persistence snapshot: graphs, ACL users and runtime config. `refresh`
-  restores the graph only, so run `infra/ccg-falkordb.sh up` and `create_users` (which rotates the secrets) first
-  (`docs/plans/connected-code-graph-p1-raw-query-memory-graph.md`). Per-user limits are P4.
+- **`raw_query` memory is capped per query only partly** (a documented P1 limit): `ccg-falkordb.sh up` sets `QUERY_MEM_CAPACITY` 256 MiB, which refuses the large-`collect`/sort shapes, but a cross product feeding an aggregate is **not** bounded by it and can still run the instance into its 2g container cap; an OOM kill drops the no-persistence snapshot: graphs, ACL users and runtime config. An instance started before that change needs `down --force` + `up`. `refresh` restores the graph only, so run `infra/ccg-falkordb.sh up` and `create_users` (which rotates the secrets) first (`docs/plans/connected-code-graph-p1-raw-query-memory-graph.md`). Per-user limits are P4.
 - Joern and the indexers run only in the offline sandbox (`sandbox/`), and the egress broker (below) mediates anything
   that leaves the host. Joern needs the toolchain image of `infra/toolchain/README.md`.
 - The closed set of known limits and the open ACs: `docs/test-reports/connected-code-graph-p1-closure-report.md`.
