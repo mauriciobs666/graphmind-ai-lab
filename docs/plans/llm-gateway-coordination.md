@@ -1,0 +1,25 @@
+# Common LLM gateway — Coordination
+
+> **Status:** active · **Owner:** `teco` · **Tracks:** `GAL-F0046` · **Reviews:** `docs/reviews/llm-gateway.md`
+
+Requirements (Ready for design): `docs/requirements/llm-gateway.md`; extension: `docs/requirements/llm-gateway-usage-stats.md`. Scope of this coordination: design of the first delivery (ccg), then build units drawn from the plan.
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| U1 design | `architect` | `a5d2d6277492067da` | accepted (rev 6; analyst Pass 9 stopping condition met, security Pass 4 approve w/ suggestions; word count and both edits verified by teco) | `docs/plans/llm-gateway.md` | `analyst` `aa13ebf1ebab68708` + `security-expert` `a7b80d0ec280cf976` (FR-8) → rev 1 needs changes (both); rev 2 re-gate: analyst Pass 6, security Pass 2 | — |
+| U0 req amend | `tico` | `ab935e9e2d6a3ab05` | delivered | `docs/requirements/llm-gateway.md` (FR-15: Ollama first-delivery, stakeholder 2026-11-23) | — → — | — |
+
+2026-11-23: Ollama scope change relayed to U1 architect by SendMessage while in flight; U1's plan must cover it.
+| U0b req amend FR-10/FR-3 | `tico` | `a4be0d204f90d4bd9` | delivered | `docs/requirements/llm-gateway.md` | — → — | — |
+
+2026-11-23 stakeholder answers: HMAC kept, same-uid residual accepted (D-1); holder-side ceiling adopted (FR-10, reverses D-6); registered scopes only (FR-3, resolves D-7). Gates: analyst Pass 5 and `docs/reviews/llm-gateway-security.md` both "needs changes"; U1 revision relayed to architect by SendMessage.
+Open: FR-8 / AC-5 wording ("no agent can reach", "direct call by anything but broker/service is refused") overclaims against the accepted same-uid HMAC residual; to be reworded by `tico` once the revised plan fixes what FR-8 truthfully guarantees.
+| U0c req reword FR-8/AC-5 | `tico` | `abc21a85f6242a29b` | delivered | `docs/requirements/llm-gateway.md` | — → — | — |
+
+Pending stakeholder: D-2 (Ollama gaps), D-3, D-4, D-5 in `docs/plans/llm-gateway.md`; `tico` words D-3/D-4 in the requirements only after answers.
+| U0d req amend FR-10 global ceiling, D-3, D-4 | `tico` | `a7fd92134498e5cff` | delivered | `docs/requirements/llm-gateway.md` | — → — | — |
+
+2026-11-24: rev 2 re-gates both "needs changes" (analyst Pass 6: 3 new majors; security Pass 2: N1–N5). Stakeholder: holder-wide rolling ceiling adopted; D-2(a–g), D-3, D-4, D-5 accepted. Rev 3 relayed to architect; analyst's stopping condition (4 items) is the done-condition.
+| U0e req reconcile AC-14/AC-2/AC-6 | `tico` | `a99451ad323911b3e` | delivered | `docs/requirements/llm-gateway.md` | — → — | — |
+
+2026-11-24: rev 4 delivered (code root /opt/llmgateway, release-by-outcome, boot/service actors). Open assumption to verify at build: a complete provider 4xx/5xx reply is not billed.
