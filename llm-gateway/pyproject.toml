@@ -1,0 +1,41 @@
+[project]
+name = "llm-gateway"
+version = "0.1.0"
+description = "Common LLM gateway: provider choice, fallback, loading, call records and token ceilings by configuration."
+requires-python = ">=3.12"
+# No runtime dependencies, deliberately: docs/plans/llm-gateway.md §3.1. The key holder and the
+# single-file client run from a root-owned code root with `python3 -I`, and the zero-dependency
+# components (model-bench, decision-models) reach the gateway only through the client.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1,<10",
+    "ruff>=0.14,<0.15",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# model-bench's convention: `-m "not live"` DESELECTS live tests by default (a reachability skip
+# alone would still run them); `-m deploy` is the tier-2 real-install suite, also opt-in.
+addopts = '-ra -m "not live and not deploy"'
+markers = [
+    "live: end-to-end test against a real LM Studio or Ollama; deselected by default, run with `pytest -m live`",
+    "deploy: tier-2 test against the real root-owned install; deselected by default, run with `pytest -m deploy`",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["llmgateway*"]

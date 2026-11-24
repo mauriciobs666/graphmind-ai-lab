@@ -60,6 +60,7 @@ engineering** (Claude Code and OpenCode artifacts).
   and versioned here). **Delivered and closed (S0–S8)**, plus the three typed-decision-point packs
   (guard, join-in, message type). Live spec: `model-bench/docs/DESIGN.md`, `FORMATS.md`. Requirements/plan live at the **repo root**; working
   state: `model-bench/AGENTS.md`, record: `model-bench/docs/HISTORY.md`.
+- `llm-gateway/` — Common LLM gateway (stdlib Python): provider choice, fallback, loading, call records and hosted token ceilings by configuration; ccg is the first adopter (`docs/plans/llm-gateway.md`). Under construction.
 - `decision-models/` — Synthetic, labelled datasets and fitted candidates for `model-bench/` (`docs/requirements/typed-decision-models.md`).
 - `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard) for
   cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` + `agent-standards` (cobb's
@@ -82,6 +83,7 @@ engineering** (Claude Code and OpenCode artifacts).
 | `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` |
 | `mcp-monitor/` | `mcp-monitor/README.md` · `mcp-monitor/AGENTS.md` |
 | `model-bench/` | `model-bench/README.md` · `model-bench/AGENTS.md` · live spec: `model-bench/docs/DESIGN.md` (design), `model-bench/docs/FORMATS.md` (formats) · `docs/requirements/small-model-benchmarking.md` · `docs/plans/small-model-benchmarking.md` |
+| `llm-gateway/` | `llm-gateway/README.md` · `llm-gateway/AGENTS.md` · `docs/requirements/llm-gateway.md` · `docs/plans/llm-gateway.md` |
 | `decision-models/` | `decision-models/README.md` · `decision-models/AGENTS.md` · `docs/requirements/typed-decision-models.md` · `docs/plans/typed-decision-models4.md` |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
 

@@ -28,4 +28,4 @@ Build phase (plan accepted, committed `749633ae`). Plan dispatch table is the un
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
-| D1 | `coder` | `a1002519559900dfd` | in-flight | `llm-gateway/` scaffold + types | `analyst` (batched D1–D6 diff gate) → — | — |
+| D1 | `coder` | `a1002519559900dfd` | delivered (20 tests re-run green by teco; 21 mutants killed per report; committed) | `llm-gateway/` scaffold + types | `analyst` (batched D1–D6 diff gate) → — | — |
