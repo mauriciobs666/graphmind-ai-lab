@@ -31,7 +31,7 @@ Build phase (plan accepted, committed `749633ae`). Plan dispatch table is the un
 | D1 | `coder` | `a1002519559900dfd` | delivered (20 tests re-run green by teco; 21 mutants killed per report; committed) | `llm-gateway/` scaffold + types | `analyst` (batched D1–D6 diff gate) → — | — |
 | D2 | `coder` | `adf703ee1a37de980` | delivered (177 tests re-run green; teco mutation: dropping O_NOFOLLOW on file → test fails; committed) | `ownercheck.py`, `config.py`, `failures.py` + tests | `analyst` (batched D1–D6) → — | — |
 | D3 | `coder` | `a2909bc9c6200a30e` | delivered (86 D3 tests re-run green; teco mutation: dropping scope_required → test fails; 34 mutants killed per report; committed b12c7b46) | `records.py`, `policy.py` + tests | `analyst` (batched D1–D6) → — | — |
-| D7 | `coder` | `aba8fe4bb4e2cc4a7` | in-flight | `framing.py`, `keyholder.py`, `ledger.py`, `bin/keyholder.py`, `deploy/install.sh` + tests | `analyst` + `security-expert` (own gate) → — | — |
+| D7 | `coder` | `aba8fe4bb4e2cc4a7` | delivered (867 tests full-suite re-run green; teco mutation: window_max_released >= → > fails; ~60 mutants killed per report; committed; tier-2 pending human sudo) | `framing.py`, `keyholder.py`, `ledger.py`, `bin/keyholder.py`, `deploy/install.sh` + tests | `analyst` + `security-expert` (own gate) → — | — |
 
 Note: D3 ∥ D7 file-disjoint (D7 does not touch records/policy); `llm-gateway/AGENTS.md` "State" line stale — teco updates after D6.
 | D4 | `coder` | `ab53d36fa731b7a6b` | delivered (87 tests re-run green; teco mutation: DirectTransport locality check disabled → test fails; 18 mutants killed per report; committed 50a3820e) | `engine.py`, `transport.py`, `providers/{__init__,base}.py` + tests | `analyst` (batched D1–D6) → — | — |
@@ -40,4 +40,4 @@ Note: D3 ∥ D7 file-disjoint (D7 does not touch records/policy); `llm-gateway/A
 
 Open for stakeholder (from D5): Anthropic adapter refuses `tools` (OpenAI-style tool-call translation not built) — FR-1 says chat completions with tool calls; ccg does not use tools, falkor-chat follow-on will. `min_p` unsupported on lmstudio/openai_compat and Ollama frequency/presence penalties unsupported (vendor docs do not list them; ccg does not send them). Unverified vendor facts listed in D5 report: LM Studio `stats`/`runtime` on /v1, `/v1/decisions` shape, Anthropic temperature family and thinking-token inclusion, Ollama `eval_count` thinking and `num_ctx` effect.
 | Gate D1–D6 | `analyst` | `aa88268ad17048330` | in-flight | `docs/reviews/llm-gateway.md` Pass 10 | — → — | — |
-| U-S5 | `architect` | `a6c231652670eed13` | in-flight | `docs/plans/connected-code-graph-egress-spec5.md` | `analyst` + `security-expert` → — | — |
+| U-S5 | `architect` | `a6c231652670eed13` | delivered | `docs/plans/connected-code-graph-egress-spec5.md` | `analyst` + `security-expert` → — | — |
