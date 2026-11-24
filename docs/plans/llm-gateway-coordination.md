@@ -30,7 +30,8 @@ Build phase (plan accepted, committed `749633ae`). Plan dispatch table is the un
 |---|---|---|---|---|---|---|
 | D1 | `coder` | `a1002519559900dfd` | delivered (20 tests re-run green by teco; 21 mutants killed per report; committed) | `llm-gateway/` scaffold + types | `analyst` (batched D1–D6 diff gate) → — | — |
 | D2 | `coder` | `adf703ee1a37de980` | delivered (177 tests re-run green; teco mutation: dropping O_NOFOLLOW on file → test fails; committed) | `ownercheck.py`, `config.py`, `failures.py` + tests | `analyst` (batched D1–D6) → — | — |
-| D3 | `coder` | `a2909bc9c6200a30e` | in-flight | `records.py`, `policy.py` + tests | `analyst` (batched D1–D6) → — | — |
+| D3 | `coder` | `a2909bc9c6200a30e` | delivered (86 D3 tests re-run green; teco mutation: dropping scope_required → test fails; 34 mutants killed per report; committed b12c7b46) | `records.py`, `policy.py` + tests | `analyst` (batched D1–D6) → — | — |
 | D7 | `coder` | `aba8fe4bb4e2cc4a7` | in-flight | `framing.py`, `keyholder.py`, `ledger.py`, `bin/keyholder.py`, `deploy/install.sh` + tests | `analyst` + `security-expert` (own gate) → — | — |
 
 Note: D3 ∥ D7 file-disjoint (D7 does not touch records/policy); `llm-gateway/AGENTS.md` "State" line stale — teco updates after D6.
+| D4 | `coder` | `ab53d36fa731b7a6b` | in-flight | `engine.py`, `transport.py`, `providers/{__init__,base}.py` + tests | `analyst` (batched D1–D6) → — | — |
