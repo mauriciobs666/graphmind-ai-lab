@@ -1177,8 +1177,23 @@ def test_p1_11b_the_repos_own_mcp_json_names_its_script():
     f = facts(r, ".mcp.json", "command")
     cypher = [x for x in f if x["service"] == "cypher"]
     assert len(cypher) == 1 and (cypher[0]["command"], cypher[0]["args"]) == ("cypher-mcp/docker-run.sh", [])
-    assert not any(a == "-c" or bundle.REDACTED in a for x in f for a in x["args"])
+    # The `ccg` entry (P1-27) is a `bash -c 'cd ... && exec <python> -m ...'` launcher: it names no script, so it is not the allow-listed
+    # `exec "$CLAUDE_PROJECT_DIR/<path>"` shape and stays the gate's own redacted `bash -c` fact (fail closed), never a bare path.
+    assert {x["service"] for x in f} == {"cypher", "ccg"}
+    (ccg,) = [x for x in f if x["service"] == "ccg"]
+    assert (ccg["command"], ccg["args"]) == ("bash", ["-c", bundle.REDACTED])
+    assert not any("CLAUDE_PROJECT_DIR" in a for x in f for a in x["args"])
     assert wr.audit_records(r.records, key=KEY, declared_services=frozenset()) == []
+
+
+def test_p1_11b_a_launcher_entry_beside_a_script_entry_does_not_hide_a_script_entry_that_stopped_resolving():
+    """The real-file test's guard stays sharp: if the `cypher` entry stops being the allow-listed exec shape, it must go red."""
+    real = json.loads((CPG.parent / ".mcp.json").read_bytes())
+    real["mcpServers"]["cypher"]["args"] = ["-c", 'cd "$CLAUDE_PROJECT_DIR" && exec cypher-mcp/docker-run.sh']
+    r = X.extract_config(REPO, {".mcp.json": json.dumps(real).encode()}, key=KEY)
+    (cy,) = [x for x in facts(r, ".mcp.json", "command") if x["service"] == "cypher"]
+    assert (cy["command"], cy["args"]) != ("cypher-mcp/docker-run.sh", [])
+    assert (cy["command"], cy["args"]) == ("bash", ["-c", bundle.REDACTED])
 
 
 @pytest.mark.parametrize("shell", ["bash", "sh"])
