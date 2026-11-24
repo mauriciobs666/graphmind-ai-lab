@@ -1,6 +1,6 @@
 # Connected code graph — egress spec, delta after P1-29 and P1-48b
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Extends:** `docs/plans/connected-code-graph-egress-spec3.md` · **Reviews:** `docs/reviews/connected-code-graph-p1-29.md`, `docs/reviews/connected-code-graph-p1-29-security.md`, `docs/reviews/connected-code-graph-p1-48b.md`, `docs/reviews/connected-code-graph-p1-48b-security.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Extends:** `docs/plans/connected-code-graph-egress-spec3.md` · **Extended by:** `docs/plans/connected-code-graph-egress-spec5.md` · **Reviews:** `docs/reviews/connected-code-graph-p1-29.md`, `docs/reviews/connected-code-graph-p1-29-security.md`, `docs/reviews/connected-code-graph-p1-48b.md`, `docs/reviews/connected-code-graph-p1-48b-security.md`
 
 This states only what changes against `docs/plans/connected-code-graph-egress-spec3.md` (spec3), which stays
 authoritative everywhere not named here. Section numbers are spec3's. Sources: the four reviews above and

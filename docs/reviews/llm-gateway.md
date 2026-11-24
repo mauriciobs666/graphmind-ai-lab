@@ -555,3 +555,21 @@ New document, no earlier revision; all words are new scope.
 
 ### Proposed REVIEW.md lines
 None.
+
+## Pass 12 — egress-spec5 revision (F1-F6 of Pass 11)
+
+Rechecked `docs/plans/connected-code-graph-egress-spec5.md` (3,943 words, +481: rework in place for F1-F6, the §8 split is new scope; no finding→resolution table) and plan §4 rows D8-D12.
+
+- **F1 — fixed in §2, not in §7 item 5 (new finding G1).** §2 now validates `gatewayRunId` outside `pick` (`policy.sanitize.pick` writes `rejected[name]` for any failed predicate, `None` included, `policy.py:164-168`); absent or `null` gives `None` with no entry. `test_broker_audit.py::test_clean_request_has_empty_rejected` runs `run_one(h)` with `model_call()`, which has no `gatewayRunId` (`broker_helpers.py:131`), and asserts `rejected == {}`: it passes only under the new rule. But item 5 still says absent and `null` reach the exchanger "with `rejected["gatewayRunId"]` equal to the digest of the raw value", which contradicts §2 and would force the pick behaviour back.
+- **F2 — fixed.** Item 14 now lists the eighth test (`test_hosted_model_call_is_r7_when_no_repository_is_local_only`) and the `Harness` `hosted_exchanger` change.
+- **F3 — fixed in design, two new gaps (G2, G3).** One shared `holder_wire_vectors.json`, generated once, literal; named mutants; "fail, never skip" for an unimportable `llmgateway`. I ran `keyholder.canonical_origin` and `ccg.manifest.canonical_endpoint` over seven inputs (default port, upper case, IPv6, `:0443`): identical, so the canonical pairs are satisfiable today.
+- **F4 — fixed** (Done now separates red items 1-5, 8-12 from guards 6, 7, 13 with mutants). **F5 — fixed**: D9a (4 production files + vectors file = 5; step S15a) and D9b (3 files; S15b), serial on `server.py`, D8 and D10 share no file with D9a, and plan §4 already has the D9a/D9b rows; D7b's stale sentence is rewritten. **F6 — fixed**: `local_addrs` named, the timeout row ordered before `OSError`, the re-exec statement corrected, the private-literal consequence stated.
+
+**G1 (minor, must fix) — item 5 contradicts §2** (above). Fix item 5: absent and `null` give `None`/empty and **no** `rejected` entry; the invalid values (integer, `""`, 129 characters, space, `|`, newline, non-ASCII) carry the digest.
+**G2 (major) — D10 depends on D9a, but the plan lists them parallel.** The `gateway` extra moved to D9a, and `llmgateway` is not importable in `cpg/.venv` today (`import llmgateway` → `ModuleNotFoundError`). D10's `BrokerTransport` imports `llmgateway`, so D10's tests fail until D9a's pyproject line is installed. Also nobody owns the install step (an editable-install into the venv is a state change an implementer may not make): name who runs it, or give D9a's and D10's tests a `sys.path` route. Plan §4 should read D10 `Needs: D4, D5, D9a`, D9a `Parallel with: D8`, and D10's row text still says "extra".
+**G3 (minor) — who writes `holder_wire_vectors.json`.** D9a creates it, but the holder-side consumers (`test_framing.py`, `test_holder_core.py`) belong to D7b, which the coordination ledger shows in flight, and D9a needs D7b first. Make D7b (or a one-line step before D9a) generate and commit the file, and state that a missing file also fails the `cpg` canonicalisation test.
+
+**Verdict: approve with suggestions. D9a can be dispatched once G1 is corrected in item 5 (a one-line edit) and G2's install/ordering is stated; G3 can be settled in the dispatch brief. D9b has no new blocker.**
+
+### Proposed REVIEW.md lines
+None.

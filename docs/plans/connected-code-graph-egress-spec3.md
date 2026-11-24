@@ -1,6 +1,6 @@
 # Connected code graph — egress broker and offline-build sandbox spec (P1, option C)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Version:** 1.5 · **Supersedes:** `docs/plans/connected-code-graph-egress-spec.md`, `docs/plans/connected-code-graph-egress-spec2.md` · **Extended by:** `docs/plans/connected-code-graph-egress-spec4.md`, `docs/plans/connected-code-graph-bundle-spec6.md` · **Reviews:** `docs/reviews/connected-code-graph-egress-spec3.md`, `docs/reviews/connected-code-graph-egress-spec3-security.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Version:** 1.5 · **Supersedes:** `docs/plans/connected-code-graph-egress-spec.md`, `docs/plans/connected-code-graph-egress-spec2.md` · **Extended by:** `docs/plans/connected-code-graph-egress-spec4.md`, `docs/plans/connected-code-graph-egress-spec5.md`, `docs/plans/connected-code-graph-bundle-spec6.md` · **Reviews:** `docs/reviews/connected-code-graph-egress-spec3.md`, `docs/reviews/connected-code-graph-egress-spec3-security.md`
 
 *2026-11-12 (v1.5): AC-8 text (§8.1-§8.3, §9, §10.2, R-E3) revised to the P1-31 harness, `cpg/sandbox/ac8/`.*
 
