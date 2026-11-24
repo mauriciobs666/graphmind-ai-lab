@@ -240,3 +240,21 @@ def test_the_secret_is_checked_and_never_shown():
         HolderTransport(config("/x"), b"short")
     assert SECRET.hex() not in repr(HolderTransport(config("/x"), SECRET))
     assert HolderTransport.reaches_hosted is True
+
+
+def test_the_timeout_mapping_is_by_type_not_by_message(monkeypatch, tmp_path):
+    def raising(exc):
+        def fake(*a, **kw):
+            raise exc
+
+        return fake
+
+    t = transport(str(tmp_path / "unused.sock"))
+    monkeypatch.setattr(framing, "exchange", raising(framing.HolderTimeout("any wording")))
+    with pytest.raises(TransportFailure) as info:
+        t.exchange(wire())
+    assert info.value.condition is Condition.SOCKET_TIMEOUT
+    monkeypatch.setattr(framing, "exchange", raising(framing.HolderUnreachable("read timeout")))
+    with pytest.raises(TransportFailure) as info:
+        t.exchange(wire())
+    assert info.value.condition is Condition.HOLDER_SOCKET_UNREACHABLE

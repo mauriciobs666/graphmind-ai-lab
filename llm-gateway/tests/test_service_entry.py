@@ -12,8 +12,12 @@ import pytest
 from gwstandin import write_config
 from holder_harness import CALLER_SECRET, wait_for
 
-from llmgateway.client import CallFailed, Client
+from llmgateway import service as service_module
+from llmgateway.client import MAX_REQUEST_BYTES, CallFailed, Client
+from llmgateway.config import DEFAULT_PATH, PRODUCTION_TRUSTED_UIDS
 from llmgateway.service import (
+    MAX_CONNECTIONS,
+    MAX_INFLIGHT_BYTES,
     Service,
     ServiceSettings,
     ServiceStartError,
@@ -217,3 +221,32 @@ def test_a_slow_or_oversized_frame_is_dropped(tmp_path):
             s.close()
     finally:
         svc.close()
+
+
+# --- the entry's configuration path and the memory bound ---
+
+
+def test_main_reads_only_the_root_config_whatever_the_environment_says(tmp_path, monkeypatch):
+    mine = tmp_path / "mine.toml"
+    mine.write_text("[scopes.plain]\n")
+    monkeypatch.setenv("LLMGATEWAY_CONFIG", str(mine))
+    seen = []
+
+    class Recorder:
+        def __init__(self, path, trusted):
+            seen.append((path, frozenset(trusted)))
+
+    def refuse(_settings):
+        raise ServiceStartError("stop here")
+
+    monkeypatch.setattr(service_module, "ConfigSource", Recorder)
+    monkeypatch.setattr(service_module, "Service", refuse)
+    assert service_module.main(["--socket", str(tmp_path / "s.sock")]) == 2
+    assert seen == [(DEFAULT_PATH, PRODUCTION_TRUSTED_UIDS)]
+
+
+def test_connections_times_the_frame_cap_stay_inside_the_memory_bound(tmp_path):
+    assert MAX_CONNECTIONS * MAX_REQUEST_BYTES <= MAX_INFLIGHT_BYTES
+    with pytest.raises(ServiceStartError, match="in-flight"):
+        make_service(tmp_path, max_connections=MAX_CONNECTIONS, max_frame_bytes=MAX_INFLIGHT_BYTES)
+    make_service(tmp_path, max_connections=4, max_frame_bytes=MAX_INFLIGHT_BYTES // 4).close()

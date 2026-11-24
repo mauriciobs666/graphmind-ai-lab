@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from llmgateway import framing
-from llmgateway.client import MAX_FRAME_BYTES, PROTOCOL_VERSION, default_socket_path
+from llmgateway.client import MAX_REQUEST_BYTES, PROTOCOL_VERSION, default_socket_path
 from llmgateway.config import (
     PRODUCTION_TRUSTED_UIDS,
     ConfigSource,
@@ -68,6 +68,14 @@ from llmgateway.types import (
 SERVICE_CALLER = "service"
 READ_TIMEOUT_S = 30.0
 MAX_CONNECTIONS = 32
+# Total request buffering a same-uid process can force: connections x the per-frame cap.
+MAX_INFLIGHT_BYTES = 256 * 1024 * 1024
+_ENVELOPE_KEYS = {
+    "call": frozenset({"v", "op", "request"}),
+    "load": frozenset({"v", "op", "call_site", "scopes", "run_id"}),
+    "provider_op": frozenset({"v", "op", "call_site", "scopes", "run_id", "name", "params"}),
+    "embed": frozenset({"v", "op"}),
+}
 _U32 = struct.Struct(">I")
 
 
@@ -143,7 +151,7 @@ class ServiceSettings:
     state_dir: str | None = None  # None: `[deployment] state_dir`, else the XDG state default
     credential_path: str | None = None  # None: the caller's default; a missing file: no hosted
     read_timeout: float = READ_TIMEOUT_S
-    max_frame_bytes: int = MAX_FRAME_BYTES
+    max_frame_bytes: int = MAX_REQUEST_BYTES
     max_connections: int = MAX_CONNECTIONS
     marker_source: ScopeMarkerSource | None = None
     registry: ProviderRegistry = REGISTRY
@@ -196,6 +204,8 @@ def _response_dict(resp: Response) -> dict[str, Any]:
 class Service:
     def __init__(self, settings: ServiceSettings) -> None:
         self.s = settings
+        if settings.max_connections * settings.max_frame_bytes > MAX_INFLIGHT_BYTES:
+            raise ServiceStartError("connections x frame cap exceeds the in-flight memory bound")
         self._uid = os.getuid() if settings.own_uid is None else settings.own_uid
         config = settings.config_source.get()
         deployed = config.deployment.get("state_dir") if config.protected else None
@@ -242,6 +252,10 @@ class Service:
             if message.get("v") != PROTOCOL_VERSION:
                 return _refusal(f"unsupported protocol version {message.get('v')!r}")
             op = message.get("op")
+            if op in _ENVELOPE_KEYS:
+                unknown = set(message) - _ENVELOPE_KEYS[op]
+                if unknown:
+                    raise ValueError(f"unknown request fields: {', '.join(sorted(unknown))}")
             if op == "call":
                 return self._call(message)
             if op == "load":
@@ -304,6 +318,10 @@ class Service:
         )
         if not isinstance(site, str) or not isinstance(scopes, list):
             raise ValueError("call_site must be a string and scopes a list")
+        if not all(isinstance(scope, str) for scope in scopes):
+            raise ValueError("scopes must be strings")
+        if run_id is not None and not isinstance(run_id, str):
+            raise ValueError("run_id must be a string or null")
         return site, tuple(scopes), run_id
 
     def _embed(self) -> dict[str, Any]:

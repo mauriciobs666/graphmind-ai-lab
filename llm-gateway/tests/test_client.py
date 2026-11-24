@@ -2,14 +2,17 @@
 other part of the package, and its bytes are pinned so a drift is a deliberate act."""
 
 import ast
+import contextlib
 import hashlib
 import json
+import os
 import pathlib
 import socket
 import struct
 import subprocess
 import sys
 import threading
+import time
 
 import pytest
 
@@ -27,7 +30,7 @@ from llmgateway.types import FailureClass
 
 CLIENT = pathlib.Path(client_module.__file__)
 # Update deliberately: every component that copied the file must take the new bytes.
-CLIENT_SHA256 = "e2a42b0949b1395ef2e00c0b2217e1b527451c5e91b08def28b8b111f9acab18"
+CLIENT_SHA256 = "0d1424d289718a9e1495ba367b9e308c68ce0f4580d46ee782a05dc9ef34e0fb"
 
 
 def test_the_file_imports_only_the_standard_library():
@@ -87,19 +90,19 @@ def test_default_socket_path_order():
 class FakeService:
     """One-shot Unix server answering with `reply_bytes` (raw, so a test can send bad frames)."""
 
-    def __init__(self, directory, reply_bytes, *, hang=False):
+    def __init__(self, directory, reply_bytes, *, hang=False, trickle=0.0):
         directory.mkdir(mode=0o700, exist_ok=True)
         self.path = str(directory / "s.sock")
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.bind(self.path)
         self.sock.listen(4)
         self.requests = []
-        self.reply_bytes, self.hang = reply_bytes, hang
+        self.reply_bytes, self.hang, self.trickle = reply_bytes, hang, trickle
         threading.Thread(target=self._serve, daemon=True).start()
 
     def _serve(self):
         conn, _ = self.sock.accept()
-        with conn:
+        with conn, contextlib.suppress(OSError, struct.error):
             (size,) = struct.unpack(">I", conn.recv(4))
             data = b""
             while len(data) < size:
@@ -108,7 +111,12 @@ class FakeService:
             if self.hang:
                 threading.Event().wait(2)
             else:
-                conn.sendall(self.reply_bytes)
+                if self.trickle:
+                    for i in range(len(self.reply_bytes)):
+                        conn.sendall(self.reply_bytes[i : i + 1])
+                        threading.Event().wait(self.trickle)
+                else:
+                    conn.sendall(self.reply_bytes)
 
     def close(self):
         self.sock.close()
@@ -208,7 +216,7 @@ def test_unreadable_replies_fail_config_and_a_silent_service_times_out(fake, tmp
         with pytest.raises(CallFailed) as info:
             Client(fake(raw).path).call("site", [])
         assert info.value.failure_class == "config"
-    huge = struct.pack(">I", client_module.MAX_FRAME_BYTES + 1)
+    huge = struct.pack(">I", client_module.MAX_REPLY_BYTES + 1)
     with pytest.raises(CallFailed) as info:
         Client(fake(huge).path).call("site", [])
     assert info.value.failure_class == "config"
@@ -227,3 +235,32 @@ def test_an_absent_service_is_connection_and_a_shared_directory_is_refused(tmp_p
     with pytest.raises(CallFailed) as info:
         Client(str(shared / "s.sock")).call("site", [])
     assert info.value.failure_class == "config"
+
+
+def test_a_reply_that_trickles_past_the_total_deadline_times_out(fake):
+    """Each byte arrives inside any per-`recv` timeout; only a total deadline stops it."""
+    start = time.monotonic()
+    with pytest.raises(CallFailed) as info:
+        Client(fake(frame(OK), trickle=0.05).path, timeout=0.5).call("site", [])
+    assert info.value.failure_class == "timeout"
+    assert time.monotonic() - start < 1.5
+
+
+def test_a_service_run_by_another_uid_is_refused_after_connecting(fake, monkeypatch):
+    f = fake(frame(OK))
+    monkeypatch.setattr(Client, "_check_directory", lambda self: None)
+    other = os.getuid() + 1
+    monkeypatch.setattr(client_module.os, "getuid", lambda: other)
+    with pytest.raises(CallFailed, match="another account") as info:
+        Client(f.path).call("site", [])
+    assert info.value.failure_class == "config"
+    assert f.requests == []  # nothing was sent to the foreign peer
+
+
+def test_a_request_over_the_frame_cap_is_refused_before_sending(fake):
+    f = fake(frame(OK))
+    big = [{"role": "user", "content": "x" * client_module.MAX_REQUEST_BYTES}]
+    with pytest.raises(CallFailed) as info:
+        Client(f.path).call("site", big)
+    assert info.value.failure_class == "rejected"
+    assert f.requests == []

@@ -297,3 +297,33 @@ def test_a_write_config_unprotected_by_ownership_disables_hosted(stack):
         stack.client().call("hosted", MSGS, run_id="eval-1")
     assert info.value.failure_class in ("config", "policy_refused")
     assert stack.env.standin.seen == [] and stack.calls_log() == []
+
+
+def test_unknown_envelope_keys_are_refused_for_every_op_and_bad_scopes_are_typed(stack):
+    c = stack.client()
+    cases = [
+        {"op": "call", "request": {"call_site": "local", "messages": MSGS}, "extra": 1},
+        {"op": "load", "call_site": "local", "extra": 1},
+        {"op": "provider_op", "call_site": "local", "name": "lmstudio.models", "extra": 1},
+        {"op": "embed", "extra": 1},
+    ]
+    for payload in cases:
+        with pytest.raises(CallFailed) as info:
+            c._roundtrip(payload)
+        assert info.value.failure_class == "policy_refused", payload
+    # the shared validation names the field, not a TypeError from deep in the engine
+    for payload, text in (
+        ({"op": "load", "call_site": "local", "scopes": [1]}, "scopes must be strings"),
+        (
+            {"op": "provider_op", "call_site": "local", "name": "x", "scopes": [[]]},
+            "scopes must be",
+        ),
+        ({"op": "load", "call_site": "local", "run_id": 5}, "run_id must be a string"),
+    ):
+        with pytest.raises(CallFailed, match=text):
+            c._roundtrip(payload)
+    assert stack.local.chats == []
+    with pytest.raises(CallFailed, match="unknown request fields: extra"):
+        c._roundtrip({"op": "embed", "extra": 1})
+    with pytest.raises(CallFailed, match="unsupported protocol version"):
+        c._roundtrip({"op": "embed", "v": 2})

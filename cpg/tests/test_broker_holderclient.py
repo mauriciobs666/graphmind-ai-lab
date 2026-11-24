@@ -8,9 +8,14 @@ and a live round trip against the real `llmgateway.framing`; the closed reply ta
 from __future__ import annotations
 
 import ast
+import contextlib
 import json
 import os
+import socket
 import struct
+import subprocess
+import sys
+import threading
 import time
 from pathlib import Path
 
@@ -228,6 +233,16 @@ CASES = {
                              ("upstream-error", None, None, None)),
     "unsigned-refusal-with-wrong-content-type": (_unsigned("bad_credential", "application/json"),
                                                  ("upstream-error", None, None, None)),
+    "non-ascii-mac": (lambda s, h: _raw_header({"closeReason": "completed", "status": 200,
+                                                "contentType": "application/json", "mac": "\u00e9" * 64}, b"{}"),
+                      ("upstream-error", None, None, None)),
+    "lone-surrogate-mac": (lambda s, h: _frame_with_header(b'{"closeReason":"completed","status":200,'
+                                                           b'"contentType":"application/json","mac":"\\ud800"}'),
+                           ("upstream-error", None, None, None)),
+    "signed-close-reason-broker-shutdown": (lambda s, h: _signed_custom(s, h, reason="broker-shutdown", status=0,
+                                                                        ctype="", body=b""),
+                                            ("upstream-error", None, None, None)),
+    "unsigned-stale-timestamp-refusal": (_unsigned("stale_timestamp"), ("upstream-error", None, None, None)),
     "bad-mac": (_bad_mac, ("upstream-error", None, None, None)),
     "mac-over-another-nonce": (lambda s, h: signed(s, "someone-else"), ("upstream-error", None, None, None)),
     "close-reason-outside-the-set": (lambda s, h: _signed_custom(s, h, reason="weird"),
@@ -276,6 +291,16 @@ def test_each_row_of_the_reply_table_maps_to_its_exchange_and_close_record(tmp_p
         assert r["response"]["status"] == status
 
 
+@pytest.mark.parametrize("case", ["non-ascii-mac", "lone-surrogate-mac"])
+def test_an_unverifiable_mac_keeps_the_bytes_sent_and_raises_nothing(tmp_path, vec, case):
+    h, secret = holder_double(tmp_path, vec, CASES[case][0])
+    try:
+        ex = client_for(h, secret)(ENDPOINT, "POST", PATH, BODY, "eval-1")
+    finally:
+        h.close()
+    assert ex.close_reason == "upstream-error" and ex.bytes_out > 0 and ex.bytes_in > 0
+
+
 def test_an_oversized_reply_frame_is_response_too_large_before_the_body_is_read(tmp_path, vec):
     h, secret = holder_double(tmp_path, vec, lambda s, hdr: signed(s, hdr.nonce, body=b"x" * 5000))
     try:
@@ -321,6 +346,48 @@ def test_a_slow_trickle_is_cut_by_the_wall_clock_deadline_not_per_read(tmp_path,
     finally:
         srv.close()
     assert ex.close_reason == "timeout"
+
+
+def test_a_holder_that_trickles_a_valid_reply_is_cut_by_the_total_deadline(tmp_path, vec):
+    """Every byte arrives well inside any per-read timeout; the reply is complete and signed, so
+    only a total deadline turns this into `timeout` (without one it would complete after ~6 s)."""
+    secret = secret_of(vec)
+    directory = tmp_path / "run"
+    directory.mkdir()
+    os.chmod(directory, 0o700)
+    path = str(directory / "holder.sock")
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    srv.bind(path)
+    srv.listen(1)
+    stop = threading.Event()
+
+    def serve():
+        conn, _ = srv.accept()
+        with conn, contextlib.suppress(OSError):
+            (size,) = struct.unpack(">I", conn.recv(4))
+            payload = b""
+            while len(payload) < size:
+                payload += conn.recv(size - len(payload))
+            hdr, _ = gw.parse_request(payload)
+            reply = signed(secret, hdr.nonce)
+            for i in range(len(reply)):
+                if stop.is_set():
+                    return
+                conn.sendall(reply[i : i + 1])
+                time.sleep(0.05)
+
+    t = threading.Thread(target=serve, daemon=True)
+    t.start()
+    try:
+        t0 = time.monotonic()
+        ex = HolderClient(path, UID, secret, timeout=0.5)(ENDPOINT, "POST", PATH, BODY, "eval-1")
+        elapsed = time.monotonic() - t0
+    finally:
+        stop.set()
+        srv.close()
+        t.join(timeout=2)
+    assert ex.close_reason == "timeout" and ex.bytes_out > 0 and 0 < ex.bytes_in < 20
+    assert elapsed < 2
 
 
 def test_a_closed_connection_with_no_reply_is_upstream_error(tmp_path, vec):
@@ -399,7 +466,31 @@ def test_the_directory_check_runs_before_every_connect(tmp_path, vec):
         h.close()
 
 
+def test_the_closed_reply_sets_are_exactly_the_holders():
+    """Duplicated from the holder's wire on purpose (the broker imports nothing from it): a widened
+    set would accept a reply the holder never sends. Widening is a deliberate edit of this test."""
+    assert holderclient.CLOSE_REASONS == {"completed", "upstream-error", "timeout", "response-too-large"}
+    assert holderclient.PRE_AUTH_REFUSALS == {"unknown_caller", "bad_credential"}
+    assert holderclient.REFUSAL_CONTENT_TYPE == "application/vnd.llmgateway.refusal+json"
+
+
 # ------------------------------------------------------------------ import isolation (item 13)
+
+_PROBE = "import sys, importlib; sys.path.insert(0, {root!r}); importlib.import_module({mod!r}); " \
+         "print(sorted({{m.split('.')[0] for m in sys.modules}} & {{'llmgateway'}}))"
+
+
+@pytest.mark.parametrize("mod", ["ccg.broker.holderclient", "ccg.broker.server", "ccg.manifest"])
+def test_importing_the_broker_leaves_llmgateway_out_of_sys_modules(mod):
+    """By execution, so any spelling of an import (`importlib.__import__`, `exec`, a transitive import
+    through `ccg.manifest`) is caught, which the AST scan below cannot promise."""
+    run = lambda code: subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True,
+                                      cwd=str(BROKER_DIR))
+    precondition = run("import llmgateway.framing")  # else the check below would pass vacuously
+    assert precondition.returncode == 0, precondition.stderr
+    res = run(_PROBE.format(mod=mod, root=str(Path(holderclient.__file__).parents[2])))
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.strip() == "[]"
 
 BROKER_DIR = Path(holderclient.__file__).parent
 

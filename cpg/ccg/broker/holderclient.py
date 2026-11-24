@@ -116,7 +116,9 @@ def parse_reply(payload: bytes, secret: bytes, request_nonce: str) -> Exchange:
     if mac:
         want = response_mac(secret, request_nonce=request_nonce, close_reason=reason, status=status,
                             content_type=ctype, body=body)
-        if not hmac.compare_digest(mac, want):
+        # bytes, not str: `compare_digest` raises TypeError on a non-ASCII str, which would skip the
+        # `Exchange` mapping (a lone surrogate raises ValueError on encode, which maps to upstream-error)
+        if not hmac.compare_digest(mac.encode("utf-8"), want.encode("ascii")):
             raise _Reject("reply MAC does not verify")
     elif not _pre_auth_refusal(ctype, body):
         raise _Reject("unsigned reply")

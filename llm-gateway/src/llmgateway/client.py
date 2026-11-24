@@ -14,6 +14,12 @@ or `{"ok": false, "error": {"type", "class", "message", "code", "call_id", "clas
     reply = client.call("answer.summarize", [{"role": "user", "content": "hi"}])
     reply.message, reply.model, reply.hosted, reply.usage
 
+Trust: the client connects to the socket named by its own environment and checks the directory
+(own uid, not group/other-writable) and, after connecting, the peer's `SO_PEERCRED` uid (the
+caller's own). A fake service run by the same uid passes both checks and can forge any reply,
+including `hosted` and usage: service results are not authenticated against a same-uid process
+(the stated residual).
+
 A failed call raises `CallFailed` carrying the service's failure class (a string such as
 `rate_limit`, `run_bound`, `policy_refused`); an unreachable service is `connection`.
 """
@@ -25,12 +31,18 @@ import os
 import socket
 import stat
 import struct
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 PROTOCOL_VERSION = 1
-MAX_FRAME_BYTES = 64 * 1024 * 1024
+# Frame caps, one home. A request is a chat prompt: 8 MiB holds a ~2M-token text context (about
+# 4 bytes a token) with room for JSON overhead, far over any legitimate call. The service's
+# buffering is bounded by connections x this cap (`service.MAX_INFLIGHT_BYTES`). A reply is
+# bounded by the key holder's own 16 MiB response cap plus the envelope; 64 MiB is the headroom.
+MAX_REQUEST_BYTES = 8 * 1024 * 1024
+MAX_REPLY_BYTES = 64 * 1024 * 1024
 SOCKET_ENV = "LLMGATEWAY_SERVICE_SOCKET"
 _U32 = struct.Struct(">I")
 
@@ -130,9 +142,14 @@ def _unwrap(reply: Mapping[str, Any]) -> Any:
     )
 
 
-def _read_exact(sock: socket.socket, count: int) -> bytes:
+def _read_exact(sock: socket.socket, count: int, deadline: float) -> bytes:
+    """`count` bytes before the monotonic `deadline` (a total, not per `recv`)."""
     chunks: list[bytes] = []
     while count:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("reply deadline")
+        sock.settimeout(remaining)
         chunk = sock.recv(min(count, 1 << 20))
         if not chunk:
             raise ConnectionError("the service closed the connection")
@@ -160,19 +177,29 @@ class Client:
                 "config", "the service socket directory is not private to this account"
             )
 
+    def _check_peer(self, sock: socket.socket) -> None:
+        raw = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
+        _pid, uid, _gid = struct.unpack("3i", raw)
+        if uid != os.getuid():
+            raise CallFailed("config", "the service socket is served by another account")
+
     def _roundtrip(self, payload: Mapping[str, Any]) -> Any:
         self._check_directory()
         data = json.dumps({"v": PROTOCOL_VERSION, **payload}, separators=(",", ":")).encode()
+        if len(data) > MAX_REQUEST_BYTES:
+            raise CallFailed("rejected", "the request is over the service's frame cap")
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
+            deadline = time.monotonic() + self._timeout
             sock.settimeout(self._timeout)
             try:
                 sock.connect(self._path)
+                self._check_peer(sock)
                 sock.sendall(_U32.pack(len(data)) + data)
-                (size,) = _U32.unpack(_read_exact(sock, 4))
-                if size > MAX_FRAME_BYTES:
+                (size,) = _U32.unpack(_read_exact(sock, 4, deadline))
+                if size > MAX_REPLY_BYTES:
                     raise CallFailed("config", "the service reply is over the frame cap")
-                reply = json.loads(_read_exact(sock, size))
+                reply = json.loads(_read_exact(sock, size, deadline))
             except TimeoutError as exc:
                 raise CallFailed("timeout", "the gateway service did not answer in time") from exc
             except OSError as exc:

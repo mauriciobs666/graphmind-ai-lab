@@ -40,8 +40,16 @@ class FrameError(Exception):
     """A frame that is malformed, over the cap, or too slow; the holder drops the connection."""
 
 
+class ReadTimeout(FrameError):
+    """`read_frame` missed its total deadline."""
+
+
 class HolderUnreachable(ConnectionError):
     """The holder socket cannot be used (absent, refused, or in a directory not owned by it)."""
+
+
+class HolderTimeout(HolderUnreachable):
+    """The holder accepted the connection but missed the read deadline (class `timeout`)."""
 
 
 class ReplyRejected(Exception):
@@ -165,12 +173,12 @@ def read_frame(
         while n:
             remaining = deadline - monotonic()
             if remaining <= 0:
-                raise FrameError("read timeout")
+                raise ReadTimeout("read timeout")
             sock.settimeout(remaining)
             try:
                 chunk = sock.recv(min(n, 65536))
             except TimeoutError as exc:
-                raise FrameError("read timeout") from exc
+                raise ReadTimeout("read timeout") from exc
             except OSError as exc:
                 raise FrameError(f"read failed: {type(exc).__name__}") from exc
             if not chunk:
@@ -408,6 +416,8 @@ def exchange(
         sock.sendall(frame)
         try:
             payload = read_frame(sock, max_bytes=max_reply_bytes, timeout=timeout)
+        except ReadTimeout as exc:
+            raise HolderTimeout(f"no reply: {exc}") from exc
         except FrameError as exc:
             raise HolderUnreachable(f"no reply: {exc}") from exc
     finally:

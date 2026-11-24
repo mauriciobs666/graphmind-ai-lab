@@ -213,10 +213,9 @@ class HolderTransport:
                 timeout=request.timeout_s,
             )
         except framing.HolderUnreachable as exc:
-            # `framing.exchange` reports a missed read deadline as an unreachable holder
             condition = (
                 Condition.SOCKET_TIMEOUT
-                if "read timeout" in str(exc)
+                if isinstance(exc, framing.HolderTimeout)
                 else Condition.HOLDER_SOCKET_UNREACHABLE
             )
             raise TransportFailure(condition, "key holder: " + str(exc)) from exc
