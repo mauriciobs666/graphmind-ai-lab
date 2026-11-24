@@ -602,3 +602,32 @@ This pass adds one section; earlier passes untouched.
 
 ### Proposed REVIEW.md lines
 None.
+
+## Pass 14 — D9a implementation
+
+Scope: commit `91291cc6` (`cpg/ccg/broker/{holderclient,policy,server}.py`, `cpg/pyproject.toml`, `cpg/tests/{broker_helpers,gateway_helpers,test_broker_*}.py`) against `docs/plans/connected-code-graph-egress-spec5.md` §2/§3/§6/§7 and plan §3.3/§3.4. Run: `cd cpg && .venv/bin/pytest -q -p no:cacheprovider tests/test_broker_*.py` gave **1133 passed**. 51 single-argument mutants on a scratchpad copy of `cpg/` (with `PYTHONPATH` set to the copy; the import path was checked): **44 caught, 7 survived**.
+
+CPG: considered, not relevant — claims come from reading source, executing probes and the mutants.
+
+**Verdict: approve with suggestions.** No blocker: no path lets an R7 allow reach the network from the broker, and the forward, mapping, R5/R6 and `gatewayRunId` rules are pinned.
+
+**J1 (minor-major) — The "wall-clock deadline, not per read" claim is unpinned.** Mutant `remaining()` returning `self.timeout` on every read (a per-read timeout, so a holder that trickles bytes could hold a broker thread past 300 s) survived. `test_a_slow_trickle_is_cut_by_the_wall_clock_deadline_not_per_read` (`test_broker_holderclient.py:316`) sends no bytes at all, so it is the hang test again under a name that claims more. Fix: a double that sends one byte every 0.1 s with `timeout=0.3` and asserts `close_reason == "timeout"` within ~0.6 s.
+
+**J2 (minor) — Import isolation (item 13) is not sound for what it says.** `_imports` (`test_broker_holderclient.py:~405`) walks `ast.Import`/`ImportFrom` and `__import__`/`import_module` calls in files under `ccg/broker/` only. Executed plants, each passed the test: `importlib.__import__('llmgateway')` (attribute form of `__import__` is not matched), `exec('import ' + 'llmgateway')`, and `import llmgateway.framing` in `ccg/manifest.py` (a transitive import from a module the broker imports). A plain `import llmgateway` in `policy.py` is caught. Fix: add a subprocess check run with `llmgateway` installed (`python -I -c "import ccg.broker.server, sys; assert not [m for m in sys.modules if m.split('.')[0]=='llmgateway']"`), which covers every spelling and the transitive case, and keep the AST scan as the fast first line.
+
+**J3 (minor) — Closed reply sets are unpinned.** `CLOSE_REASONS` widened with `broker-shutdown` and `PRE_AUTH_REFUSALS` widened with `stale_timestamp` both survived (the constants are duplicated from `llmgateway.framing` and the pre-auth set from `failures`). A holder reply `closeReason: broker-shutdown`, or an unsigned `stale_timestamp` refusal, would be accepted. Add table rows to item 2: each of these gives `upstream-error`.
+
+### Answers
+1. **Mutants caught:** the MAC's fields (run id, endpoint, body digest, `ts`), `ts` source (constant 0 and monotonic), fixed nonce, caller name, response-MAC nonce and verification, status range both ends, unsigned non-refusal replies, the `closeReason` map, owner and writability checks of the socket directory and their absence, reply cap with and without slack and `>=`, the 300 s default, timeout mapped to `upstream-error`, `bytes_in`/`bytes_out`, `run_id` `None` → empty, frame header formatting, `Broker.request` section test (validate for all allows and for none), no-holder fallback to the exchanger, `gatewayRunId`/method/endpoint not forwarded, R7 never selected, `resolvedAddr` non-null, the `gatewayRunId` regex length, first character, type, `fullmatch`, empty and digest. Survivors: J1, J3, and three equivalent ones: forwarding `clean["path"]` instead of the entry path (R0 requires them equal), `_string_free` dropped (the regex already rejects a surrogate), `R7` without its mode test (R6 precedes it).
+2. **Direct path for R7:** none. `server.py` opens sockets only for its own `AF_UNIX` listener and probe; the one `self.exchanger(...)` call sits in the non-R7 branch, which dereferences `validated` (`None` for a hosted section), so a hosted allow that took it would raise inside the existing `except Exception` and close `upstream-error`. The mutant that sends R7 down the `exchanger` branch and the one that makes a no-holder R7 connect are both red.
+3. **Isolation test:** see J2.
+4. **R5/R6:** the mutants "R5 deleted" and "R6 deleted" (and R5 reading the per-request mode) each fail `test_r5_*`/`test_r6_*`; the tests carry `marker`, `scope`, `unrestricted` and `gatewayRunId` and count zero exchanger calls.
+5. **`test_broker_caller_input.py` edit:** legitimate. `SANITISED_SLOTS` gains `gatewayRunId` because `test_the_sweep_covers_every_sanitised_field` compares it with `sanitize`'s keys; `legit_allow` exempts the slot only from "exchanger not called", which is wrong for a junk `gatewayRunId` on an R1 request (still an allow by spec §2), and the no-latch and schema-valid-record assertions still run. It would be stronger to also assert the verdict is unchanged from the clean request; optional.
+6. **Parity:** request frames and MACs are pinned to `holder_wire_vectors.json` and a live round trip. Duplicated without a pin: `CLOSE_REASONS`, `PRE_AUTH_REFUSALS` (J3). Pinned: the reply cap (`16 MiB + 64 KiB`) and 300 s timeout by literal in `test_the_default_reply_cap_is_the_broker_response_cap_plus_slack`; the holder-side 16 MiB limit by `test_holder_endpoint.py`; field order and `ts` encoding by the vectors.
+7. **Default-port test deviation:** acceptable. A 443 listener cannot be bound unprivileged, and the assertions (allow, signed `upstream-error`, `bytesIn > 0`, stand-in log empty) show the holder passed provider lookup (an `endpoint_unknown` would be a 499 completed exchange) and failed only at connect; the canonical pairs are separately pinned by the vectors. The "is served" half of spec §7 item 12 for the default port stays a tier-2 item.
+
+### Growth-stops
+This pass adds one section; earlier passes untouched.
+
+### Proposed REVIEW.md lines
+None.
