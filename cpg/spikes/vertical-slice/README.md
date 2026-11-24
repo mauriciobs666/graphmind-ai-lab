@@ -1,0 +1,1 @@
+> **FROZEN** (P1-38, index D7): ported to `cpg/ccg/` and `cpg/extractors/joern/`, kept as the live conformance oracle and for tracked dependents; do not edit, delete only per the backlog disposition table in `docs/test-reports/connected-code-graph-p1-spike-dispositions-report.md`.
