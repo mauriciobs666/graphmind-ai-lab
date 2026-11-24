@@ -87,6 +87,22 @@ class FakeExchange:
         return self.result
 
 
+class FakeHostedExchanger:
+    """Stands in for `holderclient.HolderClient` (the R7 forward): records its arguments, returns a canned `Exchange`."""
+
+    def __init__(self, result: structured.Exchange | None = None):
+        self.calls: list[dict] = []
+        self.result = result or structured.Exchange("completed", 200, "application/json", b'{"hosted":1}', 300, 400)
+
+    def __call__(self, endpoint, method, path, body, gateway_run_id):
+        self.calls.append({"endpoint": endpoint, "method": method, "path": path, "body": body,
+                           "gateway_run_id": gateway_run_id})
+        return self.result
+
+
+_DEFAULT = object()
+
+
 class Clock:
     def __init__(self):
         self.t = 1000.0
@@ -105,9 +121,11 @@ class Harness:
         self.resolver = kw.pop("resolver", None) or Resolver()
         self.exchange = kw.pop("exchanger", None) or FakeExchange()
         self.clock = kw.pop("clock", None) or Clock()
+        hosted = kw.pop("hosted_exchanger", _DEFAULT)  # None means "no holder configured"
+        self.hosted = FakeHostedExchanger() if hosted is _DEFAULT else hosted
         self.broker = Broker(self.systems, self.audit, resolver=self.resolver, iface=kw.pop("iface", fake_iface()),
                              tls_factory=lambda: "tls", clock=self.clock, exchanger=self.exchange,
-                             log=lambda m: self.logs.append(m), **kw)
+                             hosted_exchanger=self.hosted, log=lambda m: self.logs.append(m), **kw)
 
     def records(self, kind: str | None = None) -> list[dict]:
         recs = list(read_records(self.audit_dir / "egress.jsonl")) if (self.audit_dir / "egress.jsonl").exists() else []
@@ -126,6 +144,13 @@ class Harness:
 
     def last_decision(self) -> dict:
         return self.records("decision")[-1]
+
+
+def hosted_egress(endpoint: str = "https://api.hosted.example.com:443", port: int = 1234, **entry) -> dict:
+    """`egress()` with its hosted entry replaced (endpoint, plus any extra entry keys)."""
+    eg = egress(port)
+    eg["hosted"] = [{**eg["hosted"][0], "endpoint": endpoint, **entry}]
+    return eg
 
 
 def model_call(**over) -> dict:

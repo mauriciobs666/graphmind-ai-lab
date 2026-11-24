@@ -66,6 +66,8 @@ MAX_PATH_CHARS = 256
 # The manifest's own `paths` pattern (egress-v1.schema.json): a caller path that cannot be an allow-list path is junk.
 PATH_RE = re.compile(r"/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*")
 MAX_ENDPOINT_CHARS = 300
+# egress-spec5 section 2: the holder-ledger run id an R7 forward carries (caller-chosen, unrelated to the broker's runId).
+GATEWAY_RUN_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 
 
 # ------------------------------------------------------------------ the loaded system
@@ -190,6 +192,13 @@ def sanitize(raw: Any, repo_count: int) -> tuple[dict, dict]:
         "endpoint": pick("endpoint", req.get("endpoint"), endpoint_ok),
         "codebases": pick("codebases", req.get("codebases"), codebases_ok),
     }
+    # `gatewayRunId` is validated outside `pick`: absent (missing or null) is None with no `rejected` entry; only a
+    # present value that does not fit carries its digest (egress-spec5 section 2).
+    gw = req.get("gatewayRunId")
+    if gw is not None and not (isinstance(gw, str) and _string_free(gw) and GATEWAY_RUN_ID_RE.fullmatch(gw)):
+        rejected["gatewayRunId"] = _digest(gw)
+        gw = None
+    clean["gatewayRunId"] = gw
     # R0 check 6 asks whether the caller declared codebases at all, which a junk declaration still did.
     raw_cb = req.get("codebases")
     clean["_cb_declared"] = raw_cb is not None and raw_cb != []

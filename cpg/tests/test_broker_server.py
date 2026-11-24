@@ -765,6 +765,15 @@ def _hosted(tmp_path, **kw):
     return Harness(tmp_path, systems={"shop": load_system(tmp_path, repos=(("a", "hosted"),))}, **kw)
 
 
+def _r4_allow(hh):
+    """An R4 idp allow: the path that still resolves, builds a TLS context and calls `Broker.exchanger` (spec5 s3)."""
+    g = hh.open("answer", ["a"])
+    req = {"component": "access.idp", "purpose": "idp", "payloadClass": "repo-names-and-identity",
+           "endpoint": "https://idp.example.com:443", "target": {"method": "POST", "path": "/who"}, "codebases": ["a"]}
+    return hh.broker.handle({"op": "request", "token": g["token"], "request": req,
+                             "body": {"repoNames": ["a"], "identity": {"subject": "alice"}}})
+
+
 def _hosted_allow(hh):
     from broker_helpers import hosted_call
     g = hh.open("answer", ["a"])
@@ -777,8 +786,9 @@ def test_a_failing_tls_factory_still_ends_the_allow_in_an_upstream_error_close(t
         raise FileNotFoundError("/etc/ssl/certs/ca-certificates.crt")
     hh = _hosted(tmp_path)
     hh.broker.tls_factory = boom
-    r = _hosted_allow(hh)
-    assert r["decision"]["decision"] == "allow" and r["response"] is None
+    r = _r4_allow(hh)
+    assert r["decision"]["decision"] == "allow" and r["decision"]["rule"] == "R4-NAMED-SERVICE"
+    assert r["response"] is None
     [close] = hh.records("close")
     assert close["closeReason"] == "upstream-error" and close["decisionAuditId"] == r["decision"]["auditId"]
     assert hh.records("decision")[-1]["decision"] == "allow" and not hh.audit.latched
@@ -788,8 +798,21 @@ def test_a_failing_exchange_still_ends_the_allow_in_an_upstream_error_close(tmp_
     def boom(*a, **kw):
         raise RuntimeError("bug")
     hh = _hosted(tmp_path, exchanger=boom)
-    r = _hosted_allow(hh)
+    r = _r4_allow(hh)
+    assert r["decision"]["rule"] == "R4-NAMED-SERVICE"
     assert r["response"] is None and [c["closeReason"] for c in hh.records("close")] == ["upstream-error"]
+
+
+def test_a_failing_hosted_exchanger_still_ends_the_allow_in_an_upstream_error_close(tmp_path):
+    def boom(*a, **kw):
+        raise RuntimeError("bug")
+    hh = _hosted(tmp_path, hosted_exchanger=boom)
+    r = _hosted_allow(hh)
+    assert r["decision"]["rule"] == "R7-HOSTED-SERVICE" and r["response"] is None
+    [close] = hh.records("close")
+    assert close["closeReason"] == "upstream-error" and close["decisionAuditId"] == r["decision"]["auditId"]
+    assert close["bytesOut"] == 0 and not hh.audit.latched
+    assert hh.logs[-1] == "upstream setup failed: RuntimeError"
 
 
 def test_a_handler_defect_closes_the_connection_and_is_logged_by_type(served):

@@ -36,12 +36,12 @@ HOSTILE = {
 }
 
 # every key `sanitize` returns, each exercised below through the slot named here
-SANITISED_SLOTS = {"component", "purpose", "payloadClass", "method", "path", "endpoint", "codebases"}
+SANITISED_SLOTS = {"component", "purpose", "payloadClass", "method", "path", "endpoint", "codebases", "gatewayRunId"}
 
 
 def _request(slot: str, v):
     r = model_call()
-    if slot in ("component", "purpose", "payloadClass", "endpoint"):
+    if slot in ("component", "purpose", "payloadClass", "endpoint", "gatewayRunId"):
         r[slot] = v
     elif slot == "method":
         r["target"] = {"method": v, "path": "/v1/chat/completions"}
@@ -113,7 +113,8 @@ def test_hostile_caller_string_never_latches_or_invalidates_a_record(tmp_path, s
     v = HOSTILE[cls]
     h = Harness(tmp_path)
     token = h.open("answer", "*")["token"]
-    legit_allow = slot.startswith("body") or slot == "identity-subject"  # a valid value there is a real allow
+    # a valid value there is a real allow (`gatewayRunId` never changes a verdict: the local-model call stays an allow)
+    legit_allow = slot.startswith("body") or slot in ("identity-subject", "gatewayRunId")
     n_before = len(h.records())
     for msg in _messages(slot, v, token):
         parsed = msg

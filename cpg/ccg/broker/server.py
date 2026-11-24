@@ -80,7 +80,9 @@ def _default_log(msg: str) -> None:
 
 class Broker:
     """Run table, rule evaluation, the upstream exchange and the audit trail. No sockets: ``handle`` maps one
-    decoded message to one reply, so tests drive it with injected resolver, interface reader, TLS factory and clock."""
+    decoded message to one reply, so tests drive it with injected resolver, interface reader, TLS factory and clock.
+    An R7 allow never connects from here: ``hosted_exchanger`` (`ccg.broker.holderclient.HolderClient`) forwards it to the
+    key holder, and with none configured it closes ``upstream-error`` (``docs/plans/connected-code-graph-egress-spec5.md`` s3)."""
 
     def __init__(self, systems: dict[str, policy.LoadedSystem], audit: AuditWriter, *,
                  resolver: Callable[[str], list[str]] = addr_mod.default_resolver,
@@ -88,10 +90,12 @@ class Broker:
                  tls_factory: Callable[[], Any] = structured.make_tls_context,
                  clock: Callable[[], float] = time.monotonic,
                  exchanger: Callable[..., structured.Exchange] = structured.exchange,
+                 hosted_exchanger: "Callable[..., structured.Exchange] | None" = None,
                  log: Callable[[str], None] = _default_log):
         self.systems, self.audit = systems, audit
         self.resolver, self.iface, self.tls_factory = resolver, iface, tls_factory
         self.clock, self.exchanger, self.log = clock, exchanger, log
+        self.hosted_exchanger = hosted_exchanger  # R7 only: the key-holder client, or None (egress-spec5 section 3)
         self.runs = RunTable(clock)
 
     # -- dispatch
@@ -170,7 +174,7 @@ class Broker:
             raise framing.FrameError("body is not serializable as UTF-8 JSON") from None
         verdict = policy.evaluate(system, run, clean, body, body_bytes)
         validated = None
-        if verdict.decision == "allow":
+        if verdict.decision == "allow" and verdict.section != "hosted":  # R7 is the holder's to resolve (spec5 s3)
             try:
                 validated = addr_mod.validate(system.egress, verdict.section, verdict.entry,
                                               resolver=self.resolver, iface=self.iface)
@@ -187,7 +191,7 @@ class Broker:
             "decision", runId=run.run_id if run else None, component=clean["component"], purpose=clean["purpose"],
             payloadClass=clean["payloadClass"], target={"method": clean["method"], "path": clean["path"]},
             endpoint=clean["endpoint"], codebases=clean["codebases"], rejected=rejected,
-            resolvedAddr=validated.addr if allow else None, privateAddress=bool(allow and validated.private),
+            resolvedAddr=validated.addr if validated else None, privateAddress=bool(validated and validated.private),
             requestMode=verdict.mode, decision=verdict.decision, rule=verdict.rule, reason=verdict.reason,
             transport="structured",
             payloadFields=fields,
@@ -208,9 +212,16 @@ class Broker:
         path = next(p for p in verdict.entry["paths"] if p == clean["path"])  # the entry's string, never the caller's
         t0 = self.clock()
         try:  # an allow is durable: whatever fails from here on still ends in a `close` record (section 5.2)
-            ctx = self.tls_factory() if parts.scheme == "https" else None
-            ex = self.exchanger(parts.scheme, parts.hostname, parts.port, validated.addr, clean["method"], path,
-                                body_bytes, tls_context=ctx)
+            if verdict.rule == "R7-HOSTED-SERVICE":  # forwarded to the key holder, never sent from here (spec5 s3)
+                if self.hosted_exchanger is None:
+                    ex = structured.Exchange("upstream-error", None, None, None, 0, 0)
+                else:
+                    ex = self.hosted_exchanger(verdict.entry["endpoint"], clean["method"], path, body_bytes,
+                                               clean["gatewayRunId"])
+            else:
+                ctx = self.tls_factory() if parts.scheme == "https" else None
+                ex = self.exchanger(parts.scheme, parts.hostname, parts.port, validated.addr, clean["method"], path,
+                                    body_bytes, tls_context=ctx)
         except Exception as exc:
             self.log(f"upstream setup failed: {type(exc).__name__}")
             ex = structured.Exchange("upstream-error", None, None, None, 0, 0)

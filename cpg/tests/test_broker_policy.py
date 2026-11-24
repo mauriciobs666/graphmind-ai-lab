@@ -179,10 +179,13 @@ def test_hosted_model_call_in_a_mixed_system_is_r5_even_when_only_hosted_repos_a
 def test_hosted_model_call_is_r7_when_no_repository_is_local_only(tmp_path):
     hh = Harness(tmp_path, systems={"shop": load_system(tmp_path, repos=(("a", "hosted"), ("b", "hosted")))})
     g = hh.open("answer", "*")
-    d = decide(hh, g["token"], hosted_call(codebases=["a", "b"]))
+    d = decide(hh, g["token"], hosted_call(codebases=["a", "b"], gatewayRunId="eval-1"))
     assert verdict(d) == ("allow", "R7-HOSTED-SERVICE", None) and d["requestMode"] == "hosted"
-    assert hh.resolver.calls == ["api.hosted.example.com."]
-    assert hh.exchange.calls[0]["addr"] == "93.184.216.34" and hh.exchange.calls[0]["tls_context"] == "tls"
+    # forwarded to the holder (spec5 s3): nothing resolved, no TLS, no direct exchange; no address recorded
+    assert hh.resolver.calls == [] and hh.exchange.calls == [] and d["resolvedAddr"] is None
+    assert d["privateAddress"] is False
+    assert hh.hosted.calls == [{"endpoint": "https://api.hosted.example.com:443", "method": "POST",
+                                "path": "/v1/chat/completions", "body": b'{"m":1}', "gateway_run_id": "eval-1"}]
 
 
 def test_r5_precedes_r6_for_a_local_only_answer(h):
@@ -548,8 +551,13 @@ def hosted_system(tmp_path, **kw):
     return {"shop": load_system(tmp_path, repos=(("a", "hosted"), ("b", "hosted")), **kw)}
 
 
-def _hosted_ask(hh, token):
-    return decide(hh, token, hosted_call(codebases=["a"]))
+IDP = "idp.example.com."  # an R4 `outbound` entry: spec3 section 3.4's address check applies to R1/R3/R4 only (spec5 s3)
+
+
+def _r4_ask(hh, token, endpoint="https://idp.example.com:443"):
+    return decide(hh, token, {"component": "access.idp", "purpose": "idp", "payloadClass": "repo-names-and-identity",
+                              "endpoint": endpoint, "target": {"method": "POST", "path": "/who"}, "codebases": ["a"]},
+                  {"repoNames": ["a"], "identity": {"subject": "alice"}})
 
 
 def test_no_resolver_call_for_any_deny(tmp_path):
@@ -564,13 +572,13 @@ def test_no_resolver_call_for_any_deny(tmp_path):
 
 
 def test_the_absolute_name_is_resolved_once_and_the_first_address_is_used(tmp_path):
-    r = Resolver({"api.hosted.example.com.": ["93.184.216.34", "93.184.216.99"]})
+    r = Resolver({IDP: ["93.184.216.36", "93.184.216.99"]})
     hh = Harness(tmp_path, systems=hosted_system(tmp_path), resolver=r)
     g = hh.open("answer", ["a"])
-    d = _hosted_ask(hh, g["token"])
-    assert verdict(d) == ("allow", "R7-HOSTED-SERVICE", None)
-    assert r.calls == ["api.hosted.example.com."]
-    assert d["resolvedAddr"] == "93.184.216.34" and hh.exchange.calls[0]["addr"] == "93.184.216.34"
+    d = _r4_ask(hh, g["token"])
+    assert verdict(d) == ("allow", "R4-NAMED-SERVICE", None)
+    assert r.calls == [IDP]
+    assert d["resolvedAddr"] == "93.184.216.36" and hh.exchange.calls[0]["addr"] == "93.184.216.36"
 
 
 FORBIDDEN = [
@@ -587,75 +595,73 @@ FORBIDDEN = [
 
 @pytest.mark.parametrize("bad", FORBIDDEN)
 def test_each_forbidden_form_is_forbidden_address(tmp_path, bad):
-    r = Resolver({"api.hosted.example.com.": [bad]})
+    r = Resolver({IDP: [bad]})
     hh = Harness(tmp_path, systems=hosted_system(tmp_path), resolver=r)
     g = hh.open("answer", ["a"])
-    d = _hosted_ask(hh, g["token"])
+    d = _r4_ask(hh, g["token"])
     assert verdict(d) == ("deny", "R0-INVALID", "forbidden-address")
     assert d["resolvedAddr"] is None and hh.exchange.calls == []
 
 
 def test_one_bad_address_among_several_denies(tmp_path):
-    r = Resolver({"api.hosted.example.com.": ["93.184.216.34", "10.0.0.1"]})
+    r = Resolver({IDP: ["93.184.216.36", "10.0.0.1"]})
     hh = Harness(tmp_path, systems=hosted_system(tmp_path), resolver=r)
-    d = _hosted_ask(hh, hh.open("answer", ["a"])["token"])
+    d = _r4_ask(hh, hh.open("answer", ["a"])["token"])
     assert d["reason"] == "forbidden-address"
 
 
 def test_a_local_entry_address_is_forbidden_for_a_non_local_name(tmp_path):
-    r = Resolver({"api.hosted.example.com.": ["127.0.0.1"]})
+    r = Resolver({IDP: ["127.0.0.1"]})
     hh = Harness(tmp_path, systems=hosted_system(tmp_path), resolver=r)
-    assert _hosted_ask(hh, hh.open("answer", ["a"])["token"])["reason"] == "forbidden-address"
+    assert _r4_ask(hh, hh.open("answer", ["a"])["token"])["reason"] == "forbidden-address"
 
 
 def test_private_address_opt_in_admits_private_but_never_a_host_address(tmp_path):
     eg = egress()
-    eg["hosted"][0]["privateAddress"] = True
+    eg["outbound"][1]["privateAddress"] = True  # the idp entry
     for addr, ok in (("10.1.2.3", True), ("192.168.7.7", True), (HOST_ADDR, False), ("192.168.0.1", False),
                      ("172.17.0.9", False), ("127.0.0.1", False)):
-        r = Resolver({"api.hosted.example.com.": [addr]})
+        r = Resolver({IDP: [addr]})
         sub = tmp_path / addr.replace(":", "_").replace(".", "_")
         sub.mkdir()
         hh = Harness(sub, systems={"shop": load_system(sub, repos=(("a", "hosted"),), eg=eg)}, resolver=r)
-        d = _hosted_ask(hh, hh.open("answer", ["a"])["token"])
+        d = _r4_ask(hh, hh.open("answer", ["a"])["token"])
         assert (d["decision"] == "allow") == ok, addr
         assert d["privateAddress"] is ok
 
 
 def test_resolve_failed_and_address_check_unavailable(tmp_path):
-    for table, expect in (({"api.hosted.example.com.": []}, "resolve-failed"),
-                          ({"api.hosted.example.com.": ["not-an-address"]}, "resolve-failed")):
+    for table, expect in (({IDP: []}, "resolve-failed"), ({IDP: ["not-an-address"]}, "resolve-failed")):
         sub = tmp_path / expect / str(len(table))
         sub.mkdir(parents=True, exist_ok=True)
         hh = Harness(sub, systems=hosted_system(sub), resolver=Resolver(table))
-        assert _hosted_ask(hh, hh.open("answer", ["a"])["token"])["reason"] == expect
+        assert _r4_ask(hh, hh.open("answer", ["a"])["token"])["reason"] == expect
     sub = tmp_path / "gone"
     sub.mkdir()
-    hh = Harness(sub, systems=hosted_system(sub), resolver=Resolver({"api.hosted.example.com.": []}))
-    hh.resolver.table.pop("api.hosted.example.com.")  # raises OSError
-    assert _hosted_ask(hh, hh.open("answer", ["a"])["token"])["reason"] == "resolve-failed"
+    hh = Harness(sub, systems=hosted_system(sub), resolver=Resolver({IDP: []}))
+    hh.resolver.table.pop(IDP)  # raises OSError
+    assert _r4_ask(hh, hh.open("answer", ["a"])["token"])["reason"] == "resolve-failed"
 
     def unreadable():
         raise addr_mod.IfaceUnavailable("ip: not found")
     sub = tmp_path / "noip"
     sub.mkdir()
     hh = Harness(sub, systems=hosted_system(sub), iface=unreadable)
-    d = _hosted_ask(hh, hh.open("answer", ["a"])["token"])
+    d = _r4_ask(hh, hh.open("answer", ["a"])["token"])
     assert verdict(d) == ("deny", "R0-INVALID", "address-check-unavailable") and hh.exchange.calls == []
 
 
 def test_an_ip_literal_remote_entry_needs_no_resolution_but_is_still_checked(tmp_path):
     eg = egress()
-    eg["hosted"][0]["endpoint"] = "https://93.184.216.40:443"
-    sub = tmp_path
-    hh = Harness(sub, systems={"shop": load_system(sub, repos=(("a", "hosted"),), eg=eg)})
-    d = decide(hh, hh.open("answer", ["a"])["token"], hosted_call(endpoint="https://93.184.216.40:443", codebases=["a"]))
+    eg["outbound"][1]["endpoint"] = "https://93.184.216.40:443"
+    hh = Harness(tmp_path, systems={"shop": load_system(tmp_path, repos=(("a", "hosted"),), eg=eg)})
+    d = _r4_ask(hh, hh.open("answer", ["a"])["token"], "https://93.184.216.40:443")
     assert d["decision"] == "allow" and d["resolvedAddr"] == "93.184.216.40" and hh.resolver.calls == []
-    eg["hosted"][0]["endpoint"] = "https://10.0.0.5:443"
+    eg["outbound"][1]["endpoint"] = "https://10.0.0.5:443"
     sub2 = tmp_path / "p"
     sub2.mkdir()
     hh = Harness(sub2, systems={"shop": load_system(sub2, repos=(("a", "hosted"),), eg=eg)})
-    d = decide(hh, hh.open("answer", ["a"])["token"], hosted_call(endpoint="https://10.0.0.5:443", codebases=["a"]))
+    d = _r4_ask(hh, hh.open("answer", ["a"])["token"], "https://10.0.0.5:443")
     assert d["reason"] == "forbidden-address"
 
 

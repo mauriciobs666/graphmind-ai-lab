@@ -57,6 +57,10 @@ broker = [
     "jsonschema==4.26.0",
     "pyyaml==6.0.3",
 ]
+# Key-holder forward (egress-spec5 section 8, D9a): the tests import `llmgateway` (the real holder wire, ownercheck).
+# No extra on purpose: `llm-gateway` is not on an index, and a name-only requirement would resolve from one
+# (dependency confusion). Install it from the checkout - `.venv/bin/pip install -e ../llm-gateway` from `cpg/` -
+# and the broker itself never imports it.
 
 [build-system]
 requires = ["setuptools>=68"]
