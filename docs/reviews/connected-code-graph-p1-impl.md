@@ -265,3 +265,60 @@ Target: root `REVIEW.md`, "Always check". Sources given per line; none duplicate
 | AC-1 / AC-2 / AC-4 | `p1t20.json`, `eval/dev/ac5-{http,mcp,wiring}.jsonl` | counted | figures match; composition in M3 |
 | AC-24 | `eval/results/ac24-dev2/p36_devAttempts.json`, `preregistration.jsonl` | Wilson and exact binomial | attempts match; M2 |
 | AC-5 | counts report, `gate.py:50-56`, `preregistration.jsonl` | grep counts | figures and "no record" hold |
+
+## Pass 2
+
+Scope: the committed tree at `e7fdde48`, read from a clean clone; fix commits `d5782ff2` (B1), `8e07321a` (closure report),
+`08991f6b` (plan text), `728fd8f8` (close docs), `a7be79e5` (requirements log), `e7fdde48` (the two reds). The other session's
+broker/gateway files are not P1; two of its committed commits do show up in the suite (N2).
+
+**Verdict: approve with suggestions.** No blocker remains; the close may proceed. N1 and the tidy items below are owed in the
+close-out unit or one commit; none changes an AC status.
+
+### Dispositions
+
+- **B1 fixed.** `ac8-report.md:63` now reads "reported not closed at P1 (harness live-tested only)", agreeing with l.9 and the table.
+- **M1 fixed, executed.** `e7fdde48`: `test_p1_11b_the_repos_own_mcp_json_names_its_script` now pins the `ccg` entry as
+  `("bash", ["-c", REDACTED])` plus a plant (the `cypher` entry turned into a `-c` launcher must go red); `-k p1_11b` 53 passed.
+  `pyproject.toml:74` gains `front/prompts/*.txt`, `front/grammar/*.json`; the glob test passed in the full run. Extractor untouched
+  (`git diff 231d5b35 e7fdde48 -- cpg/extractors` empty). "Not P1's" now covers only what was traced.
+- **M2 fixed.** Closure AC-24 row (l.122) states P(<=8 of 12 | 0.92) = 0.012, 9/12 = 0.065, "evidence against the 0.92 target", verdict unchanged.
+- **M3 fixed.** Rows now carry: AC-2 MCP half = 20 Markdown files, 3 anchors, all `possible`; AC-1 six `salesperson/` hits; AC-9b unit-not-repository
+  and only LNK-42 mutated; AC-17 structured anchors need `repo`; AC-25 names DF-3 (l.43, 48, 92, 109, 127).
+- **M4 fixed in the close docs, residue in two places.** Q1 (close-out unit before P3) is in HISTORY, BACKLOG:32-40, root `AGENTS.md` and `cpg/README.md:75`;
+  BACKLOG:32 no longer says "P2 onward". Residue: closure headings l.40, 55, 79 and §6 l.152-153 still say "carried/deferred to P2" (l.155 supersedes them in a
+  sentence), and the proposal's P1 row (`docs/plans/connected-code-graph.md:1035`) still says AC-4/AC-5/AC-8 "P2". Both are the close-out plan's to repoint.
+- **M5 fixed.** `a7be79e5`: 17 entries, one question to one answer each, AC wording untouched; the three owed 2026-11-09/10 entries and the 2026-11-19..24 decisions are there.
+  The AC-9b entry says "reading recorded, not a separate user answer", which is honest. Unrecorded owed entries (per-system ACL names, indexer provisioning
+  step and directory, Q-ENV, strace install, P1-34 fresh draw): **none blocks the close**. They change no AC reading or closure; they are recorded in plans, the
+  README and the decision JSON. Q-ENV (env-var binding deferred) and the P1-34 spend are worth one log line each, non-blocking.
+- **m1 fixed** (HISTORY:55-62 oracle limits, probe authorisation with the user's confirmation, P1-34 disclosures; README:154 OOM recovery via `up`, `create_users`, `refresh`).
+- **m2 fixed** (closure l.11 names `a81a597e`, the later commits and that the driver was not repeated). **m3 fixed** (BACKLOG:71, trigger "before `refresh` is used unattended").
+- **m4 mostly fixed.** BACKLOG:79 (AC-10 observed, qa, live model via broker; matches Q3), :84, :86 added. Not added: README rows for `ccg/gateway/` and `holderclient.py`
+  and the `../llm-gateway` install; acceptable as that feature's close, but say so in HISTORY.
+- **m5 fixed.** Unfiltered `git grep` for `87 (P1|of 134|rows)` at `e7fdde48`: only ledger lines and the dated `test-plans/...-p1.md:9` note remain (history, owned);
+  proposal row and `-p1-gates.md` P1-38 text updated; `-p1.md:423` now says AI reviewer. **`-p1.md:371` "census 85" is acceptable**: it is the 57c step's intermediate
+  state and the same row sends D10 on to Q-DYN; optionally append "(81 after Q-DYN B)".
+- **n1 not fixed** (nit; no change to the checker or its mutant test).
+- **Growth-stops: closed.** The staleness half (87) is repaired; no new restated-history found in the fix commits.
+- **Q1 to Q4 answered:** Q1 close-out unit before P3 (plan uncommitted, out of scope); Q2 yes, recorded in the requirements log and HISTORY; Q3 in BACKLOG:79; Q4 done (`e7fdde48`).
+
+### Fix-vs-fix interactions
+
+- **AC-6 acceptance date.** Ledger and requirements log: 2026-11-23; HISTORY: 2026-11-23; closure l.77 still says "2026-11-24 ledger". The ledger is right; fix the closure line.
+- **Spike hit count: both numbers are right, at different commits.** At `62d3ca48` (the report's commit) the report's own command gives 60 hits in 39 files; at `231d5b35` and `e7fdde48`
+  it gives 63 in 41, the extra 3 being the close's own `AGENTS.md` (1) and `cpg/README.md` (2) mentions of the frozen directory. The report needs no correction; HISTORY's "60" should say "at the report's commit".
+- AC rows agree across closure, HISTORY, BACKLOG and the requirements log on statuses (4 + 8 + 4), the AC-5 deferral, AC-10, AC-18, AC-1 and AC-24; the only divergence is the "P2" wording above.
+
+### Full default suite on `e7fdde48` (clean clone, `cpg/`, host load about 1, live tiers deselected)
+
+`13 failed, 17584 passed, 110 skipped, 531 deselected, exit 1` (827 s). Not the expected 7:
+- **Fixed pair green:** `test_p1_11b_*` and the package-data glob pass. `test_units` golden, the leaf-harness survivor-tell and the `test_ac8_lib` flake did not fail here (they did at `231d5b35`, so they depend on tree state; not re-traced).
+- **Known, still red (4):** `test_scip_parse` x4.
+- **N1 (new, P1's, fresh-checkout red x4):** `test_config_extractor.py` `[.env]` cases fail on `KeyError: '.env'`: `cpg/tests/data/config/repo1/.env` is excluded by root `.gitignore:138` (`.env`, `git check-ignore` confirms) and untracked, so P1-11's golden corpus is incomplete in any clean checkout and the 531-test suite is green only where the file happens to exist. Fix: `!cpg/tests/data/config/repo1/.env` in `.gitignore` and add the file.
+- **N2 (not P1's, a P1 guard reddened by another feature, x3):** `test_no_network.py` fails, also at `231d5b35` and in the live working tree, because `ccg/gateway/brokertransport.py:27` (llm-gateway D10, `cbab7cdd`) imports `ccg.broker.client.BrokerClient`, which P1-25b's import-boundary pin allows only to the front's interpret/summary modules. Owner: the llm-gateway feature (extend the pin with a granted import, as the test's "granted broker imports" case allows). The coordinator's "no new red" at `231d5b35` does not match what I observe; re-check on the real tree.
+- **N3 (minor, clone-location dependence x2):** `test_broker_audit.py::test_the_default_audit_dir_is_the_codes_own_location_not_the_working_directory` and `test_eval_tools.py::test_derived_fixtures_match_builders` embed the checkout's absolute path or the editable-install location; they pass only at the original path. 110 skips (against 10) are the gitignored slice oracle, reported unrun as designed.
+
+### Tidy items owed (non-blocking)
+
+Closure l.77 date; closure headings and proposal row l.1035 to say close-out unit once its plan lands; N1 fixture; N2 pin; one-line HISTORY wording for the spike count.
