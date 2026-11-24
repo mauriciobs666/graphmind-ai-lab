@@ -1,0 +1,117 @@
+{
+ "head": "57be01a2969ddb5915fe4e99fe740239ade8866f",
+ "questions": [
+  {
+   "question": "impact falkor-chat/server/falkorchat/mcp.py::_resolve_thread",
+   "status": "ambiguous",
+   "provenance_model_call": false,
+   "items": 0,
+   "groups": 0
+  },
+  {
+   "question": "impact falkor-chat/server/falkorchat/api.py:58",
+   "status": "resolved",
+   "provenance_model_call": false,
+   "items": 599,
+   "groups": 0
+  },
+  {
+   "question": "impact GET /health",
+   "status": "resolved",
+   "provenance_model_call": false,
+   "items": 10,
+   "groups": 0
+  },
+  {
+   "question": "impact falkor-chat/server/falkorchat/storefront_api.py::build_router",
+   "status": "ambiguous",
+   "provenance_model_call": false,
+   "items": 0,
+   "groups": 0
+  },
+  {
+   "question": "impact falkor-chat/server/falkorchat/api.py::build_router.health",
+   "status": "resolved",
+   "provenance_model_call": false,
+   "items": 599,
+   "groups": 0
+  }
+ ],
+ "chosen": {
+  "question": "impact falkor-chat/server/falkorchat/api.py:58",
+  "items": 599,
+  "groups": 0,
+  "repos": 1,
+  "components": 10,
+  "distances": [
+   1,
+   2
+  ],
+  "statuses": {
+   "possible": 597,
+   "confirmed": 2
+  },
+  "text_lines": 5074,
+  "md_lines": 7503
+ },
+ "real_text_violations": [],
+ "real_md_violations": [],
+ "fence_sentence_first": {
+  "text": true,
+  "md": true
+ },
+ "every_item_in_a_group": {
+  "text": true,
+  "md": true
+ },
+ "cli": {
+  "text": {
+   "exit": 0,
+   "stderr_empty": true,
+   "same_as_library": true
+  },
+  "markdown": {
+   "exit": 0,
+   "stderr_empty": true,
+   "same_as_library": true
+  }
+ },
+ "mutants": {
+  "item-outside-group/text": {
+   "failed_check": true,
+   "violations": 1
+  },
+  "item-outside-group/markdown": {
+   "failed_check": true,
+   "violations": 1
+  },
+  "groups-out-of-order/text": {
+   "failed_check": true,
+   "violations": 1
+  },
+  "groups-out-of-order/markdown": {
+   "failed_check": true,
+   "violations": 1
+  },
+  "hop-without-line/text": {
+   "failed_check": true,
+   "violations": 1
+  },
+  "hop-without-line/markdown": {
+   "failed_check": true,
+   "violations": 1
+  }
+ },
+ "f3_plant": {
+  "text": [
+   1,
+   1
+  ],
+  "md": [
+   1,
+   1
+  ],
+  "fence_sample": "` x `"
+ },
+ "verdict": "PASS"
+}

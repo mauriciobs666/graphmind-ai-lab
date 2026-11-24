@@ -1,0 +1,110 @@
+{
+ "head": "57be01a2969ddb5915fe4e99fe740239ade8866f",
+ "wall_s": 1772.3,
+ "units": 1335,
+ "status": {
+  "fresh": 1335
+ },
+ "by_language_status": {
+  "config/fresh": 317,
+  "markdown/fresh": 888,
+  "python/fresh": 12,
+  "shell/fresh": 116,
+  "javascript/fresh": 2
+ },
+ "not_fresh": [],
+ "unknown_kind": 0,
+ "unattested": 1321,
+ "bind_key_mismatch": 0,
+ "snapshot_id": "62e9264b4e1131fb14bc531602ee08ae",
+ "dropped": {
+  "consumer-key-none": 5
+ },
+ "link_counts": {
+  "links": 934,
+  "by_kind": {
+   "http": 376,
+   "mcp_tool": 558
+  },
+  "by_status": {
+   "confirmed": 104,
+   "possible": 830
+  },
+  "by_reason": {
+   "key-match": 104,
+   "partial-key": 74,
+   "prompt-mention": 351,
+   "unknown-key": 405
+  },
+  "unknown_key_consumers": 9,
+  "max_fan_out": 61,
+  "refused_patterns": 0,
+  "refused_texts": 0,
+  "refused_regex_pairs": 0,
+  "loopback_port_residual": 0,
+  "binding_duplicate_ids": 0
+ },
+ "stages": [
+  {
+   "name": "sweep",
+   "s": 0.0,
+   "peak_rss_kb": 40300,
+   "mem_avail_min_kb": 3475744,
+   "mem_avail_drop_kb": 0
+  },
+  {
+   "name": "discover",
+   "s": 0.1,
+   "peak_rss_kb": 41464,
+   "mem_avail_min_kb": 3458320,
+   "mem_avail_drop_kb": 17424
+  },
+  {
+   "name": "build",
+   "s": 959.6,
+   "peak_rss_kb": 734204,
+   "mem_avail_min_kb": 1683028,
+   "mem_avail_drop_kb": 1775292
+  },
+  {
+   "name": "resolve",
+   "s": 304.7,
+   "peak_rss_kb": 1112972,
+   "mem_avail_min_kb": 2289040,
+   "mem_avail_drop_kb": 837448
+  },
+  {
+   "name": "link",
+   "s": 393.0,
+   "peak_rss_kb": 1269300,
+   "mem_avail_min_kb": 2113368,
+   "mem_avail_drop_kb": 190208
+  },
+  {
+   "name": "assemble",
+   "s": 10.6,
+   "peak_rss_kb": 1656824,
+   "mem_avail_min_kb": 1787112,
+   "mem_avail_drop_kb": 388792
+  },
+  {
+   "name": "load",
+   "s": 10.0,
+   "peak_rss_kb": 1576808,
+   "mem_avail_min_kb": 1164092,
+   "mem_avail_drop_kb": 746420
+  },
+  {
+   "name": "swap",
+   "s": 0.0,
+   "peak_rss_kb": 1536820,
+   "mem_avail_min_kb": 1302976,
+   "mem_avail_drop_kb": 252
+  }
+ ],
+ "process_peak_rss_mb": 1501,
+ "ack": [
+  "refresh graphmind-ai-lab: 1335 fresh, 0 stale-kept, 0 not-mapped (head is the local clone's)",
+  "swept 0 stale temp file(s); unknownKind 0; skippedDocs 0; undecodablePaths 0; pruned 0; prune errors 0; state errors 0"
+ ]
+}

@@ -1,0 +1,1522 @@
+{
+ "head": "57be01a2969ddb5915fe4e99fe740239ade8866f",
+ "port": 16450,
+ "filters": {
+  "AC-1": {
+   "stratum": "http",
+   "anchors": 12,
+   "items": 18
+  },
+  "AC-2/mcp": {
+   "stratum": "mcp",
+   "anchors": 3,
+   "items": 20
+  },
+  "AC-2/wiring": {
+   "stratum": "wiring",
+   "anchors": 1,
+   "items": 3
+  },
+  "AC-4": {
+   "stratum": "scripts",
+   "anchors": 1,
+   "items": 1
+  }
+ },
+ "strata": {
+  "http": {
+   "askable": {
+    "hits": 17,
+    "total": 18,
+    "misses": {
+     "not-listed": 1
+    }
+   },
+   "unit_anchor_items_not_asked": 0,
+   "anchors_total": 12,
+   "anchors_asked": 12,
+   "by_item": [
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "02170815aaa8617a1ced9c469c69e134",
+     "anchorId": "aefbd69a",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "0414efc243fcb070e9287eddcd598f0b",
+     "anchorId": "0153be92",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "0a94dc114830d9b909284330d3ab58e4",
+     "anchorId": "aefbd69a",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "1f4925715447eecec26311cde41effdf",
+     "anchorId": "a3f0a377",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "40c8c6efefb3e4a45298e2e4d45b4e4b",
+     "anchorId": "4ccf1954",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "47f12627e27fd2aa0a5b162df99e49f1",
+     "anchorId": "a3aa15ed",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "57f718cf9946bb1e3474bbb40fb3a075",
+     "anchorId": "aefbd69a",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "7546b0088a0be0630fb15293c043b0e2",
+     "anchorId": "a7d33a3f",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "7f368247430fc6b34889329285c6f9a8",
+     "anchorId": "a3aa15ed",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "8ffa9fc1646648216f3fb7efbf98a78f",
+     "anchorId": "6d3f1916",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "9703a12bc99dcb1693759be4476b1e6c",
+     "anchorId": "dc574bea",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "c056798671a2c42aed7618c58b38fd23",
+     "anchorId": "4ccf1954",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "c58283f20172dc74fbc813fccddafd81",
+     "anchorId": "7dfd0dc6",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "e25af0b52ce1df6996d1aebb4bfc9251",
+     "anchorId": "a359de51",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "f2d84c984f95f18cb6e0da67c3a2b3bd",
+     "anchorId": "5725e90f",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "f3f1d52d0be01cac2e9399cd86699ac7",
+     "anchorId": "5725e90f",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "f65a452ca0810f6aa8f04506705605f3",
+     "anchorId": "caa0554e",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "f9041b49f9c1e001469d2198c1ab5dbb",
+     "anchorId": "4ccf1954",
+     "impactedType": "symbol"
+    }
+   ]
+  },
+  "mcp": {
+   "askable": {
+    "hits": 20,
+    "total": 20,
+    "misses": {}
+   },
+   "unit_anchor_items_not_asked": 0,
+   "anchors_total": 3,
+   "anchors_asked": 3,
+   "by_item": [
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "02e3e38246852c1c079b4fefd85f0796",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "066c74b689c974565436f3131b34c0a0",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "32e30d236cbc2de0d2ea023e06faace4",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "4a8c34651380a7f3a432a939f45f22aa",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "8f7c322f30bfa80e03807bfef4159c4d",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "907e30c33a4c65a38abc28da76874d88",
+     "anchorId": "5e7e0897",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "94c5bc1795af10f25711eeaac3038418",
+     "anchorId": "cd5464b5",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "9a21361f0c8f3ba1a757d5f9df754bd4",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "a81688c21f0f190ef760d78952879657",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "ae380805f434f0e2e0b013240bb0d438",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "aeecbcd8004d5987773e64a02fe49172",
+     "anchorId": "5e7e0897",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "c4b5dc090974cf802811a7805466c0ed",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "ce974006145e6f59d5aef92cd39570a9",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "dd89584d05df75ca8a2bed0a027df54a",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "e5ee6e05b9d118f8457dea4af11dc28d",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "e8534f69e7fc4cfef6f237523a86bac2",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "ee61e56a0996d5ffb94357098c1c7539",
+     "anchorId": "5e7e0897",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "f06aa44b0db09f9681584496edb4767a",
+     "anchorId": "5e7e0897",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "fd46a43c6dacb0ef156349627301157c",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "feddc9fd4bf9b0528cc83f2da7c5a30e",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    }
+   ]
+  },
+  "scripts": {
+   "askable": {
+    "hits": 0,
+    "total": 49,
+    "misses": {
+     "not-listed": 49
+    }
+   },
+   "unit_anchor_items_not_asked": 0,
+   "anchors_total": 22,
+   "anchors_asked": 22,
+   "by_item": [
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "0fbf43ab9238efee0857b56a489c8f9f",
+     "anchorId": "c3833234",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "106e87c807dffb23c1fbe43739940348",
+     "anchorId": "f5b76cc2",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "107ea0381b9b379a58550fec86d28a49",
+     "anchorId": "f7ba3098",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "1774487968eaff49547903f497531a88",
+     "anchorId": "7e157e85",
+     "impactedType": "symbol",
+     "inStore": 2
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "1ebbf6577d139d490b4b974f4f36fa7a",
+     "anchorId": "c81c3aa0",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "28b763dd546cfaf6e2b5daf317dec3b8",
+     "anchorId": "cfe88319",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "3c0917959f8cbbdc7a7ac7a5b0dd05a7",
+     "anchorId": "aefbd69a",
+     "impactedType": "symbol",
+     "inStore": 6
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "46cba1717f475008b11ddab44200d1c0",
+     "anchorId": "dc88c0f0",
+     "impactedType": "symbol",
+     "inStore": 2
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "4886ea576cb37ac25aaea5dec3313577",
+     "anchorId": "4e7c5d3c",
+     "impactedType": "symbol",
+     "inStore": 2
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "4b9e006b82f6abb1bda8549365cc4ec6",
+     "anchorId": "dc88c0f0",
+     "impactedType": "symbol",
+     "inStore": 2
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "52fb50d10be05a24c1095d984d5ea51b",
+     "anchorId": "cfe88319",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "5b355baa970f22ac281c86fa48c259aa",
+     "anchorId": "dc88c0f0",
+     "impactedType": "symbol",
+     "inStore": 2
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "5dbd4bae63e880fdf1d1d8a27a6d54db",
+     "anchorId": "aefbd69a",
+     "impactedType": "symbol",
+     "inStore": 2
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "6fee71daaef58335371c01578f3bfd34",
+     "anchorId": "11313f7f",
+     "impactedType": "symbol",
+     "inStore": 6
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "7d9d8aa1ea919291d8cdc2b890f912ff",
+     "anchorId": "dc88c0f0",
+     "impactedType": "symbol",
+     "inStore": 2
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "7fc6a23c205a1a82a393d0918dbae59c",
+     "anchorId": "bfe3a238",
+     "impactedType": "symbol",
+     "inStore": 9
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "8f9035d42191c00eade357050315d966",
+     "anchorId": "9a66e55d",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "9149027e09da1471b856f00ed4e12c28",
+     "anchorId": "83825e84",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "9180d6995d1fb4cbb9c769689df00891",
+     "anchorId": "e48c99e0",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "9302f3d688354a4135ba73a094c39adc",
+     "anchorId": "4e7c5d3c",
+     "impactedType": "symbol",
+     "inStore": 2
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "94471e88bfd7316dfa3c106113daf815",
+     "anchorId": "bfe3a238",
+     "impactedType": "symbol",
+     "inStore": 2
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "9b992587b56c3e8003e9c519dc2856d4",
+     "anchorId": "83825e84",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "a4672e0e885f234a08214209bedb615a",
+     "anchorId": "c81c3aa0",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "a7b52a16382dd0bfe2bd278da2965b18",
+     "anchorId": "bfe3a238",
+     "impactedType": "symbol",
+     "inStore": 6
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "aa752daa898361a34fa6c09bd16cef71",
+     "anchorId": "cd5464b5",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "ace49b47a34c9dc9b1a72f078d9784c9",
+     "anchorId": "f7ba3098",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "aed9b80189d444d0c8545df0f6d1e732",
+     "anchorId": "cfe88319",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "af3d4a706ac9730fb9f880a2eb96825c",
+     "anchorId": "7e157e85",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "b0f6272d4d7d3bfa557e58f4e4ca2d4b",
+     "anchorId": "5cf6dc02",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "b3547e028a385c6fb818b30aa27e83ee",
+     "anchorId": "1d532c67",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "b35838609ea569fec3e9521082a80864",
+     "anchorId": "0572a4d5",
+     "impactedType": "symbol",
+     "inStore": 2
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "c12efdb6f2d627fcbdc276a68458b281",
+     "anchorId": "bfe3a238",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "c386af0c3aaeeab7116922c43dd7b04f",
+     "anchorId": "c3833234",
+     "impactedType": "symbol",
+     "inStore": 6
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "c649a7aca2de27884ddee78e4cd099b4",
+     "anchorId": "11313f7f",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "d105f096e63283a09511fcf69297d3ed",
+     "anchorId": "c3833234",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "d65e21299562be73b4149bd7063ba43d",
+     "anchorId": "169ea831",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "d740794ee3674204f431204925c1c0b6",
+     "anchorId": "cfe88319",
+     "impactedType": "symbol",
+     "inStore": 2
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "d7b4144e135245c043985a98cf5ac026",
+     "anchorId": "a1c8524d",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "df42c4b9db8f369cf5b0de21ce217fee",
+     "anchorId": "aefbd69a",
+     "impactedType": "symbol",
+     "inStore": 9
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "df9bdc52173fa4fdc8eb0f66c493d4d8",
+     "anchorId": "0572a4d5",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "e2d5f03022934720bd1de920f8732100",
+     "anchorId": "4e7c5d3c",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "e6c6a3c92acfe2770da837a5b30b9570",
+     "anchorId": "f7ba3098",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "e6e80b82d3f8cd8a819df01232adf3df",
+     "anchorId": "83825e84",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "e8c36e15140be75bab4c3552c5e381c1",
+     "anchorId": "cd5015a0",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "f155508da7d0709e520c176c2c5e2085",
+     "anchorId": "dbd15a60",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "f25577147eeea681d6fdd0b113e94906",
+     "anchorId": "bfe3a238",
+     "impactedType": "symbol",
+     "inStore": 6
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "f33cbe42358775055726731a9c1ecceb",
+     "anchorId": "a1c8524d",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "f7a509957611e2328bb39ac439749782",
+     "anchorId": "1d532c67",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "fa829ef8dad8121febf0cdf93278e5f2",
+     "anchorId": "4e7c5d3c",
+     "impactedType": "symbol",
+     "inStore": 2
+    }
+   ]
+  },
+  "wiring": {
+   "askable": {
+    "hits": 0,
+    "total": 7,
+    "misses": {
+     "not-listed": 7
+    }
+   },
+   "unit_anchor_items_not_asked": 4,
+   "anchors_total": 6,
+   "anchors_asked": 5,
+   "by_item": [
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "32da04f9831e662b6675d2ce3cca160e",
+     "anchorId": "cd5464b5",
+     "impactedType": "config",
+     "inStore": 10
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "3efb7f5624898aa4c8fa40f42aee5250",
+     "anchorId": "cd5464b5",
+     "impactedType": "config",
+     "inStore": 10
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "9c714071280e9d28f3ab16d5b589066a",
+     "anchorId": "b677ea6c",
+     "impactedType": "config",
+     "inStore": 55
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "ae355dd2bfcbc42c03376577727a7a2b",
+     "anchorId": "af9d344e",
+     "impactedType": "config",
+     "inStore": 25
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "da060cb283e8d3deb792e6dc7d4b24e8",
+     "anchorId": "48f54b18",
+     "impactedType": "config",
+     "inStore": 55
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "f16850fc694e79278bfab7a254f7b093",
+     "anchorId": "9535f0f6",
+     "impactedType": "config",
+     "inStore": 55
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "f8844c8c31b0e9838531a3db6f3e297c",
+     "anchorId": "cd5464b5",
+     "impactedType": "config",
+     "inStore": 10
+    }
+   ]
+  }
+ },
+ "samples": {
+  "AC-1": {
+   "hits": 17,
+   "total": 18,
+   "misses": {
+    "not-listed": 1
+   },
+   "anchors": 12,
+   "verdict": "FAIL",
+   "by_item": [
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "02170815aaa8617a1ced9c469c69e134",
+     "anchorId": "aefbd69a",
+     "impactedType": "symbol",
+     "inStore": 1
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "0414efc243fcb070e9287eddcd598f0b",
+     "anchorId": "0153be92",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "0a94dc114830d9b909284330d3ab58e4",
+     "anchorId": "aefbd69a",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "1f4925715447eecec26311cde41effdf",
+     "anchorId": "a3f0a377",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "40c8c6efefb3e4a45298e2e4d45b4e4b",
+     "anchorId": "4ccf1954",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "47f12627e27fd2aa0a5b162df99e49f1",
+     "anchorId": "a3aa15ed",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "57f718cf9946bb1e3474bbb40fb3a075",
+     "anchorId": "aefbd69a",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "7546b0088a0be0630fb15293c043b0e2",
+     "anchorId": "a7d33a3f",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "7f368247430fc6b34889329285c6f9a8",
+     "anchorId": "a3aa15ed",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "8ffa9fc1646648216f3fb7efbf98a78f",
+     "anchorId": "6d3f1916",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "9703a12bc99dcb1693759be4476b1e6c",
+     "anchorId": "dc574bea",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "c056798671a2c42aed7618c58b38fd23",
+     "anchorId": "4ccf1954",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "c58283f20172dc74fbc813fccddafd81",
+     "anchorId": "7dfd0dc6",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "e25af0b52ce1df6996d1aebb4bfc9251",
+     "anchorId": "a359de51",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "f2d84c984f95f18cb6e0da67c3a2b3bd",
+     "anchorId": "5725e90f",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "f3f1d52d0be01cac2e9399cd86699ac7",
+     "anchorId": "5725e90f",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "confirmed",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "f65a452ca0810f6aa8f04506705605f3",
+     "anchorId": "caa0554e",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "f9041b49f9c1e001469d2198c1ab5dbb",
+     "anchorId": "4ccf1954",
+     "impactedType": "symbol"
+    }
+   ]
+  },
+  "AC-2/mcp": {
+   "hits": 20,
+   "total": 20,
+   "misses": {},
+   "anchors": 3,
+   "verdict": "PASS",
+   "by_item": [
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "02e3e38246852c1c079b4fefd85f0796",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "066c74b689c974565436f3131b34c0a0",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "32e30d236cbc2de0d2ea023e06faace4",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "4a8c34651380a7f3a432a939f45f22aa",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "8f7c322f30bfa80e03807bfef4159c4d",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "907e30c33a4c65a38abc28da76874d88",
+     "anchorId": "5e7e0897",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "94c5bc1795af10f25711eeaac3038418",
+     "anchorId": "cd5464b5",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "9a21361f0c8f3ba1a757d5f9df754bd4",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "a81688c21f0f190ef760d78952879657",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "ae380805f434f0e2e0b013240bb0d438",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "aeecbcd8004d5987773e64a02fe49172",
+     "anchorId": "5e7e0897",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "c4b5dc090974cf802811a7805466c0ed",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "ce974006145e6f59d5aef92cd39570a9",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "dd89584d05df75ca8a2bed0a027df54a",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "e5ee6e05b9d118f8457dea4af11dc28d",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "e8534f69e7fc4cfef6f237523a86bac2",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "ee61e56a0996d5ffb94357098c1c7539",
+     "anchorId": "5e7e0897",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "f06aa44b0db09f9681584496edb4767a",
+     "anchorId": "5e7e0897",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "fd46a43c6dacb0ef156349627301157c",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    },
+    {
+     "hit": true,
+     "cls": "hit",
+     "status": "possible",
+     "distance": 1,
+     "chainLen": 4,
+     "boundOnLink": false,
+     "subjectType": "symbol",
+     "itemId": "feddc9fd4bf9b0528cc83f2da7c5a30e",
+     "anchorId": "90e76555",
+     "impactedType": "symbol"
+    }
+   ]
+  },
+  "AC-2/wiring": {
+   "hits": 0,
+   "total": 3,
+   "misses": {
+    "not-listed": 3
+   },
+   "config_items": 0,
+   "anchors": 1,
+   "verdict": "FAIL",
+   "by_item": [
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "32da04f9831e662b6675d2ce3cca160e",
+     "anchorId": "cd5464b5",
+     "impactedType": "config",
+     "inStore": 10
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "3efb7f5624898aa4c8fa40f42aee5250",
+     "anchorId": "cd5464b5",
+     "impactedType": "config",
+     "inStore": 10
+    },
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "f8844c8c31b0e9838531a3db6f3e297c",
+     "anchorId": "cd5464b5",
+     "impactedType": "config",
+     "inStore": 10
+    }
+   ]
+  },
+  "AC-4": {
+   "hits": 0,
+   "total": 1,
+   "misses": {
+    "not-listed": 1
+   },
+   "hits_with_bound_on_link": 0,
+   "anchors": 1,
+   "verdict": "FAIL",
+   "by_item": [
+    {
+     "hit": false,
+     "cls": "not-listed",
+     "itemId": "e8c36e15140be75bab4c3552c5e381c1",
+     "anchorId": "cd5015a0",
+     "impactedType": "symbol",
+     "inStore": 1
+    }
+   ]
+  }
+ },
+ "controls": {
+  "deleted-item-mutant": {
+   "mutant_reported_missing": true,
+   "judged": "not-listed"
+  },
+  "no-anchor-filter": {
+   "blocked": true
+  },
+  "held-out-opened": false
+ }
+}
