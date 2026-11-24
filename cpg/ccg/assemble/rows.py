@@ -601,7 +601,8 @@ def _script_calls(b: _Builder, scripts: Mapping[str, Mapping[str, str]], sites: 
     Tier 1: a literal path with a ``/``, taken relative to the calling file's directory then the repository root, equal to a script of the
     snapshot: the site's own status and reason. Tier 2: the path tail after a computed head (or a tier-1 miss), ``.`` and ``..`` applied, of at
     least two segments, equal to the end of exactly one script path: ``possible``. A basename never matches; a missing file, several matches and
-    a one-segment tail give no edge (counted)."""
+    a one-segment tail give no edge (counted), except under tier 3: behind a computed head, a one-segment tail (no ``..``) names the script of
+    that name in the calling file's own directory, if any (``possible``; the head is not checked to denote that directory, see the CO-2b report)."""
     by_base: dict[str, dict[str, list[str]]] = {}
     for repo, paths in scripts.items():
         for path in paths:
@@ -622,8 +623,13 @@ def _script_calls(b: _Builder, scripts: Mapping[str, Mapping[str, str]], sites: 
                 if not joined.startswith("..") and joined in known:
                     target = known[joined]
                     break
+        tail = _segments(text)
+        if target is None and dynamic and len(tail) == 1 and text.strip("/") == tail[0]:     # tier 3: own directory (below)
+            beside = owner.rpartition("/")[0]
+            beside = f"{beside}/{tail[0]}" if beside else tail[0]
+            if beside in known:
+                target, status = known[beside], "possible"
         if target is None:                                             # tier 2
-            tail = _segments(text)
             hits = sorted({p for p in by_base.get(repo, {}).get(tail[-1], ()) if p == "/".join(tail) or p.endswith("/" + "/".join(tail))}) \
                 if len(tail) >= 2 else []
             if len(hits) > 1:

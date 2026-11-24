@@ -1,0 +1,11 @@
+{"method": "offline assemble of every tracked *.sh and *.md file of the working tree (1331 files, real extractors, real assembler, real answer builder); no store, no build",
+ "scriptCallsEdges": {"withTier3": 432, "withoutTier3": 397, "tier3Added": 35},
+ "dropped": {"script-call-unmatched": 319, "script-call-ambiguous": 4},
+ "devItemsReadByResolver": [
+  {"family": "G", "anchor": "export-cpg.sh", "impacted": "pipeline.sh", "distance": 1, "status": "possible", "site": "pipeline.sh:149"},
+  {"family": "G", "anchor": "guard-destructive-ops.sh", "impacted": "guard-broad-bash.sh", "distance": 1, "status": "possible", "site": "guard-broad-bash.sh:67"},
+  {"family": "H", "anchor": "git-provenance.sh", "impacted": "pipeline.sh", "distance": 1, "status": "possible", "site": "pipeline.sh:96"}],
+ "stillMissing": [
+  {"family": "G", "item": "mcp-monitor/run.sh <- demo_falkor_chat.sh", "why": "the head is ROOT, the parent of the caller's directory (ROOT=$(cd $HERE/.. && pwd)); the script is not beside the caller"},
+  {"family": "H", "item": "cypher-mcp/server.py <- cypher-mcp/run.sh", "why": "the target is a Python <module>, not a shell <script>, and the site is `exec \"$PY\" \"$HERE/server.py\"`: the command-word argument a0 is $PY"}],
+ "noise": "not computed (labels needed); nothing printed"}
