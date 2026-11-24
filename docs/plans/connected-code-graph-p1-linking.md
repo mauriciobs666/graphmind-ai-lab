@@ -580,7 +580,7 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
   providers (stakeholder, Q-NC5 A: P1-17's rule stands; NC-5 narrows to LNK-12, bound, and LNK-20; the P1-36 report carries the count of
   unbound `mcp_tool`/`http` links whose key has providers in more than one unit, a line `teco` adds to `-p1-gates.md` P1-36).
 - *Rows that need no fixture edit.* LNK-14's base is a config value no Binder input reads: `possible`/`partial-key` (P1-49 rule 3).
-  LNK-08 and TW-2: the observed forms of P1-49. LNK-18 and AC6-EX-2 move to P2 (stakeholder, Q-CENSUS A): the P1 census is **87**, the AC-6 example-config floor at P1 counts instances that emit the reason (AC6-EX-4 and the reshaped AC6-EX-1, P1-56); both are filed as P2 backlog items (owner `architect`) in the close list of `docs/plans/connected-code-graph-p1.md`.
+  LNK-08 and TW-2: the observed forms of P1-49. LNK-18 and AC6-EX-2 move to P2 (stakeholder, Q-CENSUS A): the P1 census drops by these two (the count of record is `cpg/tests/test_fixtures.py`), the AC-6 example-config floor at P1 counts instances that emit the reason (AC6-EX-4 and the reshaped AC6-EX-1, P1-56); both are filed as P2 backlog items (owner `architect`) in the close list of `docs/plans/connected-code-graph-p1.md`.
 - **53a (`qa-engineer`):** (1) the pin, authored red against the unmodified fixtures, two tiers. *Offline tier (no Joern, no store):*
   the real config and shell extractors over `fx-svc`/`fx-job`, plus synthetic provider/consumer facts in the style of
   `tests/linker_bind_helpers.py` (a mention `mcp__fx-svc-exec__list_orders`, a loopback `:8000` consumer, a `:8200/mcp` mcp_tool
@@ -595,11 +595,11 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
   (2) Text, in the manifests, `docs/test-plans/connected-code-graph-fixtures.md` and `docs/test-plans/connected-code-graph-p1.md`:
   the owed `p1Form` for LNK-11/13/14/AC6-EX-4 and LNK-15 re-derived, LNK-08/TW-2 observed forms, LNK-45, LNK-19, LNK-02/06/12
   (`binding-confirmed`), P1T-06 and P1T-09 (which still say "the other five `binding-confirmed`" and assert LNK-21/22 as Links), the
-  LNK-21/45 narrative; no fixture tree edit. (3) The census sweep (87 P1 rows; the families recomputed without LNK-18 and AC6-EX-2): an unfiltered grep for `89` (and `P1 93`/`P1 92`
+  LNK-21/45 narrative; no fixture tree edit. (3) The census sweep (the P1 rows; the families recomputed without LNK-18 and AC6-EX-2): an unfiltered grep for `89` (and `P1 93`/`P1 92`
   history lines left alone as dated notes) in `docs/test-plans/connected-code-graph-fixtures.md` (§6 totals, §7 matrix), `docs/test-plans/connected-code-graph-p1.md`
   (the family table, P1T-05, §6, the totals lines), `cpg/tests/test_fixtures.py` and the manifests' `gate` fields, which `qa-engineer`
   fixes; the `docs/plans/connected-code-graph-p1-gates.md` hits are already fixed (commit `313c59e9`), as are those of
-  `docs/plans/connected-code-graph-p1.md` (87). Every hit is mapped to an owner and fixed or listed. Done: the pin red as stated, `tests/test_fixtures.py`
+  `docs/plans/connected-code-graph-p1.md`. Every hit is mapped to an owner and fixed or listed. Done: the pin red as stated, `tests/test_fixtures.py`
   consistency green, the sweep list attached.
 - **53b (`tdd-engineer`):** `fx-svc/scripts/Dockerfile`, `fx-svc/deploy/Dockerfile`, `fx-job/deploy/compose.dev.yaml`, the pinned
   materialized SHAs and family counts. Done: the pin green with each mutant recorded red with its failure message; the link multiset
@@ -702,7 +702,7 @@ binding chain runs through a `role: example` file, a `launch` row is not a store
 or reason (`-p1-graph.md` G8). A Python MCP consumer cannot bind a config URL either: `bind.py:_config_urls` returns nothing unless the
 consumer has a `server` name, which only a prompt mention `mcp__<server>__<tool>` has (`link.py:_server_name`). AC6-PM-3 as written (a
 Python triple-quoted prompt) has no extractor: the P1 mention extractor is Markdown-only (P1-12, P1-44). The session probe's outcomes (scratch, not committed) are restated only where the design depends on them.
-**Final shapes (both rows keep their ids, `gate: P1`; the census stays 134 rows and 87 at P1).**
+**Final shapes (both rows keep their ids, `gate: P1`; the census stays 134 rows, 81 at P1 as shipped).**
 - **AC6-PM-3**, `kind: mcp_tool`, shape `prompt mention`: a Markdown list item in a new prompt file `fx-svc/.claude/agents/orders.md`
   (`- Use list_orders to see what a customer has bought.`), consumer `svc:.claude/agents/orders.md::<document>`, expected
   `possible`/`prompt-mention` to `svc:mcp/server.py::list_orders`. Observed in the probe: the mention is extracted and linked exactly as
@@ -741,7 +741,7 @@ example-config consumer).
 
 ## P1-57 · P1-41 dispatch B defects D8-D14 — `tdd-engineer` (57a, 57d), `qa-engineer` (57c, 57e)
 
-Cause: `docs/test-reports/connected-code-graph-p1-report.md` section "P1-41 dispatch B" (76 of 87 rows green, 11 red). Each defect was
+Scope: the defects D8-D14 of `docs/test-reports/connected-code-graph-p1-report.md` section "P1-41 dispatch B". Each defect was
 re-verified against the tree, the manifests and the extractors; the driver's claims were checked, not taken. Verdicts, one home here:
 **D8** engine, fix (57a). **D12** the fixture carrier cannot reach the P1 mechanism, fix the carrier (57d, rows 57c); no new mechanism.
 **D9, D11, D13** manifest wrong (57c). **D14** precondition cannot hold, rows re-gated P2 (57c). **D10** a plan gap: no step builds
@@ -808,7 +808,7 @@ and the two test plans (`docs/test-plans/connected-code-graph-fixtures.md`, `doc
   hold on a Joern-only build; the P1 engine behaviour (a resolved site's other candidates `possible`/`resolution-unverified`, folded) is
   covered by `tests/test_engine_group.py`, `test_engine_bfs_rows.py` and `test_engine_answer.py`. The rows return when an indexer (P2-5, `-p1-extraction.md` P1-15's
   merge) is provisioned for the fixture build and a shape that resolves to Y is observed (stop rule: the first dispatch there probes it).
-  Census: the P1 rows are **85** (87 less these two), 134 distinct ids unchanged; P1-41's "87" is re-read as the census at that time.
+  Census: these two rows leave the P1 set; the count of record is `cpg/tests/test_fixtures.py` (81 as shipped), 134 distinct ids unchanged.
 - **LNK-42/43** (D12): `note` names the binding (`svc:deploy/compose.yaml @services.legacy` / `.tools`, `build.context`), the provider locator
   stays the symbol that exists only when the unit is built, and the P1 form is the Link to `unit:<svc-legacy|svc-tools>`; fixtures plan §4.7,
   §8 (AB-2's "its link is LNK-43") and the carrier sentence say so; AB-4's LNK-15 clause stays P3/P2.

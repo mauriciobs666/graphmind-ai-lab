@@ -122,13 +122,13 @@ needs from `match_keys.py` is **imported**, never reimplemented.
 
 ## P1-33 · P1 test plan — `qa-engineer`
 
-`docs/test-plans/connected-code-graph-p1.md`: risk-based, from the fixtures plan's rows (P1 87 of 134; no `fx-lib`
+`docs/test-plans/connected-code-graph-p1.md`: risk-based, from the fixtures plan's rows (P1 81 of 134; no `fx-lib`
 row; TP-014) and the ACs of the P1 row, listing for each row the build it needs and the step that supplies it.
 **Gate:** `analyst`. **Needs:** 00.
 
 ## P1-41 · fixture gate, part 1: the P1 rows — `qa-engineer`
 
-Execute, on the materialized fixture system (`cpg/fixtures/materialize.py`) built through P1-20: the **87 rows
+Execute, on the materialized fixture system (`cpg/fixtures/materialize.py`) built through P1-20: the **81 rows
 whose earliest gate is P1** (`docs/test-plans/connected-code-graph-fixtures.md` §6) — every link kind and status P1
 builds, including LNK-19/LNK-20 (P1-46's pack), the cross-repo Compose context → unit case (asserted by `test_linker_bind.py` on real extractor records, not by a fixture row at P1: `LNK-15`'s own binding needs the environment-variable name, a P2 item, so `LNK-15` expects `confirmed`/`key-match` here and `LNK-13`'s unknown base makes it `possible`/`partial-key` (P1-49); `OV-2` is P3; `-p0-compose-binding.md`), the 8000/8200 URL binding with the example config `possible`, mount composition, the
 AC-1 lifting chain (field path, two levels) and multi-candidate links (first real cases),
@@ -141,7 +141,7 @@ matches no row of any manifest, whatever the row's gate; a link of a row gated P
 asserted at P1", never red. **Statuses** are asserted in the P1 form of index §5 (the flow-dependent rows). **Entry
 criterion:** the source amendments have landed, in this order: this ruling (`architect`); then the manifests, the
 fixtures plan (the P1-form status, the third P1 example-config row `AC6-EX-4`, a per-gate AC-6 census in
-`test_fixtures.py`, the 87/134 counts, the `OV-2` sentence) and the test plan (`qa-engineer`); then the `analyst`
+`test_fixtures.py`, the 81/134 counts, the `OV-2` sentence) and the test plan (`qa-engineer`); then the `analyst`
 re-gate of the test plan. **Output:** the report section. **Gate:** `analyst`.
 
 **Ruling after the re-derivation (what `qa-engineer` changes).** Source: `docs/test-reports/connected-code-graph-p1-41-rederivation-report.md`, ruled in index §5.
@@ -298,10 +298,9 @@ Root-cause and fix on dev; every item of a missed item's cluster moves to dev; r
 
 ## P1-38 · phase exit — `teco`
 
-- **AC-closure table** (index §8): each AC of the proposal's P1 row — AC-1, AC-2, AC-4 closed; AC-5 per stratum;
-  AC-6 for the P1 kinds; AC-8 part 1; AC-9 (code-snapshot stamp); AC-9b closed; AC-10 (impact stages, via P1-27);
-  AC-11 (impact); AC-16 closed (impact, four clients); AC-17 (code location, contract point); AC-18 (impact
-  answers); AC-21 closed; AC-24 smoke; AC-25 closed for its data-flow half, **not closed for its control half** (the shipped V-both fallback, `-answer-spec2.md` §5) — with the closing step, evidence file, and "reported not
+- **AC-closure table** (index §8): each AC of the proposal's P1 row, with the closure the P1 report records (`docs/test-reports/connected-code-graph-p1-closure-report.md`): AC-1 closed for a stated sub-scope (17 of 18 dev items); AC-2 MCP half closed, wiring half P2; AC-4 not closed (P2); AC-5 not closed (held-out gate deferred to P2); AC-6 for the P1 kinds, dynamic import not met; AC-8 part 1 not closed (harness only; real-component run P2); AC-9 (code-snapshot stamp); AC-9b closed for a stated sub-scope; AC-10 (impact stages, via P1-27);
+  AC-11 (impact); AC-16 closed (impact, four clients; the raw leg as sufficiency only); AC-17 (code location, contract point); AC-18 (impact
+  answers); AC-21 closed; AC-24 smoke (local model not met); AC-25 closed for its data-flow half, **not closed for its control half** (the shipped V-both fallback, `-answer-spec2.md` §5) — with the closing step, evidence file, and "reported not
   closed, because" for any that did not come out (the `flow` stratum, AC-25's confirmed form, the vacuous AC-8 rows).
 - **`raw_query` memory limit:** before the exit report, `graph-dba` verifies which FalkorDB memory controls exist (read-only look); the report states that a raw query can exhaust instance memory and drop the no-persistence snapshot, a documented P1 limit (stakeholder decision 2026-11-19; per-user limits are P4, FR-24).
 - **`analyst` implementation review** of the whole phase diff: `docs/reviews/connected-code-graph-p1-impl.md`,

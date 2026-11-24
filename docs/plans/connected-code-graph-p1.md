@@ -45,7 +45,7 @@ CPG: considered, not relevant — no graph is loaded for `cpg/` (the loaded grap
   `salesperson/` until then (steps P1-02, P1-06; sequencing in the sub-plans).
 - **The compute host is small** (6 GB; `-p0-ml.md` §7). Python extract + normalize cost 4.1–4.2× the Joern
   run in the slice (`docs/test-reports/connected-code-graph-p0-slice-report.md` §7 Q2). P1-20 measures a full refresh.
-- **Fixture rows gated at P1:** 87 of 134 (`docs/test-plans/connected-code-graph-fixtures.md` §6, "By earliest
+- **Fixture rows gated at P1:** 81 of 134 (`docs/test-plans/connected-code-graph-fixtures.md` §6, "By earliest
   gate"; the census in `cpg/tests/test_fixtures.py` is the count of record), read from that document; P1-41 asserts them. The four `B1F` rows are not among them (P1-41, `-p1-gates.md`).
 - **System scope equals census scope.** The proving system's manifest (P1-03) excludes `cpg/`, `deprecated/`,
   `docs/**/connected-code-graph*`, `docs/BACKLOG.md` and the content-check files that
@@ -182,7 +182,7 @@ P1", "Owed to P1 by the P0 results", "Measurements deferred"), `-bundle-spec3.md
 
 | Disclosure | Disposition |
 |---|---|
-| Labels are AI labels; only the 8 PT gold items had a human check; the 40 union items were AI-verified (deviation from decision S36) | The stakeholder redoes the 40-item EP §7.3 sample before the `ac5-gate-1` record (`-p1-ml.md` §9 Q-D); a held-out file that changes re-records the held-out manifest first. Every P1 gate report restates the disclosure (P1-37) |
+| Labels are AI labels; only the 8 PT gold items had a human check; the 40 union items were AI-verified (deviation from decision S36) | The 40-item EP §7.3 sample is redone before the `ac5-gate-1` record by an AI reviewer (`fable` model), by the stakeholder's decision (`-p1-ml.md` §9 Q-D; `docs/test-reports/connected-code-graph-p1-s36-redo-report.md`); a held-out file that changes re-records the held-out manifest first. Every P1 gate report restates the disclosure (P1-37) |
 | Rules revised after results (EP v1.5–v1.8, ML v1.11–v1.17) | History, not P1 work. P1's new rules (the fresh flow draw, §5) are recorded before their results (P1-34) |
 | KA-flow 15 invalid lines; flow completeness 0.765 is a lower bound (~0.82 if credited) | If the flow stratum is gated, recall is reported with and without the 15 (§5; P1-37) |
 | KA2 passes: `mcp` 0.845 and `flow` 0.765 stay below 0.95 | Gate reports carry the completeness; a re-gate's fresh items follow EP §6.5 (P1-37) |
@@ -393,7 +393,7 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-40 | AC-8 part 1 run: full refresh plus queries of a mixed fixture system | `devops` | gat | 31, 20, 25, 26 | `analyst` |
 | P1-32 | Eval tooling verbs, then the AC-5 gate harness (two dispatches) | `qa-engineer` | gat | 25, 20 (harness half) | `analyst`; `data-scientist` |
 | P1-33 | P1 test plan `docs/test-plans/connected-code-graph-p1.md` | `qa-engineer` | gat | 00 | `analyst` |
-| P1-41 | Fixture gate, part 1: the 87 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d, 05 (5d), 49, 50, 51, 52, 53, 54, 55, 56 | `analyst` |
+| P1-41 | Fixture gate, part 1: the 81 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14, 23d, 05 (5d), 49, 50, 51, 52, 53, 54, 55, 56 | `analyst` |
 | P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25); AC-16 is not read closed from P1-25's narrow raw-recipe test, P1-42 adds the other shapes | `qa-engineer` | gat | 41, 26, 39d, 24b, 49, 50, 51, 52, 53, 54, 55, 56 | `analyst` |
 | P1-34 | Flow re-measurement (§5): re-point `s28_run.py`, entry check, fresh draw only if entered, decision record | `data-scientist` + `qa-engineer` | gat | 09, `-ml` | `analyst` |
 | P1-35 | AC-24 smoke harness and run | `qa-engineer` | gat | 26, 29, `-ml` | `data-scientist` |
@@ -420,7 +420,7 @@ files after the record makes the run "after adaptation" (the AC-5 result is lost
 
 **Before the record** (actors named; `-p1-ml.md` §6.1–§6.2, §8, §9). (1) `teco` has the custodian run the freeze-time
 `check-report` (the P1-32a verb) over the path set; a hit is triaged by the custodian and a contacted cluster moves to
-dev. (2) `tico` takes the 40-item redo (`-p1-ml.md` §9 Q-D) to the stakeholder; the custodian re-records and commits the
+dev. (2) the 40-item redo (`-p1-ml.md` §9 Q-D) is done by an AI reviewer (`fable` model) by the stakeholder's decision (`docs/test-reports/connected-code-graph-p1-s36-redo-report.md`); the custodian re-records and commits the
 held-out manifest if a held-out file changed. (3) `teco` commits each decision or pre-registration record before the act
 it governs: `ccg-p1-indexer-v1` (P1-15), `ccg-p1-flow-fallback-v1` (P1-39), `ccg-p1-flow-python-v2` (P1-34, if entered; it supersedes `-v1`),
 `ccg-oracle-v4` (P1-47; it supersedes `-v1`..`-v3`), `ccg-prereg-ac24-v1` (P1-35). `ccg-noise-ratify-v1` is `tico`'s requirements-log entry, which
@@ -433,7 +433,7 @@ The method is the proposal's §5 and the ML notes'; this section records only wh
 - **Altitudes** (proposal §5.1). Unit: each extractor ships fixture sources plus the expected bundle (golden per
   frontend, where a Joern upgrade is caught); each pack is table-driven; the projection has golden `DATA` and
   `CONTROLLED_BY` sets for small methods. Contract: bundle, graph and canonical-answer schemas validate in CI; the
-  engine's output passes `ccg.answer` validation (V1–V16). Integration: the fixture system's 87 P1 rows (P1-41) and
+  engine's output passes `ccg.answer` validation (V1–V16). Integration: the fixture system's 81 P1 rows (P1-41) and
   the proving repo's own anchors on `cpg/eval/dev/`.
 - **Equivalence before improvement.** A ported module (P1-04, P1-05, P1-16–P1-18, P1-21, P1-22) first reproduces
   the slice's output on the slice corpus, then changes behaviour in a separate, later dispatch. The stored slice
