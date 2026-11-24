@@ -179,17 +179,8 @@ def test_agent_account_has_no_docker_access(holder_account):
     holder's files), so a dedicated account protects nothing while the agent can use a container
     runtime (docs/reviews/llm-gateway-security.md B2). A red result here leaves AC-5 and D14
     OPEN. Remove the account from the group and log in again (RUNBOOK step 0)."""
-    docker_gid = grp.getgrnam("docker").gr_gid if _has_group("docker") else None
-    assert docker_gid is None or docker_gid not in os.getgroups(), (
-        "this session's account is in group docker (root-equivalent): see RUNBOOK step 0"
-    )
-    reachable = dl.reachable_container_sockets()
-    assert reachable == [], f"container sockets reachable by the agent account: {reachable}"
-    if docker_gid is not None:
-        members = grp.getgrgid(docker_gid).gr_mem
-        assert pwd.getpwuid(os.getuid()).pw_name not in members, (
-            "listed in /etc/group's docker line"
-        )
+    exposure = dl.container_exposure()
+    assert exposure == [], f"{exposure}: see RUNBOOK step 0"
 
 
 def _has_group(name: str) -> bool:

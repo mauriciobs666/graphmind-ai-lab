@@ -45,17 +45,30 @@ SHA='<the reviewed commit, 40 hex characters, given by the coordinator>'
 SCRATCH=~/llmgw-tier2                 # fixed name, so teardown still finds it in a new shell
 G='env GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git'
 inst() { sudo /bin/bash /opt/llmgateway/deploy/install.sh "$@"; }
-mkdir -p -m 0700 "$SCRATCH"
+codeok() {   # the checkout's code is exactly the reviewed sha (run it again right before every step that executes it)
+  git -C "$REPO" diff --quiet "$SHA" -- llm-gateway cpg \
+    && [ -z "$(git -C "$REPO" status --porcelain -- llm-gateway cpg)" ] \
+    && [ -z "$(find "$REPO/llm-gateway" \( -name '*.pth' -o -name sitecustomize.py -o -name usercustomize.py \) -print -quit)" ] \
+    && echo "codeok" || { echo "CODE IS NOT THE REVIEWED SHA: stop"; return 1; }
+}
+mkdir -p "$SCRATCH" && chmod 0700 "$SCRATCH"
 ```
 Checks (each must print what is expected):
 ```bash
 [[ $SHA =~ ^[0-9a-f]{40}$ ]] && git -C "$REPO" cat-file -e "$SHA^{commit}" && echo "sha ok"
-git -C "$REPO" diff --quiet "$SHA" -- llm-gateway cpg && [ -z "$(git -C "$REPO" status --porcelain -- llm-gateway cpg)" ] && echo "checkout code == sha"
+codeok
 ls -ld /opt/llmgateway /opt/llmgateway.new /etc/llmgateway /var/lib/llmholder /run/llmholder 2>&1 | grep -v 'No such file'; getent passwd llmholder
 id -nG; getent group docker
 ```
-Expected: `sha ok`; `checkout code == sha` (the pytest and broker in steps 9-11 and 16 run **from this checkout**, so
-`llm-gateway/` and `cpg/` must be exactly the reviewed sha, clean; other directories may differ); no `ls`/`getent
+Expected: `sha ok`; `codeok`. The pytest and the broker in steps 9-11, 13 and 16 run **from this checkout**, so
+`llm-gateway/` and `cpg/` must equal the reviewed sha with nothing modified or untracked (other directories may
+differ). **If `codeok` fails** (this monorepo usually carries in-flight work, for instance edits under `cpg/infra/`):
+with no agent running, the human commits or stashes that work first (`git status -- llm-gateway cpg` lists it), then
+takes `SHA` from the resulting commit, which must be a commit that contains the D14 fixes (`git -C "$REPO" log -3
+--oneline -- llm-gateway/deploy llm-gateway/tests/deploy`). Residual, stated: `codeok` does not cover gitignored
+executable code (`cpg/.venv`, `__pycache__`, `.pth` outside `llm-gateway/`) or **`model-bench/.venv`** (the pytest
+interpreter and its site-packages), both outside the checked paths: they are same-uid code, the standing residual of
+the threat model; `sudo -k` and the repeated `codeok` bound what a swap could do, they do not remove it. Also expected: no `ls`/`getent
 passwd` lines (nothing installed; otherwise do step 17 first).
 
 **Docker (decide now).** If `id -nG` or `getent group docker` lists you, `test_agent_account_has_no_docker_access`
@@ -100,6 +113,8 @@ it without closing your terminal:
     | awk '$1!="100644" && $1!="100755"{print "refused mode: " $0; bad=1} END{exit bad}'
   mkdir "$SCRATCH/ref"
   $G -C "$SCRATCH/src.git" archive "$SHA" llm-gateway | tar -x --strip-components=1 -C "$SCRATCH/ref"   # unprivileged copy: the reference
+  $G -C "$SCRATCH/src.git" ls-tree "$SHA" -- cpg/ccg/system.yaml \
+    | awk '$1!="100644" && $1!="100755"{print "refused mode: " $0; bad=1} END{exit (bad || NR!=1)}'   # a regular blob, not a symlink
   $G -C "$SCRATCH/src.git" show "$SHA:cpg/ccg/system.yaml" >"$SCRATCH/system.yaml"
   sudo install -d -m 0755 -o root -g root /opt/llmgateway.new
   $G -C "$SCRATCH/src.git" archive "$SHA" llm-gateway | sudo tar -x --no-same-owner --strip-components=1 -C /opt/llmgateway.new
@@ -202,11 +217,10 @@ If `systemctl --user` says it cannot connect to the bus, open a new shell after 
 
 ## 9. Start the broker (second terminal; leave it running during step 10)
 
-This runs code from the agent-writable checkout (verified equal to the sha in step 0). Drop any cached sudo ticket
-first, so that code never runs in a sudo-warm shell:
+This runs code from the agent-writable checkout. Drop any cached sudo ticket and re-check the code first, so it never
+runs in a sudo-warm shell or after an edit:
 ```bash
-sudo -k
-cd "$REPO/cpg" && .venv/bin/python -m ccg.broker.server \
+sudo -k && codeok && cd "$REPO/cpg" && .venv/bin/python -m ccg.broker.server \
   --system /etc/llmgateway/ccg/system.yaml --require-owner-protected \
   --key-holder-socket /run/llmholder/holder.sock --holder-uid "$(id -u llmholder)"
 ```
@@ -217,8 +231,7 @@ one; stop it with Ctrl-C after step 10.
 ## 10. The tier-2 suite
 
 ```bash
-sudo -k                                   # the suite runs agent-writable code: no warm sudo ticket
-cd "$REPO/llm-gateway"
+sudo -k && codeok && cd "$REPO/llm-gateway" && \
 LLMGATEWAY_DEPLOY_REF="$SCRATCH/ref" LLMGATEWAY_DEPLOY_MANIFEST="$SCRATCH/system.yaml" \
   ../model-bench/.venv/bin/pytest -p no:cacheprovider -m deploy tests/deploy --tb=short 2>&1 | tee "$SCRATCH/pytest.txt"
 ```
@@ -240,8 +253,7 @@ inst caller broker  "$(id -u)" "$HOME/.config/llmgateway/callers/broker.cred"  -
 inst caller service "$(id -u)" "$HOME/.config/llmgateway/callers/service.cred" --rotate
 systemctl --user restart llmgateway                            # reads its credential once, at start
 # restart the step-9 broker too (Ctrl-C, run it again): it also reads its credential once.
-sudo -k                                                       # `inst` re-warmed sudo; drop it before agent-writable code
-cd "$REPO/llm-gateway"
+sudo -k && codeok && cd "$REPO/llm-gateway" && \
 LLMGATEWAY_DEPLOY_REF="$SCRATCH/ref" LLMGATEWAY_DEPLOY_MANIFEST="$SCRATCH/system.yaml" \
 LLMGATEWAY_DEPLOY_OLD_CRED_BROKER="$SCRATCH/old-broker.cred" LLMGATEWAY_DEPLOY_OLD_CRED_SERVICE="$SCRATCH/old-service.cred" \
   ../model-bench/.venv/bin/pytest -p no:cacheprovider -m deploy tests/deploy --tb=short -k "rotation or credential"
@@ -293,15 +305,20 @@ max_tokens = 2000
 ( umask 077; printf 'sk-ant-FAKE-%s\n' "$(openssl rand -hex 16)" >"$SCRATCH/fake.key" )
 inst holder-account --key-from-stdin anthropic <"$SCRATCH/fake.key"   # expected: `installed key for anthropic`
 systemctl --user restart llmgateway
-sudo -k
-cd "$REPO/llm-gateway"
+sudo -k && codeok && cd "$REPO/llm-gateway" && \
 LLMGATEWAY_DEPLOY_FAKE_KEY_FILE="$SCRATCH/fake.key" LLMGATEWAY_DEPLOY_SMOKE_CALL_SITE=smoke LLMGATEWAY_DEPLOY_SMOKE_RUN_ID=deploy-smoke-1 \
   ../model-bench/.venv/bin/pytest -p no:cacheprovider -m deploy tests/deploy --tb=short -k "fake_key"
 ```
 Expected: PASS (the provider answers 401, class `auth`, nothing leaks, the host-wide search finds the fake key
 only where the test plants it; the file you installed it from is the one excluded path). It SKIPS with
 "no usable egress" when offline, which does **not** show the hosted half of AC-5: rerun online until it PASSES. The
-search is long (minutes: `/tmp` and `$HOME` are large) and FAILS rather than passes if it cannot finish. The fake key is
+search is long (minutes: `/tmp` and `$HOME` are large; every readable file is streamed whatever its size, so a few
+GB of media or model files cost seconds each) and FAILS rather than passes if it cannot finish. If it fails on the
+**system journal** ("journal not readable" / `not seeing messages`), the account may not read it: add it to the group
+for the run (`sudo usermod -aG systemd-journal "$USER"`, new login or `wsl.exe --shutdown`, paste the ENV block,
+re-run) and remove it afterwards (`sudo gpasswd -d "$USER" systemd-journal`); or leave AC-5's hosted half **open**
+and say so in the paste-back. The test is not loosened and has no skip for it. If it fails on the time budget,
+rerun on a quieter host or after pruning `/tmp`; do not raise anything silently. The fake key is
 sent to the real provider as `x-api-key` (it is not a secret). Delete the key afterwards:
 `sudo rm /var/lib/llmholder/keys/anthropic.key; shred -u "$SCRATCH/fake.key"` (`shred` is advisory on ext4/WSL).
 
@@ -311,10 +328,12 @@ on this installation (step 10 output), and only after you decided the Docker ste
 ```bash
 read -rs -p 'provider key: ' K; echo
 printf '%s\n' "$K" | inst holder-account --key-from-stdin anthropic; unset K
+sudo -k && codeok && cd "$REPO/llm-gateway" && \
 LLMGATEWAY_DEPLOY_SMOKE_CALL_SITE=smoke LLMGATEWAY_DEPLOY_SMOKE_RUN_ID=deploy-smoke-2 \
   ../model-bench/.venv/bin/pytest -p no:cacheprovider -m needs_provider_key tests/deploy --tb=short
 ```
-Expected: PASS with `hosted` true; it SKIPS if the fake-key file variable is still exported or the two variables are unset.
+The test itself FAILS (it does not merely warn) if the account is in group `docker` or a container-runtime socket is
+reachable. Expected: PASS with `hosted` true; it SKIPS if the fake-key file variable is still exported or the two variables are unset.
 
 ## 14. Negative rehearsal: a writable code path stops the installer and the holder
 
@@ -346,8 +365,7 @@ Two blocks: the root-run collection, then (after dropping the sudo ticket) the s
   systemctl show llmholder -p ActiveState,SubState,NRestarts,User,NoNewPrivileges,ProtectSystem,ProtectProc
   sudo -u llmholder /usr/bin/python3 -I /opt/llmgateway/bin/keyholder.py log
 } 2>&1 | tee "$SCRATCH/report.txt"
-sudo -k
-cd "$REPO/llm-gateway" && LLMGATEWAY_DEPLOY_REF="$SCRATCH/ref" LLMGATEWAY_DEPLOY_MANIFEST="$SCRATCH/system.yaml" \
+sudo -k && codeok && cd "$REPO/llm-gateway" && LLMGATEWAY_DEPLOY_REF="$SCRATCH/ref" LLMGATEWAY_DEPLOY_MANIFEST="$SCRATCH/system.yaml" \
   ../model-bench/.venv/bin/pytest -p no:cacheprovider -m deploy tests/deploy --tb=short -rA -q 2>&1 | tail -n 150 | tee -a "$SCRATCH/report.txt"
 ```
 Paste `report.txt`: it holds names, modes, counts and pass/fail lines, never a key or a credential (the `log` is

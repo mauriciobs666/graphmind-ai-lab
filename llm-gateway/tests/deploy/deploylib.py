@@ -370,6 +370,8 @@ CONTAINER_SOCKETS = (
     "/var/run/podman/podman.sock",
     "/mnt/wsl/docker-desktop/shared-sockets/guest-services/docker.proxy.sock",
     "/mnt/wsl/docker-desktop/docker-desktop-proxy",
+    "/var/lib/lxd/unix.socket",
+    "/var/snap/lxd/common/lxd/unix.socket",
 )
 
 
@@ -395,6 +397,34 @@ def reachable_container_sockets(
         except (OSError, ValueError):
             pass
     return found
+
+
+def container_exposure(
+    env: dict[str, str] | None = None,
+    system: tuple[str, ...] = CONTAINER_SOCKETS,
+    groups: list[int] | None = None,
+    group_lookup=None,
+) -> list[str]:
+    """Why this account can act as root through a container runtime (empty = none): membership
+    of group `docker` (live process groups or `/etc/group`), or a reachable runtime socket."""
+    import grp
+
+    out = []
+    lookup = group_lookup or (lambda name: grp.getgrnam(name))
+    try:
+        docker = lookup("docker")
+    except KeyError:
+        docker = None
+    if docker is not None:
+        live = os.getgroups() if groups is None else groups
+        if docker.gr_gid in live:
+            out.append("this session's account is in group docker")
+        if pwd.getpwuid(os.getuid()).pw_name in docker.gr_mem:
+            out.append("/etc/group lists this account in group docker")
+    out += [
+        f"container socket reachable: {s}" for s in reachable_container_sockets(env, (), system)
+    ]
+    return out
 
 
 def sudo_refused(*argv: str) -> tuple[bool, str]:
@@ -496,10 +526,26 @@ def run_check_deployment(*extra: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+class _RedactedHex(str):
+    """A `str` whose `repr`/`str`/format are fixed text; it still concatenates and encodes."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "<redacted credential>"
+
+    def __format__(self, spec: str) -> str:
+        return "<redacted credential>"
+
+    __str__ = __repr__
+
+
 class Secret(bytes):
     """Credential bytes that cannot be printed by accident. pytest shows the arguments of the
     last frame of a failure (`--tb=long`/`auto`) and the operands of a failed `assert`; both go
-    through `repr`, which here is fixed text. Everything else about it is plain `bytes`."""
+    through `repr`, which here is fixed text. Everything else is plain `bytes`. Covered: `repr`,
+    `str`, f-strings, `in`/`!=` operands, `.hex()`. NOT covered: an `==` between two bytes makes
+    pytest diff them byte by byte; compare with `assert_secrets_differ`, never `assert a == b`."""
 
     __slots__ = ()
 
@@ -507,6 +553,9 @@ class Secret(bytes):
         return "<redacted credential>"
 
     __str__ = __repr__
+
+    def hex(self, *args, **kwargs) -> str:  # type: ignore[override]
+        return _RedactedHex(super().hex(*args, **kwargs))
 
 
 def secret_needle(secret: bytes) -> Secret:
@@ -635,17 +684,15 @@ class Search(NamedTuple):
     hits: list[str]
     complete: bool
     files: int  # files read
-    problems: list[str]  # why it is not complete: budget, unreadable/missing root, unscanned file
+    problems: list[str]  # why it is not complete: budget exhausted, unreadable or missing root
 
 
 CHUNK = 4 << 20
 
 
-def _contains(path: str, needle: bytes, limit: int) -> bool | None:
-    """Stream `path` for `needle` (chunks overlap by len(needle)-1); None when over `limit`."""
+def _contains(path: str, needle: bytes) -> bool:
+    """Stream `path` for `needle` in chunks that overlap by len(needle)-1, whatever its size."""
     with open(path, "rb") as fh:
-        if os.fstat(fh.fileno()).st_size > limit:
-            return None
         tail = b""
         while chunk := fh.read(CHUNK):
             if needle in tail + chunk:
@@ -658,7 +705,6 @@ def surface_hits(
     needle: bytes,
     roots: list[str],
     *,
-    max_file: int = 512 << 20,
     budget_seconds: float = 1800.0,
     exclude: tuple[str, ...] = (),
 ) -> Search:
@@ -666,9 +712,9 @@ def surface_hits(
     returned). Coverage limits, stated: a directory named in `SKIP_DIRS` (`.git`, `.venv`, `venv`,
     `node_modules`, `__pycache__`) is pruned (git history is `git_history_hits`); a file or
     directory this account cannot read is by definition not reachable by an agent here; special
-    files are skipped; a file over `max_file` is REPORTED, not skipped silently. The search is
-    `complete` only if every root could be entered, the budget was not exhausted and no file
-    was left unscanned."""
+    files are skipped; there is no size cap (every readable file is streamed; the time budget
+    bounds the run). The search is `complete` only if every root could be entered and the
+    budget was not exhausted."""
     hits: list[str] = []
     problems: list[str] = []
     files = 0
@@ -691,30 +737,41 @@ def surface_hits(
                 try:
                     if not stat.S_ISREG(os.lstat(path).st_mode):
                         continue
-                    found = _contains(path, needle, max_file)
+                    found = _contains(path, needle)
                 except OSError:
                     continue
                 files += 1
-                if found is None:
-                    problems.append(f"unscanned (over {max_file} bytes): {path}")
-                elif found:
+                if found:
                     hits.append(path)
     return Search(hits, not problems, files, problems)
 
 
 def journal_search(needle: bytes, *, user: bool = False, budget_seconds: float = 300.0) -> Search:
     """The journal (system, or `--user`) as this account can read it; an unreadable journal or a
-    `journalctl` failure makes the result incomplete."""
+    `journalctl` failure makes the result incomplete. `files` counts 4 MiB chunks read."""
+    import threading
+
     argv = ["journalctl", "--no-pager", "-q", "-o", "cat"] + (["--user"] if user else [])
-    hits, problems, size = [], [], 0
+    hits: list[str] = []
+    problems: list[str] = []
+    chunks = 0
     try:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except OSError as exc:
         return Search([], False, 0, [f"{argv[0]}: {exc.strerror}"])
     assert proc.stdout and proc.stderr
+    err_chunks: list[bytes] = []
+
+    def drain() -> None:  # stderr is read at the same time, so a full pipe cannot stall stdout
+        assert proc.stderr
+        while data := proc.stderr.read(65536):
+            err_chunks.append(data)
+
+    reader = threading.Thread(target=drain, daemon=True)
+    reader.start()
     tail, end = b"", time.monotonic() + budget_seconds
     while chunk := proc.stdout.read(CHUNK):
-        size += 1
+        chunks += 1
         if needle in tail + chunk:
             hits.append("journal --user" if user else "journal")
             break
@@ -723,13 +780,14 @@ def journal_search(needle: bytes, *, user: bool = False, budget_seconds: float =
             problems.append("journal budget exhausted")
             break
     proc.kill()
-    err = proc.stderr.read().decode(errors="replace").strip()
     proc.wait()
+    reader.join(5)
+    err = b"".join(err_chunks).decode(errors="replace").strip()
     if proc.returncode not in (0, -9) and not hits:
         problems.append(f"journalctl exit {proc.returncode}: {err[:200]}")
     elif "No journal files" in err or "not seeing messages" in err:
         problems.append(f"journal not readable: {err[:200]}")
-    return Search(hits, not problems, size, problems)
+    return Search(hits, not problems, chunks, problems)
 
 
 def process_hits(needle: bytes) -> list[int]:

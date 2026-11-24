@@ -132,5 +132,10 @@ def test_one_real_hosted_call_through_the_service_reaches_the_provider_and_retur
             f"needs_provider_key: skipped unless a REAL key is installed (not a fake) and {SITE} "
             f"and {RUN} are set to send ONE small billable call; this test never reads the key"
         )
+    exposure = dl.container_exposure()
+    assert not exposure, (
+        f"a real key must not be installed while the agent can act as root through a container "
+        f"runtime: {exposure}"
+    )
     r = _call(site, run)
     assert r.hosted is True

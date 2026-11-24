@@ -4,6 +4,7 @@ on any host under `-m deploy`; they fail if a probe went blind or a check went v
 
 import os
 import pathlib
+import pwd
 import re
 import socket
 import stat
@@ -418,15 +419,56 @@ def test_a_search_that_did_not_finish_is_never_complete(tmp_path):
     # an exhausted budget
     r = dl.surface_hits(needle, [str(tmp_path)], budget_seconds=-1)
     assert r.complete is False and "budget" in r.problems[0]
-    # a file over the cap is reported, not skipped; a hit past the first chunk and across a
-    # chunk boundary is still found
-    (tmp_path / "big").write_bytes(b"z" * 5000)
-    r = dl.surface_hits(needle, [str(tmp_path)], max_file=1000)
-    assert r.complete is False and any("big" in p for p in r.problems)
+    # a hit across a chunk boundary is found
     pad = b"q" * (dl.CHUNK - 7)
     (tmp_path / "split").write_bytes(pad + needle + b"tail")
-    r = dl.surface_hits(needle, [str(tmp_path)], max_file=1 << 30)
+    r = dl.surface_hits(needle, [str(tmp_path)])
     assert str(tmp_path / "split") in r.hits and r.complete
+
+
+def test_a_very_large_sparse_file_is_scanned_not_skipped_or_reported(tmp_path):
+    """No size cap: a 700 MiB sparse file (past the old 512 MiB limit) with the needle at its end
+    is found, and the search stays complete."""
+    needle = b"sk-ant-FAKE-" + b"ef" * 16
+    big = tmp_path / "film.bin"
+    with open(big, "wb") as fh:
+        fh.truncate(700 << 20)
+        fh.seek((700 << 20) - 64)
+        fh.write(needle)
+    clean = tmp_path / "clean.bin"
+    with open(clean, "wb") as fh:
+        fh.truncate(700 << 20)
+    r = dl.surface_hits(needle, [str(tmp_path)])
+    assert (r.hits, r.complete) == ([str(big)], True) and r.files == 2
+
+
+def test_container_exposure_reports_group_and_sockets_and_nothing_otherwise(tmp_path):
+    import grp
+    import socket
+
+    gid = os.getgid() + 12345
+    docker = grp.struct_group(("docker", "x", gid, []))
+    mine = grp.struct_group(("docker", "x", gid, [pwd.getpwuid(os.getuid()).pw_name]))
+    none = lambda name: (_ for _ in ()).throw(KeyError(name))  # noqa: E731
+    assert dl.container_exposure({}, (), [], lambda n: docker) == []
+    assert dl.container_exposure({}, (), [], none) == []
+    assert "group docker" in dl.container_exposure({}, (), [gid], lambda n: docker)[0]
+    assert "/etc/group" in dl.container_exposure({}, (), [], lambda n: mine)[0]
+    p = str(tmp_path / "d.sock")
+    srv = socket.socket(socket.AF_UNIX)
+    srv.bind(p)
+    srv.listen(1)
+    try:
+        assert dl.container_exposure({}, (p,), [], none) == [f"container socket reachable: {p}"]
+    finally:
+        srv.close()
+
+
+def test_secret_hex_and_str_are_redacted_but_still_usable():
+    s = dl.Secret(bytes(range(32)))
+    assert "000102" not in f"{s.hex()} {s.hex()!r} {s!s} {s!r}"
+    assert s.hex().encode() == bytes(range(32)).hex().encode()
+    assert dl.secret_needle(s) in bytes(range(32)).hex().encode()
 
 
 def test_journal_search_reports_an_unreadable_journal_as_incomplete(monkeypatch):
