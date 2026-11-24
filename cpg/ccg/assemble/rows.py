@@ -91,6 +91,9 @@ _LAUNCH_PROPS = (("protocol", "protocol"), ("port", "port"), ("envVar", "envVar"
 _PATH_ARGS = frozenset({"recv", "a0", "a1", "a2", "a3"})
 #: Command words whose first non-flag argument is the script they run or source.
 _SCRIPT_LAUNCHERS = frozenset({".", "source", "exec", "bash", "sh", "dash", "zsh"})
+#: Launcher options that take the next word as their value (``bash --rcfile F``, ``bash -o pipefail``): the value is not the script.
+_LAUNCHER_VALUE_FLAGS = frozenset({"-o", "+o", "-O", "+O", "--rcfile", "--init-file"})
+_COMBINED_C = re.compile(r"-[A-Za-z]*c[A-Za-z]*")             # `-c`, `-xc`: the next word is a command line
 _PATH_TOKEN_REFUSED = re.compile(r"[\s$~*?\[\]{}()\\\"'`;|&<>]")
 _PORT_ORIGINS = ("explicit", "env-default", "compose", "pack-default")
 _STRENGTH = {"confirmed": 0, "possible": 1}
@@ -580,29 +583,66 @@ def _site_path(site: Mapping, lang: str, arg_values: Mapping) -> tuple[bool, str
         vs = arg_values.get((site["id"], "recv"))
         return None if vs is None else _static_path(vs)
     if callee in _SCRIPT_LAUNCHERS:
-        for i in range(4):
+        i = 0
+        while i < 4:
             vs = arg_values.get((site["id"], f"a{i}"))
             if vs is None:
                 return None
-            flag = _static_path(vs)
-            if flag is not None and not flag[0] and flag[1].startswith("-"):
-                if flag[1] == "-c":                                 # `bash -c '...'`: the next argument is a command line
+            word = _static_path(vs)
+            if word is not None and not word[0] and len(word[1]) > 1 and word[1][0] in "-+":
+                if _COMBINED_C.fullmatch(word[1]):                  # `bash -c '...'`, `bash -xc '...'`: the next argument is a command line
                     return None
+                i += 2 if word[1] in _LAUNCHER_VALUE_FLAGS else 1
                 continue
-            return flag
+            return word
         return None
     return (False, callee) if "/" in callee else None
+
+
+def _resolve_script(text: str, dynamic: bool, markdown: bool, owner: str, known: Mapping[str, str],
+                    by_base: Mapping[str, Sequence[str]]) -> tuple[str | None, str | None, bool]:
+    """``(target path, status override, ambiguous)`` for the path ``text`` named from the file ``owner``: ``target`` is ``None`` for no edge,
+    and ``ambiguous`` then says whether several scripts matched (else none did)."""
+    if dynamic and not text.startswith("/"):                       # a computed piece glued to the first segment: that segment is unknown
+        return None, None, False
+    if not dynamic:                                                # tier 1: an exact path of the snapshot
+        for base in (owner.rpartition("/")[0], ""):
+            joined = posixpath.normpath(posixpath.join(base, text))
+            if not joined.startswith("..") and joined in known:
+                return joined, None, False
+        if not markdown:                                           # a literal shell path that misses tier 1 names no script (no tail match)
+            return None, None, False
+    tail = _segments(text)
+    if dynamic and len(tail) == 1 and text.strip("/") == tail[0]:  # tier 3: own directory
+        beside = owner.rpartition("/")[0]
+        beside = f"{beside}/{tail[0]}" if beside else tail[0]
+        if beside in known:
+            return beside, "possible", False
+    if len(tail) < 2:                                              # tier 2 needs two segments at least
+        return None, None, False
+    joined_tail = "/".join(tail)
+    hits = sorted({p for p in by_base.get(tail[-1], ()) if p == joined_tail or p.endswith("/" + joined_tail)})
+    if len(hits) == 1:
+        return hits[0], "possible", False
+    return None, None, bool(hits)
 
 
 def _script_calls(b: _Builder, scripts: Mapping[str, Mapping[str, str]], sites: Sequence[tuple[str, str, dict]], arg_values: Mapping,
                   sym_path: Mapping[str, str]) -> None:
     """Add a ``CALLS`` edge from a call site that names a script by path to that script's ``<script>`` symbol, within the site's repository.
 
-    Tier 1: a literal path with a ``/``, taken relative to the calling file's directory then the repository root, equal to a script of the
-    snapshot: the site's own status and reason. Tier 2: the path tail after a computed head (or a tier-1 miss), ``.`` and ``..`` applied, of at
-    least two segments, equal to the end of exactly one script path: ``possible``. A basename never matches; a missing file, several matches and
-    a one-segment tail give no edge (counted), except under tier 3: behind a computed head, a one-segment tail (no ``..``) names the script of
-    that name in the calling file's own directory, if any (``possible``; the head is not checked to denote that directory, see the CO-2b report)."""
+    Tier 1 (a literal path, shell or Markdown): the path with a ``/``, taken relative to the calling file's directory then the repository root,
+    equal to a script of the snapshot: the site's own status and reason. A *shell* literal that misses tier 1 (a missing file, a path climbing
+    out of the repository) gives no edge and is counted ``script-call-unmatched``: it is never retried as a tail. Tier 2 (a computed head, or a
+    Markdown mention): the path tail, ``.`` and ``..`` applied (a ``..`` with nothing before it is dropped), of at least two segments, equal to
+    the end of exactly one script path of the repository: ``possible``. A computed piece glued to the first segment (``"${D}foo/x.sh"``) makes
+    that segment unknown: no edge. A basename never matches; several matches and a one-segment tail give no edge (counted), except under tier 3:
+    behind a computed head, a one-segment tail (no ``..``) names the script of that name in the calling file's own directory, if any
+    (``possible``; the head is not checked to denote that directory, see the CO-2b report).
+
+    Status: a tier-1 edge carries the call site's own status. The shell extractor marks every unresolved site ``possible``/``name-match``
+    (or ``shell-dynamic``), so on real data a script-path edge is never ``confirmed``; the plan's "``confirmed`` at tier 1" holds only for a
+    site that already says so (a hand-made bundle, tested as such). A call from a function of the script to the script itself is no edge."""
     by_base: dict[str, dict[str, list[str]]] = {}
     for repo, paths in scripts.items():
         for path in paths:
@@ -616,32 +656,17 @@ def _script_calls(b: _Builder, scripts: Mapping[str, Mapping[str, str]], sites: 
             continue
         known = scripts.get(repo, {})
         owner = sym_path[site["symbolId"]]
-        target, status = None, site["status"]
-        if not dynamic:                                                # tier 1
-            for base in (owner.rpartition("/")[0], ""):
-                joined = posixpath.normpath(posixpath.join(base, text))
-                if not joined.startswith("..") and joined in known:
-                    target = known[joined]
-                    break
-        tail = _segments(text)
-        if target is None and dynamic and len(tail) == 1 and text.strip("/") == tail[0]:     # tier 3: own directory (below)
-            beside = owner.rpartition("/")[0]
-            beside = f"{beside}/{tail[0]}" if beside else tail[0]
-            if beside in known:
-                target, status = known[beside], "possible"
-        if target is None:                                             # tier 2
-            hits = sorted({p for p in by_base.get(repo, {}).get(tail[-1], ()) if p == "/".join(tail) or p.endswith("/" + "/".join(tail))}) \
-                if len(tail) >= 2 else []
-            if len(hits) > 1:
+        path, override, ambiguous = _resolve_script(text, dynamic, lang == "markdown", owner, known, by_base.get(repo, {}))
+        if path is None:
+            if ambiguous:
                 b.drop("script-call-ambiguous")
-                continue
-            if not hits:
+            else:
                 b.drop("script-call-unmatched")
-                continue
-            target, status = known[hits[0]], "possible"
-        if target == site["symbolId"]:                                 # a script that names itself is not its own caller
             continue
-        b.edge(("CallSite", site["id"]), "CALLS", ("Symbol", target), _non_default("CALLS", status, site["reason"]), key=(status, site["reason"]))
+        if path == owner:                                          # a script that names itself (from any function of it) is not its own caller
+            continue
+        status = override or site["status"]
+        b.edge(("CallSite", site["id"]), "CALLS", ("Symbol", known[path]), _non_default("CALLS", status, site["reason"]), key=(status, site["reason"]))
 
 
 def _record(b: _Builder, r: dict, unit_id: str, repo_id: str, point_label: dict, symbol_ids: set, sym_lang: dict, sym_path: dict,

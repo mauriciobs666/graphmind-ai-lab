@@ -1,0 +1,8 @@
+{"method": "offline assemble of every tracked *.sh and *.md file of the working tree (1332 files, real extractors, real assembler, real answer builder); no store, no build; 45 symbol-anchored dev script items of cpg/eval/dev/ac5-scripts.jsonl judged by the EP identity match (without the AC-18 chain check)",
+ "before": {"scriptCallsEdges": 432, "devHits": 36},
+ "after": {"scriptCallsEdges": 426, "devHits": 36, "dropped": {"script-call-unmatched": 325, "script-call-ambiguous": 4}},
+ "hitSetChanged": false,
+ "edgesRemoved": {"count": 6, "kind": "possible/name-match from a shell literal ./scripts/bootstrap_schema.sh in falkor-chat/scripts/test_queries.sh and 5 evidence copies of it: cwd-relative to falkor-chat/, a tier-1 miss, previously matched by tail"},
+ "edgesAdded": 0,
+ "mutants": {"total": 23, "killed": 21, "survived": 2, "survivors": ["tier 1 also run for a dynamic head (equivalent: a dynamic text always starts with '/', and a joined absolute path is never a known script)", "startswith('..') in tier 1 (equivalent: a known path never starts with '..')"]},
+ "noise": "not computed (labels needed); nothing printed"}

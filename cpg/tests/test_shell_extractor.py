@@ -981,3 +981,43 @@ def test_a_file_that_still_fails_after_the_second_parse_keeps_no_calls_and_the_w
     recs, warns = snippet(tmp_path, 'x="${v:+$v; }"\nif then fi fi\necho a\n')
     assert len(warns) == 1 and warns[0]["code"] == "parse-error"
     assert calls_in(recs, "s.sh::<script>") == []
+
+
+
+# --- CO-2c m5: the retry tracks nesting as a context stack: a `;` is hidden only directly inside a `${...}` ----------
+
+def test_a_semicolon_in_a_command_substitution_inside_an_expansion_stays_a_separator(tmp_path):
+    recs, warns = snippet(tmp_path, 'x="${v:+$v; }"\ny="${z:-$(foo; bar)}"\n')
+    assert warns == []
+    assert [c["calleeName"] for c in calls_in(recs, "s.sh::<script>")] == ["foo", "bar"]
+
+
+def test_a_semicolon_in_a_parenthesised_group_after_an_expansion_stays_a_separator(tmp_path):
+    recs, warns = snippet(tmp_path, 'x="${v:+$v; }"\n( one; two )\n')
+    assert warns == []
+    assert [c["calleeName"] for c in calls_in(recs, "s.sh::<script>")] == ["one", "two"]
+
+
+def test_a_semicolon_in_a_brace_group_inside_a_substitution_inside_an_expansion_stays_a_separator(tmp_path):
+    recs, warns = snippet(tmp_path, 'x="${v:+$v; }"\ny="${z:-$({ foo; bar; })}"\necho ${w:-1}; baz\n')
+    assert warns == []
+    assert [c["calleeName"] for c in calls_in(recs, "s.sh::<script>")] == ["foo", "bar", "echo", "baz"]
+
+
+def test_quotes_are_not_tracked_so_an_unbalanced_expansion_in_a_quote_keeps_the_hidden_semicolons_in_the_names(tmp_path):
+    # documented limit (`_hide_expansion_semicolons`): the callee text keeps its `;`, which the scripts resolver refuses
+    recs, _ = snippet(tmp_path, 'x="${v:+$v; }"\necho \'${\'\n./a.sh; ./b.sh\n')
+    assert "./a.sh;" in [c["calleeName"] for c in calls_in(recs, "s.sh::<script>")]
+
+
+def test_a_semicolon_after_a_closed_substitution_inside_an_expansion_is_still_hidden(tmp_path):
+    recs, warns = snippet(tmp_path, 'x="${a:-$(foo); bar}"\n')
+    assert warns == []
+    assert [c["calleeName"] for c in calls_in(recs, "s.sh::<script>")] == ["foo"]
+
+
+def test_a_nested_subshell_inside_a_substitution_inside_an_expansion_keeps_the_later_separator(tmp_path):
+    recs, warns = snippet(tmp_path, 'x="${v:+$v; }"\ny="${z:-$(foo; (a; b); c)}"\n')
+    assert warns == []
+    assert [c["calleeName"] for c in calls_in(recs, "s.sh::<script>")] == ["foo", "a", "b", "c"]
+

@@ -107,19 +107,29 @@ def _parse(data: bytes):
 
 
 def _hide_expansion_semicolons(data: bytes) -> bytes:
-    """``data`` with every ``;`` inside a ``${...}`` replaced by ``,`` (same length, so every offset and line is unchanged). tree-sitter-bash
-    reads a ``;`` in a parameter-expansion word (``${v:+$v; }``) as a command separator and fails the whole file; bash reads it as text. Only
-    used for a second parse of a file the first parse rejected; the extractor still reads every text from the original bytes."""
-    out, depth, i = bytearray(data), 0, 0
+    """``data`` with every ``;`` directly inside a ``${...}`` replaced by ``,`` (same length, so every offset and line is unchanged).
+    tree-sitter-bash reads a ``;`` in a parameter-expansion word (``${v:+$v; }``) as a command separator and fails the whole file; bash reads
+    it as text. Only used for a second parse of a file the first parse rejected; the extractor still reads every text from the original bytes.
+
+    Nesting is a context stack: ``${`` opens an expansion context (the first ``}`` closes it, as in bash), a ``(`` (so ``$(``) a command context; a ``;`` is hidden only when the innermost open context is an expansion, so ``${z:-$(foo; bar)}`` keeps its separator.
+    Out of scope: quotes, comments and backticks (a backtick command is not modelled) are not tracked. A ``${`` inside single quotes or a comment opens a context that never closes, and
+    the ``;`` after it become ``,`` in the second parse's text: those calls keep a ``;`` in their names, which the scripts resolver refuses."""
+    out, stack, i = bytearray(data), [], 0
     while i < len(out):
-        if out[i:i + 2] == b"${":
-            depth, i = depth + 1, i + 2
+        two = out[i:i + 2]
+        c = out[i]
+        if two == b"${":
+            stack.append("{")
+            i += 2
             continue
-        if depth and out[i] == ord("{"):
-            depth += 1
-        elif depth and out[i] == ord("}"):
-            depth -= 1
-        elif depth and out[i] == ord(";"):
+        top = stack[-1] if stack else ""
+        if c == ord("}") and top == "{":
+            stack.pop()
+        elif c == ord("(") and stack:
+            stack.append("(")
+        elif c == ord(")") and top == "(":
+            stack.pop()
+        elif c == ord(";") and top == "{":
             out[i] = ord(",")
         i += 1
     return bytes(out)
