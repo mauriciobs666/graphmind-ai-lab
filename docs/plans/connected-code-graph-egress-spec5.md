@@ -237,10 +237,12 @@ In order:
     `keyholder.canonical_origin` and `ccg.manifest.canonical_endpoint` (a ccg test) against the same pairs, so the three copies of
     the wire and of canonicalisation are each tied to the literals, not to each other. A live round trip of `holderclient` against
     the real `llmgateway.framing.parse_reply` is added. Named mutants: `holderclient` reordering two MAC fields; dropping the
-    explicit default port in either canonicaliser; each fails the vectors. D9a's tests import `llmgateway` through the
-    `cpg/pyproject.toml` extra `gateway`, which D9a adds and installs (§8); an unimportable `llmgateway` makes these tests **fail**, never skip.
+    explicit default port in either canonicaliser; each fails the vectors. D9a's tests import `llmgateway` from the editable install of §8 (there is no `cpg/pyproject.toml` extra); an unimportable `llmgateway` makes these tests **fail**, never skip.
 12. **Real holder, through the real broker (integration).** Two additional cases: a hosted entry at the default port (`https://host:443`
-    in the manifest, `base_url` spelled without the port) is served, proving the canonical-origin keying; and an absent
+    in the manifest, `base_url` spelled without the port): the holder finds the provider by canonical origin, so the reply is not
+    `endpoint_unknown`; without root nothing can listen on 443, so the holder's own connect is refused and the reply is a signed
+    `upstream-error` (`closeReason: upstream-error`, `bytesIn > 0`, not a 499); the served (200) variant needs a real install and is
+    tier 2 (plan §5.2); and an absent
     `gatewayRunId` is refused `run_id_missing` under `unmatched = refuse` and served within the shared bucket under `unmatched = cap`. For each code of plan §3.3's table that one ccg-shaped call can
     provoke, assert the 499 refusal reaches `BrokerClient.request` intact, one `decision` and one `close` (`499`, `completed`),
     the stand-in's request log empty, and only a stopped holder gives `closeReason: upstream-error`. A 200 settles and returns the
@@ -266,20 +268,25 @@ dependency (D7's holder) is exercised by item 12 only.
 ## 8. Dispatch: D9 splits into D9a and D9b
 
 Production files: `cpg/ccg/broker/holderclient.py` (new), `cpg/ccg/broker/ownerprot.py` (new), `cpg/ccg/broker/server.py`,
-`cpg/ccg/broker/policy.py`, `cpg/ccg/manifest.py`, `cpg/pyproject.toml`: six, and nine items of work, past the ≤5-file, ≤3-step
-cap, so two serial dispatches (both edit `server.py`, and D9b's `main` wires D9a's exchanger):
+`cpg/ccg/broker/policy.py`, `cpg/ccg/manifest.py`: five files but nine items of work, past the ≤3-step cap, so two serial dispatches
+(both edit `server.py`, and D9b's `main` wires D9a's exchanger). There is **no `gateway` extra** in `cpg/pyproject.toml` (an
+unindexed pinned name in an extra is a dependency-confusion risk); `llmgateway` is installed by the implementer, in its own
+dispatch, not under `sudo`: `cd cpg && .venv/bin/pip install -e ../llm-gateway` (editable, from the checkout, inside `cpg/.venv`,
+where `import llmgateway` fails today).
 
-- **D9a (forward path):** `holderclient.py`, `policy.py` (`sanitize`: `gatewayRunId`), `server.py` (`Broker.__init__`, `request`,
-  `_upstream`), `cpg/pyproject.toml` (the `gateway` extra, §7 item 11), `broker_helpers.py`; needs D7b's vectors file; tests 1-5, 7, 10-11,
-  13, and 14's `test_broker_policy.py` re-points and the `Harness` change.
-- **D9b (start-up):** `ownerprot.py`, `manifest.py` (`load_manifest_text`), `server.py` (`load_systems`, `main`: options, static
-  hosted check, credential intake); tests 6, 8, 9, 12, and 14's `test_broker_server.py` re-points. Needs D9a and D7/D7b.
+- **D9a (forward path):** production `holderclient.py` (`HolderClient`), `policy.py` (`sanitize`: `gatewayRunId`), `server.py`
+  (`Broker.__init__`, `request`, `_upstream`): three files; plus `broker_helpers.py` and D7b's vectors file, consumed. Tests 1-5, 7,
+  10-11, 13, and 14's `test_broker_policy.py` re-points and the `Harness` change.
+- **D9b (start-up):** `ownerprot.py`, `manifest.py` (`load_manifest_text`), `server.py` (`load_systems`, `main`). Needs D9a, D7, D7b.
+  - `main` parses the credential file (hex, 32 bytes) and builds `HolderClient(socket_path, holder_uid, secret_bytes)`, passed as
+    `Broker(hosted_exchanger=...)`.
+  - The static hosted-entry check (§1) fails today's loopback-hosted integration fixtures, so `load_systems` and `main` gain a
+    keyword `check_hosted_entries: bool = True`; fixtures pass `False`. It is a Python seam only: no option, no environment
+    variable, and the process entry point always checks.
+  - Tests: 6, 8, 9, item 12 as a real-subprocess run, the credential and fake-key scan over argv, `/proc/<pid>/{cmdline,environ}`
+    and files (item 12), and 14's `test_broker_server.py` re-points.
 
-D9a adds the `gateway` extra (naming the `llm-gateway` distribution (import name `llmgateway`)) and its implementer then runs, in its own dispatch and not
-under `sudo`, `cd cpg && .venv/bin/pip install -e ../llm-gateway` (editable, inside `cpg/.venv`, where `import llmgateway` fails today);
-nothing else in the venv changes. D10's `BrokerTransport` imports `llmgateway`, so D10 depends on D9a, and D10's row ("extra") is wrong:
-D10 neither edits `pyproject.toml` nor installs the extra.
-
-Plan change needed (`docs/plans/llm-gateway.md` §4): replace the D9 row by D9a and D9b as above; D10 loses `cpg/pyproject.toml`
-and its "Needs" gains D9a (it is then parallel with D9b and D8, not with D9a); D9a is parallel with D8 and needs D7b's vectors file;
-D11 and D12 need D9b, not D9.
+Plan change needed (`docs/plans/llm-gateway.md` §4): replace the D9 row by D9a (`holderclient.py`, `policy.py`, `server.py`;
+needs D7b's vectors file and the editable install) and D9b (`ownerprot.py`, `manifest.py`, `server.py`; needs D9a). D10's row drops
+`cpg/pyproject.toml` and the word "extra" (D10 edits only `cpg/ccg/gateway/*`), and its "Needs" gains D9a; D10 is then parallel
+with D9b and D8, not with D9a. D9a is parallel with D8. D11 and D12 need D9b, not D9.

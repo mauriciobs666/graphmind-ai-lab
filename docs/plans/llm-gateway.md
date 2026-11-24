@@ -148,7 +148,7 @@ A dispatch is one implementer run: ≤ 3 steps, ≤ 5 production files. **U-S5**
 | D7 | S11 framing + holder auth; S12 validation + ledger; S13 deploy + check | `framing.py`, `keyholder.py` (incl. `check-deployment`, `log`, `add-caller`), `ledger.py`, `bin/keyholder.py` (entry shim: puts `../src` of its own root-owned location on `sys.path`, runs `keyholder.main`), `deploy/install.sh` | D2 | D3–D6 | — |
 | D8 | S14 service, client, `HolderTransport` | `service.py`, `client.py`, `transport.py` (edit) | D6, D7 | D9a | `transport.py` (after D4) |
 | U-S5 | egress-spec5 delta, gated (no dispatch) | `docs/plans/connected-code-graph-egress-spec5.md` | §3.3/§3.4 wire | any | — |
-| D9a | S15a forward path: holder client, `gatewayRunId`, `gateway` extra | `cpg/ccg/broker/{holderclient,policy,server}.py`, `cpg/pyproject.toml`, `llm-gateway/tests/holder_wire_vectors.json` | U-S5 gated, D7 + D7b (wire vectors file) | D8, D10 | `server.py` |
+| D9a | S15a forward path: holder client, `gatewayRunId`, editable install of `llm-gateway` (no extra) | `cpg/ccg/broker/{holderclient,policy,server}.py`, `llm-gateway/tests/holder_wire_vectors.json` | U-S5 gated, D7 + D7b (wire vectors file) | D8, D10 | `server.py` |
 | D9b | S15b start-up: options, `ownerprot`, `manifest`, `main` | `cpg/ccg/broker/{ownerprot,server}.py`, `cpg/ccg/manifest.py` | D9a | D10 | `server.py` |
 | D10 | S16 `BrokerTransport`, `ccg-manifest` source | `cpg/ccg/gateway/{__init__,brokertransport,manifestmarkers}.py` | D4, D5, D9a | D8, D9b | — |
 | D11 | S17 `ModelRun` swap + golden tests | `front/interpret.py`, `front/summary.py` | D6, D9b, D10; **ccg P1 phase exit closed** | — | `interpret.py` |
