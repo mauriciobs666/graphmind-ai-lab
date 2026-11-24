@@ -118,9 +118,14 @@ TIMEOUT_MAX_UP=10000
 # (ccg/engine/config.py RESULTSET_SIZE) takes a reply shorter than this as complete, so a lower server value would cut silently.
 RESULTSET_SIZE_IMAGE=10000
 MAX_INFO_QUERIES_UP=0
+# The engine sends QUERY_TIMEOUT_MS on every read and the server refuses a limit above its TIMEOUT_MAX, while the engine role
+# cannot read TIMEOUT_MAX: `status` compares the two. The value is read from the code (ccg/engine/config.py), not copied here.
+ENGINE_CONFIG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../ccg/engine/config.py"
+engine_timeout_ms() { sed -n 's/^QUERY_TIMEOUT_MS[[:space:]]*=[[:space:]]*\([0-9_]*\).*/\1/p' "$ENGINE_CONFIG" 2>/dev/null | head -1 | tr -d _; }
 # QUERY_MEM_CAPACITY (bytes, module-wide): one query that grows past it is refused with a memory error.
 # Without it a read-only GRAPH.RO_QUERY is outside maxmemory (no denyoom flag), so only the container cap bounds it
-# (docs/plans/connected-code-graph-p1-raw-query-memory-graph.md). 256 MiB; bounds ONE query, not several concurrent ones.
+# (docs/plans/connected-code-graph-p1-raw-query-memory-graph.md). 256 MiB; bounds ONE query, not several concurrent
+# ones, and not every operator (a cross product feeding an aggregate is uncounted).
 QUERY_MEM_CAPACITY_UP=268435456
 # The P1 steady-state ACL user set (P1-19's create_users): default plus, per system <s>, the four
 # users ccg_<role>_<s> with role build|verdict|engine|raw; any other user is drift. <s> follows the
@@ -522,6 +527,11 @@ cmd_status() {
   echo "QUERY_MEM_CAPACITY: $qmc (up sets $QUERY_MEM_CAPACITY_UP; a restart behind up's back turns it off)"
   echo "ACL users:   $acl (allowed: default, ccg_{build,verdict,engine,raw}_<system>)"
   case "$tmax" in ''|*[!0-9]*|0) drift "GRAPH.CONFIG TIMEOUT_MAX is '${tmax}', not a nonzero value (restarted behind up's back?)" ;; esac
+  local etm; etm="$(engine_timeout_ms)"
+  echo "engine QUERY_TIMEOUT_MS: ${etm:-<unreadable>} (TIMEOUT_MAX must be at least this, read from ccg/engine/config.py)"
+  case "$etm" in ''|*[!0-9]*) drift "cannot read QUERY_TIMEOUT_MS from $ENGINE_CONFIG" ;;
+    *) case "$tmax" in ''|*[!0-9]*) ;; *) [ "$tmax" -ge "$etm" ] || drift "GRAPH.CONFIG TIMEOUT_MAX $tmax is below the engine's QUERY_TIMEOUT_MS $etm (every engine ask would be refused)" ;; esac ;;
+  esac
   [ "$miq" = "$MAX_INFO_QUERIES_UP" ] || drift "GRAPH.CONFIG MAX_INFO_QUERIES is '$miq', not $MAX_INFO_QUERIES_UP"
   [ "$rsz" = "$RESULTSET_SIZE_IMAGE" ] || drift "GRAPH.CONFIG RESULTSET_SIZE is '$rsz', not the image default $RESULTSET_SIZE_IMAGE (the engine reader would take a cut reply as complete)"
   [ "$qmc" = "$QUERY_MEM_CAPACITY_UP" ] || drift "GRAPH.CONFIG QUERY_MEM_CAPACITY is '$qmc', not $QUERY_MEM_CAPACITY_UP (a read-only query would be bounded only by the container cap)"

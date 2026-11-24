@@ -323,6 +323,9 @@ st_case() { # description setup-command
 }
 new_world; mkc ccg-falkordb running 1 6390 0; run_s -- status
 check "S0 clean instance -> status passes" '[ $RC = 0 ]'
+check "S0d status reports the engine QUERY_TIMEOUT_MS read from the code" 'echo "$OUT" | grep -q "engine QUERY_TIMEOUT_MS: 10000"'
+new_world; mkc ccg-falkordb running 1 6390 0; echo 10000 >"$W/c/ccg-falkordb/tmax"; run_s -- status
+check "S0e TIMEOUT_MAX equal to the engine's 10000 passes" '[ $RC = 0 ]'
 check "S0c status reports QUERY_MEM_CAPACITY" 'echo "$OUT" | grep -q "QUERY_MEM_CAPACITY:.*268435456"'
 check "S0b status reports RESULTSET_SIZE" 'echo "$OUT" | grep -q "RESULTSET_SIZE:.*10000"'
 st_case "no password"        'echo 0 >"$W/c/ccg-falkordb/auth"'
@@ -332,6 +335,7 @@ st_case "wrong module ver"   'echo 41900 >"$W/c/ccg-falkordb/modver"'
 st_case "two binding lines"  'printf "6379/tcp -> 127.0.0.1:6390\n6379/tcp -> [::1]:6390\n" >"$W/c/ccg-falkordb/ports"'
 st_case "no binding"         ': >"$W/c/ccg-falkordb/ports"'
 st_case "TIMEOUT_MAX 0 (restarted behind up's back)" 'echo 0 >"$W/c/ccg-falkordb/tmax"'
+st_case "TIMEOUT_MAX 9999, below the engine's QUERY_TIMEOUT_MS 10000" 'echo 9999 >"$W/c/ccg-falkordb/tmax"'
 st_case "MAX_INFO_QUERIES default 1000" 'echo 1000 >"$W/c/ccg-falkordb/miq"'
 st_case "RESULTSET_SIZE below the image default 10000 (the engine reader would take a cut reply as whole)" 'echo 5000 >"$W/c/ccg-falkordb/rsz"'
 st_case "QUERY_MEM_CAPACITY 0 (off: the image default, or a restart behind up's back)" 'echo 0 >"$W/c/ccg-falkordb/qmc"'

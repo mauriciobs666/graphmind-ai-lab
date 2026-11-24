@@ -36,7 +36,7 @@ Measured on my own throwaways (`falkordb/falkordb:v4.18.11`, ports 16480 and 164
 
 **Does not bound.**
 - **A cross product whose rows are aggregated, over nodes with realistic property weight.** On a 100,000-node store of 8-property nodes, `MATCH (a:C),(b:C) WITH a,b LIMIT 30000000 RETURN size(collect([a.callSiteId,b.callSiteId]))` was **not refused and OOM-killed the container** in 8.4 s (`OOMKilled=true`) with the cap at 256 MiB, 64 MiB and 16 MiB alike; the same shape on the real store (the CallSite label, via `Client.raw_query`) did the same (process at 1.82 GiB when sampled), twice, so the snapshot (graphs, ACL users, runtime config) is lost and a rebuild restores it. `MATCH (a:C),(b:C) RETURN size(collect(a.callSiteId))` was not refused either: stopped by the 10 s time limit with the container at 540 MiB (cap 256 MiB), 524 MiB (16 MiB) and 470 MiB (64 MiB). So the cap is not a hard limit on memory: some operator results are not counted against it, and no value tried closed that. The 10 s time limit and the 2g container cap remain the only bounds for such a shape.
-- Several concurrent queries: each is bounded on its own, if at all.
+- Several concurrent queries: each is bounded on its own, if at all. Three concurrent cross-product-aggregate queries with a 3 s time limit each OOM-killed a throwaway (reproduced on port 16530, `OOMKilled=true`), so a shorter time limit does not remove the exposure.
 - Everything outside query execution (`maxmemory` and the container cap still govern the rest); a write path (`GRAPH.QUERY`) is the same setting but unreachable by the raw role.
 
 ## What the P1 report may say
