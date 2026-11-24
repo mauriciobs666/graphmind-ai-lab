@@ -93,8 +93,6 @@ plans the close-out unit. New item IDs are allocated by `teco` with `wi` at the 
   for the TypeScript `store.fetch`, AC-9b's wider rule (an unbound crossing into a never-built unit), and one sentence in
   `extractors/joern/README.md` (D13: the default file filter has no left boundary on `test`/`spec`/`conf`, so `latest.ts`
   is `frontend-ignore`).
-- **Untracked `.env` fixture** (`tdd-engineer`; being fixed now, delete this line when it lands): `cpg/tests/data/config/repo1/.env`
-  is excluded by root `.gitignore:138` and untracked, so 4 `[.env]` tests in `test_config_extractor` fail on a clean checkout.
 - **Absolute-path-dependent tests** (`tdd-engineer`; trigger: before CI or a second checkout): the default-audit-dir tests in
   `test_broker_audit.py` and the derived-fixtures tests in `test_eval_tools.py` depend on the checkout's absolute path.
 - **3 `test_no_network.py` failures** (not P1's; owner: the llm-gateway feature's session; trigger: its close):
