@@ -1,6 +1,6 @@
 # Connected code graph — P1 plan (impact on this repo, every client)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1)
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Extended by:** `docs/plans/connected-code-graph-p1-closeout.md`
 
 This is the **index** of the P1 plan. Step detail lives in four ordered sub-plans (§3.1):
 `docs/plans/connected-code-graph-p1-extraction.md`, `docs/plans/connected-code-graph-p1-linking.md`,
