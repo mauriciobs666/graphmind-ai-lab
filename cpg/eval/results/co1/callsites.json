@@ -1,0 +1,2852 @@
+[
+ {
+  "itemId": "0fbf43ab9238efee0857b56a489c8f9f",
+  "anchor": "skills/joern-cpg/scripts/git-provenance.sh::<script>",
+  "impacted": "skills/joern-cpg/scripts/test-stamp-wiring.sh::run_block",
+  "lines": [
+   168
+  ],
+  "symbolFound": false,
+  "lang": null,
+  "sites": []
+ },
+ {
+  "itemId": "106e87c807dffb23c1fbe43739940348",
+  "anchor": "claude/tdd-engineer/hooks/guard-tdd-broad-bash.sh::<script>",
+  "impacted": "claude/tdd-engineer/tdd-engineer.md::<document>",
+  "lines": [
+   14
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [],
+  "nSitesInSymbol": 18
+ },
+ {
+  "itemId": "107ea0381b9b379a58550fec86d28a49",
+  "anchor": "falkor-chat/scripts/test_queries.sh::<script>",
+  "impacted": "AGENTS.md::<document>",
+  "lines": [
+   94
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [],
+  "nSitesInSymbol": 16
+ },
+ {
+  "itemId": "1774487968eaff49547903f497531a88",
+  "anchor": "falkor-chat/scripts/verify_salesperson.sh::<script>",
+  "impacted": "falkor-chat/scripts/start_demo.sh::<script>",
+  "lines": [
+   316
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 317,
+    "callee": "<dynamic>",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "const": "demo"
+      },
+      {
+       "unknown": "unresolved-ref"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 104
+ },
+ {
+  "itemId": "1ebbf6577d139d490b4b974f4f36fa7a",
+  "anchor": "claude/scripts/guard-broad-write.sh::<script>",
+  "impacted": "claude/tdd-engineer/hooks/guard-tdd-broad-write.sh::<script>",
+  "lines": [
+   57
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 57,
+    "callee": "exec",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a2": [
+      {
+       "const": "tdd-engineer guardrail: Write/Edit targets '__PATH__', which looks like another specialist's documented deliverable path (a plan/review/requirements/manual/test-plan/test-report doc, an agent definition or kaizen file, a team catalog or skill package, an MCP-standards doc, or the project backlog). Approve only if tdd-engineer genuinely owns this write for the current task; otherwise it belongs to whichever agent normally authors that doc kind."
+      }
+     ],
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/../../scripts/guard-broad-write.sh"
+        }
+       ]
+      }
+     ],
+     "a1": [
+      {
+       "const": "docs/plans/*|*/docs/plans/*|docs/reviews/*|*/docs/reviews/*|docs/requirements/*|*/docs/requirements/*|docs/manuals/*|*/docs/manuals/*|docs/test-plans/*|*/docs/test-plans/*|docs/test-reports/*|*/docs/test-reports/*|claude/*/*.md|*/claude/*/*.md|claude/*/kaizen/*|*/claude/*/kaizen/*|claude/README.md|*/claude/README.md|claude/AGENTS.md|*/claude/AGENTS.md|claude/CLAUDE.md|*/claude/CLAUDE.md|skills/README.md|*/skills/README.md|skills/agent-maintenance/*|*/skills/agent-maintenance/*|skills/agent-standards/*|*/skills/agent-standards/*|cypher-mcp/README.md|*/cypher-mcp/README.md|docs/BACKLOG.md|*/docs/BACKLOG.md"
+      }
+     ]
+    }
+   },
+   {
+    "line": 57,
+    "callee": "readlink",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "-f"
+      }
+     ],
+     "a1": [
+      {
+       "unknown": "runtime-built"
+      }
+     ]
+    }
+   },
+   {
+    "line": 57,
+    "callee": "dirname",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "unknown": "point-derived"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 3
+ },
+ {
+  "itemId": "28b763dd546cfaf6e2b5daf317dec3b8",
+  "anchor": "claude/scripts/guard-destructive-ops.sh::<script>",
+  "impacted": "claude/devops/hooks/guard-destructive-ops.sh::<script>",
+  "lines": [
+   8
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 8,
+    "callee": "exec",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/../../scripts/guard-destructive-ops.sh"
+        }
+       ]
+      }
+     ],
+     "a1": [
+      {
+       "const": "devops"
+      }
+     ]
+    }
+   },
+   {
+    "line": 8,
+    "callee": "readlink",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "-f"
+      }
+     ],
+     "a1": [
+      {
+       "unknown": "runtime-built"
+      }
+     ]
+    }
+   },
+   {
+    "line": 8,
+    "callee": "dirname",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "unknown": "point-derived"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 3
+ },
+ {
+  "itemId": "3c0917959f8cbbdc7a7ac7a5b0dd05a7",
+  "anchor": "GET /health",
+  "impacted": "falkor-chat/scripts/load_test.sh::<script>",
+  "lines": [
+   77
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 77,
+    "callee": "curl",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "-fsS"
+      }
+     ],
+     "a1": [
+      {
+       "template": [
+        {
+         "const": "http://127.0.0.1:"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/health"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 78,
+    "callee": "exit",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "1"
+      }
+     ]
+    }
+   },
+   {
+    "line": 76,
+    "callee": "seq",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "1"
+      }
+     ],
+     "a1": [
+      {
+       "const": "60"
+      }
+     ]
+    }
+   },
+   {
+    "line": 78,
+    "callee": "tail",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a1": [
+      {
+       "template": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/server.log"
+        }
+       ]
+      }
+     ],
+     "a0": [
+      {
+       "const": "-20"
+      }
+     ]
+    }
+   },
+   {
+    "line": 78,
+    "callee": "kill",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "-0"
+      }
+     ],
+     "a1": [
+      {
+       "unknown": "runtime-built"
+      }
+     ]
+    }
+   },
+   {
+    "line": 77,
+    "callee": "echo",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "server ready"
+      }
+     ]
+    }
+   },
+   {
+    "line": 78,
+    "callee": "echo",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "const": "ERROR: server exited early \u2014 see "
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/server.log"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 77,
+    "callee": "break",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 63
+ },
+ {
+  "itemId": "46cba1717f475008b11ddab44200d1c0",
+  "anchor": "falkor-chat/scripts/shlib/opencode_config.sh::<script>",
+  "impacted": "falkor-chat/scripts/start_agent_team.sh::<script>",
+  "lines": [
+   146
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 147,
+    "callee": "resolve_opencode_config",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {}
+   },
+   {
+    "line": 146,
+    "callee": "dirname",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "unknown": "runtime-built"
+      }
+     ]
+    }
+   },
+   {
+    "line": 146,
+    "callee": ".",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/shlib/opencode_config.sh"
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 67
+ },
+ {
+  "itemId": "4886ea576cb37ac25aaea5dec3313577",
+  "anchor": "falkor-chat/scripts/create_workspace.sh::<script>",
+  "impacted": "falkor-chat/scripts/start_server.sh::<script>",
+  "lines": [
+   197
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 198,
+    "callee": "<dynamic>",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "const": "acme"
+      },
+      {
+       "unknown": "unresolved-ref"
+      }
+     ]
+    }
+   },
+   {
+    "line": 197,
+    "callee": "echo",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "const": "[3/6] Bootstrapping schema for workspace '"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "' (dim "
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": ")..."
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 55
+ },
+ {
+  "itemId": "4b9e006b82f6abb1bda8549365cc4ec6",
+  "anchor": "falkor-chat/scripts/shlib/opencode_config.sh::<script>",
+  "impacted": "falkor-chat/scripts/ensure_demo_models.sh::<script>",
+  "lines": [
+   59
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 59,
+    "callee": ".",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/shlib/opencode_config.sh"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 59,
+    "callee": "dirname",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "unknown": "runtime-built"
+      }
+     ]
+    }
+   },
+   {
+    "line": 60,
+    "callee": "resolve_opencode_config",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 12
+ },
+ {
+  "itemId": "52fb50d10be05a24c1095d984d5ea51b",
+  "anchor": "claude/scripts/guard-destructive-ops.sh::<script>",
+  "impacted": "claude/graph-dba/hooks/guard-destructive-ops.sh::<script>",
+  "lines": [
+   9
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 9,
+    "callee": "readlink",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a1": [
+      {
+       "unknown": "runtime-built"
+      }
+     ],
+     "a0": [
+      {
+       "const": "-f"
+      }
+     ]
+    }
+   },
+   {
+    "line": 9,
+    "callee": "dirname",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "unknown": "point-derived"
+      }
+     ]
+    }
+   },
+   {
+    "line": 9,
+    "callee": "exec",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a1": [
+      {
+       "const": "graph-dba"
+      }
+     ],
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/../../scripts/guard-destructive-ops.sh"
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 3
+ },
+ {
+  "itemId": "5b355baa970f22ac281c86fa48c259aa",
+  "anchor": "falkor-chat/scripts/shlib/opencode_config.sh::<script>",
+  "impacted": "falkor-chat/scripts/start_demo.sh::<script>",
+  "lines": [
+   175
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 176,
+    "callee": ".",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/shlib/opencode_config.sh"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 176,
+    "callee": "dirname",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "unknown": "runtime-built"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 104
+ },
+ {
+  "itemId": "5dbd4bae63e880fdf1d1d8a27a6d54db",
+  "anchor": "GET /health",
+  "impacted": "falkor-chat/scripts/seed_nlq_eval_corpus.sh::<script>",
+  "lines": [
+   78
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 78,
+    "callee": "curl",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a3": [
+      {
+       "template": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/health"
+        }
+       ]
+      }
+     ],
+     "a2": [
+      {
+       "const": "5"
+      }
+     ],
+     "a1": [
+      {
+       "const": "-m"
+      }
+     ],
+     "a0": [
+      {
+       "const": "-sf"
+      }
+     ]
+    }
+   },
+   {
+    "line": 79,
+    "callee": "echo",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "const": "ERROR: "
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": " is not reachable. This corpus needs a REAL"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 77,
+    "callee": "echo",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "const": "Checking "
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/health..."
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 25
+ },
+ {
+  "itemId": "6fee71daaef58335371c01578f3bfd34",
+  "anchor": "skills/joern-cpg/scripts/export-cpg.sh::<script>",
+  "impacted": "skills/joern-cpg/scripts/pipeline.sh::<script>",
+  "lines": [
+   149
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 148,
+    "callee": "echo",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "== [2/3] export neo4jcsv =="
+      }
+     ]
+    }
+   },
+   {
+    "line": 149,
+    "callee": "<dynamic>",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/cpg.bin"
+        }
+       ]
+      }
+     ],
+     "a2": [
+      {
+       "const": "cpg"
+      },
+      {
+       "unknown": "point-derived"
+      }
+     ],
+     "a3": [
+      {
+       "const": "neo4jcsv"
+      }
+     ],
+     "a1": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/export"
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 136
+ },
+ {
+  "itemId": "7d9d8aa1ea919291d8cdc2b890f912ff",
+  "anchor": "falkor-chat/scripts/shlib/opencode_config.sh::<script>",
+  "impacted": "falkor-chat/scripts/start_server.sh::<script>",
+  "lines": [
+   135
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 136,
+    "callee": ".",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/shlib/opencode_config.sh"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 136,
+    "callee": "dirname",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "unknown": "runtime-built"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 55
+ },
+ {
+  "itemId": "7fc6a23c205a1a82a393d0918dbae59c",
+  "anchor": "falkor-chat/scripts/bootstrap_schema.sh::<script>",
+  "impacted": "falkor-chat/scripts/test_queries.sh::<script>",
+  "lines": [
+   103
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 103,
+    "callee": "echo",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": ""
+      }
+     ]
+    }
+   },
+   {
+    "line": 104,
+    "callee": "echo",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "\u25b6 connectivity"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 1039
+ },
+ {
+  "itemId": "8f9035d42191c00eade357050315d966",
+  "anchor": "falkor-chat/scripts/load_test.sh::<script>",
+  "impacted": "falkor-chat/AGENTS.md::<document>",
+  "lines": [
+   79
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [
+   {
+    "line": 78,
+    "callee": "shlib/opencode_config.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 78,
+    "callee": "./scripts/reembed_unembedded_chunks.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 79,
+    "callee": "./scripts/backfill_thread_ids.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 80,
+    "callee": "./scripts/backfill_document_lsh_bands.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 80
+ },
+ {
+  "itemId": "9149027e09da1471b856f00ed4e12c28",
+  "anchor": "claude/scripts/audit-team.sh::<script>",
+  "impacted": "claude/cobb/cobb.md::<document>",
+  "lines": [
+   76,
+   88
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [
+   {
+    "line": 88,
+    "callee": "claude/scripts/audit-team.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 88,
+    "callee": "sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "claude/scripts/audit-team.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 75,
+    "callee": "git",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 18
+ },
+ {
+  "itemId": "9180d6995d1fb4cbb9c769689df00891",
+  "anchor": "model-bench/modelbench/__main__.py::<module>",
+  "impacted": "model-bench/run.sh::<script>",
+  "lines": [
+   19
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 19,
+    "callee": "exec",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/.venv/bin/python"
+        }
+       ]
+      }
+     ],
+     "a1": [
+      {
+       "const": "-m"
+      }
+     ],
+     "a2": [
+      {
+       "const": "modelbench"
+      }
+     ],
+     "a3": [
+      {
+       "unknown": "spread-argument"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 7
+ },
+ {
+  "itemId": "9302f3d688354a4135ba73a094c39adc",
+  "anchor": "falkor-chat/scripts/create_workspace.sh::<script>",
+  "impacted": "falkor-chat/scripts/start_agent_team.sh::<script>",
+  "lines": [
+   222
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 222,
+    "callee": "<dynamic>",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "-team"
+        }
+       ]
+      },
+      {
+       "unknown": "unresolved-ref"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 67
+ },
+ {
+  "itemId": "94471e88bfd7316dfa3c106113daf815",
+  "anchor": "falkor-chat/scripts/bootstrap_schema.sh::<script>",
+  "impacted": "falkor-chat/scripts/create_workspace.sh::<script>",
+  "lines": [
+   55
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 55,
+    "callee": "<dynamic>",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "unknown": "spread-argument"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 10
+ },
+ {
+  "itemId": "9b992587b56c3e8003e9c519dc2856d4",
+  "anchor": "claude/scripts/audit-team.sh::<script>",
+  "impacted": "claude/AGENTS.md::<document>",
+  "lines": [
+   84,
+   189,
+   233
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [
+   {
+    "line": 84,
+    "callee": "scripts/audit-team.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 188,
+    "callee": "scripts/audit-team.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 232,
+    "callee": "scripts/audit-team.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 66
+ },
+ {
+  "itemId": "a4672e0e885f234a08214209bedb615a",
+  "anchor": "claude/scripts/guard-broad-write.sh::<script>",
+  "impacted": "claude/coder/hooks/guard-coder-broad-write.sh::<script>",
+  "lines": [
+   19
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 19,
+    "callee": "exec",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a1": [
+      {
+       "const": "docs/plans/*|*/docs/plans/*|docs/reviews/*|*/docs/reviews/*|docs/requirements/*|*/docs/requirements/*|docs/manuals/*|*/docs/manuals/*|docs/test-plans/*|*/docs/test-plans/*|docs/test-reports/*|*/docs/test-reports/*|claude/*/*.md|*/claude/*/*.md|claude/*/kaizen/*|*/claude/*/kaizen/*|claude/README.md|*/claude/README.md|claude/AGENTS.md|*/claude/AGENTS.md|claude/CLAUDE.md|*/claude/CLAUDE.md|skills/README.md|*/skills/README.md|skills/agent-maintenance/*|*/skills/agent-maintenance/*|skills/agent-standards/*|*/skills/agent-standards/*|cypher-mcp/README.md|*/cypher-mcp/README.md|docs/BACKLOG.md|*/docs/BACKLOG.md"
+      }
+     ],
+     "a2": [
+      {
+       "const": "coder guardrail: Write/Edit targets '__PATH__', which looks like another specialist's documented deliverable path (a plan/review/requirements/manual/test-plan/test-report doc, an agent definition or kaizen file, a team catalog or skill package, an MCP-standards doc, or the project backlog). Approve only if coder genuinely owns this write for the current task; otherwise it belongs to whichever agent normally authors that doc kind."
+      }
+     ],
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/../../scripts/guard-broad-write.sh"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 19,
+    "callee": "dirname",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "unknown": "point-derived"
+      }
+     ]
+    }
+   },
+   {
+    "line": 19,
+    "callee": "readlink",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "-f"
+      }
+     ],
+     "a1": [
+      {
+       "unknown": "runtime-built"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 3
+ },
+ {
+  "itemId": "a7b52a16382dd0bfe2bd278da2965b18",
+  "anchor": "falkor-chat/scripts/bootstrap_schema.sh::<script>",
+  "impacted": "falkor-chat/scripts/seed_eval_corpus.py::main",
+  "lines": [
+   599,
+   600
+  ],
+  "symbolFound": true,
+  "lang": "python",
+  "sites": [
+   {
+    "line": 600,
+    "callee": "str",
+    "kind": "call",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "ref": "falkor-chat/scripts/seed_eval_corpus.py::_BOOTSTRAP"
+      }
+     ]
+    }
+   },
+   {
+    "line": 599,
+    "callee": "run",
+    "kind": "call",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "kw.env.EMBEDDING_DIM": [
+      {
+       "unknown": "point-derived"
+      }
+     ],
+     "kw.check": [
+      {
+       "const": true
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 58
+ },
+ {
+  "itemId": "aa752daa898361a34fa6c09bd16cef71",
+  "anchor": "send_message",
+  "impacted": "mcp-monitor/scripts/demo_falkor_chat.sh::<script>",
+  "lines": [
+   145,
+   146
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [],
+  "nSitesInSymbol": 46
+ },
+ {
+  "itemId": "ace49b47a34c9dc9b1a72f078d9784c9",
+  "anchor": "falkor-chat/scripts/test_queries.sh::<script>",
+  "impacted": "falkor-chat/AGENTS.md::<document>",
+  "lines": [
+   77,
+   129,
+   221
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [
+   {
+    "line": 76,
+    "callee": "pin_workspace_embedding_model.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 78,
+    "callee": "shlib/opencode_config.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 221,
+    "callee": "add",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "./scripts/create_workspace.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 78,
+    "callee": "./scripts/reembed_unembedded_chunks.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 77,
+    "callee": "./scripts/test_queries.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 80
+ },
+ {
+  "itemId": "aed9b80189d444d0c8545df0f6d1e732",
+  "anchor": "claude/scripts/guard-destructive-ops.sh::<script>",
+  "impacted": "claude/qa-engineer/hooks/guard-destructive-ops.sh::<script>",
+  "lines": [
+   10
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 10,
+    "callee": "dirname",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "unknown": "point-derived"
+      }
+     ]
+    }
+   },
+   {
+    "line": 10,
+    "callee": "exec",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/../../scripts/guard-destructive-ops.sh"
+        }
+       ]
+      }
+     ],
+     "a1": [
+      {
+       "const": "qa-engineer"
+      }
+     ]
+    }
+   },
+   {
+    "line": 10,
+    "callee": "readlink",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "-f"
+      }
+     ],
+     "a1": [
+      {
+       "unknown": "runtime-built"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 3
+ },
+ {
+  "itemId": "af3d4a706ac9730fb9f880a2eb96825c",
+  "anchor": "falkor-chat/scripts/verify_salesperson.sh::<script>",
+  "impacted": "falkor-chat/AGENTS.md::<document>",
+  "lines": [
+   87
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [
+   {
+    "line": 88,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 87,
+    "callee": "./scripts/verify_catalog.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 87,
+    "callee": "verify_workflows.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 86,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 88,
+    "callee": "seed_demo.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 86,
+    "callee": "./scripts/seed_catalog.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 88,
+    "callee": "seed_catalog.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 88,
+    "callee": "./scripts/seed_salesperson.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 80
+ },
+ {
+  "itemId": "b0f6272d4d7d3bfa557e58f4e4ca2d4b",
+  "anchor": "claude/tico/hooks/guard-tico-repo-writes.sh::<script>",
+  "impacted": "claude/tico/tico.md::<document>",
+  "lines": [
+   11
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [],
+  "nSitesInSymbol": 28
+ },
+ {
+  "itemId": "b3547e028a385c6fb818b30aa27e83ee",
+  "anchor": "skills/joern-cpg/scripts/pipeline.sh::<script>",
+  "impacted": "skills/joern-cpg/SKILL.md::<document>",
+  "lines": [
+   33,
+   254,
+   335
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [
+   {
+    "line": 254,
+    "callee": "pipeline.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 50
+ },
+ {
+  "itemId": "b35838609ea569fec3e9521082a80864",
+  "anchor": "falkor-chat/scripts/verify_catalog.sh::<script>",
+  "impacted": "falkor-chat/scripts/start_demo.sh::<script>",
+  "lines": [
+   303
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 304,
+    "callee": "<dynamic>",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {}
+   },
+   {
+    "line": 302,
+    "callee": "echo",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "const": "      Preflight: verify_catalog.sh"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 104
+ },
+ {
+  "itemId": "c12efdb6f2d627fcbdc276a68458b281",
+  "anchor": "falkor-chat/scripts/bootstrap_schema.sh::<script>",
+  "impacted": "falkor-chat/AGENTS.md::<document>",
+  "lines": [
+   75,
+   77,
+   80,
+   81,
+   84,
+   93,
+   208
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [
+   {
+    "line": 82,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 83,
+    "callee": "./scripts/seed_agent_team.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "pin_workspace_embedding_model.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 78,
+    "callee": "shlib/opencode_config.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 84,
+    "callee": "seed_demo.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 83,
+    "callee": "add",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 82,
+    "callee": "./scripts/seed_demo.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 75,
+    "callee": "./scripts/bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "./scripts/create_workspace.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 75,
+    "callee": "create_workspace.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 78,
+    "callee": "./scripts/reembed_unembedded_chunks.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 85,
+    "callee": "./scripts/verify_workflows.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 83,
+    "callee": "ingest_document",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 84,
+    "callee": "./scripts/seed_workflows.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 77,
+    "callee": "./scripts/test_queries.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 74,
+    "callee": "./scripts/start_server.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 84,
+    "callee": "verify_workflows.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 79,
+    "callee": "./scripts/backfill_thread_ids.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 84,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 80,
+    "callee": "./scripts/backfill_document_lsh_bands.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 83,
+    "callee": "./scripts/bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 81,
+    "callee": "./scripts/load_test.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 80
+ },
+ {
+  "itemId": "c386af0c3aaeeab7116922c43dd7b04f",
+  "anchor": "skills/joern-cpg/scripts/git-provenance.sh::<script>",
+  "impacted": "skills/joern-cpg/scripts/pipeline.sh::<script>",
+  "lines": [
+   96
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 97,
+    "callee": "date",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a1": [
+      {
+       "const": "+%Y-%m-%dT%H:%M:%SZ"
+      }
+     ],
+     "a0": [
+      {
+       "const": "-u"
+      }
+     ]
+    }
+   },
+   {
+    "line": 96,
+    "callee": ".",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/git-provenance.sh"
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 136
+ },
+ {
+  "itemId": "c649a7aca2de27884ddee78e4cd099b4",
+  "anchor": "skills/joern-cpg/scripts/export-cpg.sh::<script>",
+  "impacted": "skills/joern-cpg/SKILL.md::<document>",
+  "lines": [
+   206
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [],
+  "nSitesInSymbol": 50
+ },
+ {
+  "itemId": "d105f096e63283a09511fcf69297d3ed",
+  "anchor": "skills/joern-cpg/scripts/git-provenance.sh::<script>",
+  "impacted": "skills/joern-cpg/scripts/test-stamp-wiring.sh::<script>",
+  "lines": [
+   345,
+   629,
+   654
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [],
+  "nSitesInSymbol": 0
+ },
+ {
+  "itemId": "d65e21299562be73b4149bd7063ba43d",
+  "anchor": "mcp-monitor/mcp_monitor/__main__.py::<module>",
+  "impacted": "mcp-monitor/run.sh::<script>",
+  "lines": [
+   19
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 19,
+    "callee": "exec",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a1": [
+      {
+       "const": "-m"
+      }
+     ],
+     "a3": [
+      {
+       "unknown": "spread-argument"
+      }
+     ],
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/.venv/bin/python"
+        }
+       ]
+      }
+     ],
+     "a2": [
+      {
+       "const": "mcp_monitor"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 7
+ },
+ {
+  "itemId": "d740794ee3674204f431204925c1c0b6",
+  "anchor": "claude/scripts/guard-destructive-ops.sh::<script>",
+  "impacted": "claude/scripts/guard-broad-bash.sh::<script>",
+  "lines": [
+   67
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 67,
+    "callee": "printf",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a1": [
+      {
+       "unknown": "point-derived"
+      }
+     ],
+     "a0": [
+      {
+       "const": "%s"
+      }
+     ]
+    }
+   },
+   {
+    "line": 67,
+    "callee": "<dynamic>",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "const": "agent"
+      },
+      {
+       "unknown": "point-derived"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 13
+ },
+ {
+  "itemId": "d7b4144e135245c043985a98cf5ac026",
+  "anchor": "mcp-monitor/run.sh::<script>",
+  "impacted": "mcp-monitor/AGENTS.md::<document>",
+  "lines": [
+   80
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [],
+  "nSitesInSymbol": 21
+ },
+ {
+  "itemId": "df42c4b9db8f369cf5b0de21ce217fee",
+  "anchor": "GET /health",
+  "impacted": "claude/teco/hooks/ensure-environment.sh::<script>",
+  "lines": [
+   155,
+   171,
+   175
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 174,
+    "callee": "say",
+    "kind": "command",
+    "status": "confirmed",
+    "reason": "resolved-call",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "const": "ws:agent-team server on :"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": " is not answering yet, but it is already being started by an earlier launch (log: "
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/agent-team-"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": ".log); nothing new was launched."
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 175,
+    "callee": "tell",
+    "kind": "command",
+    "status": "confirmed",
+    "reason": "resolved-call",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "const": "Environment: the ws:agent-team server on :"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": " refused /health while another launch holds its start lock, so it is already being started (log: "
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/agent-team-"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": ".log). Nothing new was launched. Poll 'curl -sf http://127.0.0.1:"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/health' until 200; if the log shows the start failed, route to devops. If the mcp__falkor-chat-agent-team__* tools are missing once it is up, ask the user to run /mcp -> falkor-chat-agent-team -> Reconnect."
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 171,
+    "callee": "tell",
+    "kind": "command",
+    "status": "confirmed",
+    "reason": "resolved-call",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "const": "Environment: the ws:agent-team server on :"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": " was down and has been started detached (log: "
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/agent-team-"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": ".log)."
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": " The falkor-chat-agent-team MCP connects by itself only if the server came up within the client's ~7s retry window. If the mcp__falkor-chat-agent-team__* tools are missing or fail when you need them, poll 'curl -sf http://127.0.0.1:"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/health' until 200, then ask the user to run /mcp -> falkor-chat-agent-team -> Reconnect (you cannot reconnect it yourself). Do not start a second copy."
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 170,
+    "callee": "say",
+    "kind": "command",
+    "status": "confirmed",
+    "reason": "resolved-call",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "const": "ws:agent-team server was down on :"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "; starting it in the background (log: "
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/agent-team-"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": ".log)."
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": " If /mcp then shows falkor-chat-agent-team as failed (startup took longer than the MCP client's ~7s retry window), select it and choose Reconnect once it is up."
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 155,
+    "callee": "curl",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a6": [
+      {
+       "const": "2"
+      }
+     ],
+     "a4": [
+      {
+       "const": "%{http_code}"
+      }
+     ],
+     "a2": [
+      {
+       "const": "/dev/null"
+      }
+     ],
+     "a3": [
+      {
+       "const": "-w"
+      }
+     ],
+     "a0": [
+      {
+       "const": "-s"
+      }
+     ],
+     "a7": [
+      {
+       "template": [
+        {
+         "const": "http://127.0.0.1:"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/health"
+        }
+       ]
+      }
+     ],
+     "a5": [
+      {
+       "const": "--max-time"
+      }
+     ],
+     "a1": [
+      {
+       "const": "-o"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 45
+ },
+ {
+  "itemId": "df9bdc52173fa4fdc8eb0f66c493d4d8",
+  "anchor": "falkor-chat/scripts/verify_catalog.sh::<script>",
+  "impacted": "falkor-chat/AGENTS.md::<document>",
+  "lines": [
+   85
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [
+   {
+    "line": 84,
+    "callee": "seed_demo.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 86,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 86,
+    "callee": "./scripts/seed_catalog.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 85,
+    "callee": "./scripts/verify_workflows.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 84,
+    "callee": "./scripts/seed_workflows.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 84,
+    "callee": "verify_workflows.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 84,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 80
+ },
+ {
+  "itemId": "e2d5f03022934720bd1de920f8732100",
+  "anchor": "falkor-chat/scripts/create_workspace.sh::<script>",
+  "impacted": "falkor-chat/AGENTS.md::<document>",
+  "lines": [
+   75,
+   76
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [
+   {
+    "line": 76,
+    "callee": "pin_workspace_embedding_model.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 75,
+    "callee": "./scripts/bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "./scripts/create_workspace.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 75,
+    "callee": "create_workspace.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 77,
+    "callee": "./scripts/test_queries.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 74,
+    "callee": "./scripts/start_server.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 80
+ },
+ {
+  "itemId": "e6c6a3c92acfe2770da837a5b30b9570",
+  "anchor": "falkor-chat/scripts/test_queries.sh::<script>",
+  "impacted": "claude/qa-engineer/qa-engineer.md::<document>",
+  "lines": [
+   52
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [
+   {
+    "line": 53,
+    "callee": "add",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 53,
+    "callee": "pytest",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 20
+ },
+ {
+  "itemId": "e6e80b82d3f8cd8a819df01232adf3df",
+  "anchor": "claude/scripts/audit-team.sh::<script>",
+  "impacted": "skills/agent-maintenance/SKILL.md::<document>",
+  "lines": [
+   266
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [],
+  "nSitesInSymbol": 40
+ },
+ {
+  "itemId": "e8c36e15140be75bab4c3552c5e381c1",
+  "anchor": "cypher-mcp/server.py::<module>",
+  "impacted": "cypher-mcp/run.sh::<script>",
+  "lines": [
+   31
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 31,
+    "callee": "exec",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a1": [
+      {
+       "template": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/server.py"
+        }
+       ]
+      }
+     ],
+     "a0": [
+      {
+       "template": [
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "/.venv/bin/python"
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 7
+ },
+ {
+  "itemId": "f155508da7d0709e520c176c2c5e2085",
+  "anchor": "falkor-chat/scripts/verify_workflows.sh::<script>",
+  "impacted": "falkor-chat/AGENTS.md::<document>",
+  "lines": [
+   77,
+   82,
+   83,
+   170
+  ],
+  "symbolFound": true,
+  "lang": "markdown",
+  "sites": [
+   {
+    "line": 82,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 83,
+    "callee": "./scripts/seed_agent_team.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "pin_workspace_embedding_model.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 78,
+    "callee": "shlib/opencode_config.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 84,
+    "callee": "seed_demo.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 83,
+    "callee": "add",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 82,
+    "callee": "./scripts/seed_demo.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "./scripts/create_workspace.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 78,
+    "callee": "./scripts/reembed_unembedded_chunks.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 83,
+    "callee": "ingest_document",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 84,
+    "callee": "./scripts/seed_workflows.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 77,
+    "callee": "./scripts/test_queries.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 84,
+    "callee": "verify_workflows.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 76,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 84,
+    "callee": "bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 83,
+    "callee": "./scripts/bootstrap_schema.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   },
+   {
+    "line": 81,
+    "callee": "./scripts/load_test.sh",
+    "kind": "mention",
+    "status": "possible",
+    "reason": "prompt-mention",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 80
+ },
+ {
+  "itemId": "f25577147eeea681d6fdd0b113e94906",
+  "anchor": "falkor-chat/scripts/bootstrap_schema.sh::<script>",
+  "impacted": "falkor-chat/scripts/load_test.sh::<script>",
+  "lines": [
+   55
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 54,
+    "callee": "log",
+    "kind": "command",
+    "status": "confirmed",
+    "reason": "resolved-call",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "const": "Bootstrapping schema for ws:"
+        },
+        {
+         "unknown": "runtime-built"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 55,
+    "callee": "<dynamic>",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "const": "load"
+      },
+      {
+       "unknown": "unresolved-ref"
+      }
+     ]
+    }
+   },
+   {
+    "line": 56,
+    "callee": "mem",
+    "kind": "command",
+    "status": "confirmed",
+    "reason": "resolved-call",
+    "args": {}
+   }
+  ],
+  "nSitesInSymbol": 63
+ },
+ {
+  "itemId": "f33cbe42358775055726731a9c1ecceb",
+  "anchor": "mcp-monitor/run.sh::<script>",
+  "impacted": "mcp-monitor/scripts/demo_falkor_chat.sh::<script>",
+  "lines": [
+   117
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 116,
+    "callee": "echo",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "const": "\u2500\u2500 starting mcp-monitor (log: "
+        },
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/mcp-monitor.log) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "line": 117,
+    "callee": "<dynamic>",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a3": [
+      {
+       "const": "INFO"
+      }
+     ],
+     "a1": [
+      {
+       "template": [
+        {
+         "unknown": "point-derived"
+        },
+        {
+         "const": "/config.toml"
+        }
+       ]
+      }
+     ],
+     "a0": [
+      {
+       "const": "--config"
+      }
+     ],
+     "a2": [
+      {
+       "const": "--log-level"
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 46
+ },
+ {
+  "itemId": "f7a509957611e2328bb39ac439749782",
+  "anchor": "skills/joern-cpg/scripts/pipeline.sh::<script>",
+  "impacted": "skills/joern-cpg/scripts/test-stamp-wiring.sh::<script>",
+  "lines": [
+   142,
+   462
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [],
+  "nSitesInSymbol": 0
+ },
+ {
+  "itemId": "fa829ef8dad8121febf0cdf93278e5f2",
+  "anchor": "falkor-chat/scripts/create_workspace.sh::<script>",
+  "impacted": "falkor-chat/scripts/start_demo.sh::<script>",
+  "lines": [
+   270
+  ],
+  "symbolFound": true,
+  "lang": "shell",
+  "sites": [
+   {
+    "line": 271,
+    "callee": "<dynamic>",
+    "kind": "command",
+    "status": "possible",
+    "reason": "shell-dynamic",
+    "args": {
+     "a0": [
+      {
+       "const": "demo"
+      },
+      {
+       "unknown": "unresolved-ref"
+      }
+     ]
+    }
+   },
+   {
+    "line": 269,
+    "callee": "echo",
+    "kind": "command",
+    "status": "possible",
+    "reason": "name-match",
+    "args": {
+     "a0": [
+      {
+       "template": [
+        {
+         "const": "[4/9] Bootstrapping schema for workspace '"
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": "' (dim "
+        },
+        {
+         "unknown": "runtime-built"
+        },
+        {
+         "const": ")..."
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "nSitesInSymbol": 104
+ }
+]

@@ -1,0 +1,122 @@
+{
+ "global": {
+  "ConfigEntry": 347733,
+  "Link": 934,
+  "BOUND_BY": 124,
+  "TO": 934,
+  "Link_BOUND_BY_ConfigEntry": 82,
+  "ConfigEntry_in_repo_config_paths": 145
+ },
+ "items": [
+  {
+   "itemId": "129dc9a30912b62b199218d6dd672232",
+   "anchorType": "unit",
+   "path": "falkor-chat/compose.yaml",
+   "keyPath": "services.server",
+   "configEntryInStore": 0,
+   "linkBoundByIt": 0,
+   "configEntriesUnderKeyPath": 11,
+   "linkBoundByUnder": 0
+  },
+  {
+   "itemId": "284562c681f3561d501da9b763bcb0c3",
+   "anchorType": "unit",
+   "path": "kiro/.kiro/agents/falkor-chat-demo.json",
+   "keyPath": "mcpServers.falkor-chat",
+   "configEntryInStore": 0,
+   "linkBoundByIt": 0,
+   "configEntriesUnderKeyPath": 1,
+   "linkBoundByUnder": 0
+  },
+  {
+   "itemId": "2ae2afccacf7fb85417dbcfaca123204",
+   "anchorType": "unit",
+   "path": "mcp-monitor/config.example.toml",
+   "keyPath": "server.falkor-chat",
+   "configEntryInStore": 0,
+   "linkBoundByIt": 0,
+   "configEntriesUnderKeyPath": 2,
+   "linkBoundByUnder": 0
+  },
+  {
+   "itemId": "32da04f9831e662b6675d2ce3cca160e",
+   "anchorType": "contract",
+   "path": "kiro/.kiro/agents/falkor-chat-demo.json",
+   "keyPath": "allowedTools[0]",
+   "configEntryInStore": 1,
+   "linkBoundByIt": 0,
+   "configEntriesUnderKeyPath": 1,
+   "linkBoundByUnder": 0
+  },
+  {
+   "itemId": "3efb7f5624898aa4c8fa40f42aee5250",
+   "anchorType": "contract",
+   "path": "kiro/.kiro/agents/falkor-chat-demo.json",
+   "keyPath": "tools[0]",
+   "configEntryInStore": 1,
+   "linkBoundByIt": 0,
+   "configEntriesUnderKeyPath": 1,
+   "linkBoundByUnder": 0
+  },
+  {
+   "itemId": "81fd8cb3dd30d58bc5b1f7baabaaab39",
+   "anchorType": "unit",
+   "path": ".mcp.json",
+   "keyPath": "mcpServers.falkor-chat-agent-team",
+   "configEntryInStore": 0,
+   "linkBoundByIt": 0,
+   "configEntriesUnderKeyPath": 2,
+   "linkBoundByUnder": 0
+  },
+  {
+   "itemId": "9c714071280e9d28f3ab16d5b589066a",
+   "anchorType": "symbol",
+   "path": "opencode/agents/tank/opencode.json",
+   "keyPath": "agent.tank",
+   "configEntryInStore": 0,
+   "linkBoundByIt": 0,
+   "configEntriesUnderKeyPath": 48,
+   "linkBoundByUnder": 0
+  },
+  {
+   "itemId": "ae355dd2bfcbc42c03376577727a7a2b",
+   "anchorType": "symbol",
+   "path": "mcp-monitor/config.example.toml",
+   "keyPath": "server.fake-test",
+   "configEntryInStore": 0,
+   "linkBoundByIt": 0,
+   "configEntriesUnderKeyPath": 4,
+   "linkBoundByUnder": 0
+  },
+  {
+   "itemId": "da060cb283e8d3deb792e6dc7d4b24e8",
+   "anchorType": "symbol",
+   "path": "opencode/agents/tank/opencode.json",
+   "keyPath": "agent.tank",
+   "configEntryInStore": 0,
+   "linkBoundByIt": 0,
+   "configEntriesUnderKeyPath": 48,
+   "linkBoundByUnder": 0
+  },
+  {
+   "itemId": "f16850fc694e79278bfab7a254f7b093",
+   "anchorType": "symbol",
+   "path": "opencode/agents/tank/opencode.json",
+   "keyPath": "agent.tank",
+   "configEntryInStore": 0,
+   "linkBoundByIt": 0,
+   "configEntriesUnderKeyPath": 48,
+   "linkBoundByUnder": 0
+  },
+  {
+   "itemId": "f8844c8c31b0e9838531a3db6f3e297c",
+   "anchorType": "contract",
+   "path": "kiro/.kiro/agents/falkor-chat-demo.json",
+   "keyPath": "prompt",
+   "configEntryInStore": 1,
+   "linkBoundByIt": 0,
+   "configEntriesUnderKeyPath": 1,
+   "linkBoundByUnder": 0
+  }
+ ]
+}
