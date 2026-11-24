@@ -58,3 +58,6 @@ Known defect carried from spec5 review: holder matches `endpoint` to raw `base_u
 | D8 | `coder` | `a815b5fa2b9c9815c` | in-flight | `service.py`, `client.py`, `transport.py` (HolderTransport), `bin/service.py` + tests | `analyst` → — | — |
 | D9a | `coder` | `a3b35093dc5e27523` | in-flight | `cpg/ccg/broker/{holderclient,policy,server}.py`, `cpg/pyproject.toml` + tests (ccg impact: unavailable, anchor-unresolved) | `analyst` + `security-expert` → — | — |
 D7b security re-check: Pass 7 approve with suggestions; P5-1/2/3/5 closed, P5-4 accepted residual. Open minors: `calls.log` size-based rotation (backlog); P7-1 (DirectTransport/`load.py` hosted flag) routed to D8 (relayed to `a815b5fa2b9c9815c`). Tier-2 on D7 code may be attempted by the human (bootstrap, `holder-account`, `owner-files`, `caller`, `check`, AC-5 probe); end-to-end hosted waits for D8 + D9.
+| D7 gate (analyst) | `analyst` | `aa88268ad17048330` | gated: approve with suggestions (Pass 13; H1 major run_bounds match unpinned) | `docs/reviews/llm-gateway.md` Pass 13 | → D7c |
+| D7c | `coder` | `a2ecc7b066645a497` | in-flight | H1 run_bounds tests, H2 refusal branch, H3 body-key narrowing, lint, `calls.log` rotation | `analyst` re-check → — | — |
+| plan absorb H1/H4 | `architect` | `a5d2d6277492067da` | in-flight | `docs/plans/llm-gateway.md` §3.4 | — → — | — |
