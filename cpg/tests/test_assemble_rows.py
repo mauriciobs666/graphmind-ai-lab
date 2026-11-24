@@ -1232,6 +1232,18 @@ def _with(unit_records, which=0):
     return w
 
 
+def _script_world(*script_paths, callee="<dynamic>", recv_tail="/scripts/t.sh"):
+    """The ``world()`` plus a shell unit: one ``<script>`` symbol per path and, in the first, one computed command word whose ``recv`` value is a
+    computed head followed by ``recv_tail`` (CO-2, the scripts resolver)."""
+    u3 = [header("U3", ".", "shell"), *[file_rec(f"s{i}", p, unit="U3", lang="shell", kind="code") for i, p in enumerate(script_paths)],
+          *[sym_rec(f"script{i}", f"s{i}", p, lang="shell", kind="script") | {"name": "<script>", "qname": f"{p}::<script>"}
+            for i, p in enumerate(script_paths)],
+          call_rec("sh_call", "script0", callee, 2, reason="shell-dynamic"),
+          {"type": "valueSet", "id": H("vs", "recv"), "callSiteId": H("cs", "sh_call"), "arg": "recv",
+           "values": [{"template": [{"unknown": "unresolved-ref"}, {"const": recv_tail}]}]}]
+    return world() + [u3]
+
+
 def _planted_drops(tmp_path):
     """reason -> one planter per ``drop(...)`` call site of that reason; each returns ``build`` rows with exactly the planted input."""
     def facts_(prov_=(), cons_=(), mounts=(), launch=()):
@@ -1244,6 +1256,8 @@ def _planted_drops(tmp_path):
                        evidence=(bound(SITE_A, 0, GHOST_CE),))
     return {
         "calls-target-not-in-snapshot": [lambda: build(tmp_path, bundles=_with([call_rec("g", "caller", "fetch", 36, targets=["ghostsym"])]))],
+        "script-call-unmatched": [lambda: build(tmp_path, bundles=_script_world("bin/run.sh", recv_tail="/scripts/gone.sh"))],
+        "script-call-ambiguous": [lambda: build(tmp_path, bundles=_script_world("bin/run.sh", "a/scripts/t.sh", "b/scripts/t.sh"))],
         "data-endpoint-missing": [lambda: build(tmp_path, bundles=_with([data_rec(H("nowhere"), H("cs", "res"))]))],
         "controlled-by-self-edge": [lambda: build(tmp_path, bundles=_with(
             [{"type": "controlledBy", "id": H("cb", 3), "point": H("k", "c"), "cond": H("k", "c")}]))],

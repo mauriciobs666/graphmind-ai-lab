@@ -1,0 +1,110 @@
+{
+ "clone": "git clone --no-hardlinks of the working repo at 9728c632675b28baed262ed3d0186cf946293c32, plus one private commit in the clone holding the working-tree changes of CO-2/CO-2a (the repo's own tree was not committed to)",
+ "strata": {
+  "scripts": {
+   "hits": 34,
+   "items": 49,
+   "misses": {
+    "not-listed": 15
+   }
+  },
+  "http": {
+   "hits": 17,
+   "items": 18,
+   "misses": {
+    "not-listed": 1
+   }
+  },
+  "mcp": {
+   "hits": 20,
+   "items": 20,
+   "misses": {}
+  }
+ },
+ "scriptsByFamily": {
+  "A": {
+   "hits": 13,
+   "items": 13
+  },
+  "B": {
+   "hits": 0,
+   "items": 2
+  },
+  "C": {
+   "hits": 0,
+   "items": 2
+  },
+  "D": {
+   "hits": 4,
+   "items": 4
+  },
+  "E": {
+   "hits": 5,
+   "items": 5
+  },
+  "F": {
+   "hits": 1,
+   "items": 1
+  },
+  "G": {
+   "hits": 8,
+   "items": 10
+  },
+  "H": {
+   "hits": 1,
+   "items": 2
+  },
+  "I": {
+   "hits": 2,
+   "items": 3
+  },
+  "J": {
+   "hits": 0,
+   "items": 2
+  },
+  "K": {
+   "hits": 0,
+   "items": 1
+  },
+  "L": {
+   "hits": 0,
+   "items": 3
+  },
+  "M": {
+   "hits": 0,
+   "items": 1
+  }
+ },
+ "scriptCallsEdges": {
+  "total": 324,
+  "byStatusReason": [
+   [
+    "possible",
+    "name-match",
+    32
+   ],
+   [
+    "possible",
+    "prompt-mention",
+    271
+   ],
+   [
+    "possible",
+    "shell-dynamic",
+    21
+   ]
+  ],
+  "bySourceUnitLanguage": {
+   "shell": 53,
+   "markdown": 271
+  },
+  "confirmed": 0
+ },
+ "dropped": {
+  "consumer-key-none": 5,
+  "script-call-unmatched": 303,
+  "script-call-ambiguous": 4
+ },
+ "noise": "not computed: Q and the wrong-possible bound need the custodian's labels, which a dev run does not have; no reduction, burden sum or baseline [k, n] was computed or printed",
+ "note": "scripts hits beyond the 30 expected: 4 coincident distance-2 items in withheld families (G one-segment 1, H 1, I 2), each reached through a Markdown caller that mentions both scripts (chains.py); the resolver names none of them"
+}

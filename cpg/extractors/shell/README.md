@@ -29,6 +29,7 @@ lineEnd)])` returns `(lastChangedAt, lastChangedCommit)`; without it symbols car
 | `eval`, a computed command name, a computed `source`/`.` path, an argument using `${!name}` | `possible`/`shell-dynamic` |
 | the leading literal of the one argument of `eval` (`eval "mcp-call $TOOL"`, `eval 'a "b c"'`) | the `eval` site as above **plus** one inner call site per complete simple command in it (below) |
 | each argument `a0`.. (at most 32) | a `valueSet`: `const`, `template`, `ref`, `unknown` alternatives |
+| a computed command word (`calleeName` `<dynamic>`, not `eval`) | one more `valueSet`, `arg` `recv`, the word's value in the same shape (`"$ROOT/scripts/x.sh"` is a `template` of an `unknown` head and `/scripts/x.sh`); no `data` record. The assembler's scripts resolver reads it (`docs/plans/connected-code-graph-p1-closeout.md` §3.1) |
 | a once-assigned script variable | a `constant` (`path::NAME`); functions read it as `{"ref": ...}` |
 | a value that comes from `$N`, `$@` or a command substitution, through assignments | `data` (use = the call site `a<i>`, def = the `param` `p<k>` or the inner call site `r`), `confirmed`/`intra-flow`; `possible`/`shell-dynamic` through `${!n}` or into `eval` |
 
@@ -81,7 +82,8 @@ Warnings go to the `warnings` list as `{path, code, line, detail}`; the shell `s
   `<script>` symbol and one `parse-error` warning. On `git ls-files '*.sh'` that is 5 of 113 files (about 4.4%):
   `claude/teco/hooks/test-ensure-environment.sh`, `cpg/eval/headless/tests/test_launcher.sh`, `cpg/sandbox/offline-run.sh`,
   `cpg/sandbox/tests/test_sandbox.sh`, `skills/joern-cpg/scripts/test-stamp-wiring.sh`; the causes are `(( 0$(...) ))`,
-  `<>/dev/tcp` and `<<<`. An error-tolerant extractor is a P2 backlog item.
+  `<>/dev/tcp` and `<<<`. (A `;` inside a `${...}` word, the cause in `test-stamp-wiring.sh`, is handled: a file the first parse rejects is parsed
+  once more with those `;` hidden, same length, and every text is still read from the original bytes.) An error-tolerant extractor is a P2 backlog item.
 
 - No `cond`/`ret` records, so `complexity` is 1 (spec4 §2: 1 + own `cond` records).
 - `shift`, `set --`, `getopts`, `$#`, arrays, `declare -n`, `export -f`, functions defined by `eval` and `bash -c` strings (an `eval` string's commands are call sites only).

@@ -14,7 +14,8 @@ walk is an explicit-stack loop, nesting deeper than ``MAX_DEPTH`` and a file ove
 per-command arguments, the expansion-resolution depth and the records per file are capped. A name that leaves
 ``unit_root`` (``..``, an absolute name, a symlink out), a file that is not regular and bytes that are not UTF-8
 (index D12) raise ``SourceRefused``: the unit fails, nothing is skipped silently. A file tree-sitter cannot parse
-cleanly is a warning (``warnings``) and keeps its ``<script>`` symbol with no calls.
+cleanly is a warning (``warnings``) and keeps its ``<script>`` symbol with no calls; a ``;`` inside a ``${...}`` word, which the grammar
+rejects and bash does not, is hidden for one more parse (``_hide_expansion_semicolons``).
 
 **What is modelled** (everything else is a recorded limit, README):
 
@@ -28,7 +29,8 @@ cleanly is a warning (``warnings``) and keeps its ``<script>`` symbol with no ca
   An ``eval`` with exactly one argument keeps its call site and *adds* one inner ``possible``/``shell-dynamic`` call site
   per complete simple command found by parsing the argument's leading literal as shell (``_eval_sites``; P1-10 10b);
   an inner command naming a function of the file resolves to it like any other command (the bundle schema ties ``resolved`` to ``confirmed``).
-- *Values.* Each argument (``a0``..) has a ``valueSet``: a literal, an interpolated string (``template``), the reaching
+- *Values.* A computed command word (``<dynamic>``) has a ``valueSet`` of ``arg`` ``recv`` (its value, same shape as an argument's, no ``data``
+  record). Each argument (``a0``..) has a ``valueSet``: a literal, an interpolated string (``template``), the reaching
   assignment(s) of a variable in the same scope, a ``ref`` to a once-assigned script-level variable (``constant``), or
   an ``unknown``. A literal that fails the token screen (``bundle.screen_fails``) and the value assigned to a
   variable whose name fails the name rule, or that follows a flag whose name does, is withheld as ``unknown``.
@@ -102,6 +104,25 @@ def _parse(data: bytes):
 
     tree = _parser().parse(read)
     return None if expired else tree
+
+
+def _hide_expansion_semicolons(data: bytes) -> bytes:
+    """``data`` with every ``;`` inside a ``${...}`` replaced by ``,`` (same length, so every offset and line is unchanged). tree-sitter-bash
+    reads a ``;`` in a parameter-expansion word (``${v:+$v; }``) as a command separator and fails the whole file; bash reads it as text. Only
+    used for a second parse of a file the first parse rejected; the extractor still reads every text from the original bytes."""
+    out, depth, i = bytearray(data), 0, 0
+    while i < len(out):
+        if out[i:i + 2] == b"${":
+            depth, i = depth + 1, i + 2
+            continue
+        if depth and out[i] == ord("{"):
+            depth += 1
+        elif depth and out[i] == ord("}"):
+            depth -= 1
+        elif depth and out[i] == ord(";"):
+            out[i] = ord(",")
+        i += 1
+    return bytes(out)
 
 
 # --- small helpers --------------------------------------------------------------------------------------
@@ -775,9 +796,14 @@ class _FileExtractor:
     def _arguments(self, sc: _Scope, cmd: Node, rec: dict) -> None:
         sym, cs_id = sc.sym_id, rec["id"]
         is_eval = rec["calleeName"] == "eval"
-        name_end = cmd.child_by_field_name("name").end_byte
+        name_node = cmd.child_by_field_name("name")
+        name_end = name_node.end_byte
         argv = [c for c in cmd.named_children if c.start_byte >= name_end and c.type not in _REDIRECTS]
         dynamic, prev_flag, first_text = rec["calleeName"] == "<dynamic>" or is_eval, None, None
+        if rec["calleeName"] == "<dynamic>":                    # a computed command word keeps its value in `recv` (closeout plan §3.1); no data record
+            word = self._ev(name_node, sc, name_node.start_byte, 0)
+            self.records.append({"type": "valueSet", "id": ids.value_set_id(cs_id, "recv"), "callSiteId": cs_id, "arg": "recv",
+                                 "values": self._values(word.alts, False)})
         for i, a in enumerate(argv[:MAX_ARGS]):
             p = self._ev(a, sc, a.start_byte, 0)
             if i == 0:
@@ -840,6 +866,11 @@ def extract_shell(unit_root: str | os.PathLike, files: Iterable[str], *, repo_id
             out += [fx.file_record(), fx.script_symbol()]
             continue
         depth, bad = _scan(tree.root_node)
+        if bad is not None and b"${" in data and b";" in data:      # a ";" inside "${...}" fails the grammar, not bash: one more parse
+            retry = _parse(_hide_expansion_semicolons(data))
+            if retry is not None and _scan(retry.root_node)[1] is None:
+                tree = retry
+                depth, bad = _scan(tree.root_node)
         if depth > MAX_DEPTH:
             fx.warn("too-deep", None, f"syntax tree nesting {depth} is over {MAX_DEPTH}")
             out += [fx.file_record(), fx.script_symbol()]

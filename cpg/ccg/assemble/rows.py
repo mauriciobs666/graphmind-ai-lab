@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ast
 import json
+import posixpath
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -85,6 +86,12 @@ _SYMBOL_PROPS = ("kind", "name", "nameNorm", "qname", "path", "lineStart", "line
                  "lastChangedAt", "lastChangedCommit", "complexity", "lang", "signature")
 _LAUNCH_PROPS = (("protocol", "protocol"), ("port", "port"), ("envVar", "envVar"), ("mountPath", "mountPath"),
                  ("service", "service"), ("command", "argv0"))
+#: The arguments whose value sets the script resolver reads: ``recv`` is the computed command word of a shell site, ``a0``..``a3`` the
+#: first arguments of a launcher (``_SCRIPT_LAUNCHERS``), searched for the first one that is not a flag.
+_PATH_ARGS = frozenset({"recv", "a0", "a1", "a2", "a3"})
+#: Command words whose first non-flag argument is the script they run or source.
+_SCRIPT_LAUNCHERS = frozenset({".", "source", "exec", "bash", "sh", "dash", "zsh"})
+_PATH_TOKEN_REFUSED = re.compile(r"[\s$~*?\[\]{}()\\\"'`;|&<>]")
 _PORT_ORIGINS = ("explicit", "env-default", "compose", "pack-default")
 _STRENGTH = {"confirmed": 0, "possible": 1}
 _RFC3339_Z = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
@@ -416,6 +423,9 @@ def build_rows(bundles: Sequence[Sequence[dict]], links: Any, facts: Any, *, sys
     by_name: dict[tuple[str, str], list[str]] = {}
     parents: dict[str, str | None] = {}
     entry_ids: set[str] = set()
+    scripts: dict[str, dict[str, str]] = {}                       # repoId -> path -> symbolId of the shell ``<script>`` symbol
+    script_sites: list[tuple[str, str, dict]] = []                # (repoId, unit language, callsite) of the sites with no resolved target
+    arg_values: dict[tuple[str, str], list] = {}                  # (callSiteId, arg) -> values, for the paths ``_site_path`` reads
 
     # pass 1: index every point, symbol and config entry, so edges find both ends whichever bundle holds them
     for records in ordered:
@@ -427,6 +437,13 @@ def build_rows(bundles: Sequence[Sequence[dict]], links: Any, facts: Any, *, sys
                 sym_lang[r["id"]], sym_path[r["id"]], sym_unit[r["id"]] = r["lang"], r["path"], header["unitId"]
                 by_name.setdefault((r["lang"], r["name"]), []).append(r["id"])
                 parents[r["id"]] = r.get("parentId")
+                if r["lang"] == "shell" and r["kind"] == "script":
+                    scripts.setdefault(r["repoId"], {})[r["path"]] = r["id"]
+            elif t == "callsite" and not r["targets"]:
+                script_sites.append((header["unit"]["repoId"], header["unit"]["lang"], r))
+                point_label[r["id"]] = "CallSite"
+            elif t == "valueSet" and r["arg"] in _PATH_ARGS:
+                arg_values[(r["callSiteId"], r["arg"])] = r["values"]
             elif t in ("param", "ret", "cond", "callsite"):
                 point_label[r["id"]] = {"param": "Param", "ret": "Ret", "cond": "Cond", "callsite": "CallSite"}[t]
             elif t in ("configEntry", "launchFact"):
@@ -486,6 +503,7 @@ def build_rows(bundles: Sequence[Sequence[dict]], links: Any, facts: Any, *, sys
     _contracts(b, facts, links, point_label, symbol_ids, entry_ids, unit_index, {p["id"] for p in packs})
     _mounts(b, facts, packs, point_label, symbol_ids, sym_unit)
     _launches(b, facts, entry_ids, unit_index)
+    _script_calls(b, scripts, script_sites, arg_values, sym_path)
 
     for p_id, version, content in triples:
         b.node("Pack", {"packId": p_id, "version": version, "contentHash": content})
@@ -511,6 +529,113 @@ def check_edge_groups(rows: GraphRows) -> None:
     for group in rows.edges:
         if group not in EDGE_GROUPS:
             raise AssembleError(f"edge group ({group[0]})-[:{group[1]}]->({group[2]}) is not in the P1 list")
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# the scripts resolver (``docs/plans/connected-code-graph-p1-closeout.md`` §3.1)
+# ---------------------------------------------------------------------------------------------------------------------
+def _static_path(values: Sequence[Mapping]) -> tuple[bool, str] | None:
+    """``(dynamic head, text)`` of a value set that is one path: a literal, or a template of leading computed pieces followed by literal
+    text only. ``None`` for anything else (several alternatives, a computed piece after a literal one, no literal text at all)."""
+    if len(values) != 1:
+        return None
+    el = values[0]
+    if "const" in el:
+        return (False, el["const"]) if isinstance(el["const"], str) and el["const"] else None
+    pieces = el.get("template")
+    if not pieces:
+        return None
+    head = 0
+    while head < len(pieces) and "const" not in pieces[head]:
+        head += 1
+    rest = pieces[head:]
+    if not rest or any("const" not in x or not isinstance(x["const"], str) for x in rest):
+        return None
+    return head > 0, "".join(x["const"] for x in rest)
+
+
+def _segments(path: str) -> list[str]:
+    """``path``'s segments with ``.`` and empty ones removed and ``..`` applied; a ``..`` with nothing before it is dropped (its target was
+    the computed head, which is not known)."""
+    out: list[str] = []
+    for seg in path.split("/"):
+        if seg in ("", "."):
+            continue
+        if seg == "..":
+            if out:
+                out.pop()
+        else:
+            out.append(seg)
+    return out
+
+
+def _site_path(site: Mapping, lang: str, arg_values: Mapping) -> tuple[bool, str] | None:
+    """The script path a call site names, as ``(dynamic head, text)``, or ``None`` when it names none."""
+    callee = site["calleeName"]
+    if lang == "markdown":
+        return (False, callee) if site["callKind"] == "mention" else None
+    if lang != "shell":
+        return None
+    if callee == "<dynamic>":
+        vs = arg_values.get((site["id"], "recv"))
+        return None if vs is None else _static_path(vs)
+    if callee in _SCRIPT_LAUNCHERS:
+        for i in range(4):
+            vs = arg_values.get((site["id"], f"a{i}"))
+            if vs is None:
+                return None
+            flag = _static_path(vs)
+            if flag is not None and not flag[0] and flag[1].startswith("-"):
+                if flag[1] == "-c":                                 # `bash -c '...'`: the next argument is a command line
+                    return None
+                continue
+            return flag
+        return None
+    return (False, callee) if "/" in callee else None
+
+
+def _script_calls(b: _Builder, scripts: Mapping[str, Mapping[str, str]], sites: Sequence[tuple[str, str, dict]], arg_values: Mapping,
+                  sym_path: Mapping[str, str]) -> None:
+    """Add a ``CALLS`` edge from a call site that names a script by path to that script's ``<script>`` symbol, within the site's repository.
+
+    Tier 1: a literal path with a ``/``, taken relative to the calling file's directory then the repository root, equal to a script of the
+    snapshot: the site's own status and reason. Tier 2: the path tail after a computed head (or a tier-1 miss), ``.`` and ``..`` applied, of at
+    least two segments, equal to the end of exactly one script path: ``possible``. A basename never matches; a missing file, several matches and
+    a one-segment tail give no edge (counted)."""
+    by_base: dict[str, dict[str, list[str]]] = {}
+    for repo, paths in scripts.items():
+        for path in paths:
+            by_base.setdefault(repo, {}).setdefault(path.rsplit("/", 1)[-1], []).append(path)
+    for repo, lang, site in sites:
+        named = _site_path(site, lang, arg_values)
+        if named is None:
+            continue
+        dynamic, text = named
+        if "/" not in text or (text.startswith("/") and not dynamic) or _PATH_TOKEN_REFUSED.search(text):
+            continue
+        known = scripts.get(repo, {})
+        owner = sym_path[site["symbolId"]]
+        target, status = None, site["status"]
+        if not dynamic:                                                # tier 1
+            for base in (owner.rpartition("/")[0], ""):
+                joined = posixpath.normpath(posixpath.join(base, text))
+                if not joined.startswith("..") and joined in known:
+                    target = known[joined]
+                    break
+        if target is None:                                             # tier 2
+            tail = _segments(text)
+            hits = sorted({p for p in by_base.get(repo, {}).get(tail[-1], ()) if p == "/".join(tail) or p.endswith("/" + "/".join(tail))}) \
+                if len(tail) >= 2 else []
+            if len(hits) > 1:
+                b.drop("script-call-ambiguous")
+                continue
+            if not hits:
+                b.drop("script-call-unmatched")
+                continue
+            target, status = known[hits[0]], "possible"
+        if target == site["symbolId"]:                                 # a script that names itself is not its own caller
+            continue
+        b.edge(("CallSite", site["id"]), "CALLS", ("Symbol", target), _non_default("CALLS", status, site["reason"]), key=(status, site["reason"]))
 
 
 def _record(b: _Builder, r: dict, unit_id: str, repo_id: str, point_label: dict, symbol_ids: set, sym_lang: dict, sym_path: dict,

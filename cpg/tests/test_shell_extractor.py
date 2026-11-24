@@ -882,3 +882,102 @@ def test_the_module_imports_no_bundle_rule_deciding_name():
     """The AST tripwire's own check (tests/test_writer_rules.py) runs over `extractors/**`; this pins the module is in it."""
     src = Path(shell.__file__).read_text(encoding="utf-8")
     assert "gate_argv" not in src and "bind_value_allowed" not in src and "valuehash" not in src
+
+
+# --- CO-2: the computed command word's value (`recv`, closeout plan §3.1) -----------------------------------
+
+def recv_sets(recs):
+    return [r for r in of(recs, "valueSet") if r["arg"] == "recv"]
+
+
+def test_a_computed_command_word_gets_a_recv_value_set_that_keeps_its_literal_tail_and_marks_the_dynamic_head(tmp_path):
+    recs, _ = snippet(tmp_path, '"$REPO_DIR/scripts/x.sh" --flag\n')
+    (c,) = calls(recs, "s.sh::<script>", "<dynamic>")
+    (rv,) = recv_sets(recs)
+    assert rv["callSiteId"] == c["id"] and rv["id"] == ids.value_set_id(c["id"], "recv")
+    assert rv["values"] == [{"template": [{"unknown": "unresolved-ref"}, {"const": "/scripts/x.sh"}]}]
+    assert values(recs, c, "a0") == [{"const": "--flag"}]                      # the arguments keep their own paths
+    assert [d for d in of(recs, "data") if d["use"] == c["id"]] == []          # no flow record for the command word
+    assert_valid(recs)
+
+
+def test_a_dynamic_head_derived_from_a_command_substitution_is_point_derived_and_writes_no_data_record(tmp_path):
+    recs, _ = snippet(tmp_path, '"$(dirname "$0")/../../scripts/x.sh" a\n')
+    (rv,) = recv_sets(recs)
+    assert rv["values"] == [{"template": [{"unknown": "point-derived"}, {"const": "/../../scripts/x.sh"}]}]
+    c = calls(recs, "s.sh::<script>", "<dynamic>")[0]
+    assert [d for d in of(recs, "data") if d["use"] == c["id"]] == []
+    assert_valid(recs)
+
+
+def test_only_a_dynamic_command_word_gets_a_recv_value_set(tmp_path):
+    recs, _ = snippet(tmp_path, 'echo "$1"\n./scripts/x.sh a\neval "$1"\nSRC=1\nsource "$SRC/lib.sh"\n')
+    assert recv_sets(recs) == []
+    assert_valid(recs)
+
+
+def test_a_computed_command_word_inside_a_function_is_recorded_too(tmp_path):
+    recs, _ = snippet(tmp_path, 'f() { "$ROOT/run.sh" "$1"; }\n')
+    (rv,) = recv_sets(recs)
+    assert rv["values"] == [{"template": [{"unknown": "unresolved-ref"}, {"const": "/run.sh"}]}]
+    assert_valid(recs)
+
+
+def test_no_default_pack_reads_a_recv_value_set_of_a_shell_site():
+    """The ruling's negative pin: the packs' facts over the shell goldens and the fixture scripts are the same with and without the `recv` records."""
+    from ccg.packrt import run_packs
+    from ccg.refresh import DEFAULT_PACKS
+    from ccg.rulepack import load_pack
+    recs = []
+    for root in (DATA, CPG / "fixtures/system1"):
+        got, _ = run(sorted(p.relative_to(root).as_posix() for p in root.rglob("*.sh")), root=root)
+        recs += got
+    assert recv_sets(recs), "no input holds a computed command word: the pin would be vacuous"
+    packs = [load_pack(CPG / "packs" / n / "pack.yaml") for n in DEFAULT_PACKS]
+    bare = [r for r in recs if not (r["type"] == "valueSet" and r["arg"] == "recv")]
+    assert run_packs([recs], packs) == run_packs([bare], packs)
+
+
+# --- CO-2a: a `;` inside a `${...}` word is not a parse error (tree-sitter-bash rejects it; bash does not) ---------
+
+def test_a_semicolon_inside_a_parameter_expansion_word_keeps_the_files_calls(tmp_path):
+    recs, warns = snippet(tmp_path, 'f() {\n  msg="${msg:+$msg; }no refusal"\n  echo "$msg"\n}\n')
+    assert [w["code"] if isinstance(w, dict) else w for w in warns] == []
+    assert [c["calleeName"] for c in calls_in(recs, "s.sh::f")] == ["echo"]
+    assert_valid(recs)
+
+
+def test_the_semicolon_inside_the_expansion_stays_in_the_extracted_value(tmp_path):
+    recs, _ = snippet(tmp_path, 'echo "${a:-x; y}"\n')
+    (e,) = calls(recs, "s.sh::<script>", "echo")
+    assert values(recs, e, "a0") == [{"const": "x; y"}, {"unknown": "unresolved-ref"}]
+
+
+def test_a_semicolon_outside_an_expansion_and_a_real_syntax_error_are_untouched(tmp_path):
+    recs, warns = snippet(tmp_path, 'echo a; echo b\nif then fi fi\n')
+    assert len(warns) == 1 and "parse-error" in str(warns[0])
+    assert calls(recs, "s.sh::<script>", "echo") == []                              # a broken file keeps no calls
+
+
+def test_the_stamp_wiring_script_parses_and_keeps_its_run_block_function():
+    rel = "skills/joern-cpg/scripts/test-stamp-wiring.sh"
+    recs, warns = run([rel], root=REPO_ROOT)
+    assert warns == []
+    assert sym(recs, f"{rel}::run_block")
+
+
+def calls_in(records, scope_qname):
+    sid = sym(records, scope_qname)["id"]
+    return sorted((r for r in of(records, "callsite") if r["symbolId"] == sid), key=lambda r: (r["line"], r["ordinal"]))
+
+
+def test_only_the_semicolons_inside_an_expansion_are_hidden_for_the_second_parse(tmp_path):
+    recs, warns = snippet(tmp_path, 'echo a; echo b\nx="${v:+$v; }"\n')
+    assert warns == []
+    assert [c["calleeName"] for c in calls_in(recs, "s.sh::<script>")] == ["echo", "echo"]      # `a; echo b` stayed two commands
+
+
+def test_a_file_that_still_fails_after_the_second_parse_keeps_no_calls_and_the_warning(tmp_path):
+    recs, warns = snippet(tmp_path, 'x="${v:+$v; }"\nif then fi fi\necho a\n')
+    assert len(warns) == 1 and warns[0]["code"] == "parse-error"
+    assert calls_in(recs, "s.sh::<script>") == []
