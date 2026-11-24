@@ -23,3 +23,9 @@ Pending stakeholder: D-2 (Ollama gaps), D-3, D-4, D-5 in `docs/plans/llm-gateway
 | U0e req reconcile AC-14/AC-2/AC-6 | `tico` | `a99451ad323911b3e` | delivered | `docs/requirements/llm-gateway.md` | — → — | — |
 
 2026-11-24: rev 4 delivered (code root /opt/llmgateway, release-by-outcome, boot/service actors). Open assumption to verify at build: a complete provider 4xx/5xx reply is not billed.
+
+Build phase (plan accepted, committed `749633ae`). Plan dispatch table is the unit list; ccg adoption (D11) waits for the P1-38 phase exit. D7's installer and tier-2 need a human `sudo` run.
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| D1 | `coder` | `a1002519559900dfd` | in-flight | `llm-gateway/` scaffold + types | `analyst` (batched D1–D6 diff gate) → — | — |
