@@ -76,14 +76,17 @@ real-component run and the AC-24 retry. Open work: `docs/BACKLOG.md` C-1001.
   not P1's (`docs/reviews/connected-code-graph-p1-47-impl.md` m3). The throwaway `ccg-falkordb-tw-16390` is still up; its
   teardown needs the user's `--yes`.
 
-**Spike dispositions (index D7).** `cpg/spikes/vertical-slice/` is frozen, not deleted: 60 tracked hits in 39 files were
+**Spike dispositions (index D7).** `cpg/spikes/vertical-slice/` is frozen, not deleted: 60 tracked hits in 39 files at the spike report's commit 62d3ca48 (63 in 41 files now, since the close documents themselves mention the frozen directory) were
 ruled one by one in `docs/test-reports/connected-code-graph-p1-spike-dispositions-report.md`; the directory carries a
 `FROZEN` README and `cpg/README.md` marks it. Deletion is a backlog item (C-1001).
 
 **Other documentation updated at this close:** `cpg/README.md` (Layout, Setup extras, Tests markers, a "Running a build
 and an answer" section, the frozen marker) and the `cpg/` bullet of root `AGENTS.md`. Left to their owners: the
 rule-pack spec rows, `skills/joern-cpg`/`skills/cpg-analysis`, the archive flips and the whole-component `cpg/` live spec
-(owed at the feature close after P2), all listed in `docs/plans/connected-code-graph-p1.md` §11.
+(owed at the feature close after P2), all listed in `docs/plans/connected-code-graph-p1.md` §11. The README does not list
+`ccg/gateway/`, `holderclient.py` or the `../llm-gateway` install step: they belong to the llm-gateway feature's own
+close. Requirements follow-ups for `tico` (non-blocking): Q-ENV and the P1-34 fresh draw are not yet in the requirements
+decision log.
 
 ## 2026-11-24 — C-1001 P1 wave W4: egress, gates, flow re-measure, smoke, noise, oracle, exit runs ✅
 
