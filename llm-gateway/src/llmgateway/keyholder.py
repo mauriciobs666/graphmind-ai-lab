@@ -8,6 +8,24 @@ sends, and answers every refusal as a completed exchange (499, refusal content t
 
 It imports no provider adapter: the closed per-kind tables below are its own copy.
 
+Run bounds (`_bound_for`): the first `[[run_bounds]]` entry, in file order, whose `match` glob
+`fnmatch.fnmatchcase`s the run id supplies the bound (`*`, `?`, `[...]`, case-sensitive); the
+library's `policy.check_run_bound` matches the same way (`tests/test_holder_run_bounds.py` runs
+one case table against both).
+
+Body validation (`validate_body`) fails closed and never clamps. `tools` and `cache_control` are
+refused at any depth, even as a JSON-schema property name (false positives accepted). A limit alias
+(`max_tokens`, `max_completion_tokens`, `num_predict`) is refused anywhere except where it names a
+property of a JSON schema (a key directly under `properties`, `patternProperties`, `$defs` or
+`definitions`), so a structured-output schema may have a field called `max_tokens`.
+
+Any internal fault while serving an authenticated request is answered with a signed
+`upstream-error` close reason (class `connection`: retryable), never a refusal code and never an
+unsigned reply; `failures.HOLDER_REFUSALS` has no internal-error code.
+
+`calls.log` is rotated by size (`HolderSettings.log_max_bytes`, default `LOG_MAX_BYTES`): one
+previous file, `calls.log.1`, is kept.
+
 Subcommands (`main`): `serve` (default), `check-deployment`, `add-caller`, `install-user-file`,
 `log`.
 """
@@ -58,7 +76,8 @@ MAX_RUN_ID_CHARS = 256
 _LOCAL_KINDS = frozenset({"lmstudio", "ollama", "openai_compat"})  # config.py's local kinds
 # The broker's reply cap, `ccg.broker.framing.MAX_RESPONSE_BYTES` (cpg/ccg/broker/framing.py),
 # hard-coded: llm-gateway imports no ccg. A larger holder reply would be undeliverable (the broker
-# closes the connection with no reply); `tests/test_holder_endpoint.py` pins the number to the source.
+# closes the connection with no reply); `tests/test_holder_endpoint.py` pins the number to the
+# source.
 MAX_BROKER_RESPONSE_BYTES = 16 * 1024 * 1024
 
 
@@ -112,6 +131,10 @@ KINDS: dict[str, KindSpec] = {
 KINDS["lmstudio"] = KINDS["openai_compat"]
 LIMIT_NAMES = frozenset({"max_tokens", "max_completion_tokens", "num_predict"})
 GUARDED_ANYWHERE = frozenset({"cache_control", "tools"})
+SCHEMA_NAME_CONTAINERS = frozenset({"properties", "patternProperties", "$defs", "definitions"})
+# `calls.log` rotates at this size. The plan's `[holder]` table has no key for it, so it is a
+# constant (overridable per holder through `HolderSettings.log_max_bytes`).
+LOG_MAX_BYTES = 16 * 1024 * 1024
 UNRELEASED_STATUSES = frozenset({408, 504, 524})
 
 
@@ -177,7 +200,8 @@ def validate_body(provider: Provider, body: bytes) -> tuple[int, str]:
     for path, key in _walk_keys(doc):
         if key in GUARDED_ANYWHERE and key not in provider.extra_body_keys:
             raise BodyRefused("body_invalid")
-        if key in LIMIT_NAMES and path + (key,) not in allowed_limits:
+        in_schema_names = bool(path) and path[-1] in SCHEMA_NAME_CONTAINERS
+        if key in LIMIT_NAMES and not in_schema_names and path + (key,) not in allowed_limits:
             raise BodyRefused("body_invalid")  # a nested or other kind's alias
     if doc.get("stream", False) is not False:
         raise BodyRefused("body_invalid")
@@ -573,6 +597,7 @@ class HolderSettings:
     read_timeout: float = 5.0
     max_connections: int = 64
     max_nonces: int = 100_000
+    log_max_bytes: int = LOG_MAX_BYTES
 
 
 class Holder:
@@ -593,17 +618,43 @@ class Holder:
             )
         except LedgerLocked as exc:
             raise HolderStartError(str(exc)) from None
+        self._log_path = os.path.join(settings.state_root, "calls.log")
+        self._log_fd = self._open_log()
+        self._stop = threading.Event()
+        self._sock: socket.socket | None = None
+
+    def _open_log(self) -> int:
         old = os.umask(0o077)
         try:
-            self._log_fd = os.open(
-                os.path.join(settings.state_root, "calls.log"),
+            return os.open(
+                self._log_path,
                 os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW | os.O_CLOEXEC,
                 0o600,
             )
         finally:
             os.umask(old)
-        self._stop = threading.Event()
-        self._sock: socket.socket | None = None
+
+    def _rotate_log(self) -> None:
+        """Move `calls.log` to `calls.log.1` (replacing the previous one) and start a new file
+        with the old file's mode and owner. Called under `_log_lock`; a failure keeps appending
+        to the current file (a log that cannot rotate must not lose the call)."""
+        try:
+            before = os.fstat(self._log_fd)
+            os.replace(self._log_path, self._log_path + ".1")
+            fd = self._open_log()
+            try:
+                os.fchmod(fd, stat.S_IMODE(before.st_mode))
+                after = os.fstat(fd)
+                if (after.st_uid, after.st_gid) != (before.st_uid, before.st_gid):
+                    os.fchown(fd, before.st_uid, before.st_gid)
+            except OSError:
+                os.close(fd)
+                raise
+        except OSError as exc:
+            self._diag(f"log rotation failed {type(exc).__name__}")
+            return
+        os.close(self._log_fd)
+        self._log_fd = fd
 
     # -- configuration, per request ----------------------------------------------------------
 
@@ -686,7 +737,8 @@ class Holder:
             reply = self._answer(secret, hdr, exc.code)
         except Exception as exc:  # never a traceback or message: the type name only
             self._diag(f"internal error {type(exc).__name__}")
-            reply = self._answer(secret, hdr, "body_invalid")
+            reply = self._upstream_failure("upstream-error", secret, hdr.nonce)
+            status = 0
         self._log_call(now, hdr, status, tokens, connected[0] if connected else None)
         return reply
 
@@ -743,7 +795,7 @@ class Holder:
         try:
             addresses = [host] if _is_ip(host) else self.s.resolver(host, port)
         except OSError:
-            return self._upstream_failure("upstream-error"), 0, 0
+            return self._upstream_failure("upstream-error", secret, hdr.nonce), 0, 0
         if not addresses or not all(address_allowed(a, provider.allow_private) for a in addresses):
             raise Refusal("address_forbidden")
         run_bound, cap_bound = self._bound_for(policy, hdr.run_id)
@@ -847,9 +899,9 @@ class Holder:
         """`calls.log`: ts, caller, run_id, endpoint, status, tokens, resolved_addr (the pinned
         address connected to; null when no connection was attempted); no body, no key.
 
-        Known limit: neither `calls.log` nor the ledger's `reservations` rows are ever pruned or
-        rotated, so a credential holder's call volume grows `/var/lib/llmholder` without bound
-        (review P5-4); the holder's own disk, under the human's watch, is the only bound."""
+        `calls.log` rotates by size (one previous file). Known limit: the ledger's `reservations`
+        rows are never pruned (review P5-4), so a credential holder's call volume still grows
+        `/var/lib/llmholder`; the holder's own disk, under the human's watch, is the bound."""
         line = json.dumps(
             {
                 "ts": int(now),
@@ -862,8 +914,11 @@ class Holder:
             },
             separators=(",", ":"),
         )
+        data = line.encode("utf-8") + b"\n"
         with self._log_lock:
-            os.write(self._log_fd, line.encode("utf-8") + b"\n")
+            if os.fstat(self._log_fd).st_size + len(data) > self.s.log_max_bytes:
+                self._rotate_log()
+            os.write(self._log_fd, data)
 
     @staticmethod
     def _diag(message: str) -> None:

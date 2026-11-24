@@ -118,6 +118,49 @@ def test_aliases_and_nested_limit_keys_refused(kind, doc):
     assert refused(prov(kind), doc) == "body_invalid"
 
 
+SCHEMA = {"type": "object", "properties": {"max_tokens": {"type": "integer"}}}
+
+
+def _anth_schema(schema):
+    return {**ANTH, "output_config": {"format": {"type": "json_schema", "schema": schema}}}
+
+
+@pytest.mark.parametrize(
+    "kind,doc",
+    [
+        ("anthropic", _anth_schema(SCHEMA)),
+        ("anthropic", _anth_schema({"$defs": {"max_tokens": {}}})),
+        ("openai_compat", {**OAI, "response_format": {"json_schema": {"schema": SCHEMA}}}),
+        (
+            "openai_compat",
+            {
+                **OAI,
+                "response_format": {
+                    "json_schema": {"schema": {"properties": {"max_completion_tokens": {}}}}
+                },
+            },
+        ),
+        ("ollama", {**OLL, "format": {"properties": {"num_predict": {"type": "integer"}}}}),
+    ],
+)
+def test_a_schema_property_may_be_named_like_a_limit(kind, doc):
+    limit, _ = validate_body(prov(kind), json.dumps(doc).encode())
+    assert limit == 100
+
+
+def test_a_schema_property_named_tools_or_cache_control_is_still_refused():
+    for name in ("tools", "cache_control"):
+        schema = {"type": "object", "properties": {name: {"type": "string"}}}
+        assert refused(prov(), _anth_schema(schema)) == "body_invalid"
+
+
+def test_the_schema_exemption_does_not_cover_a_real_limit_next_to_it():
+    doc = {**ANTH, "output_config": {"properties": {"x": 1}, "max_tokens": 9}}
+    assert refused(prov(), doc) == "body_invalid"
+    opts = {"properties": {"x": 1}, "max_tokens": 9}
+    assert refused(prov("ollama"), {**OLL, "options": opts}) == "body_invalid"
+
+
 def test_duplicate_keys_at_any_depth_and_non_json_refused():
     assert (
         refused(prov(), b'{"model":"m-20250101","max_tokens":1,"max_tokens":2,"messages":[]}')

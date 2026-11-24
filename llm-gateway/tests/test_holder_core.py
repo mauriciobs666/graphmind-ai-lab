@@ -3,6 +3,7 @@ drives it, release by outcome, and key hygiene (plan §3.3, §3.4; §5.2 FR-8, F
 
 import json
 import os
+import sqlite3
 import threading
 import time
 
@@ -751,6 +752,56 @@ def test_internal_errors_log_only_the_exception_type(env, clock, capfd):
     h.close()
     out, err = capfd.readouterr()
     assert "RuntimeError" in err and env.marker not in out + err and "secret detail" not in err
+
+
+def _signed_exchange(h, **kw):
+    """One request through `Holder.process`, the reply parsed as a library client does: a MAC is
+    required (`framing.exchange` rejects an unsigned non-refusal reply as `ReplyRejected`)."""
+    frame, nonce = framing.build_request(
+        CALLER_SECRET,
+        caller="broker",
+        method="POST",
+        endpoint=h.test_endpoint,
+        path="/v1/messages",
+        run_id="eval-1",
+        body=body_for(100),
+        ts=int(h.s.clock()),
+        nonce=None,
+    )
+    raw = h.process(frame[4:])
+    return framing.parse_reply(raw[4:], CALLER_SECRET, nonce, require_mac=True)
+
+
+def test_a_resolver_failure_is_a_signed_upstream_error_reply(env, clock):
+    def dns_down(host, port):
+        raise OSError("temporary failure in name resolution")
+
+    env.write_config(providers={"anth": env.provider(base_url="https://api.anthropic.example")})
+    h = env.holder(clock=clock, upstream=FakeUpstream(), resolver=dns_down)
+    h.test_endpoint = "https://api.anthropic.example"
+    reply = _signed_exchange(h)
+    assert (reply.close_reason, reply.status, reply.authenticated) == ("upstream-error", 0, True)
+    assert total(h) == 0  # nothing was reserved
+    h.close()
+
+
+def test_an_internal_fault_is_a_signed_upstream_error_not_a_rejected_request(
+    env, clock, capfd
+):
+    h = env.holder(clock=clock, upstream=FakeUpstream())
+
+    def broken(**kw):
+        raise sqlite3.OperationalError("disk I/O error with detail")
+
+    h.ledger.reserve = broken
+    reply = _signed_exchange(h)
+    assert (reply.close_reason, reply.status, reply.authenticated) == ("upstream-error", 0, True)
+    assert reply.refusal_code is None
+    h.close()
+    out, err = capfd.readouterr()
+    assert "OperationalError" in err and "detail" not in out + err
+    rows = [json.loads(line) for line in open(f"{env.state_root}/calls.log")]
+    assert [(r["status"], r["tokens"]) for r in rows] == [(0, 0)]
 
 
 def test_calls_log_has_no_bodies_and_is_holder_only(env, clock):

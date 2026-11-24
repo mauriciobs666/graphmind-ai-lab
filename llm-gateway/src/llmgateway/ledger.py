@@ -9,18 +9,18 @@ refused), `keep`t (the safe floor until the window rolls off) or `release`d (an 
 limiter caps releases per window). The clock is injected so the rolling window is testable.
 A second process on the same ledger is refused by a lock file.
 
-Intent (plan §3.4, "Release by outcome"): once the window's `window_max_released` is spent, `reserve`
-refuses every call with `release_cap_reached` BEFORE anything is sent. This is the error-storm
-limiter and it is the plan's decision, not an accident: it stops a retry storm from reaching the
-provider at all. The price is deliberate and bounded by the window: a provider outage (JSON 5xx
-is released) or a credential holder sending provider-400 requests can pause hosted use until the
-oldest release rolls off. Whoever holds the credential can also spend the whole window ceiling,
-so this adds no new reach; `release` degrades to keeping the reservation only for the in-flight
-calls that were already admitted.
+Intent (plan §3.4, "Release by outcome"): once the window's `window_max_released` is spent,
+`reserve` refuses every call with `release_cap_reached` BEFORE anything is sent. This is the
+error-storm limiter and it is the plan's decision, not an accident: it stops a retry storm from
+reaching the provider at all. The price is deliberate and bounded by the window: a provider outage
+(JSON 5xx is released) or a credential holder sending provider-400 requests can pause hosted use
+until the oldest release rolls off. Whoever holds the credential can also spend the whole window
+ceiling, so this adds no new reach; `release` degrades to keeping the reservation only for the
+in-flight calls that were already admitted.
 
 Known limit: rows in `reservations` are never pruned (the run totals and the rolling window both
-read them), and the holder's `calls.log` is never rotated; neither is bounded except by the
-holder's own disk under the human's watch.
+read them); they are bounded only by the holder's own disk under the human's watch. (`calls.log`
+rotates by size, see `keyholder.py`.)
 """
 
 from __future__ import annotations

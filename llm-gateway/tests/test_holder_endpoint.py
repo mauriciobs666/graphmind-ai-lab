@@ -106,7 +106,13 @@ def test_default_port_hosted_entry_is_served_for_the_brokers_canonical_form(env,
 def test_a_different_origin_is_still_unknown(env):
     env.write_config(providers={"anth": env.provider(base_url="https://127.0.0.1")})
     h = env.holder(clock=Clock(), upstream=_redirecting(env, []))
-    for endpoint in ("https://127.0.0.1:8443", "http://127.0.0.1:443", "https://127.0.0.2:443", "nonsense", ""):
+    for endpoint in (
+        "https://127.0.0.1:8443",
+        "http://127.0.0.1:443",
+        "https://127.0.0.2:443",
+        "nonsense",
+        "",
+    ):
         assert call(h, endpoint=endpoint).refusal_code == "endpoint_unknown"
     h.close()
 
