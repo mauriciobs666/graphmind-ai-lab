@@ -43,6 +43,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from llmgateway.config import is_hosted_config
 from llmgateway.engine import PreparedStep, StepContext
 from llmgateway.failures import Condition, classify_condition, classify_exception
 from llmgateway.providers.base import BuiltRequest, Provider
@@ -110,8 +111,11 @@ class Residency:
         scopes: tuple[str, ...] = (),
         run_id: str | None = None,
         timeout_s: float = 120.0,
+        hosted: bool = False,
     ) -> None:
         self._transport, self._provider = transport, provider
+        # a keyed provider is hosted whatever the caller says: the wire flag is never weaker
+        self._hosted = hosted or is_hosted_config(config)
         self._id, self._config = provider_id, config
         self._wire = {
             "component": component,
@@ -150,7 +154,7 @@ class Residency:
             base_url=str(self._config.get("base_url", "")),
             path=built.path,
             body=built.body,
-            hosted=False,
+            hosted=self._hosted,
             method=built.method,
             headers=built.headers,
             **self._wire,
@@ -242,6 +246,7 @@ class LoadResidency:
             scopes=ctx.scopes,
             run_id=ctx.request.run_id,
             timeout_s=ctx.timeout_s,
+            hosted=ctx.step.hosted,
         )
         if settings:
             res.check_settings(model or "-", settings)  # parallel and unknown names fail here

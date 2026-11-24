@@ -586,9 +586,17 @@ def test_the_shim_refuses_without_isolated_mode(tr, tmp_path):
     assert res.returncode != 0 and "-I" in res.stderr and "Traceback" not in res.stderr
 
 
-def test_service_unit_refuses_until_the_service_shim_exists(tr, tmp_path):
+def test_service_unit_dry_run_succeeds_with_the_shipped_shim(tr, tmp_path):
     home = tmp_path / "home"
     assert sh(tr, "holder-account").returncode == 0
+    dry = sh(tr, "service-unit", str(UID), str(home), flags=["--dry-run", "--test-root", str(tr)])
+    assert dry.returncode == 0 and "DRY-RUN" in dry.stdout
+
+
+def test_service_unit_refuses_while_the_service_shim_is_absent(tr, tmp_path):
+    home = tmp_path / "home"
+    assert sh(tr, "holder-account").returncode == 0
+    (tr / "opt" / "llmgateway" / "bin" / "service.py").unlink()
     res = sh(tr, "service-unit", str(UID), str(home))
     assert res.returncode == 1 and "service.py does not exist" in res.stderr
     assert not (home / ".config/systemd/user/llmgateway.service").exists()
