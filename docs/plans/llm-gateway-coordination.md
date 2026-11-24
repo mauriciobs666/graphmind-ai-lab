@@ -62,3 +62,7 @@ D7b security re-check: Pass 7 approve with suggestions; P5-1/2/3/5 closed, P5-4 
 | D7c | `coder` | `a2ecc7b066645a497` | delivered (1095 tests re-run green, ruff clean; 22 mutants killed per report; committed) | H1 run_bounds tests, H2 refusal branch, H3 body-key narrowing, lint, `calls.log` rotation | `analyst` re-check → — | — |
 | plan absorb H1/H4 | `architect` | `a5d2d6277492067da` | delivered (5,035 words; committed) | `docs/plans/llm-gateway.md` §3.4 | — → — | — |
 D9a notes for D9b/D10/D13: default-port hosted test cannot listen on 443 so asserts signed `upstream-error` with `bytesIn>0`, not a 499 (differs from spec5 item 12 wording); D9b must add the real-subprocess variant of item 12, credential/fake-key scan over argv and /proc, items 8/9 start-up tests, and the static hosted-entry check will break integration fixtures that rely on loopback hosted entries (need an injected seam); spec5 §8 'gateway extra' must become 'editable install from the checkout, no extra'.
+| D10 | `coder` | `aaa181f71095e2653` | in-flight | `cpg/ccg/gateway/{__init__,brokertransport,manifestmarkers}.py` + tests | `analyst` → — | — |
+| D9a gate (analyst) | `analyst` | `aa88268ad17048330` | in-flight | `docs/reviews/llm-gateway.md` Pass 14 | — → — | — |
+| D9a gate (security) | `security-expert` | `a7b80d0ec280cf976` | in-flight | `docs/reviews/llm-gateway-security.md` Pass 8 | — → — | — |
+| spec5 amend (D9a lessons) | `architect` | `a6c231652670eed13` | in-flight | `docs/plans/connected-code-graph-egress-spec5.md` | — → — | — |
