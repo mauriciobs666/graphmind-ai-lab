@@ -51,7 +51,7 @@ def test_service_refuses_an_unknown_call_site_without_touching_a_provider(servic
 
 
 def test_service_process_carries_no_credential_content(service_pid, service_secret):
-    needle = service_secret.hex().encode()
+    needle = dl.secret_needle(service_secret)
     r = dl.probe_process(service_pid, needle)
     assert r["cmdline"] == dl.Access("read", b"0")
     assert r["environ"] == dl.Access("read", b"0")
@@ -59,4 +59,6 @@ def test_service_process_carries_no_credential_content(service_pid, service_secr
 
 
 def test_service_credential_is_a_real_separate_secret(service_secret, broker_secret):
-    assert service_secret != broker_secret
+    dl.assert_secrets_differ(
+        service_secret, broker_secret, "the service and the broker share one credential"
+    )

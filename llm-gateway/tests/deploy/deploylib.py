@@ -9,6 +9,8 @@ No function here reads, returns or prints a provider key. A caller credential (`
 from __future__ import annotations
 
 import errno
+import hashlib
+import hmac
 import json
 import os
 import pathlib
@@ -21,6 +23,7 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass
+from typing import NamedTuple
 
 CODE_ROOT = "/opt/llmgateway"
 ETC_DIR = "/etc/llmgateway"
@@ -70,6 +73,29 @@ def lstat_problems(path: str, *, uid: int, mode: int, kind: str) -> list[str]:
     if stat.S_IMODE(st.st_mode) != mode:
         out.append(f"{path}: mode {stat.S_IMODE(st.st_mode):04o}, want {mode:04o}")
     return out
+
+
+def tree_differences(ref: str, installed: str) -> list[str]:
+    """Paths whose presence, bytes or executable bit differ between two trees (the verified
+    extract of the reviewed sha vs the installed code root)."""
+
+    def listing(root: str) -> dict[str, tuple[bytes | None, bool]]:
+        out: dict[str, tuple[bytes | None, bool]] = {}
+        for dirpath, dirs, files in os.walk(root):
+            for name in dirs:
+                out[os.path.relpath(os.path.join(dirpath, name), root) + "/"] = (None, True)
+            for name in files:
+                p = os.path.join(dirpath, name)
+                st = os.lstat(p)
+                data = pathlib.Path(p).read_bytes() if stat.S_ISREG(st.st_mode) else b"<special>"
+                out[os.path.relpath(p, root)] = (data, bool(st.st_mode & 0o111))
+        return out
+
+    a, b = listing(ref), listing(installed)
+    diff = [f"only in the sha: {k}" for k in sorted(a.keys() - b.keys())]
+    diff += [f"only installed: {k}" for k in sorted(b.keys() - a.keys())]
+    diff += [f"differs: {k}" for k in sorted(a.keys() & b.keys()) if a[k] != b[k]]
+    return diff
 
 
 def code_root_problems(root: str = CODE_ROOT, *, trusted: int = 0, anchor: str = "/") -> list[str]:
@@ -336,6 +362,41 @@ def docker_reachable(path: str = DOCKER_SOCKET) -> bool:
     return True
 
 
+CONTAINER_SOCKETS = (
+    "/var/run/docker.sock",
+    "/run/docker.sock",
+    "/run/containerd/containerd.sock",
+    "/run/podman/podman.sock",
+    "/var/run/podman/podman.sock",
+    "/mnt/wsl/docker-desktop/shared-sockets/guest-services/docker.proxy.sock",
+    "/mnt/wsl/docker-desktop/docker-desktop-proxy",
+)
+
+
+def reachable_container_sockets(
+    env: dict[str, str] | None = None,
+    extra: tuple[str, ...] = (),
+    system: tuple[str, ...] = CONTAINER_SOCKETS,
+):
+    """Every root-equivalent container endpoint this account can connect to: the usual system
+    sockets, Docker Desktop's WSL sockets, and `DOCKER_HOST` (a `unix://` path, or a `tcp://`
+    host:port, which counts when it accepts a connection)."""
+    env = os.environ if env is None else env
+    found = [p for p in (*system, *extra) if docker_reachable(p)]
+    host = env.get("DOCKER_HOST", "")
+    if host.startswith("unix://"):
+        if docker_reachable(host[len("unix://") :]):
+            found.append(host)
+    elif host.startswith("tcp://"):
+        h, _, port = host[len("tcp://") :].rpartition(":")
+        try:
+            with socket.create_connection((h or "127.0.0.1", int(port or 2375)), timeout=3):
+                found.append(host)
+        except (OSError, ValueError):
+            pass
+    return found
+
+
 def sudo_refused(*argv: str) -> tuple[bool, str]:
     """`sudo -n -k -u llmholder ...`: `-k` ignores a cached sudo ticket, so a terminal that just
     ran `sudo` cannot make the refusal look like success. True when sudo refused."""
@@ -435,6 +496,32 @@ def run_check_deployment(*extra: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+class Secret(bytes):
+    """Credential bytes that cannot be printed by accident. pytest shows the arguments of the
+    last frame of a failure (`--tb=long`/`auto`) and the operands of a failed `assert`; both go
+    through `repr`, which here is fixed text. Everything else about it is plain `bytes`."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "<redacted credential>"
+
+    __str__ = __repr__
+
+
+def secret_needle(secret: bytes) -> Secret:
+    """The hex form of a credential, as a search needle, kept redacted the same way."""
+    return Secret(secret.hex().encode())
+
+
+def assert_secrets_differ(a: bytes, b: bytes, message: str) -> None:
+    """Fail with `message` only. A bare `assert a != b` makes pytest print both operands, which
+    for a credential lands in the paste-back; this compares digests and shows neither."""
+    da, db = hashlib.sha256(a).digest(), hashlib.sha256(b).digest()
+    if hmac.compare_digest(da, db):
+        raise AssertionError(message)
+
+
 # --- the holder wire, as the agent speaks it -----------------------------------------------------
 
 _CRED = re.compile(rb"[0-9a-f]{64}\n?")
@@ -445,7 +532,7 @@ def load_credential(path: str) -> bytes:
     from llmgateway import framing
 
     try:
-        return framing.load_secret(path)
+        return Secret(framing.load_secret(path))
     except (OSError, ValueError) as exc:
         raise ValueError(f"{path}: not a usable credential ({type(exc).__name__})") from None
 
@@ -542,37 +629,107 @@ def windows_clock_skew() -> float | None:
 SKIP_DIRS = frozenset({".venv", "venv", "node_modules", "__pycache__", ".git"})
 
 
+class Search(NamedTuple):
+    """A host-wide search outcome: `hits == []` means "found nowhere" ONLY when `complete`."""
+
+    hits: list[str]
+    complete: bool
+    files: int  # files read
+    problems: list[str]  # why it is not complete: budget, unreadable/missing root, unscanned file
+
+
+CHUNK = 4 << 20
+
+
+def _contains(path: str, needle: bytes, limit: int) -> bool | None:
+    """Stream `path` for `needle` (chunks overlap by len(needle)-1); None when over `limit`."""
+    with open(path, "rb") as fh:
+        if os.fstat(fh.fileno()).st_size > limit:
+            return None
+        tail = b""
+        while chunk := fh.read(CHUNK):
+            if needle in tail + chunk:
+                return True
+            tail = chunk[-(len(needle) - 1) :] if len(needle) > 1 else b""
+    return False
+
+
 def surface_hits(
     needle: bytes,
     roots: list[str],
     *,
-    max_file: int = 8 << 20,
-    budget_seconds: float = 300.0,
+    max_file: int = 512 << 20,
+    budget_seconds: float = 1800.0,
     exclude: tuple[str, ...] = (),
-) -> list[str]:
-    """Every readable file under `roots` containing `needle` (never the needle itself is returned).
-    `.git` is skipped here: history is searched by `git_history_hits`."""
+) -> Search:
+    """Search every file readable by this account under `roots` for `needle` (the needle is never
+    returned). Coverage limits, stated: a directory named in `SKIP_DIRS` (`.git`, `.venv`, `venv`,
+    `node_modules`, `__pycache__`) is pruned (git history is `git_history_hits`); a file or
+    directory this account cannot read is by definition not reachable by an agent here; special
+    files are skipped; a file over `max_file` is REPORTED, not skipped silently. The search is
+    `complete` only if every root could be entered, the budget was not exhausted and no file
+    was left unscanned."""
     hits: list[str] = []
+    problems: list[str] = []
+    files = 0
     end = time.monotonic() + budget_seconds
     for root in roots:
-        for dirpath, dirs, files in os.walk(root, onerror=lambda _e: None):
+        try:
+            os.listdir(root)
+        except OSError as exc:
+            problems.append(f"root {root}: {exc.strerror}")
+            continue
+        for dirpath, dirs, names in os.walk(root, onerror=lambda _e: None):
             dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-            for name in files:
+            for name in names:
                 if time.monotonic() > end:
-                    return hits
-                p = os.path.join(dirpath, name)
-                if p in exclude:
+                    problems.append(f"budget of {budget_seconds:.0f}s exhausted in {root}")
+                    return Search(hits, False, files, problems)
+                path = os.path.join(dirpath, name)
+                if path in exclude:
                     continue
                 try:
-                    st = os.lstat(p)
-                    if not stat.S_ISREG(st.st_mode) or st.st_size > max_file:
+                    if not stat.S_ISREG(os.lstat(path).st_mode):
                         continue
-                    with open(p, "rb") as fh:
-                        if needle in fh.read():
-                            hits.append(p)
+                    found = _contains(path, needle, max_file)
                 except OSError:
                     continue
-    return hits
+                files += 1
+                if found is None:
+                    problems.append(f"unscanned (over {max_file} bytes): {path}")
+                elif found:
+                    hits.append(path)
+    return Search(hits, not problems, files, problems)
+
+
+def journal_search(needle: bytes, *, user: bool = False, budget_seconds: float = 300.0) -> Search:
+    """The journal (system, or `--user`) as this account can read it; an unreadable journal or a
+    `journalctl` failure makes the result incomplete."""
+    argv = ["journalctl", "--no-pager", "-q", "-o", "cat"] + (["--user"] if user else [])
+    hits, problems, size = [], [], 0
+    try:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except OSError as exc:
+        return Search([], False, 0, [f"{argv[0]}: {exc.strerror}"])
+    assert proc.stdout and proc.stderr
+    tail, end = b"", time.monotonic() + budget_seconds
+    while chunk := proc.stdout.read(CHUNK):
+        size += 1
+        if needle in tail + chunk:
+            hits.append("journal --user" if user else "journal")
+            break
+        tail = chunk[-(len(needle) - 1) :]
+        if time.monotonic() > end:
+            problems.append("journal budget exhausted")
+            break
+    proc.kill()
+    err = proc.stderr.read().decode(errors="replace").strip()
+    proc.wait()
+    if proc.returncode not in (0, -9) and not hits:
+        problems.append(f"journalctl exit {proc.returncode}: {err[:200]}")
+    elif "No journal files" in err or "not seeing messages" in err:
+        problems.append(f"journal not readable: {err[:200]}")
+    return Search(hits, not problems, size, problems)
 
 
 def process_hits(needle: bytes) -> list[int]:

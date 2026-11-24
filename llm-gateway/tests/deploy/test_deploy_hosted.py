@@ -29,7 +29,16 @@ FAKE_FILE, SITE, RUN = (
     "LLMGATEWAY_DEPLOY_SMOKE_CALL_SITE",
     "LLMGATEWAY_DEPLOY_SMOKE_RUN_ID",
 )
-SEARCH_ROOTS = ["/tmp", "/var/tmp", "/etc", "/opt", f"/run/user/{os.getuid()}", dl.home()]
+SEARCH_ROOTS = [
+    "/tmp",
+    "/var/tmp",
+    "/dev/shm",
+    "/etc",
+    "/opt",
+    "/var/log",
+    f"/run/user/{os.getuid()}",
+    dl.home(),
+]
 
 
 def _call(site, run):
@@ -54,9 +63,8 @@ def _fake_key():
             f"export {FAKE_FILE}=FILE, {SITE} and {RUN}"
         )
     key = pathlib.Path(path).read_text().strip()
-    assert key.startswith("sk-ant-FAKE-"), (
-        f"{FAKE_FILE} must hold a FAKE-prefixed value, never a real key"
-    )
+    is_fake = key.startswith("sk-ant-FAKE-")
+    assert is_fake, f"{FAKE_FILE} must hold a FAKE-prefixed value, never a real key"
     return path, key
 
 
@@ -85,20 +93,32 @@ def test_a_fake_key_hosted_call_fails_auth_leaks_nothing_and_is_found_only_where
     )
     assert not leaked, "the key appears in the error text"
 
-    # Positive control first: the same needle, planted where an agent can reach, is found.
+    # Positive control first: the same needle, planted where an agent can reach, is found, in a
+    # small root (pytest's own base directory), not in all of /tmp.
     planted = tmp_path / "planted.txt"
     planted.write_bytes(b"x" + needle + b"y")
     child = dl.MarkerChild(marker=key)
     try:
-        assert str(planted) in dl.surface_hits(needle, ["/tmp"], budget_seconds=120)
+        control = dl.surface_hits(needle, [str(tmp_path.parent)], budget_seconds=120)
+        assert control.complete, control.problems
+        assert str(planted) in control.hits
         assert child.pid in dl.process_hits(needle)
     finally:
         child.close()
         planted.unlink()
 
     # The file the human installed the key from is the one place excluded (the runbook deletes it).
+    # Coverage (see `surface_hits`): files and processes this account can read, the system and
+    # user journals, and git history of this repo; `.venv`/`node_modules` trees are pruned; the
+    # search FAILS rather than passes when a root is missing, the budget runs out or a file is
+    # too large to scan.
     found = dl.surface_hits(needle, SEARCH_ROOTS, exclude=(key_file,))
-    assert found == [], "the key is in an agent-readable file (paths listed above)"
+    assert found.complete, found.problems
+    assert found.hits == [], "the key is in an agent-readable file (paths listed above)"
+    for user in (False, True):
+        journal = dl.journal_search(needle, user=user)
+        assert journal.complete, journal.problems
+        assert journal.hits == [], "the key is in the journal"
     assert dl.process_hits(needle) == [], "the key is in a process's argv or environment"
     in_history = dl.git_history_hits(str(REPO), key)
     assert not in_history, "the key is in git history"

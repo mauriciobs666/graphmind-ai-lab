@@ -8,7 +8,6 @@ import pathlib
 
 import deploylib as dl
 
-REPO = pathlib.Path(__file__).resolve().parents[3]
 CODE_FILES = (
     "bin/keyholder.py",
     "bin/service.py",
@@ -69,14 +68,35 @@ def test_etc_artifacts_match_the_table_and_are_not_agent_writable(install):
         assert dl.write_attempt(f).status == "denied", f
 
 
-def test_installed_manifest_is_a_byte_copy_of_the_tracked_one(install):
-    """AC-21: the broker reads the installed copy; a difference means `owner-files` is stale."""
-    tracked = (REPO / "cpg" / "ccg" / "system.yaml").read_bytes()
-    installed = pathlib.Path(f"{dl.ETC_DIR}/ccg/system.yaml").read_bytes()
-    assert hashlib.sha256(installed).hexdigest() == hashlib.sha256(tracked).hexdigest(), (
-        "the installed manifest differs from cpg/ccg/system.yaml: re-run `install.sh owner-files` "
-        "(and restart the broker) if the tracked file changed on purpose"
+REF, MANIFEST = "LLMGATEWAY_DEPLOY_REF", "LLMGATEWAY_DEPLOY_MANIFEST"
+
+
+def _required_path(name, what):
+    value = os.environ.get(name)
+    assert value, (
+        f"export {name} to {what} (RUNBOOK step 10); the claim cannot be checked without it"
     )
+    assert os.path.exists(value), f"{name}={value}: no such path"
+    return value
+
+
+def test_installed_code_root_equals_the_verified_extract_of_the_reviewed_sha(install):
+    """Step 1's `$SCRATCH/ref` is `git archive <sha>` extracted unprivileged after `fsck` and the
+    tree-mode check; the install must equal it byte for byte (and in executable bits)."""
+    ref = _required_path(REF, "name the verified extract of the reviewed sha")
+    assert dl.tree_differences(ref, install) == []
+
+
+def test_installed_manifest_is_a_byte_copy_of_the_one_in_the_reviewed_sha(install):
+    """AC-21: the broker reads the installed copy. The reference is `git show <sha>:cpg/ccg/
+    system.yaml` (not the working tree, which an agent can edit)."""
+    ref = _required_path(MANIFEST, "name the manifest extracted from the reviewed sha")
+    installed = pathlib.Path(f"{dl.ETC_DIR}/ccg/system.yaml").read_bytes()
+    same = (
+        hashlib.sha256(installed).digest()
+        == hashlib.sha256(pathlib.Path(ref).read_bytes()).digest()
+    )
+    assert same, "the installed manifest differs from the reviewed sha's: re-run `owner-files`"
 
 
 def test_installed_gateway_toml_names_the_holder_uid_that_exists(install, holder_account):

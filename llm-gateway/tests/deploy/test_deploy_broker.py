@@ -33,10 +33,11 @@ def work():
 
 @pytest.fixture(scope="module")
 def ccg_python():
-    if not CCG_PY.exists():
-        pytest.skip(
-            f"no ccg interpreter at {CCG_PY}: set LLMGATEWAY_DEPLOY_CCG_PYTHON (see RUNBOOK)"
-        )
+    """A missing interpreter FAILS: skipping would silently drop the AC-21 half of the suite."""
+    assert CCG_PY.exists(), (
+        f"no ccg interpreter at {CCG_PY}: create the cpg venv (cpg/README.md) or set "
+        "LLMGATEWAY_DEPLOY_CCG_PYTHON; the broker tests cannot be skipped"
+    )
     return str(CCG_PY)
 
 
@@ -192,7 +193,7 @@ def test_broker_process_shows_the_credential_path_but_never_its_content(
     proc, line = _start(ccg_python, work, *_flags(INSTALLED_MANIFEST, holder_account.pw_uid, cred))
     try:
         assert "listening" in line, line
-        needle = broker_secret.hex().encode()
+        needle = dl.secret_needle(broker_secret)
         r = dl.probe_process(proc.pid, needle)
         assert dl.proc_file(proc.pid, "cmdline").data.count(cred.encode()) == 1
         assert r["cmdline"] == dl.Access("read", b"0")  # the path, not the content

@@ -116,7 +116,9 @@ def test_rotation_replaces_the_credential_and_the_old_one_stops_working(holder_p
             f"rotation step not run: set {env} to a copy of the pre-rotation credential (RUNBOOK)"
         )
     old, new = dl.load_credential(old_path), dl.load_credential(dl.cred_path(name))
-    assert old != new, "the credential did not change: `install.sh caller ... --rotate` was not run"
+    dl.assert_secrets_differ(
+        old, new, "the credential did not change: `install.sh caller ... --rotate` was not run"
+    )
     r_old = dl.wire(SOCK, old, caller=name)
     assert (_code(r_old), r_old.authenticated) == ("bad_credential", False)
     r_new = dl.wire(SOCK, new, caller=name)  # no holder restart: the registry is read per request

@@ -76,11 +76,9 @@ def test_agent_cannot_reach_the_holders_files(holder_account):
     assert dl.create_attempt(f"{dl.STATE_ROOT}/keys").status == "denied"
 
 
-def test_agent_cannot_list_or_connect_through_the_run_directory_except_to_the_socket(
-    holder_account, holder_proc
-):
-    a = dl.read_attempt(dl.RUN_DIR)
-    assert a.status in ("denied", "error"), "the run directory must not be listable"
+def test_agent_cannot_list_the_run_directory(holder_account, holder_proc):
+    """Traverse only (0711): listing is refused. Connecting is test_deploy_holder_wire."""
+    assert dl.read_attempt(dl.RUN_DIR).status in ("denied", "error")
     with pytest.raises(PermissionError):
         os.listdir(dl.RUN_DIR)
 
@@ -117,6 +115,7 @@ def test_agent_cannot_ptrace_the_holder(holder_proc):
 
 
 def _ps_env_visible(pid: int) -> bool:
+    assert os.path.exists(f"/proc/{pid}"), f"pid {pid} is gone: both `ps` outputs would be empty"
     plain = subprocess.run(
         ["ps", "ww", "-o", "args=", "-p", str(pid)], capture_output=True, text=True
     ).stdout
@@ -148,32 +147,44 @@ def test_the_holder_process_is_non_dumpable_and_has_no_core_files(holder_proc, h
 # --- docker, sudo, other uids ---------------------------------------------------------------------
 
 
-def test_docker_socket_probe_is_blind_without_a_reachable_socket(tmp_path):
-    """Positive control: the helper says True for a socket the agent can connect to."""
+def test_container_socket_probe_is_blind_without_a_reachable_socket(tmp_path):
+    """Positive control: the probe reports a socket the agent can connect to, via the list, via
+    `DOCKER_HOST=unix://` and via `DOCKER_HOST=tcp://`, and nothing for a closed or absent one."""
     import socket
 
     p = str(tmp_path / "d.sock")
     srv = socket.socket(socket.AF_UNIX)
     srv.bind(p)
-    srv.listen(1)
+    srv.listen(5)
+    tcp = socket.socket()
+    tcp.bind(("127.0.0.1", 0))
+    tcp.listen(5)
     try:
         assert dl.docker_reachable(p) is True
+        assert dl.reachable_container_sockets({}, extra=(p,), system=()) == [p]
+        assert dl.reachable_container_sockets({"DOCKER_HOST": "unix://" + p}, system=()) == [
+            "unix://" + p
+        ]
+        host = f"tcp://127.0.0.1:{tcp.getsockname()[1]}"
+        assert dl.reachable_container_sockets({"DOCKER_HOST": host}, system=()) == [host]
     finally:
         srv.close()
+        tcp.close()
     assert dl.docker_reachable(str(tmp_path / "absent.sock")) is False
+    assert dl.reachable_container_sockets({"DOCKER_HOST": "tcp://127.0.0.1:1"}, system=()) == []
 
 
 def test_agent_account_has_no_docker_access(holder_account):
     """Docker-group access is root-equivalent (`docker run -v /var/lib/llmholder:/h` reads the
-    holder's files), so a dedicated account protects nothing while the agent can use docker
-    (docs/reviews/llm-gateway-security.md B2). Remove the account from the group, log in again."""
+    holder's files), so a dedicated account protects nothing while the agent can use a container
+    runtime (docs/reviews/llm-gateway-security.md B2). A red result here leaves AC-5 and D14
+    OPEN. Remove the account from the group and log in again (RUNBOOK step 0)."""
     docker_gid = grp.getgrnam("docker").gr_gid if _has_group("docker") else None
     assert docker_gid is None or docker_gid not in os.getgroups(), (
-        "this session's account is in group docker (root-equivalent): "
-        "`sudo gpasswd -d $USER docker`, then end every session of this account "
-        "(WSL: `wsl.exe --shutdown` from Windows) and run the suite again"
+        "this session's account is in group docker (root-equivalent): see RUNBOOK step 0"
     )
-    assert not dl.docker_reachable(), "the Docker socket is reachable by the agent account"
+    reachable = dl.reachable_container_sockets()
+    assert reachable == [], f"container sockets reachable by the agent account: {reachable}"
     if docker_gid is not None:
         members = grp.getgrgid(docker_gid).gr_mem
         assert pwd.getpwuid(os.getuid()).pw_name not in members, (
@@ -190,7 +201,9 @@ def _has_group(name: str) -> bool:
 
 
 def test_sudo_into_the_holder_account_is_refused(holder_account):
-    """No sudoers rule: `-n` never prompts, `-k` ignores a cached ticket from the human's sudo."""
+    """No sudoers rule: `-n` never prompts, `-k` ignores a cached ticket from the human's sudo.
+    No own-uid positive control exists (a successful sudo needs privilege); the message check is
+    what keeps a non-refusal failure (sudo missing, wrong flags) from passing."""
     refused, err = dl.sudo_refused("/usr/bin/true")
     assert refused, f"sudo -n -u {dl.HOLDER} /usr/bin/true was not refused: {err!r}"
     assert "password is required" in err or "not allowed" in err or "may not run" in err, err
@@ -198,7 +211,9 @@ def test_sudo_into_the_holder_account_is_refused(holder_account):
     assert refused, f"the holder's log is readable without a password: {err!r}"
 
 
-def test_runuser_and_su_to_the_holder_are_refused(holder_account):
+def test_runuser_into_the_holder_is_refused_for_a_non_root_caller(holder_account):
+    """`runuser` is root-only. There is no own-uid positive control (it would need privilege); the
+    assertion is the refusal message itself, not merely a non-zero exit."""
     out = subprocess.run(
         ["runuser", "-u", dl.HOLDER, "--", "/usr/bin/id"],
         capture_output=True,
@@ -207,3 +222,4 @@ def test_runuser_and_su_to_the_holder_are_refused(holder_account):
         stdin=subprocess.DEVNULL,
     )
     assert out.returncode != 0 and out.stdout == ""
+    assert "may not be used by non-root" in out.stderr, out.stderr

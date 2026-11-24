@@ -285,10 +285,13 @@ def test_host_search_finds_a_planted_needle_in_files_and_processes_and_only_ther
     (tmp_path / "sub" / "other.txt").write_bytes(b"nothing here")
     (tmp_path / ".venv").mkdir()
     (tmp_path / ".venv" / "skipped.txt").write_bytes(needle.encode())
-    assert dl.surface_hits(needle.encode(), [str(tmp_path)]) == [str(tmp_path / "sub" / "f.txt")]
-    assert dl.surface_hits(b"sk-ant-FAKE-absent", [str(tmp_path)]) == []
+    r = dl.surface_hits(needle.encode(), [str(tmp_path)])
+    assert (r.hits, r.complete) == ([str(tmp_path / "sub" / "f.txt")], True)
+    r = dl.surface_hits(b"sk-ant-FAKE-absent", [str(tmp_path)])
+    assert (r.hits, r.complete) == ([], True) and r.files == 2
     excluded = str(tmp_path / "sub" / "f.txt")
-    assert dl.surface_hits(needle.encode(), [str(tmp_path)], exclude=(excluded,)) == []
+    r = dl.surface_hits(needle.encode(), [str(tmp_path)], exclude=(excluded,))
+    assert (r.hits, r.complete) == ([], True)
     child = dl.MarkerChild(marker=needle)
     try:
         assert child.pid in dl.process_hits(needle.encode())
@@ -318,3 +321,139 @@ def test_git_history_pickaxe_finds_a_needle_in_a_history_and_not_otherwise(tmp_p
     subprocess.run(["git", "-C", str(r), "commit", "-q", "-m", "x"], check=True, env=env)
     assert dl.git_history_hits(str(r), "sk-ant-FAKE-histneedle") is True
     assert dl.git_history_hits(str(r), "sk-ant-FAKE-absent") is False
+
+
+def test_a_failing_test_prints_no_credential_under_any_traceback_style(tmp_path):
+    """The paste-back holds pytest output. Control: plain bytes DO leak (operands of an assert,
+    and the arguments of the last frame under `--tb=long`), so the grep is not vacuous; a
+    `Secret` (what `load_credential` returns) leaks in neither place, in any style."""
+    import subprocess
+    import sys
+
+    raw = os.urandom(32)
+    forms = (raw.hex(), repr(bytes(raw)))
+    case = tmp_path / "test_leak_probe.py"
+    case.write_text(
+        "import sys\n"
+        f"sys.path.insert(0, {str(pathlib.Path(dl.__file__).parent)!r})\n"
+        "import deploylib as dl\n"
+        f"RAW = bytes.fromhex({raw.hex()!r})\n"
+        "import pytest\n"
+        "@pytest.fixture\n"
+        "def cred():\n    return dl.Secret(RAW)\n"
+        "def helper(secret):\n    raise RuntimeError('boom')\n"
+        "def test_plain_assert():\n    assert RAW != RAW, 'same'\n"
+        "def test_plain_arg_in_last_frame():\n    helper(RAW)\n"
+        "def test_secret_assert(cred):\n    assert cred != cred, 'same'\n"
+        "def test_secret_arg_in_last_frame(cred):\n    helper(cred)\n"
+        "def test_secret_fixture_arg_last_frame(cred):\n    raise RuntimeError('boom')\n"
+        "def test_helper(cred):\n    dl.assert_secrets_differ(cred, cred, 'same')\n"
+    )
+
+    def run(style):
+        out = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-p",
+                "no:cacheprovider",
+                "-q",
+                f"--tb={style}",
+                str(case),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        ).stdout
+        sections = {}
+        for part in out.split("\n____"):
+            for name in (
+                "plain_assert",
+                "plain_arg",
+                "secret_assert",
+                "secret_arg",
+                "secret_fixture",
+                "helper",
+            ):
+                if part.lstrip("_ ").startswith("test_" + name):
+                    sections[name] = part
+        return sections
+
+    for style in ("long", "auto", "short", "native"):
+        s = run(style)
+        assert set(s) == {
+            "plain_assert",
+            "plain_arg",
+            "secret_assert",
+            "secret_arg",
+            "secret_fixture",
+            "helper",
+        }
+        for name in ("secret_assert", "secret_arg", "secret_fixture", "helper"):
+            assert not any(f in s[name] for f in forms), (style, name)
+        if style == "long":  # control: the leak is real for plain bytes
+            assert any(f in s["plain_assert"] for f in forms)
+            assert any(f in s["plain_arg"] for f in forms)
+    assert not any(f in str(dl.Secret(raw)) + repr(dl.Secret(raw)) for f in forms)
+    dl.assert_secrets_differ(dl.Secret(raw), os.urandom(32), "distinct secrets are distinct")
+    with pytest.raises(AssertionError) as exc:
+        dl.assert_secrets_differ(dl.Secret(raw), dl.Secret(raw), "same")
+    assert not any(f in str(exc.value) for f in forms)
+
+
+def test_a_search_that_did_not_finish_is_never_complete(tmp_path):
+    needle = b"sk-ant-FAKE-" + b"cd" * 16
+    (tmp_path / "a").write_bytes(b"nothing")
+    # a missing root and an unreadable root
+    r = dl.surface_hits(needle, [str(tmp_path / "absent")])
+    assert (r.hits, r.complete) == ([], False) and "absent" in r.problems[0]
+    closed = tmp_path / "closed"
+    closed.mkdir(mode=0o000)
+    try:
+        r = dl.surface_hits(needle, [str(tmp_path), str(closed)])
+        assert r.complete is False and any("closed" in p for p in r.problems)
+    finally:
+        closed.chmod(0o700)
+    # an exhausted budget
+    r = dl.surface_hits(needle, [str(tmp_path)], budget_seconds=-1)
+    assert r.complete is False and "budget" in r.problems[0]
+    # a file over the cap is reported, not skipped; a hit past the first chunk and across a
+    # chunk boundary is still found
+    (tmp_path / "big").write_bytes(b"z" * 5000)
+    r = dl.surface_hits(needle, [str(tmp_path)], max_file=1000)
+    assert r.complete is False and any("big" in p for p in r.problems)
+    pad = b"q" * (dl.CHUNK - 7)
+    (tmp_path / "split").write_bytes(pad + needle + b"tail")
+    r = dl.surface_hits(needle, [str(tmp_path)], max_file=1 << 30)
+    assert str(tmp_path / "split") in r.hits and r.complete
+
+
+def test_journal_search_reports_an_unreadable_journal_as_incomplete(monkeypatch):
+    real = dl.subprocess.Popen
+
+    def fake(argv, **kw):
+        return real(["/bin/sh", "-c", "echo boom >&2; exit 1"], **kw)
+
+    monkeypatch.setattr(dl.subprocess, "Popen", fake)
+    r = dl.journal_search(b"sk-ant-FAKE-x")
+    assert r.complete is False and r.hits == []
+
+
+def test_tree_differences_names_presence_bytes_and_mode_changes(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    for root in (a, b):
+        (root / "bin").mkdir(parents=True)
+        (root / "bin" / "k.py").write_bytes(b"x")
+        (root / "f").write_bytes(b"y")
+    assert dl.tree_differences(str(a), str(b)) == []
+    (b / "f").write_bytes(b"z")
+    (b / "extra").write_bytes(b"")
+    (a / "gone").write_bytes(b"")
+    (b / "bin" / "k.py").chmod(0o755)
+    assert dl.tree_differences(str(a), str(b)) == [
+        "only in the sha: gone",
+        "only installed: extra",
+        "differs: bin/k.py",
+        "differs: f",
+    ]
