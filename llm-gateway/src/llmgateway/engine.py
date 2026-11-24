@@ -42,6 +42,7 @@ from llmgateway.types import (
     EmbeddingsNotAvailable,
     FailureClass,
     HostedFromCallerProcess,
+    LoadMode,
     Request,
     Response,
 )
@@ -71,6 +72,9 @@ class StepContext:
     provider: Provider
     request: Request
     model: str | None
+    component: str = ""
+    scopes: tuple[str, ...] = ()
+    timeout_s: float = DEFAULT_TIMEOUT_S
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,14 +87,32 @@ class PreparedStep:
 
 class ResidencyHook(Protocol):
     def prepare(self, ctx: StepContext) -> PreparedStep:
-        """May raise `CallFailed` (e.g. `model_not_loaded`); that is the attempt's failure."""
+        """May raise `CallFailed` (e.g. `model_not_loaded`); that is the attempt's failure. A
+        raised error carrying a `loaded_state` attribute has it recorded on the attempt."""
+
+    def load(self, ctx: StepContext) -> PreparedStep:
+        """The caller-directed (explicit) load behind `Gateway.load`."""
 
 
 class NoResidency:
-    """S6's no-op hook: the step's own model, no loaded state."""
+    """The default hook: the step's own model, no loaded state. A call that asks for residency
+    behaviour (a request `load_mode`, or `load_mode`/`load`/`bind_loaded` on the call site) fails
+    `config` rather than silently ignoring it; wire `load.LoadResidency` to honour them."""
 
     def prepare(self, ctx: StepContext) -> PreparedStep:
+        wanted = ctx.request.load_mode is not None or any(
+            k in ctx.site for k in ("load_mode", "load", "bind_loaded")
+        )
+        if wanted:
+            raise CallFailed(
+                FailureClass.CONFIG,
+                f"call site {ctx.request.call_site!r} asks for load behaviour but this gateway "
+                "has no residency configured",
+            )
         return PreparedStep(ctx.model)
+
+    def load(self, ctx: StepContext) -> PreparedStep:
+        raise CallFailed(FailureClass.CONFIG, "this gateway has no residency configured")
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,18 +273,88 @@ class Gateway:
         try:
             provider = self._registry.get(config.providers[step.provider].get("kind", ""))
             prepared = self._residency.prepare(
-                StepContext(config, site, step, provider, request, model)
+                self._step_context(config, site, resolution, step, provider, request, model)
             )
             model, loaded_state = prepared.model, prepared.loaded_state
             outcome = self._send(config, site, resolution, step, provider, request, call_id, model)
         except CallFailed as exc:
             outcome = _Failure(exc.failure_class, str(exc), exc.code)
+            loaded_state = getattr(exc, "loaded_state", loaded_state)
         duration_ms = max(0, int((self._clock() - started) * 1000))
         self._record(
             resolution, step, request, call_id, number, kind, reason, outcome, model,
             loaded_state, duration_ms,
         )  # fmt: skip
         return outcome
+
+    @staticmethod
+    def _step_context(
+        config: GatewayConfig,
+        site: Mapping[str, Any],
+        resolution: Any,
+        step: Step,
+        provider: Provider,
+        request: Request,
+        model: str | None,
+    ) -> StepContext:
+        return StepContext(
+            config, site, step, provider, request, model,
+            component=resolution.component,
+            scopes=resolution.scopes,
+            timeout_s=_timeout(site, config.providers[step.provider]),
+        )  # fmt: skip
+
+    def load(
+        self, call_site: str, *, scopes: tuple[str, ...] = (), run_id: str | None = None
+    ) -> PreparedStep:
+        """Explicit mode (FR-16): the caller directs a load of the call site's first-step model.
+        Loads it when absent, reuses it when resident, fails naming a mismatch; one attempt
+        record carries the loaded state. Local steps only."""
+        config = self._get_config()
+        request = Request(call_site, (), scopes=scopes, run_id=run_id, load_mode=LoadMode.EXPLICIT)
+        resolution = resolve(config, request, self._markers)
+        step = resolution.chain[0]
+        site = config.call_sites[call_site]
+        call_id, started = new_call_id(), self._clock()
+        model = step.model or config.providers[step.provider].get("model")
+        loaded_state: str | None = None
+        try:
+            if step.hosted:
+                raise CallFailed(FailureClass.CONFIG, "a hosted step cannot be loaded")
+            if not model:
+                raise CallFailed(
+                    FailureClass.CONFIG, f"no model configured for provider {step.provider!r}"
+                )
+            provider = self._registry.get(config.providers[step.provider].get("kind", ""))
+            prepared = self._residency.load(
+                self._step_context(config, site, resolution, step, provider, request, model)
+            )
+            model, loaded_state, failure = prepared.model or model, prepared.loaded_state, None
+        except CallFailed as exc:
+            failure = exc
+            loaded_state = getattr(exc, "loaded_state", None)
+        duration_ms = max(0, int((self._clock() - started) * 1000))
+        self._records.write(
+            Attempt(
+                call_id=call_id,
+                attempt=1,
+                component=resolution.component,
+                scopes=resolution.scopes,
+                call_site=resolution.call_site,
+                provider=step.provider,
+                model=model or "unknown",
+                hosted=step.hosted,
+                outcome="ok" if failure is None else "failed",
+                run_id=run_id,
+                duration_ms=duration_ms,
+                failure_class=None if failure is None else failure.failure_class,
+                loaded_state=loaded_state,
+            ),
+            text_allowed=False,
+        )
+        if failure is not None:
+            raise failure
+        return prepared
 
     def _send(
         self,
