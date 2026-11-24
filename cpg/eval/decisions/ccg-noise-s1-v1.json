@@ -1,0 +1,47 @@
+{
+ "bindingStructure": "key-scoped is a subset of kind-wide for the same system burden, so the key-scoped reduction is never larger: its numeric bar binds. Kind-wide carries the equal-recall comparison (the ccg-noise-recall-rule-v1 flag), which key-scoped can fail to meet. Each variant is computed with ccg-noise-recall-rule-v1 unchanged.",
+ "decides": "S1: which noise-reduction baseline variant carries the AC-5 reduction bar of -p1-ml.md 5.3 (at least 5x) at the next gate (ac5-gate-1 over the gated strata)",
+ "disclosures": [
+  "this record states what was observed in the repository at its writing; it does not claim the rehearsal scratch logs were clean (see priorPrints.notCovered)",
+  "a rule changed after scoring counts as after adaptation and is reported as such"
+ ],
+ "extends": "cpg/eval/decisions/ccg-noise-recall-rule-v1.json (not modified; its openStakeholderQuestion S1 is answered here)",
+ "id": "ccg-noise-s1-v1",
+ "laterUnitsPrintOnly": {
+  "mechanism": "the printing is a dispatch-brief rule, enforced by reading the run output before it is quoted; baseline.py and noise.py are not changed for it (their hashes are pinned below)",
+  "rule": "Until the ac5-gate-1 pre-registration record is committed (CO-6b), every dispatch of CO-1..CO-5 and the CO-9 rehearsal prints only aggregate noise: Q (the AC-5 noise statistic as the harness defines it) and the wrong-`possible` bound. It prints no kind-wide reduction, no key-scoped reduction, no per-variant burden sum and no baseline [k, n]. A run that prints one is reported in the ac5-gate-1 record with its date and the figure, and the reduction bar is not weakened by it."
+ },
+ "owner": "data-scientist",
+ "priorPrints": {
+  "found": "No printed variant reduction in any of these. 'Reduction' figures in the P1-36 reviews are planted-test arithmetic (for example the flag cross-multiplication 8/10 vs 7/10), not a measured reduction.",
+  "heldOutReductionSeen": false,
+  "notCovered": "the gate-rehearsal scoring logs (31_score_variants.sh writes them to a scratch directory outside the repo) were not read; a reduction line in them cannot be excluded from this record alone and, if one exists, is to be disclosed in the ac5-gate-1 record with its date",
+  "searched": [
+   "docs/plans/connected-code-graph-coordination.md (all 2026-11-24 entries)",
+   "cpg/eval/results/ (ac24-dev2, ccg-p1-flow-fallback-v1.json, gate-rehearsal scripts)",
+   "docs/reviews, docs/plans, docs/test-reports (grep for reduction figures)"
+  ],
+  "statement": "Before this record no variant reduction (kind-wide or key-scoped, dev or held-out) had been printed or seen by the data-scientist or in any CO-1..CO-5 or CO-9 run: CO-1..CO-5 had not yet been dispatched when this record was written."
+ },
+ "ratified": {
+  "by": "stakeholder (user)",
+  "date": "2026-11-24",
+  "where": "docs/plans/connected-code-graph-coordination.md, 2026-11-24 entries (analyst plan gate, USER ANSWERS: S1 ratified, both variants)"
+ },
+ "reporting": [
+  "in-scope reduction decides the bar; all-listed reduction is reported beside it, never crossed with it",
+  "the recall flag is reported per variant; a flagged variant is an upper bound and not a pass",
+  "variant, flag and reduction are each stated for the same item set (itemSetSha256 of the rule record)"
+ ],
+ "rule": "The reduction bar of `-p1-ml.md` §5.3 (at least 5x) is met iff both the kind-wide and the key-scoped in-scope reductions are at least 5x, each computed with the rule of `ccg-noise-recall-rule-v1`; the all-listed reductions are reported beside; the recall flag is reported per variant and a flagged variant is an upper bound, not a pass. Neither variant's held-out reduction has been seen; any dev reduction seen before this record is listed with its date.",
+ "ruleSource": "docs/plans/connected-code-graph-p1-gate-marker-ml.md, last section, paragraph 'S1 (Q2): rule (c), both variants' (verbatim pre-register sentence quoted in 'rule'; the closing sentence of the quote about dev reductions is superseded by 'priorPrints' below)",
+ "sha256": {
+  "baseline.py": "d003c0053fa092c2981eb82161092b5a9679494adbf76acbeeff15241cf62b16",
+  "ccg-noise-recall-rule-v1.json": "ae25049779b629a6da0faefc54c5282cad7fd3b10ec61d93c61652af2c9247b7",
+  "gate-marker-note-S1-paragraph": "ec866259ab4c0010a3e9bf5fb1fda0b1c1980f54a6f1714bb8b29c874a9d08e5",
+  "match_keys.py": "4bded3f56486d076d5e83fa5bbf74345dc008f672f19e9fa339d63da8ce19bee",
+  "noise.py": "8f12d1ad3c355f7b200d8cc3501dec413ccb19f75ec93b7907d2a4f935c232e1",
+  "snapshot_export.py": "8dd0fc68400eb3f2027d6fd66d0578c27a0d97832956e97c1c5ed99f32048943"
+ },
+ "sha256Definitions": "gate-marker-note-S1-paragraph = sha256 of the UTF-8 bytes (no trailing newline) of the single line of docs/plans/connected-code-graph-p1-gate-marker-ml.md that begins '**S1 (Q2)'; the other entries are sha256 of the file bytes at the commit that adds this record"
+}
