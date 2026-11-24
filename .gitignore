@@ -211,3 +211,6 @@ __marimo__/
 
 # Claude Code account-synced Anthropic skills (arrive via the ~/.claude/skills symlink)
 skills/synced/
+
+# P1-11 config-extractor golden corpus (synthetic fixture; no real secret)
+!cpg/tests/data/config/repo1/.env
