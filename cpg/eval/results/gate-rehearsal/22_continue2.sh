@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # usage: 22_continue2.sh <f4|f5|f6|f7|f8|f9>   the steps after the first (fresh) run of a scenario: state, resume(s), score. Logs under $RH/log.
 D=$(dirname "$(readlink -f "$0")"); cd $D
-args() { . ./env.sh; echo run --gate-id $GATE_ID --custodian $CUST --repo $REPO --system $SYSTEM --host 127.0.0.1 --port $PORT --lists $CUST/lists/$1.jsonl; }
+args() { . ./env.sh; echo run --gate-id $GATE_ID --custodian $CUST --repo $REPO --system $SYSTEM --host 127.0.0.1 --port $PORT --dev-probe $DEV_PROBE --lists $CUST/lists/$1.jsonl; }
 score() { # name port [repo]
   PORT=$2; . ./env.sh; ./key.sh $CUST/lists/l-$1.jsonl > $RH/log/k-$1
   [ -n "$3" ] && { REPO=$3; . ./env.sh; }

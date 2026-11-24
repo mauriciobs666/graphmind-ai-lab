@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # usage: 21_continue.sh <f2|f3|...>   the steps after the first (fresh) run of a scenario: state, resume(s), score. Every step logs under $RH/log.
 D=$(dirname "$(readlink -f "$0")"); cd $D
-args() { . ./env.sh; echo run --gate-id $GATE_ID --custodian $CUST --repo $REPO --system $SYSTEM --host 127.0.0.1 --port $PORT --lists $CUST/lists/$1.jsonl; }
+args() { . ./env.sh; echo run --gate-id $GATE_ID --custodian $CUST --repo $REPO --system $SYSTEM --host 127.0.0.1 --port $PORT --dev-probe $DEV_PROBE --lists $CUST/lists/$1.jsonl; }
 sc() { # name port
   PORT=$2; . ./env.sh; ./key.sh $CUST/lists/l-$1.jsonl > $RH/log/k-$1; ./score.sh $1-score $CUST/lists/l-$1.jsonl $(cat $RH/log/k-$1)
   echo "score: $(head -c 200 $RH/log/$1-score.err | tr '\n' ' ')"; $PY scan.py $RH/log/$1-score.out $RH/log/$1-score.err | tail -1

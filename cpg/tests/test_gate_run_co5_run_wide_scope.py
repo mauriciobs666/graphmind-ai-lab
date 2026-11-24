@@ -54,3 +54,17 @@ def test_exception_class_is_the_innermost_only_under_a_store_error():
 
 def test_a_product_outer_over_a_host_fault_is_still_the_products():
     assert engine_entry(implicit(ValueError("v"), OSError(28, "full"))) == {"outcome": "engine-error", "exceptionClass": "ValueError"}
+
+
+# ------------------------------------------------------------------------------------------------ P6-3: the redis module is a module, not a substring
+@pytest.mark.parametrize("module", ["ccg.redis_helpers", "myredis", "redisx.exceptions", "app.redis"])
+def test_a_class_named_like_a_driver_fault_in_a_module_that_merely_contains_redis_is_not_run_wide(module):
+    cls = type("NoPermissionError", (Exception,), {"__module__": module})
+    assert engine_entry(explicit(StoreError("x"), cls("mine"))) == {"outcome": "engine-error", "exceptionClass": "NoPermissionError"}
+    assert not R._is_redis(cls("mine"))
+
+
+@pytest.mark.parametrize("module", ["redis", "redis.exceptions", "redis.asyncio.connection"])
+def test_the_driver_package_and_its_submodules_are_redis(module):
+    assert R._is_redis(type("AuthenticationError", (Exception,), {"__module__": module})("a"))
+    assert R._is_redis(RE.AuthenticationError("a"))

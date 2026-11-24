@@ -8,7 +8,6 @@ import pytest
 
 import gate_helpers as H
 from gate_helpers import G
-from gate_run_helpers import dev_probe_doc
 
 
 # ---------------------------------------------------------------- run_asks
@@ -395,7 +394,7 @@ class ScoreEnv:
         self.ctx = {**G.run_context(self.repo, pf, allow_after_adaptation=True), "label": label}
         self.run = self.cust / "run.json"
         self.dev_probe = tmp_path / "dev-probe.json"
-        self.dev_probe.write_text(json.dumps(dev_probe_doc()))
+        self.dev_probe.write_text(json.dumps(self.probe_doc()))
         self.key = G.list_key([self.w.rec])
         self.write_marker("asked")
         self.write_run(run_pin)
@@ -409,11 +408,15 @@ class ScoreEnv:
         self.write_run()
 
     def write_marker(self, state, key=None):
-        (self.cust / f"gate-run-{key or self.key}.marker").write_text(json.dumps({"state": state, "pins": {"flowFlag": self.flow_flag}}) + "\n")
+        (self.cust / f"gate-run-{key or self.key}.marker").write_text(
+            json.dumps({"state": state, "pins": {"flowFlag": self.flow_flag, "devProbeSha256": H.sha_of(self.dev_probe)}}) + "\n")
 
     def write_run(self, pin=H.SNAP, **extra):
         run = {**self.w.run(snapshot_id=pin), "preflight": self.ctx, "listKey": self.key, "flowFlag": self.flow_flag, "withheld": self.withheld, **extra}
         self.run.write_text(json.dumps(run))
+
+    def probe_doc(self, **kw):
+        return H.dev_probe_doc(self.repo, record_commit=self.ctx["recordCommit"], **kw)
 
     def argv(self, **over):
         a = {"--gate-id": "ac5-gate-1", "--lists": str(self.lists), "--run": str(self.run), "--custodian": str(self.cust), "--port": "16420",

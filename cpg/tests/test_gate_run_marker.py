@@ -44,7 +44,7 @@ def test_the_marker_payload_holds_every_pin_the_resume_compares(tmp_path):
     e = Env(tmp_path)
     e.go()
     m = e.marker()
-    assert set(m["pins"]) == {"recordCommit", "harnessSha256", "snapshotId", "prereg", "coreTreeHash", "label", "flowFlag", "withheld", "probeMapSha256", "manifestSha256", "stall"}
+    assert set(m["pins"]) == {"recordCommit", "harnessSha256", "snapshotId", "prereg", "coreTreeHash", "label", "flowFlag", "withheld", "probeMapSha256", "manifestSha256", "devProbeSha256", "stall"}
     assert m["pins"]["snapshotId"] == H.SNAP and set(m["pins"]["prereg"]) == set(G.PREREG_FIELDS) and m["pins"]["label"] == "first-contact"
     assert m["head"] == H.head(e.repo) and m["startedAt"] and m["gateId"] == GATE and m["records"] == 1 and m["resumes"] == []
 
@@ -226,6 +226,7 @@ def test_a_resume_after_the_harness_was_edited_and_committed_is_refused_on_the_h
     f.write_text(f.read_text() + "# adapted\n")
     H.git(e.repo, "add", "-A")
     H.git(e.repo, "commit", "-qm", "adapt")
+    e.refresh_probe()                                                   # a new rehearsal on the adapted harness: the probe check is not what this pins
     with pytest.raises(G.Refusal):                                      # the label is after-adaptation now: refused unless allowed
         e.go(resume=True)
     with pytest.raises(G.Refusal, match="harnessSha256"):               # and when allowed, the pinned hash differs
@@ -235,6 +236,7 @@ def test_a_resume_after_the_harness_was_edited_and_committed_is_refused_on_the_h
 
 def test_a_resume_after_the_record_commit_changed_is_refused(tmp_path):
     e = killed_run(tmp_path)
+    e.refresh_probe(record_commit=e.eval_commit)
     with pytest.raises(G.Refusal, match="recordCommit"):
         e.go(resume=True, record_commit_sha=e.eval_commit, allow_after_adaptation=True)
     assert e.asked == []
@@ -244,6 +246,7 @@ def test_a_resume_after_the_snapshot_changed_is_refused(tmp_path):
     e = killed_run(tmp_path)
     e.snap.sid = "c" * 32
     e.engine_sid = "c" * 32
+    e.refresh_probe(snapshot_id="c" * 32)
     with pytest.raises(G.Refusal, match="snapshotId"):
         e.go(resume=True)
     assert e.asked == []

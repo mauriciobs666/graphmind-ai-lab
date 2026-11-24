@@ -88,3 +88,32 @@ def test_no_probe_injected_means_no_claim_about_the_store(tmp_path, monkeypatch,
     over["live_graph_present"] = None
     rc, err = run(e, monkeypatch, capsys, **over)
     assert rc == R.EXIT_BAD and "new empty store" not in err
+
+
+# ------------------------------------------------------------------------------------------------ P6-4: a second signal during the liveness probe keeps the remedy
+def test_a_second_interrupt_inside_the_probe_does_not_lose_the_remedy(tmp_path, monkeypatch, capsys):
+    e = Env(tmp_path)
+    many_world(e, 1)
+    calls = []
+
+    def probe():
+        calls.append(1)
+        if len(calls) > 1:
+            raise KeyboardInterrupt()                                  # the operator presses ^C again while the handler asks the store
+        return False
+    rc, err = run(e, monkeypatch, capsys, refresh_fn=Store(RuntimeError("x"), True).refresh, live_graph_present=probe)
+    assert rc in (R.EXIT_BAD, R.EXIT_RESUMABLE) and has_remedy(err) and not e.markers()
+
+
+def test_a_second_terminate_inside_the_probe_keeps_the_original_exception(tmp_path, monkeypatch, capsys):
+    e = Env(tmp_path)
+    many_world(e, 1)
+    calls = []
+
+    def probe():
+        calls.append(1)
+        if len(calls) > 1:
+            raise R._Terminated()
+        return False
+    rc, err = run(e, monkeypatch, capsys, refresh_fn=Store(RuntimeError("boom"), True).refresh, live_graph_present=probe)
+    assert rc == R.EXIT_BAD and "bad input: RuntimeError" in err and has_remedy(err)

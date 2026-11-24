@@ -11,4 +11,5 @@ export PY=$REAL/cpg/.venv/bin/python
 export CCG_CREDENTIALS_DIR=$RH/cred-$PORT   # per store: create_users rotates the passwords
 export CCG_CONFIG_DIR=$RH/cfg
 export GATE_ID=ac5-gate-1
-run_gate() { ( cd $REPO/cpg/eval/tools && HOME=$HOME_R "$PY" gate_run.py run --gate-id $GATE_ID --custodian $CUST --repo $REPO --system $SYSTEM --host 127.0.0.1 --port $PORT "$@" ); }
+export DEV_PROBE=${DEV_PROBE:-$RH/dev-probe.json}   # the attestation `gate.py dev-probe` writes from the dev rehearsal (11_dev_probe.sh); a list of dev items only needs none
+run_gate() { ( cd $REPO/cpg/eval/tools && HOME=$HOME_R "$PY" gate_run.py run --gate-id $GATE_ID --custodian $CUST --repo $REPO --system $SYSTEM --host 127.0.0.1 --port $PORT --dev-probe $DEV_PROBE "$@" ); }

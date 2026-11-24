@@ -4,7 +4,7 @@ D=$(dirname "$(readlink -f "$0")"); cd $D
 sv() { # tag port list-name repo [extra]
   tag=$1; port=$2; ln=$3; repo=$4; shift 4
   export PORT=$port; . ./env.sh; K=$(cat $RH/log/k-$ln)
-  ( cd $repo/cpg/eval/tools && HOME=$HOME_R $PY gate.py score --gate-id $GATE_ID --lists $CUST/lists/l-$ln.jsonl --run $CUST/run-$K.json --custodian $CUST --host 127.0.0.1 --port $port --system $SYSTEM "$@" ) > $RH/log/$tag.out 2> $RH/log/$tag.err
+  ( cd $repo/cpg/eval/tools && HOME=$HOME_R $PY gate.py score --gate-id $GATE_ID --lists $CUST/lists/l-$ln.jsonl --run $CUST/run-$K.json --custodian $CUST --host 127.0.0.1 --port $port --system $SYSTEM --dev-probe $DEV_PROBE "$@" ) > $RH/log/$tag.out 2> $RH/log/$tag.err
   echo "$tag exit=$? stdout=$(wc -c < $RH/log/$tag.out)B :: $(head -c 200 $RH/log/$tag.err | tr '\n' ' ')"
 }
 . ./env.sh

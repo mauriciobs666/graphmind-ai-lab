@@ -1275,44 +1275,159 @@ class PrecheckRefusal(Refusal):
     """A refusal of :func:`score_inputs_check`: raised by ``run`` before the marker (nothing spent) and by ``score``."""
 
 
-def read_dev_probe(path: Path) -> dict:
-    """The dev-gold probe result the rehearsal wrote (dev data, builder-visible: any path). Unreadable or not JSON -> :class:`PrecheckRefusal`."""
+# --- the dev-gold probe: an attestation bound to the run it vouches for (P6-1) ---------------------------------------------------------------------
+#
+# Design choice (CO-5 round 2): the probe is the PRODUCT of a dev rehearsal run (:func:`write_dev_probe`, the ``dev-probe`` verb), not the gate asking the dev gold
+# itself before its marker. Asking dev at ``run`` would need a built store and an engine ask before the marker, so a dev miss would strand a ~30 minute build
+# (the list stays unspent but the store is lost) where a bad probe now refuses at exit 5 before the lock, the build and the marker, and it would turn the CO-9
+# rehearsal into a gate-internal step instead of the separately reported run it is meant to be. The attestation is made forgery-resistant instead: the gate
+# computes the dev items from the committed gold, compares the record commit, the harness sha map, the gold hashes and (after its own build) the snapshot id the
+# file carries, checks every key-error id against the committed stakeholder record, and pins the file's sha256 in the marker. A list made only of dev items is a
+# dev rehearsal and needs no probe (it cannot spend a held-out list); every other list does.
+
+DEV_KEY_ERRORS = Path("cpg") / "eval" / "decisions" / "ccg-dev-key-errors-v1.json"
+DEV_KEY_ERRORS_SCHEMA = "ccg-dev-key-errors-v1"
+DEV_GOLD = "cpg/eval/dev/ac5-{}.jsonl"
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+
+
+def read_dev_probe(path: Path) -> tuple[Any, str]:
+    """``(document, sha256 of the exact bytes)`` of the rehearsal's probe file (dev data, builder-visible: any path). Unreadable or not JSON -> :class:`PrecheckRefusal`."""
     try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
+        raw = Path(path).read_bytes()
+        return json.loads(raw.decode("utf-8")), hashlib.sha256(raw).hexdigest()
     except (OSError, ValueError):
         raise PrecheckRefusal("the dev-gold probe result is missing or unreadable: the rehearsal writes it, and the gate does not start without it") from None
 
 
-def _count(v: Any) -> bool:
-    return type(v) is int and v >= 0
+def _dev_gold(repo: Path, stratum: str) -> tuple[list[dict], str]:
+    f = Path(repo) / DEV_GOLD.format(stratum)
+    try:
+        raw = f.read_bytes()
+        return [json.loads(l) for l in raw.decode("utf-8").splitlines() if l.strip()], hashlib.sha256(raw).hexdigest()
+    except (OSError, ValueError):
+        raise PrecheckRefusal(f"the committed dev gold of {stratum} is unreadable") from None
 
 
-def dev_probe_check(probe: Any, gated: Sequence[str] = STRATA_GATED) -> None:
-    """The pre-gate probe of ``docs/plans/connected-code-graph-p1-closeout.md`` §3.5: for every GATED stratum the dev hits must equal the dev items, or the
-    whole shortfall must be a stakeholder-confirmed ``key-error``. ``probe`` is ``{"schema": DEV_PROBE_SCHEMA, "byStratum": {stratum: {"items", "hits",
-    "keyErrors"}}}`` (the rehearsal writes ``keyErrors`` only from the stakeholder-confirmed list); a stratum outside ``gated`` is not read. Fewer hits than items
-    blocks, not only zero hits; a missing, empty or inconsistent stratum is a refusal, never a pass. Counts and strata only (dev data)."""
+def is_dev_rehearsal(repo: Path, records: Sequence[Mapping]) -> bool:
+    """True iff the list is non-empty and every item is a committed dev gold item: such a run cannot spend a held-out list, so it needs no probe (it is what
+    produces one)."""
+    ids = set()
+    for s in STRATA:
+        try:
+            ids |= {r["itemId"] for r in _dev_gold(repo, s)[0]}
+        except (PrecheckRefusal, KeyError, TypeError):
+            return False
+    return bool(records) and all(r.get("itemId") in ids for r in records)
+
+
+def confirmed_key_errors(repo: Path, committed_text: Callable[[Path], str] | None = None) -> set[str]:
+    """The item ids the stakeholder confirmed as dev key-errors, from the COMMITTED record ``cpg/eval/decisions/ccg-dev-key-errors-v1.json``
+    (``{"schema", "confirmed": [{"itemId", ...}]}``; the working copy must equal HEAD's). Missing, uncommitted, edited or malformed -> :class:`PrecheckRefusal`."""
+    path = Path(repo) / DEV_KEY_ERRORS
+    try:
+        text = path.read_text(encoding="utf-8")
+        if (committed_text or _ac._git_head_text)(path) != text:
+            raise ValueError
+        doc = json.loads(text)
+        ids = [c["itemId"] for c in doc["confirmed"]]
+        if doc["schema"] != DEV_KEY_ERRORS_SCHEMA or not all(isinstance(i, str) for i in ids):
+            raise ValueError
+    except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError, Refusal, _ac.Refusal):
+        raise PrecheckRefusal("the committed key-error confirmation record is missing, edited after its commit or malformed") from None
+    return set(ids)
+
+
+def _harness_sha(repo: Path) -> dict:
+    return {rel: hashlib.sha256((Path(repo) / rel).read_bytes()).hexdigest() for rel in HARNESS_FILES if (Path(repo) / rel).is_file()}
+
+
+def dev_probe_check(probe: Any, repo: Path, record_commit: str, gated: Sequence[str] = STRATA_GATED, committed_text: Callable[[Path], str] | None = None) -> None:
+    """The pre-gate probe of ``docs/plans/connected-code-graph-p1-closeout.md`` §3.5, as an attestation. ``probe`` is ``{"schema": DEV_PROBE_SCHEMA,
+    "rehearsalId", "recordCommit", "snapshotId", "harnessSha256": {file: sha}, "devGoldSha256": {stratum: sha}, "byStratum": {stratum: {"hitIds": [...],
+    "keyErrorIds": [...]}}}``. The gate takes NOTHING countable from it: per gated stratum the dev items are those of the committed gold file, and
+    ``hitIds`` plus ``keyErrorIds`` must be exactly that set, disjoint and duplicate-free, with every key-error id in the committed confirmation record. The
+    file must carry the freeze (record) commit, the current harness sha map (the import-closure files, equal as a set), the hash of each gated gold file and
+    a 64-hex rehearsal id, and a snapshot id (compared with the gate's own build by :func:`check_probe_snapshot`). A stratum outside ``gated`` is not read.
+    Counts, strata and field names only in a refusal (dev data)."""
     if not isinstance(probe, Mapping) or probe.get("schema") != DEV_PROBE_SCHEMA or not isinstance(probe.get("byStratum"), Mapping):
         raise PrecheckRefusal(f"the dev-gold probe result is not a `{DEV_PROBE_SCHEMA}` document: the gate does not start without one")
+    if probe.get("recordCommit") != record_commit:
+        raise PrecheckRefusal("the dev-gold probe is for another record commit than this run's: the rehearsal is not at the freeze commit")
+    if not isinstance(probe.get("harnessSha256"), Mapping) or dict(probe["harnessSha256"]) != _harness_sha(repo):
+        raise PrecheckRefusal("the dev-gold probe's harness file hashes differ from the current harness files: the rehearsal ran other harness code")
+    if not (isinstance(probe.get("rehearsalId"), str) and _HEX64.fullmatch(probe["rehearsalId"])):
+        raise PrecheckRefusal("the dev-gold probe carries no rehearsal run id (64 hex)")
+    if not (isinstance(probe.get("snapshotId"), str) and probe["snapshotId"]):
+        raise PrecheckRefusal("the dev-gold probe carries no snapshot id of the build it vouches for")
+    gold_sha = probe.get("devGoldSha256") if isinstance(probe.get("devGoldSha256"), Mapping) else {}
+    confirmed = confirmed_key_errors(repo, committed_text)                          # the record must be usable whenever a probe is accepted, key-errors or not
     for s in gated:
+        records, sha = _dev_gold(repo, s)
+        if gold_sha.get(s) != sha:
+            raise PrecheckRefusal(f"the dev-gold probe was not made against the committed dev gold of {s}: its hash differs")
         row = probe["byStratum"].get(s)
-        if not isinstance(row, Mapping) or not all(_count(row.get(k)) for k in ("items", "hits", "keyErrors")) or row["items"] == 0:
-            raise PrecheckRefusal(f"the dev-gold probe has no usable counts for the gated stratum {s}")
-        items, hits, key_errors = row["items"], row["hits"], row["keyErrors"]
-        if hits + key_errors > items:
-            raise PrecheckRefusal(f"the dev-gold probe is inconsistent for {s}: {hits} hits and {key_errors} key-errors exceed {items} dev items")
-        if hits + key_errors < items:
-            raise PrecheckRefusal(f"dev-gold probe: {s} has {hits} hits of {items} dev items ({key_errors} stakeholder-confirmed key-errors): "
+        if not isinstance(row, Mapping) or not all(isinstance(row.get(k), list) and all(isinstance(i, str) for i in row[k]) for k in ("hitIds", "keyErrorIds")):
+            raise PrecheckRefusal(f"the dev-gold probe has no usable item lists for the gated stratum {s}")
+        items = [r["itemId"] for r in records]
+        hits, key_errors = row["hitIds"], row["keyErrorIds"]
+        listed = hits + key_errors
+        if len(set(listed)) != len(listed) or not set(listed) <= set(items):
+            raise PrecheckRefusal(f"the dev-gold probe is inconsistent for {s}: duplicated ids, or ids that are not dev items")
+        if key_errors:
+            if not set(key_errors) <= confirmed:
+                raise PrecheckRefusal(f"dev-gold probe: {s} lists {len(set(key_errors) - confirmed)} key-error id(s) the committed stakeholder record does not confirm")
+        if len(set(listed)) < len(set(items)):
+            raise PrecheckRefusal(f"dev-gold probe: {s} has {len(hits)} hits of {len(set(items))} dev items ({len(key_errors)} stakeholder-confirmed key-errors): "
                                   f"every dev item of a gated stratum must be a hit before the gate starts")
 
 
+def check_probe_snapshot(probe: Mapping, built_snapshot_id: str) -> None:
+    """The probe must vouch for the build the gate made: its ``snapshotId`` equals the built graph's. Raised after the build, so the caller's stranded-store
+    remedy applies; the list is not spent."""
+    if probe.get("snapshotId") != built_snapshot_id:
+        raise Refusal("the dev-gold probe vouches for another snapshot than the one this run built: rehearse again on this build")
+
+
+def write_dev_probe(repo: Path, run: Mapping, snapshot, committed_text: Callable[[Path], str] | None = None) -> dict:
+    """The attestation, as the product of a dev rehearsal: ``run`` is the rehearsal's ``run.json`` (its ``answers`` are the ``answers.jsonl`` entries), scored by the
+    SAME :func:`score_gate` path against the committed dev gold of ``gated_strata(run's flow flag)`` on ``snapshot`` (the live store; its snapshot id must be the
+    run's). ``hitIds`` are the items scored ``hit``; ``keyErrorIds`` are the other items the committed record confirms. Everything else it carries is read from the run
+    (record commit and harness sha map from its preflight block, the list key as the rehearsal id) or from the repository (gold hashes)."""
+    repo = Path(repo)
+    ctx, key = run.get("preflight"), run.get("listKey")
+    if not isinstance(ctx, Mapping) or not ctx.get("recordCommit") or not isinstance((ctx.get("harnessPin") or {}).get("sha256"), Mapping) \
+            or not (isinstance(key, str) and _HEX64.fullmatch(key)) or not isinstance(run.get("snapshotId"), str):
+        raise Refusal("the run file is not a rehearsal run: it carries no preflight block, list key or snapshot id")
+    if snapshot.snapshot_id() != run["snapshotId"]:
+        raise Refusal("the live :Snapshot node differs from the run file's snapshot id: the probe is written on the store the rehearsal ran against")
+    strata = gated_strata(bool(run.get("flowFlag")))
+    patterns = scope_patterns(_load_yaml(repo / "cpg" / "eval" / "eval-manifest.yaml"))
+    records, shas = [], {}
+    for s in strata:
+        recs, shas[s] = _dev_gold(repo, s)
+        records += recs
+    result = score_gate(records, run, snapshot, patterns)
+    confirmed = confirmed_key_errors(repo, committed_text)
+    by = {}
+    for s in strata:
+        ids = sorted(r["itemId"] for r in records if r["derivedStratum"] == s)
+        hit = [i for i in ids if result["items"][i]["outcome"] == "hit"]
+        by[s] = {"hitIds": hit, "keyErrorIds": [i for i in ids if i not in hit and i in confirmed]}
+    return {"schema": DEV_PROBE_SCHEMA, "rehearsalId": key, "recordCommit": ctx["recordCommit"], "snapshotId": run["snapshotId"],
+            "harnessSha256": dict(ctx["harnessPin"]["sha256"]), "devGoldSha256": shas, "byStratum": by}
+
+
 def score_inputs_check(repo: Path, gate_id: str, pf: Mapping, records: Sequence[Mapping], *, flags_given: bool | None = None, committed_text=None,
-                       dev_probe: Any = None, gated: Sequence[str] = STRATA_GATED) -> dict:
+                       dev_probe: Any = None, gated: Sequence[str] = STRATA_GATED, probe_check: bool = True) -> dict:
     """EVERY refusal of ``score`` that depends only on inputs known BEFORE the marker, in one place that both verbs call (``run`` before it takes the
     marker, exit 5, nothing spent; ``score`` first thing after it has read the lists): the stored gold re-normalises cleanly, the working tree is clean,
     the committed record states a valid gate kind (and, for a re-gate, usable ``movedOut``), ``--flags`` matches that kind (``flags_given`` is ``None``
     where the flags file is not known yet, as at ``run``), the eval manifest parses, and the dev-gold probe (``dev_probe``, the parsed rehearsal result;
-    ``None`` is a refusal) shows every dev item of each ``gated`` stratum a hit (:func:`dev_probe_check`). -> ``{"kind", "movedOut", "patterns"}``. A refusal that a later
+    ``None`` is a refusal unless every record is a dev gold item, :func:`is_dev_rehearsal`) attests every dev item of each ``gated`` stratum a hit and is
+    bound to this record commit, harness and dev gold (:func:`dev_probe_check`). ``score`` passes ``probe_check=False``: it does not
+    re-validate the content (a harness-only cure after the run, ``-p1-gate-marker-ml.md`` §3, changes the harness hashes the probe carries) but requires the
+    marker's pinned sha256 to equal the file's, i.e. the very file ``run`` validated before its marker. -> ``{"kind", "movedOut", "patterns"}``. A refusal that a later
     command can raise from such an input and the first irreversible step does not is a list spent for nothing."""
     require_clean_renormalize(renormalize_stored_gold(records))
     if pf["firstContact"]["dirtyPaths"]:
@@ -1333,7 +1448,8 @@ def score_inputs_check(repo: Path, gate_id: str, pf: Mapping, records: Sequence[
         patterns = scope_patterns(_load_yaml(Path(repo) / "cpg" / "eval" / "eval-manifest.yaml"))
     except Exception as e:                                       # noqa: BLE001 - an unreadable manifest is a refusal, whatever the parser raised
         raise PrecheckRefusal(f"the eval manifest is unusable ({type(e).__name__})") from None
-    dev_probe_check(dev_probe, gated)
+    if probe_check and not is_dev_rehearsal(repo, records):      # a dev-only list cannot spend a held-out list; every other list needs the attestation
+        dev_probe_check(dev_probe, repo, pf.get("recordCommit"), gated, committed_text)
     return {"kind": kind, "movedOut": moved_out, "patterns": patterns}
 
 
@@ -1394,7 +1510,12 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         sc.add_argument(f, required=True)
     sc.add_argument("--flags", help="re-gate only: regate-flags.jsonl (the kind itself comes from the committed record)")
     sc.add_argument("--exposure")
-    sc.add_argument("--dev-probe", required=True, help="the dev-gold probe result the rehearsal wrote (dev data; the check is the one `run` made before its marker)")
+    sc.add_argument("--dev-probe", help="the dev-gold probe the rehearsal wrote (`dev-probe` verb): the very file `run` pinned in its marker; omitted only for a dev-only list")
+    dp = sub.add_parser("dev-probe", help="write the dev-gold probe from a dev rehearsal's run.json, scored by the gate's own path against the committed dev gold")
+    for f in ("--run", "--out"):
+        dp.add_argument(f, required=True)
+    for f, kw in (("--host", {"default": "127.0.0.1"}), ("--port", {"type": int}), ("--graph", {}), ("--repo", {}), ("--system", {})):
+        dp.add_argument(f, **kw)
     sc.add_argument("--flow-decision", help="the committed ccg-p1-flow-python-v2-decision record (default: the repository's)")
     sc.add_argument("--host", default="127.0.0.1")
     sc.add_argument("--port", type=int)
@@ -1407,14 +1528,30 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
             rep = preflight(Path(a.repo), a.gate_id, record_commit_sha=a.record_commit)
             print(json.dumps(rep, sort_keys=True))
             return 0 if rep["label"] == "first-contact" else 1
+        if a.cmd == "dev-probe":
+            repo = Path(repo) if repo else Path(a.repo) if a.repo else _CPG.parent
+            run = json.loads(Path(a.run).read_text(encoding="utf-8"))
+            if snapshot is None:
+                sys.path.insert(0, str(_HERE))
+                from snapshot_export import RoRunner
+                snapshot = StoreSnapshot(RoRunner(snapshot_graph(a.host, a.port, a.graph, a.system or manifest_system(repo) or "ccg")))
+            doc = write_dev_probe(repo, run, snapshot, committed_text)
+            Path(a.out).write_text(json.dumps(doc, sort_keys=True, indent=1) + "\n", encoding="utf-8")
+            rows = {s: {"items": len(_dev_gold(repo, s)[0]), "hits": len(r["hitIds"]), "keyErrors": len(r["keyErrorIds"])} for s, r in doc["byStratum"].items()}
+            complete = all(v["hits"] + v["keyErrors"] == v["items"] for v in rows.values())
+            print(json.dumps({"strata": rows, "complete": complete}, sort_keys=True))
+            return 0 if complete else 1
         cust = within_custodian(Path(a.custodian), None, "--custodian")
         repo = Path(repo) if repo else Path(a.repo) if a.repo else _CPG.parent
         records = []
         for f in a.lists.split(","):
             records += _jsonl(within_custodian(Path(f), None, "--lists"))
         pf = (preflight_fn or preflight)(repo, a.gate_id)
-        dev_probe = read_dev_probe(Path(a.dev_probe))
-        chk = score_inputs_check(repo, a.gate_id, pf, records, flags_given=bool(a.flags), committed_text=committed_text, dev_probe=dev_probe)      # what run checked before its marker
+        if is_dev_rehearsal(repo, records):                  # a dev-only list: no probe was required or pinned, and a file named here is not read
+            probe_sha = None
+        else:
+            _, probe_sha = read_dev_probe(Path(a.dev_probe)) if a.dev_probe else (None, None)
+        chk = score_inputs_check(repo, a.gate_id, pf, records, flags_given=bool(a.flags), committed_text=committed_text, probe_check=False)      # what run checked before its marker
         kind, moved_out = chk["kind"], chk["movedOut"]
         key = list_key(records)                           # over every record of --lists, withheld strata included (the key gate_run took the marker under)
         if marker_state(cust, key) != "asked":            # -p1-gate-marker-ml.md §1.1.7: a started or failed run, or none, is never scored; first, so a run that
@@ -1440,7 +1577,8 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         if (read_marker(cust, key) or {}).get("pins", {}).get("flowFlag") != flag:
             raise Refusal("the run file's flow flag differs from the marker's pin: score refuses")
         gated = gated_strata(flag)
-        dev_probe_check(dev_probe, gated)                  # the run's own gated set (flow included when its flag was true): the check `run` made
+        if (read_marker(cust, key) or {}).get("pins", {}).get("devProbeSha256") != probe_sha:        # the very file `run` pinned (None for a dev-only list)
+            raise Refusal("the dev-gold probe file is not the one the run pinned in its marker: score refuses")
         records, withheld = withhold_strata(records, gated)
         if withheld != run["withheld"]:
             raise Refusal("the lists do not reproduce the withheld set the run recorded: score refuses")

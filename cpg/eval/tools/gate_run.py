@@ -9,7 +9,7 @@
   anchor IN the graph that does not resolve is a :class:`~gate.HarnessError` (never a synthesized document).
 * :func:`resolve_preflight`: the read-only dry-run ``resolve`` of every asked in-graph anchor before the marker (counts by status only).
 * :func:`run_gate` and the ``run`` verb: refuse unless the preflight is first-contact and clean (``G.run_context``), the list was not run, the probe
-  map and the lists lie under the custodian area, the dev-gold probe result (``--dev-probe``, written by the rehearsal) shows every dev item of each gated
+  map and the lists lie under the custodian area, the dev-gold probe result (``--dev-probe``, written by ``gate.py dev-probe`` from a dev rehearsal and bound to this commit, harness and build) attests every dev item of each gated
   stratum a hit (``gate.dev_probe_check``; exit 5), the store does not already hold the gate system's live graph, the resolve dry-run passes; build the
   refresh Target at ``EVAL_COMMIT`` with PRIVATE ``work_root`` / ``keys_root`` / ``audit_dir`` under the custodian root (the developer's ``ccg`` area is
   never touched); take the marker (``started``: temp file + ``os.link``, so it is never empty or torn) under a per-list ``flock``; persist every answer
@@ -178,7 +178,8 @@ def _names(exc: BaseException) -> set[str]:
 
 
 def _is_redis(exc: BaseException) -> bool:
-    return "redis" in (type(exc).__module__ or "")
+    module = type(exc).__module__ or ""
+    return module == "redis" or module.startswith("redis.")
 
 
 def _is_run_wide(exc: BaseException) -> bool:
@@ -460,13 +461,13 @@ def _read_lists(lists: Sequence[Path], home: Path | None) -> tuple[list[dict], s
 
 
 def _pins(ctx: Mapping, snapshot_id: str, obs: Mapping, *, flow_flag: bool, withheld: Mapping, probe_map_sha256: str, manifest_sha256: str,
-          stall: Mapping) -> dict:
+          dev_probe_sha256: str | None, stall: Mapping) -> dict:
     """What a resume must find equal. The flow flag and the withheld counts decide WHICH anchors are asked, and the probe map decides which point a
     unit anchor is asked from: neither may change between two halves of one run (N3, N6)."""
     return {"recordCommit": ctx["recordCommit"], "harnessSha256": dict(ctx["harnessPin"]["sha256"]), "snapshotId": snapshot_id,
             "prereg": {k: obs.get(k) for k in G.PREREG_FIELDS}, "coreTreeHash": obs.get("coreTreeHash"), "label": ctx["label"],
             "flowFlag": bool(flow_flag), "withheld": dict(withheld), "probeMapSha256": probe_map_sha256,
-            "manifestSha256": manifest_sha256, "stall": dict(stall)}
+            "manifestSha256": manifest_sha256, "devProbeSha256": dev_probe_sha256, "stall": dict(stall)}
 
 
 PRIVATE_AREAS = ("work", "keys", "audit")
@@ -567,10 +568,14 @@ def _stranded_on_exit(active: bool, live: Any = _ALWAYS):
 
 
 def _probe_says_live(live: Callable[[], bool]) -> bool:
+    """Whether the graph is live now. An unreadable store is no claim (False); a SECOND signal while the probe runs (it is called inside the handler of the
+    first failure) leaves the answer unknown, so the remedy is kept (True) and the first exception stands: the probe never replaces it."""
     try:
         return bool(live())
     except Exception:                                               # noqa: BLE001 - an unreadable store: no claim about it
         return False
+    except BaseException:                                           # noqa: BLE001 - KeyboardInterrupt / _Terminated / SystemExit during the probe
+        return True
 
 
 def run_gate(*args, **kw) -> dict:
@@ -609,8 +614,12 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
         raise Refusal("the system disagrees with the system manifest's own: pass the manifest's system, or none")
     all_records, key = _read_lists(lists, home)
     flag = G.flow_flag(Path(flow_decision) if flow_decision else repo / G.FLOW_DECISION, committed_text)
+    if G.is_dev_rehearsal(repo, all_records):                    # a dev-only list needs no probe (it makes one): not read, and the marker pins none
+        probe_doc, probe_sha = None, None
+    else:
+        probe_doc, probe_sha = G.read_dev_probe(dev_probe) if dev_probe else (None, None)
     G.score_inputs_check(repo, gate_id, pf, all_records, committed_text=committed_text,           # every refusal `score` already knows, before the marker
-                         dev_probe=G.read_dev_probe(dev_probe) if dev_probe else None, gated=G.gated_strata(flag))
+                         dev_probe=probe_doc, gated=G.gated_strata(flag))
     records, withheld = G.withhold_strata(all_records, G.gated_strata(flag))
     marker = _marker_path(cust, key)
     if lock is not None:
@@ -635,6 +644,8 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     with _stranded_on_exit(not resume):                          # the build has loaded the live graph: every exit before the marker leaves the store stranded
         snap = snapshot_factory(built)
         sid = snap.snapshot_id()
+        if probe_doc is not None:
+            G.check_probe_snapshot(probe_doc, sid)             # the attestation vouches for THIS build (after the build: the stranded-store remedy applies)
         if engine_snapshot_id is not None and engine_snapshot_id() != sid:
             raise Refusal("the engine reader's :Snapshot id differs from the snapshot reader's: the store or system is not the one the run reads")
         answers_path = cust / f"run-{key}.answers.jsonl"
@@ -642,7 +653,7 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
         obs = {**(dict(tree) if tree is not None else G.observe_tree(repo)), **(observed if observed is not None else G.engine_observed())}
         pins = _pins(ctx, sid, obs, flow_flag=flag, withheld=withheld, probe_map_sha256=hashlib.sha256(pmap.read_bytes()).hexdigest(),
                      manifest_sha256=hashlib.sha256(manifest.read_bytes()).hexdigest(),
-                     stall={"k": stall_k, "deadlineS": stall_deadline_s, "canaryRequest": canary_request if canary is not None else None})
+                     dev_probe_sha256=probe_sha, stall={"k": stall_k, "deadlineS": stall_deadline_s, "canaryRequest": canary_request if canary is not None else None})
         if resume:
             _resume_checks(old, pins, key, cust, len(recorded), cache_len)
         else:
@@ -786,7 +797,8 @@ def main(argv=None, deps: Mapping | None = None) -> int:
     r.add_argument("--graph")
     r.add_argument("--probe-map", help=f"the S47 probe map under the custodian root (default <custodian>/{PROBE_MAP_NAME})")
     r.add_argument("--flow-decision", help="the committed flow decision record (default: the repository's)")
-    r.add_argument("--dev-probe", required=True, help="the dev-gold probe result the rehearsal wrote: a gated stratum with fewer dev hits than dev items refuses the start (exit 5)")
+    r.add_argument("--dev-probe", help="the dev-gold probe `gate.py dev-probe` wrote from a dev rehearsal (an attestation bound to this commit, harness and build; pinned in the "
+                                       "marker): refused at exit 5 unless every dev item of a gated stratum is a hit; omitted only for a list of dev items only")
     r.add_argument("--resume", action="store_true", help="continue a started / failed:transient run of the same list under equal pins")
     r.add_argument("--allow-after-adaptation", action="store_true", help="run with the after-adaptation label (recorded in the marker and run.json)")
     a = ap.parse_args(argv)
@@ -799,7 +811,7 @@ def main(argv=None, deps: Mapping | None = None) -> int:
         kw = dict(deps) if deps is not None else _default_deps(a)
         out = run_gate(Path(a.repo), a.gate_id, [Path(f) for f in a.lists.split(",")], Path(a.custodian),
                        probe_map=Path(a.probe_map) if a.probe_map else None, resume=a.resume, allow_after_adaptation=a.allow_after_adaptation,
-                       flow_decision=Path(a.flow_decision) if a.flow_decision else None, dev_probe=Path(a.dev_probe), **kw)
+                       flow_decision=Path(a.flow_decision) if a.flow_decision else None, dev_probe=Path(a.dev_probe) if a.dev_probe else None, **kw)
         print(json.dumps(out, sort_keys=True))
         return EXIT_OK
     except (ResolveRefusal, G.PrecheckRefusal) as e:

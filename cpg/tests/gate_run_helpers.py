@@ -15,12 +15,6 @@ OBS = {"algorithm": {"id": "bfs-v1", "version": "1.2"}, "defaultDepthBound": 2}
 GATE = "ac5-gate-1"
 
 
-def dev_probe_doc(**by_stratum) -> dict:
-    """The dev-gold probe result the rehearsal writes (``gate.DEV_PROBE_SCHEMA``): every gated stratum all hits unless ``by_stratum`` overrides it."""
-    base = {s: {"items": 10, "hits": 10, "keyErrors": 0} for s in ("http", "mcp", "scripts", "flow")}
-    return {"schema": G.DEV_PROBE_SCHEMA, "byStratum": {**base, **by_stratum}}
-
-
 DROP = object()                      # ``Env(record_extra={'kind': DROP})``: the committed record lacks that field
 
 
@@ -92,7 +86,8 @@ class Env:
         H.git(repo, "add", "-A")
         H.git(repo, "commit", "-qm", "record")
         self.dev_probe = tmp_path / "dev-probe.json"                                         # builder-visible dev data: not under the custodian root
-        self.dev_probe.write_text(json.dumps(dev_probe_doc()))
+        self.record_commit = H.head(repo)
+        self.dev_probe.write_text(json.dumps(H.dev_probe_doc(repo)))
         self.events = []
         self.refresh_kw = None
         self.asked: list[str] = []
@@ -116,6 +111,10 @@ class Env:
             req = G.build_request(rec, aid, locators)
             a = req["anchors"][0]
             self.table[spec_key(R.cli_request(req)["anchor"])] = (a["type"], aid)
+
+    def refresh_probe(self, **kw):
+        """A new rehearsal's attestation for the repo as it is now (after a harness edit, a changed record commit or snapshot)."""
+        self.dev_probe.write_text(json.dumps(H.dev_probe_doc(self.repo, **{"record_commit": self.record_commit, **kw})))
 
     def set_probes(self, probes: dict):
         self.probes.write_text(json.dumps(probes) + "\n")

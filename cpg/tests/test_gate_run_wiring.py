@@ -253,6 +253,7 @@ def _edit_harness_after_the_record(e):
 def test_run_refuses_an_after_adaptation_label_unless_explicitly_allowed_and_then_records_it(tmp_path):
     e = Env(tmp_path)
     _edit_harness_after_the_record(e)
+    e.refresh_probe()
     with pytest.raises(G.Refusal, match="after-adaptation"):
         e.go()
     assert e.events == [] and not e.markers()

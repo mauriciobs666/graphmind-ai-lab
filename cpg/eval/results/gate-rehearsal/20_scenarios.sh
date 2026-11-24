@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # usage: 20_scenarios.sh <name> -- launches the first (fresh) run of a scenario on its own store; the resume/score steps are separate commands.
 . "$(dirname "$0")/env.sh"
-args() { echo run --gate-id $GATE_ID --custodian $CUST --repo $REPO --system $SYSTEM --host 127.0.0.1 --port $PORT --lists $CUST/lists/$1.jsonl; }
+args() { echo run --gate-id $GATE_ID --custodian $CUST --repo $REPO --system $SYSTEM --host 127.0.0.1 --port $PORT --dev-probe $DEV_PROBE --lists $CUST/lists/$1.jsonl; }
 cd "$(dirname "$0")"
 . ./env.sh
 case "$1" in

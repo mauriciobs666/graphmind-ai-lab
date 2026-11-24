@@ -24,9 +24,18 @@ def git(repo: Path, *args: str) -> str:
                           capture_output=True, text=True).stdout
 
 
+DEV_STRATA = ("http", "mcp", "scripts", "flow", "wiring")
+
+
+def dev_ids(stratum: str, n: int = 3) -> list[str]:
+    return [f"{stratum}-dev{k}".ljust(32, "0") for k in range(n)]
+
+
 def make_repo(tmp: Path) -> Path:
     repo = tmp / "repo"
-    for rel, text in {
+    dev = {f"cpg/eval/dev/ac5-{s}.jsonl": "".join(json.dumps({"itemId": i, "derivedStratum": s}) + "\n" for i in dev_ids(s)) for s in DEV_STRATA}
+    dev["cpg/eval/decisions/ccg-dev-key-errors-v1.json"] = json.dumps({"schema": "ccg-dev-key-errors-v1", "confirmed": []}) + "\n"
+    for rel, text in {**dev,
         "cpg/ccg/a.py": "A = 1\n", "cpg/packs/p/pack.yaml": "rules: []\n", "cpg/eval/note.json": "{}\n",
         "cpg/tests/test_x.py": "X = 1\n", "cpg/README.md": "# r\n", "cpg/eval/tools/gate.py": "# gate v1\n",
         "cpg/eval/tools/match_keys.py": "# mk\n", "cpg/eval/preregistration.jsonl": "",
@@ -38,6 +47,24 @@ def make_repo(tmp: Path) -> Path:
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "base")
     return repo
+
+
+def sha_of(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def dev_probe_doc(repo: Path, *, record_commit: str | None = None, snapshot_id: str = SNAP, key_errors=(), strata=("http", "mcp", "scripts", "flow"),
+                  **over) -> dict:
+    """A valid ``ccg-dev-probe-v1`` document for ``repo``, computed here from the repo's own files (not through the gate): every dev item of ``strata`` a
+    hit except ``key_errors``, which are listed as key-errors. ``over`` replaces top-level fields."""
+    repo = Path(repo)
+    ids = {s: [json.loads(l)["itemId"] for l in (repo / f"cpg/eval/dev/ac5-{s}.jsonl").read_text().splitlines()] for s in strata}
+    doc = {"schema": G.DEV_PROBE_SCHEMA, "rehearsalId": "b" * 64, "recordCommit": record_commit or head(repo), "snapshotId": snapshot_id,
+           "harnessSha256": {rel: sha_of(repo / rel) for rel in G.HARNESS_FILES if (repo / rel).is_file()},
+           "devGoldSha256": {s: sha_of(repo / f"cpg/eval/dev/ac5-{s}.jsonl") for s in strata},
+           "byStratum": {s: {"hitIds": [i for i in ids[s] if i not in key_errors], "keyErrorIds": [i for i in ids[s] if i in key_errors]} for s in strata}}
+    doc.update(over)
+    return doc
 
 
 def head(repo: Path) -> str:
