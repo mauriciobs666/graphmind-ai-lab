@@ -18,7 +18,7 @@ below names the code symbol it was read from (`cpg/ccg/broker/`: `server.py`, `s
 | Option | Meaning |
 |---|---|
 | `--key-holder-socket <path>` | Enables forwarding of R7 allows (§3). Absent: no hosted exchange is ever made (§3, last row). Needs `--holder-uid` and `--require-owner-protected`. |
-| `--holder-uid <int>` | The uid that must own the socket's directory (plan §3.4: a caller refuses a socket whose directory is not holder-owned). The plan names `holder_uid` in `[deployment]` but gives the broker no source for it, and the broker reads no `gateway.toml`; it is an option. A value equal to the broker's own `os.getuid()` is exit 64: the holder runs under another account, and a same-uid "holder" would let any agent bind a fake one. |
+| `--holder-uid <int>` | The uid that must own the socket's directory (plan §3.4: a caller refuses a socket whose directory is not holder-owned). The plan names `holder_uid` in `[deployment]` but gives the broker no source for it, and the broker reads no `gateway.toml`; it is an option. A bare `--holder-uid` (no socket), a negative value, or a value equal to the broker's own `os.getuid()` is exit 64: the holder runs under another account, and a same-uid "holder" would let any agent bind a fake one. The rule is enforced in `server._parse` (reached from `main`, the only production constructor of `HolderClient`), not in `HolderClient` itself. |
 | `--holder-cred <file>` | The broker's credential (plan §3.4, caller `broker`). Default `<passwd home>/.config/llmgateway/callers/broker.cred` (the plan §3.4 artifact table's path). Valid only with `--key-holder-socket`. |
 | `--require-owner-protected` | Every `--system` manifest must pass the owner-protection check below before it is loaded. Mandatory with `--key-holder-socket`: giving the socket without it is exit 64, before anything is bound or locked. Allowed alone. |
 
@@ -26,11 +26,11 @@ below names the code symbol it was read from (`cpg/ccg/broker/`: `server.py`, `s
 (plan §3.6), never the tracked `cpg/ccg/system.yaml`. The broker still loads manifests once, in `main`; a changed manifest is
 a restart (spec3 §2.0, plan D-4).
 
-**Static check of hosted entries (resolution-free).** Because R7 skips address validation (§3 item 1), `server.load_systems` checks
+**Static check of hosted entries (resolution-free).** Because R7 skips address validation (§3 item 1), `server._check_hosted_entries`, called from `server.load_systems`, checks
 each `egress.hosted[]` entry after `check_local_entries` and before accepting the system, with no DNS and no connection: the
 scheme is `https`, and when the host is an IP literal (`addr._literal`) it is not forbidden by `addr._forbidden(addr, data, local_addrs, False)`, where `data` is the interface data already read for S6 and
 `local_addrs` is the set of IP literals of the manifest's `local` entries (built as `addr.validate` builds it); `private_ok` is
-always false, so a private literal on a hosted entry fails at load even with `privateAddress: true` (the flag has no effect on R7). Failure is `ManifestError` naming the file, exit 64. A name host
+always false, so a private literal on a hosted entry fails at load even with `privateAddress: true` (the flag has no effect on R7); this is stricter than the holder's own `allow_private`, by design. Failure is `ManifestError` naming the file, exit 64. A name host
 passes (only the holder can resolve it, plan §3.4).
 
 **Owner-protection check** (new module `cpg/ccg/broker/ownerprot.py`; the broker must not import `llmgateway`, so this is
@@ -40,8 +40,8 @@ files). A manifest passes only when: opened `O_NOFOLLOW`; `fstat` on the descrip
 and not group/other-writable. The bytes are read from that descriptor and **parsed from those bytes**, not re-read by path:
 `ccg.manifest.load_manifest(path)` reads by path (`Path(path).read_text()`), so D9 adds `ccg.manifest.load_manifest_text`
 (`load_manifest` delegates to it) and `server.load_systems` calls it with the verified bytes. `trusted_uids` is `{0}` in
-production and an injected parameter of `main`/`load_systems` for tests only; there is no option or environment variable for
-it. A failure is `PreconditionError`, exit 69, naming the file and the failed condition (spec3 §2.0's exit-code class for a
+production and, with `check_hosted_entries`, a Python-only keyword of `main`/`load_systems` for tests; there is no option or
+environment variable for either. A failure is `PreconditionError`, exit 69, naming the file and the failed condition (spec3 §2.0's exit-code class for a
 failed start precondition).
 
 **Credential intake.** `main` reads the file once, and never again. `reexec_if_needed` runs only in `server.py`'s `if __name__ == "__main__"` guard,
@@ -239,9 +239,9 @@ In order:
     the real `llmgateway.framing.parse_reply` is added. Named mutants: `holderclient` reordering two MAC fields; dropping the
     explicit default port in either canonicaliser; each fails the vectors. D9a's tests import `llmgateway` from the editable install of §8 (there is no `cpg/pyproject.toml` extra); an unimportable `llmgateway` makes these tests **fail**, never skip.
 12. **Real holder, through the real broker (integration).** Two additional cases: a hosted entry at the default port (`https://host:443`
-    in the manifest, `base_url` spelled without the port): the holder finds the provider by canonical origin, so the reply is not
-    `endpoint_unknown`; without root nothing can listen on 443, so the holder's own connect is refused and the reply is a signed
-    `upstream-error` (`closeReason: upstream-error`, `bytesIn > 0`, not a 499); the served (200) variant needs a real install and is
+    in the manifest, `base_url` spelled without the port): the stand-in host `provider.example.test:443` is resolved to 127.0.0.1 by a test launcher, the holder finds the provider by canonical
+    origin (so the reply is not `endpoint_unknown`); without root nothing can listen on 443, so the holder's own connect is refused and
+    the reply is a signed `upstream-error` (`closeReason: upstream-error`, `bytesIn > 0`, not a 499); the served (200, TLS name) variant needs a real install and is
     tier 2 (plan §5.2); and an absent
     `gatewayRunId` is refused `run_id_missing` under `unmatched = refuse` and served within the shared bucket under `unmatched = cap`. For each code of plan §3.3's table that one ccg-shaped call can
     provoke, assert the 499 refusal reaches `BrokerClient.request` intact, one `decision` and one `close` (`499`, `completed`),
@@ -277,11 +277,12 @@ where `import llmgateway` fails today).
 - **D9a (forward path):** production `holderclient.py` (`HolderClient`), `policy.py` (`sanitize`: `gatewayRunId`), `server.py`
   (`Broker.__init__`, `request`, `_upstream`): three files; plus `broker_helpers.py` and D7b's vectors file, consumed. Tests 1-5, 7,
   10-11, 13, and 14's `test_broker_policy.py` re-points and the `Harness` change.
-- **D9b (start-up):** `ownerprot.py`, `manifest.py` (`load_manifest_text`), `server.py` (`load_systems`, `main`). Needs D9a, D7, D7b.
-  - `main` parses the credential file (hex, 32 bytes) and builds `HolderClient(socket_path, holder_uid, secret_bytes)`, passed as
+- **D9b (start-up):** `ownerprot.py`, `manifest.py` (`load_manifest_text`), `server.py` (`_parse`, `_check_hosted_entries`, `load_systems`, `main`). Needs D9a, D7, D7b.
+  - `main` reads and parses the credential file (hex, 32 bytes) **before** loading any manifest, so a credential error wins when
+    both are bad, and builds `HolderClient(socket_path, holder_uid, secret_bytes)`, passed as
     `Broker(hosted_exchanger=...)`.
   - The static hosted-entry check (§1) fails today's loopback-hosted integration fixtures, so `load_systems` and `main` gain a
-    keyword `check_hosted_entries: bool = True`; fixtures pass `False`. It is a Python seam only: no option, no environment
+    second Python-only keyword beside `trusted_uids`, `check_hosted_entries: bool = True`; fixtures pass `False`. It is a seam only: no option, no environment
     variable, and the process entry point always checks.
   - Tests: 6, 8, 9, item 12 as a real-subprocess run, the credential and fake-key scan over argv, `/proc/<pid>/{cmdline,environ}`
     and files (item 12), and 14's `test_broker_server.py` re-points.
