@@ -105,6 +105,21 @@ component = "answer.hostedsecret"
 scopes = ["secret"]
 chain = ["claude", "lm1"]
 
+[call_sites.stepmodel]
+component = "answer.stepmodel"
+chain = [{{ provider = "lm1", model = "step-model" }}]
+
+[call_sites.provset]
+component = "answer.provset"
+chain = ["lm1"]
+settings = {{ temperature = 0.5, max_tokens = 10 }}
+provider_settings = {{ lm1 = {{ temperature = 0.9, seed = 3 }}, lm2 = {{ temperature = 0.1 }} }}
+
+[call_sites.timed]
+component = "answer.timed"
+chain = ["lm1"]
+timeout_s = 7.5
+
 [call_sites.bounded]
 component = "answer.bounded"
 chain = ["lm1"]
@@ -177,6 +192,80 @@ def test_success_returns_reported_identity_and_one_record(make):
     )
     assert (row["input_tokens"], row["output_tokens"], row["hosted"]) == (3, 2, False)
     assert row["duration_ms"] is not None
+
+
+def test_a_bad_run_id_is_refused_before_anything_is_sent(make):
+    env = make()
+    with pytest.raises(ValueError, match="run_id"):
+        env.gateway().call(req(run_id="run 1 (a)"))
+    assert env.a.received == [] and rows(env) == []
+
+
+@pytest.mark.parametrize("odd", ["has a space", "x" * 201, "naïve", "a;b"])
+def test_an_odd_reported_model_id_keeps_the_reply_and_is_recorded_as_a_placeholder(make, odd):
+    body = json.dumps(
+        {
+            "model": odd,
+            "choices": [{"message": {"role": "assistant", "content": "hi"}}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+        }
+    ).encode()
+    env = make([(200, "application/json", body)])
+    r = env.gateway().call(req(run_id="eval-1"))
+    assert r.model == odd and r.message["content"] == "hi"
+    (row,) = rows(env)
+    assert row["model"] == "invalid-reported-model"
+    assert (row["input_tokens"], row["output_tokens"]) == (3, 2)
+    assert env.records.tokens_used("eval-1") == 5
+
+
+def test_the_row_carries_the_effective_scopes_and_the_time_to_answer(make):
+    ticks = iter([10.0, 10.25, 20.0, 20.5])
+    env = make([(503, "application/json", b"{}"), ok()])
+    gw = env.gateway(clock=lambda: next(ticks))
+    gw.call(req("retry", scopes=("plain", "open")))
+    a, b = rows(env)
+    assert a["scopes"] == b["scopes"] == ("plain", "open")
+    assert (a["outcome"], a["duration_ms"]) == ("failed", 250)
+    assert (b["outcome"], b["duration_ms"]) == ("ok", 500)
+
+
+def test_a_redirect_is_a_rejected_failure_not_a_crash(make):
+    env = make([(302, "text/html", b"<a>moved</a>"), ok()])
+    with pytest.raises(AttemptsFailed, match="rejected, HTTP 302") as e:
+        env.gateway().call(req("retry"))
+    assert e.value.failure_class is F.REJECTED and len(env.a.received) == 1
+    assert rows(env)[0]["failure_class"] == "rejected"
+
+
+def test_a_chain_step_model_wins_over_the_provider_model(make):
+    env = make()
+    env.gateway().call(req("stepmodel"))
+    assert json.loads(env.a.received[0]["body"])["model"] == "step-model"
+    assert rows(env)[0]["outcome"] == "ok"
+
+
+def test_provider_settings_layer_overrides_the_profile_and_the_request_overrides_it(make):
+    env = make()
+    gw = env.gateway()
+    gw.call(req("provset"))
+    assert json.loads(env.a.received[0]["body"]) | {} == {
+        "model": "m1",
+        "messages": [dict(MSGS[0])],
+        "temperature": 0.9,
+        "max_tokens": 10,
+        "seed": 3,
+    }
+    gw.call(req("provset", settings={"temperature": 0.2}))
+    assert json.loads(env.a.received[1]["body"])["temperature"] == 0.2
+
+
+def test_timeout_s_reaches_the_wire_request_from_the_site_else_the_default(make):
+    env = make()
+    t = ScriptedTransport(WireResponse(200, GOOD_BODY, "application/json"))
+    env.gateway(t).call(req("timed"))
+    env.gateway(t).call(req("plain"))
+    assert [w.timeout_s for w in t.seen] == [7.5, 120.0]
 
 
 def test_no_model_or_provider_field_selects_the_model_from_configuration(make):

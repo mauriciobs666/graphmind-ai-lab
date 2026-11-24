@@ -553,3 +553,20 @@ def test_hosted_steps_are_never_silently_filtered_from_a_mixed_chain(cfg):
     assert e.value.reason == "restricted_hosted_override"
     # unrestricted: the whole chain, hosted step included, is returned untouched
     assert [s.provider for s in resolve(cfg, req("mixed")).chain] == ["claude", "lm"]
+
+
+def test_override_entry_without_a_chain_is_a_config_error_not_the_default_chain(root):
+    text = TOML + '\n[[scope_overrides]]\nscope = "texty"\n'
+    cfg = load(root, text)
+    with pytest.raises(PolicyRefused) as e:
+        resolve(cfg, req("hosted", "texty"))
+    assert e.value.failure_class is F.CONFIG and e.value.reason == "empty_chain"
+    assert resolve(cfg, req("hosted")).source == "default"  # other scopes are untouched
+
+
+@pytest.mark.parametrize("chain", ['"lm"', "[]", "7"])
+def test_override_entry_with_an_unusable_chain_is_a_config_error(root, chain):
+    cfg = load(root, TOML + f'\n[[scope_overrides]]\nscope = "texty"\nchain = {chain}\n')
+    with pytest.raises(PolicyRefused) as e:
+        resolve(cfg, req("local", "texty"))
+    assert e.value.failure_class is F.CONFIG

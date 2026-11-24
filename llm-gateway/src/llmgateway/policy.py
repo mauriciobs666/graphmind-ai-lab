@@ -145,7 +145,9 @@ def _override_chain(config: GatewayConfig, call_site: str, scopes: tuple[str, ..
         if site is not None and site != call_site:
             continue
         if entry.get("scope") in scopes:
-            return entry.get("chain")
+            # A matching entry without a usable `chain` is a config error (`_steps` refuses an
+            # empty or non-list chain), never a fall-through to the default chain.
+            return entry.get("chain", [])
     return None
 
 

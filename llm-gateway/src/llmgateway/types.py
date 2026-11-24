@@ -8,6 +8,7 @@ express a loosening (AC-2).
 from __future__ import annotations
 
 import enum
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from typing import Any
@@ -28,6 +29,11 @@ NEUTRAL_SETTINGS: frozenset[str] = frozenset(
         "stop",
     }
 )
+
+
+# The plain-identifier alphabet shared by `Request.run_id` and the call-record columns that hold
+# an identifier (`records.py`): a value outside it is refused before a send, never at write time.
+IDENT = re.compile(r"[A-Za-z0-9_:.\-/@+]{1,200}")
 
 
 class FailureClass(enum.StrEnum):
@@ -120,6 +126,10 @@ class Request:
     def __post_init__(self) -> None:
         if not isinstance(self.call_site, str) or not self.call_site:
             raise ValueError("call_site must be a non-empty string")
+        if self.run_id is not None and not (
+            isinstance(self.run_id, str) and IDENT.fullmatch(self.run_id)
+        ):
+            raise ValueError("run_id must match [A-Za-z0-9_:.\\-/@+]{1,200}")
         unknown = set(self.settings) - NEUTRAL_SETTINGS
         if unknown:
             raise ValueError(f"unknown settings: {', '.join(sorted(unknown))}")

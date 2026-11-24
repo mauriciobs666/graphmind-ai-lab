@@ -142,3 +142,16 @@ def test_call_failed_carries_class_and_code():
     assert e.code == "window_ceiling_reached"
     assert "refused" in str(e)
     assert CallFailed(FailureClass.AUTH, "x").code is None
+
+
+@pytest.mark.parametrize("bad", ["run 1 (a)", "", "x" * 201, "é", 7, b"r"])
+def test_run_id_outside_the_record_alphabet_is_refused_at_construction(bad):
+    with pytest.raises(ValueError, match="run_id"):
+        Request("cs", (), run_id=bad)
+    with pytest.raises(ValueError, match="run_id"):
+        Request.from_dict({"call_site": "cs", "messages": [], "run_id": bad})
+
+
+@pytest.mark.parametrize("good", ["eval-1", "run:7/a.b@c+d_e", "x" * 200])
+def test_run_id_inside_the_record_alphabet_is_accepted(good):
+    assert Request("cs", (), run_id=good).run_id == good

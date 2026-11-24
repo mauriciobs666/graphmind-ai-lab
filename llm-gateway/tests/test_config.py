@@ -356,3 +356,54 @@ def test_unprotected_never_honours_owner_origins_even_if_constructed_with_them()
     assert cfg.effective_local_endpoints() == frozenset()
     assert not cfg.is_local("http://10.1.2.3:8080")
     assert cfg.is_local("http://127.0.0.1:8080")
+
+
+HOSTED_KINDS = """
+[deployment]
+local_endpoints = ["http://127.0.0.1:1234"]
+
+[providers.claude_local]
+kind = "anthropic"
+base_url = "http://127.0.0.1:1234"
+
+[providers.keyed_local]
+kind = "lmstudio"
+base_url = "http://127.0.0.1:1234/v1"
+key_ref = "k1"
+
+[providers.plain_local]
+kind = "lmstudio"
+base_url = "http://127.0.0.1:1234/v1"
+
+[providers.unknown_kind_local]
+kind = "mystery"
+base_url = "http://127.0.0.1:1234"
+"""
+
+
+def test_hosted_by_kind_even_at_a_listed_local_origin(root):
+    """An `anthropic` (or unknown) kind is hosted whatever its origin."""
+    write(root, HOSTED_KINDS)
+    cfg = source(root).get()
+    assert cfg.is_local(cfg.providers["claude_local"]["base_url"])
+    assert cfg.provider_is_hosted("claude_local")
+    assert cfg.provider_is_hosted("unknown_kind_local")
+    assert not cfg.provider_is_hosted("plain_local")
+
+
+def test_a_key_ref_makes_a_provider_hosted_at_a_local_origin_and_adapters_agree(root):
+    from llmgateway.providers import openai_compat
+
+    write(root, HOSTED_KINDS)
+    cfg = source(root).get()
+    assert cfg.provider_is_hosted("keyed_local")
+    for pid in cfg.providers:
+        if cfg.providers[pid].get("kind") != "anthropic":
+            assert config_mod.is_hosted_config(cfg.providers[pid]) == (pid == "keyed_local")
+    assert openai_compat.is_hosted_config is config_mod.is_hosted_config
+
+
+def test_unprotected_config_drops_a_key_ref_provider_even_on_loopback(root):
+    write(root, HOSTED_KINDS)
+    cfg = source(root, frozenset({ME + 4242})).get()
+    assert not cfg.protected and set(cfg.providers) == {"plain_local"}

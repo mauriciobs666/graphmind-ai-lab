@@ -259,3 +259,22 @@ def test_hosted_keep_alive_is_refused_not_sent():
     with pytest.raises(CallFailed, match="keep_alive") as exc:
         P.build(ctx(config={**HOSTED, "keep_alive": "5m"}))
     assert exc.value.failure_class is F.CONFIG
+
+
+@pytest.mark.parametrize("hosted", [False, True])
+def test_float_settings_reach_the_wire_with_their_exact_values(env, hosted):
+    """FR-18: no rounding, local and hosted, asserted on the raw bytes the stand-in received."""
+    e = env(hosted=hosted)
+    e.call(settings={"temperature": 0.35, "top_p": 0.955, "seed": 9007199254740993})
+    assert b'"options":{"temperature":0.35,"top_p":0.955,"seed":9007199254740993}' in e.last
+
+
+def test_hosted_ollama_body_is_byte_exact_on_the_wire(env):
+    e = env(hosted=True)
+    e.call(settings={"temperature": 0.0, "seed": 9007199254740993})
+    want = (
+        '{"model":"m1","messages":[{"role":"user","content":"hello"}],'
+        '"options":{"temperature":0.0,"seed":9007199254740993},"stream":false}'
+    )
+    assert e.last == want.encode()
+    assert e.sent[0]["path"] == "/api/chat"

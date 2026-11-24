@@ -254,3 +254,30 @@ def test_hosted_call_through_a_forwarding_transport_names_the_pinned_model(env):
     e = env(hosted=True, model="m1")
     r = e.call(settings={"max_tokens": 50})
     assert r.hosted is True and json.loads(e.last)["max_tokens"] == 50
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_float_settings_reach_the_wire_with_their_exact_values(env, kind):
+    """FR-18: a value is never rounded; asserted on the raw bytes the stand-in received."""
+    e = env(kind)
+    e.call(
+        settings={
+            "temperature": 0.35,
+            "top_p": 0.955,
+            "repeat_penalty": 1.05,
+            "frequency_penalty": 0.123456789,
+        }
+    )
+    assert (
+        b'"temperature":0.35,"top_p":0.955,"repeat_penalty":1.05,"frequency_penalty":0.123456789'
+        in e.last
+    )
+
+
+def test_a_float_is_value_identical_not_text_identical(env):
+    """Known limit (see `providers/base.py`): `json.dumps` re-spells a float (`1e-7` -> `1e-07`);
+    the value is unchanged, which is what FR-18 requires."""
+    e = env()
+    e.call(settings={"temperature": 1e-7, "top_p": 1e21})
+    assert b'"temperature":1e-07,"top_p":1e+21' in e.last
+    assert json.loads(e.last)["temperature"] == 1e-7 and json.loads(e.last)["top_p"] == 1e21

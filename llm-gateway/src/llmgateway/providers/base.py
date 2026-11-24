@@ -5,6 +5,10 @@ A provider kind is a `Provider` subclass: `build` turns neutral inputs into a wi
 error body is read there and dropped). A provider adds nothing the caller did not ask for
 (FR-18): values pass through unchanged, and a required setting it cannot honour fails the call
 naming it (`SettingUnsupported`) before anything is sent.
+
+Known limit: a float is value-identical on the wire, not text-identical, because the body is
+re-serialised by `json.dumps` (`1e-7` goes out as `1e-07`, `1e21` as `1e+21`). FR-18 forbids
+changing a value, not its spelling; integers (a seed above 2**53 included) and strings are exact.
 """
 
 from __future__ import annotations

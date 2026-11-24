@@ -34,9 +34,16 @@ from llmgateway.failures import (
 from llmgateway.policy import ScopeMarkerSource, Step, check_run_bound, resolve
 from llmgateway.providers import REGISTRY, ProviderRegistry
 from llmgateway.providers.base import BuildContext, Provider
-from llmgateway.records import Attempt, RecordSink, RecordStore, new_call_id
+from llmgateway.records import (
+    UNRECORDABLE_MODEL,
+    Attempt,
+    RecordSink,
+    RecordStore,
+    new_call_id,
+)
 from llmgateway.transport import Transport, TransportFailure, WireRequest, WireResponse
 from llmgateway.types import (
+    IDENT,
     NEUTRAL_SETTINGS,
     CallFailed,
     EmbeddingsNotAvailable,
@@ -444,6 +451,15 @@ class Gateway:
             raw=parsed.raw,
         )
 
+    @staticmethod
+    def _recordable_model(outcome: Response | _Failure, model: str | None) -> str:
+        """The model column. A provider-reported id outside the record alphabet is recorded as
+        `UNRECORDABLE_MODEL`: the reply was already paid for, so it must not be lost to a write
+        error (the `Response` still carries the reported id)."""
+        if not isinstance(outcome, Response):
+            return model or "unknown"
+        return outcome.model if IDENT.fullmatch(outcome.model) else UNRECORDABLE_MODEL
+
     def _record(
         self,
         resolution: Any,
@@ -468,7 +484,7 @@ class Gateway:
                 scopes=resolution.scopes,
                 call_site=resolution.call_site,
                 provider=step.provider,
-                model=outcome.model if isinstance(outcome, Response) else (model or "unknown"),
+                model=self._recordable_model(outcome, model),
                 hosted=step.hosted,
                 outcome="ok" if ok else "failed",
                 run_id=request.run_id,

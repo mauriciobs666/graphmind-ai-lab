@@ -111,3 +111,9 @@ def test_encode_body_is_compact_utf8_and_preserves_values():
     raw = encode_body({"seed": 42, "response_format": schema})
     want = '{"seed":42,"response_format":{"type":"object","properties":{"é":{"type":"integer"}}}}'
     assert raw == want.encode()
+
+
+def test_map_settings_never_rounds_a_float():
+    table = {"temperature": "temperature", "top_p": "top_p"}
+    out = map_settings("p", {"temperature": 0.123456789, "top_p": 0.955}, table)
+    assert out == {"temperature": 0.123456789, "top_p": 0.955}

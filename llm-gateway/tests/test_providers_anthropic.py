@@ -252,3 +252,11 @@ def test_a_spend_limit_400_is_out_of_credit_only_through_the_owner_pattern(env):
     assert env(replies=(body,)).fail(settings=S).failure_class is F.REJECTED
     e = env(replies=(body,), extra='out_of_credit_patterns = ["api usage limits"]\n')
     assert e.fail(settings=S).failure_class is F.OUT_OF_CREDIT
+
+
+def test_float_settings_reach_the_wire_with_their_exact_values(env):
+    """FR-18: no rounding; the raw bytes the stand-in received, through the hosted transport."""
+    e = env()
+    e.call(settings={"max_tokens": 64, "temperature": 0.35, "top_p": 0.955})
+    assert b'"max_tokens":64,"messages":[{"role":"user","content":"hello"}],' in e.last
+    assert b'"temperature":0.35,"top_p":0.955' in e.last

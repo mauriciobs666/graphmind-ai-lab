@@ -24,6 +24,7 @@ import json
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from llmgateway.config import is_hosted_config
 from llmgateway.providers.base import (
     BuildContext,
     BuiltRequest,
@@ -56,11 +57,6 @@ def reported_count(container: Mapping[str, Any], key: str) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{key} is not a non-negative integer")
     return value
-
-
-def is_hosted_config(config: Mapping[str, Any]) -> bool:
-    """A provider with a `key_ref` is reached through the key holder with a key it injects."""
-    return bool(config.get("key_ref"))
 
 
 def require_pinned(ctx: BuildContext) -> None:

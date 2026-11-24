@@ -95,6 +95,12 @@ def _is_loopback_literal(host: str) -> bool:
     return ip == ipaddress.IPv6Address("::1")
 
 
+def is_hosted_config(provider: Mapping[str, Any]) -> bool:
+    """A provider table with a `key_ref` is hosted whatever its origin: the key holder injects
+    the key. The one definition behind `GatewayConfig.provider_is_hosted` and the adapters."""
+    return bool(provider.get("key_ref"))
+
+
 @dataclass(frozen=True, slots=True)
 class GatewayConfig:
     """One load of the configuration. Sections are plain mappings; policy interprets them."""
@@ -135,7 +141,11 @@ class GatewayConfig:
 
     def provider_is_hosted(self, provider_id: str) -> bool:
         prov = self.providers[provider_id]
-        return prov.get("kind") not in _LOCAL_KINDS or not self.is_local(prov.get("base_url"))
+        return (
+            is_hosted_config(prov)
+            or prov.get("kind") not in _LOCAL_KINDS
+            or not self.is_local(prov.get("base_url"))
+        )
 
 
 def _table(raw: Mapping[str, Any], key: str) -> dict[str, Any]:
@@ -218,7 +228,9 @@ def _build_unprotected(reason: str, untrusted: bytes) -> GatewayConfig:
     providers = {
         pid: prov
         for pid, prov in _named_tables(raw, "providers").items()
-        if prov.get("kind") in _LOCAL_KINDS and shell.is_local(prov.get("base_url"))
+        if prov.get("kind") in _LOCAL_KINDS
+        and shell.is_local(prov.get("base_url"))
+        and not is_hosted_config(prov)
     }
     call_sites: dict[str, dict[str, Any]] = {}
     for name, site in _named_tables(raw, "call_sites").items():

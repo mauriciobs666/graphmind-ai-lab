@@ -20,13 +20,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from llmgateway.types import FailureClass, GatewayError
+from llmgateway.types import IDENT, FailureClass, GatewayError
 
 DB_NAME = "records.sqlite3"
 SCHEMA_VERSION = 1
 OUTCOMES = frozenset({"ok", "failed"})
 KINDS = frozenset({"first", "retry", "fallback"})
-_IDENT = re.compile(r"[A-Za-z0-9_:.\-/@+]{1,200}")
+_IDENT = IDENT
+UNRECORDABLE_MODEL = "invalid-reported-model"
 _STATE = re.compile(r"[a-z0-9_:.-]{1,64}")
 
 
