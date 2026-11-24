@@ -8,6 +8,12 @@
    "language": "python"
   },
   {
+   "unitId": "0a248e781288368b80c2ac5d37f19de7",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "coordination-graph",
+   "language": "python"
+  },
+  {
    "unitId": "553675a7b9ad7a0252794dd7004e53ec",
    "repoId": "graphmind-ai-lab",
    "rootPath": "cypher-mcp",
@@ -32,6 +38,12 @@
    "language": "javascript"
   },
   {
+   "unitId": "7dbb81449d86f71dcde144fe7b599899",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "falkor-chat/docs",
+   "language": "python"
+  },
+  {
    "unitId": "7abafb34c937b0a744228dd8c24b792a",
    "repoId": "graphmind-ai-lab",
    "rootPath": "falkor-chat/scripts",
@@ -41,6 +53,12 @@
    "unitId": "0fb899742d4d3687495c30357ca16253",
    "repoId": "graphmind-ai-lab",
    "rootPath": "falkor-chat/server",
+   "language": "python"
+  },
+  {
+   "unitId": "dffa8be94c09a01010262923f5e03ed7",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "llm-gateway",
    "language": "python"
   },
   {
