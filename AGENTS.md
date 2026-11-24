@@ -22,10 +22,16 @@ engineering** (Claude Code and OpenCode artifacts).
   headless, local-model DevOps variant that runs a read-only health/hygiene check by default and
   can bring up/tear down one Docker-Compose environment it itself started
   (`opencode/agents/tank/README.md`); it builds on the LM Studio manual `opencode/docs/manuals/local-llm.md`.
-- `cpg/` — Code-Property-Graph component code home: durable CPG reload artifacts
-  (`.cpg-artifacts/`, gitignored) for the Joern-built graphs (`cpg_<component>`) loaded into
-  FalkorDB, and the connected-code-graph (`ccg`) contracts, schemas, sandbox, fixtures and eval data
-  (`cpg/README.md`). The MCP server is **not** here — it's the top-level `cypher-mcp/`, generic rather than
+- `cpg/` — Code-Property-Graph component code home. Holds the durable CPG reload artifacts
+  (`.cpg-artifacts/`, gitignored) for the Joern-built `cpg_<component>` graphs, and the **connected code graph**
+  (`ccg`, C-1001), **P0 and P1 delivered**: the `ccg` package (extractors, packs, linker, assembler, store loader,
+  refresh, answer engine), four clients in `cpg/clients/` (MCP `ccg` tools `ask`/`resolve`/`refresh`/`raw_query`, CLI,
+  plain-language front, raw read-only query), the egress broker and offline sandbox, and the dedicated
+  `ccg-falkordb` store (`127.0.0.1:6390`, no persistence: a restart means a rebuild, `cpg/infra/`), plus fixtures and eval
+  data (`cpg/README.md`). What bites: P1 answers impact and depends-on only; python flow is unavailable, so data-flow items
+  are `possible`; **`raw_query` has no memory cap** (documented limit); `cpg/spikes/vertical-slice/` is frozen, do not edit;
+  which ACs closed is `docs/test-reports/connected-code-graph-p1-closure-report.md`; no live spec yet (owed after P2).
+  The MCP server for `cpg_*` graphs is **not** here — it's the top-level `cypher-mcp/`, generic rather than
   CPG-specific. **Root `docs/HISTORY.md`/`docs/BACKLOG.md` are this component's own** (their own
   headers say so) though they sit at the repo root — a
   delivery entry or backlog item for any other component belongs in that component's own `docs/`
@@ -76,7 +82,7 @@ engineering** (Claude Code and OpenCode artifacts).
 | `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · live spec: `falkor-chat/docs/DESIGN.md` (graph), `falkor-chat/docs/SERVER.md` (server process), `falkor-chat/docs/QUERIES.md` |
 | `salesperson/` | `salesperson/README.md` · `salesperson/AGENTS.md` · `docs/requirements/salesperson-ui.md` · `docs/plans/salesperson-ui.md` |
 | `opencode/` | `opencode/AGENTS.md` · `opencode/docs/manuals/local-llm.md` · `opencode/agents/tank/README.md` |
-| `cpg/` | `cpg/README.md` · `docs/HISTORY.md` · `docs/BACKLOG.md` · `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
+| `cpg/` | `cpg/README.md` (incl. "Running a build and an answer") · `docs/HISTORY.md` · `docs/BACKLOG.md` · `docs/requirements/cpg-query-access.md` · `docs/requirements/connected-code-graph.md` · `docs/plans/connected-code-graph-p1.md` · `docs/test-reports/connected-code-graph-p1-closure-report.md` · `skills/cpg-analysis/SKILL.md` |
 | `cypher-mcp/` | `cypher-mcp/README.md` |
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` |
 | `coordination-graph/` | `coordination-graph/README.md` · `coordination-graph/AGENTS.md` · `skills/coordination-graph/SKILL.md` |

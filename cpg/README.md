@@ -5,8 +5,12 @@
 - **Durable CPG reload artifacts** for the Joern-built `cpg_<component>` graphs, in
   `.cpg-artifacts/` (gitignored, local only). The `cypher` MCP server that queries them is the
   top-level `cypher-mcp/`, not this directory.
-- **The `ccg` Python package**, C-1001 P0's contract code: ids, bundle schema and validators
-  (`docs/plans/connected-code-graph-p0.md` §2 D2), plus the P0 infra and spikes around it.
+- **The `ccg` Python package** (C-1001, the connected code graph; P0's contracts, P1 delivered 2026-11-24): ids, bundle
+  schema and validators, then the P1 pipeline: extractors, pack runtime, linker, assembler, store loader, refresh, the
+  answer engine and renderers, the egress broker and its offline sandbox, and four clients (MCP, CLI, plain-language
+  front, raw read-only query) over a dedicated `ccg-falkordb` store. P1 answers impact and depends-on questions; what it
+  does not close is in `docs/test-reports/connected-code-graph-p1-closure-report.md` and `docs/BACKLOG.md` C-1001.
+  Evaluation harnesses, fixtures and the frozen P0 spikes sit beside it (Layout).
 
 ## Setup
 
@@ -32,7 +36,7 @@ once more (D8). A step that finds a dependency missing stops and asks `teco`.
 | `live` | `falkordb` 1.6.x (V17), `redis` | `live` tests; store spikes S13, S17, S20–S22 |
 | `spike` | `tree-sitter` + grammars `python`, `typescript`/`tsx`, `javascript`, `java`, `kotlin`, `c_sharp`, `go`, `c`, `cpp` | S25–S27 frontend fitness (`docs/plans/connected-code-graph-p0-ml.md` §5.2, §11 N6) |
 | `extract` | `tree-sitter` + `tree-sitter-bash` | P1 shell extractor (`docs/plans/connected-code-graph-p1-extraction.md` P1-10) |
-| `engine` | `mcp` 1.28.1 (the SDK `cypher-mcp/` runs) | P1 engine MCP surface |
+| `engine` | `mcp` 1.28.1 (the SDK `cypher-mcp/` runs) | the `ccg` MCP server (`clients/mcp/server.py`) |
 | `broker` | `jsonschema`, `pyyaml` (the `dev` pins verbatim) | P1 egress broker (`ccg/broker/`): manifests load through `load_manifest`, records validate against `egress-audit-v1.schema.json` |
 
 ## Tests
@@ -46,13 +50,22 @@ cd cpg
 CCG_FALKORDB_PORT=6390 .venv/bin/python -m pytest -m live     # needs infra/ccg-falkordb.sh up
 ```
 
-`live` tests need Docker, the `ccg-falkordb` instance, or Joern. They are deselected by default.
+Two markers are registered in `pyproject.toml`:
+
+- `live`: needs Docker, the `ccg-falkordb` instance (port 6390) or Joern. **Deselected by default** (`addopts` carries
+  `-m "not live"`); a command-line `-m` overrides it.
+- `slice`: an equivalence or conformance gate whose oracle is the frozen `spikes/vertical-slice/` code or the gitignored
+  `.ccg-work/` artifacts. Selected by default; a skip because the oracle artifact is absent is reported **unrun, never
+  green** (`docs/plans/connected-code-graph-p1.md` D9). Run only these with `-m slice`.
+
+The live tier stands up its own throwaway stores (`infra/ccg-falkordb.sh --throwaway`), never `falkordb-dev` or the
+`ccg-falkordb` the MCP server reads.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `pyproject.toml` | package `ccg`; pytest `testpaths=["tests"]`; marker `live` |
+| `pyproject.toml` | packages `ccg*`, `extractors*`, `clients*`; pytest `testpaths=["tests"]`; markers `live`, `slice` |
 | `ccg/ids.py` | canonical tuple → 32-hex id: the one place hashing is defined (bundle spec §3.1–§3.2) |
 | `ccg/bundle.py` | bundle JSONL read, validate and write with deterministic order; the reference validator, and the one implementation of the BS2 gates (bundle spec §2, §5, §8 as amended by BS2); `parse_bind_url` and the `bindParts` rules V1–V6 (spec5 §9); `HOST_LANGS` (the one definition) and rule S6a (`-bundle-spec6.md`: an empty `sandboxAuditIds`, valid only for a host-extractor unit, needs every `file.lang` equal to the unit's) |
 | `ccg/valuehash.py` | `entry_hmac(key, domain, value)`: the keyed, domain-separated hash of `-bundle-spec5.md` §2 (conformance: §9.1); computes only, never reads a key; the `bindParts` tags, `host_kind`, `bind_parts`, `bind_parts_usable`, `mount_prefix_hmac` |
@@ -99,9 +112,49 @@ CCG_FALKORDB_PORT=6390 .venv/bin/python -m pytest -m live     # needs infra/ccg-
 | `ccg/front/` | The plain-language front (P1-26, `docs/plans/connected-code-graph-p1-answers.md`): `parsers.py` (deterministic routes, `file:line`, `path::symbol`, qnames), `resolve.py` (span-group draft to ids and ranked options, fabrication guard), `draft.py`, `errors.py` (`ModelError`), `__init__.py` (`Front`: parsers first, then the interpreter; `answer(summary=True)` adds the summary on the same run), `interpret.py` (`ModelRun`: one broker `answer` run per question opened at the first model call, never for a parser-resolved question; `Interpreter`: one grammar-constrained call, fixed sampler `temperature 0, top_p 1, max_tokens 384, seed 0`, provenance with the endpoint fingerprint and prompt/grammar/sampling hashes, an invalid reply is never repaired), `cache.py` (key `ccg.answer.cache_key`, in-process, one snapshot at a time, `cacheBypass` neither reads nor writes), `summary.py` (aggregate-only; `validate` first; dropped on any added entity; `flow_notice_lines` always follows), `prompts/*.txt`, `grammar/interpret.json` (never `.md`). The shipped `local` egress entry in `ccg/system.yaml` lists `/api/v0/models` and `/v1/chat/completions`. Tests: `tests/test_front_{parsers,resolve,documents,clients,interpret,summary,prompt,broker}.py` (`front_helpers.py`, `front_model_helpers.py`: a broker double and stub model, no live model) |
 | `eval/superset_dev.py` | the measuring tool of pre-registration `ccg-p1-flow-fallback-v1` (P1-39c; line 2 of `eval/preregistration.jsonl`): phase A (refuses an instance that already holds `ccg_flowfb`; not idempotent) builds and loads the EVAL_COMMIT snapshot on a throwaway and prints its digest and unit status, phase B measures the four candidate walks over the dev anchors; refuses on any pin, tool-line (three tool files plus `extraPins`: the build path's files the record's `builderFiles` omits and the pack YAML), snapshot-line or port mismatch. Driven by `tests/test_engine_superset_dev.py` (`-m live`, `CCG_SUPERSET_PHASE=A\|B`); offline proof `tests/test_superset_dev_tool.py`. Never run outside the pre-registered run conditions |
 | `.cpg-artifacts/` | CPG reload artifacts (gitignored) |
+| `ccg/answer.py`, `ccg/keynorm.py`, `ccg/rulepack.py`, `ccg/globs.py` | the canonical answer document, validator and `facts_bytes` projection (`-answer-spec.md`, `-answer-spec2.md`); step 8a of the `http` `keyNorm` (`mask_http_segments`, the one implementation); the rule-pack validator (`-rule-pack-spec.md`); the prompt-bearing Markdown glob grammar |
+| `ccg/registry/` | data, not code: `flow-availability.yaml` (`Unit.flowAvailable` per language, written by the assembler; a row flips only by an accepted re-measurement record, index D2; python is `false`, `FALSE:measured` at P1) and `reasons.yaml` (the reason-code registry the rule-pack validator reads) |
+| `ccg/front/prompts/`, `ccg/front/grammar/` | the interpreter prompts (`*.txt`) and grammars (`*.json`): never `.md`, so `coreTreeHash` covers them (index D5, asserted by a test) |
+| `packs/` | declarative rule packs (`pack.yaml`, `negatives.yaml`, tests), one directory per framework or client (rows above for the P1 shell, `requests`/`httpx` and TypeScript MCP-client packs) |
+| `fixtures/` | the fixture system (`system1/`: `fx-svc`, `fx-web`, `fx-job`, `fx-lib`, `system.yaml`, `expected/`) that the offline and live fixture gates build; `materialize.py` |
+| `eval/` | evaluation inputs and tools: `eval-manifest.yaml`, `heldout-manifest.json` (hashes only), `dev/` gold files, `preregistration.jsonl`, `decisions/`, `results/`, and `tools/` (gate harness `gate.py`/`gate_run.py`, `noise.py`, `oracle*.py`, `ac24_smoke.py`). Held-out content is never in the repo |
+| `spikes/` | P0's spikes: `frontend-fitness/`, `store/`, and **`vertical-slice/`, FROZEN** (P1-38, index D7): ported into `ccg/` and `extractors/joern/`, kept as the live conformance oracle for `tests/slice/` and for the tracked dependents listed in `docs/test-reports/connected-code-graph-p1-spike-dispositions-report.md`. Do not edit it; deletion is a backlog item (`docs/BACKLOG.md` C-1001) |
 
-The rest of plan §2 D2's tree (`sandbox/`, `packs/`,
-`fixtures/`, `eval/`, `spikes/`) arrives with its own step.
+`.ccg-work/`, `.audit/` and `.cpg-artifacts/` are gitignored local state.
+
+## Running a build and an answer
+
+All from `cpg/` with the venv of Setup. Order matters: store, users, build, ask.
+
+```bash
+# 1. The dedicated store (127.0.0.1:6390, no persistence: every restart means a rebuild)
+infra/ccg-falkordb.sh up
+
+# 2. The four per-system ACL users, once per store. Writes ~/.config/ccg/keys/<system>.acl; run it as the
+#    store's operator with the admin credential from ~/.config/ccg/falkordb-admin.pass (`ccg.store.acl.create_users`)
+
+# 3. Build and load the system: units are extracted from the local clones, linked, assembled, loaded, swapped in
+CCG_SYSTEM=graphmind-ai-lab .venv/bin/python -m clients.cli.main refresh            # --scope REPO_ID ... to rebuild some
+
+# 4. Ask. Structured, or a plain-language question (an anchor named as path:line, path::symbol, 'GET /route')
+.venv/bin/python -m clients.cli.main ask --request '{"useCase":"impact","anchor":{"kind":"contract","key":"GET /health","contractKind":"http"}}'
+.venv/bin/python -m clients.cli.main ask --question 'impact GET /health' --format markdown
+.venv/bin/python -m clients.cli.main resolve --anchor '{"kind":"symbol","repo":"r","qname":"m.py::A"}'
+.venv/bin/python -m clients.cli.main raw --cypher 'MATCH (n:Unit) RETURN count(n)'     # read-only, as ccg_raw_<system>
+```
+
+- `ask --fail-on possible|any` exits 1 when the answer lists a `possible` item or any item (a CI gate); `2` is a typed
+  error on stderr, `3` an `ambiguous` or `unresolved` question with `--fail-on` given (`clients/cli/main.py`).
+- The same four operations are the MCP tools `ask`, `resolve`, `refresh` and `raw_query` of the `ccg` server in the
+  repo-root `.mcp.json` (`CCG_SYSTEM`, `CCG_FALKORDB_HOST`, `CCG_FALKORDB_PORT`; Claude-Code-only wiring).
+- Every answer carries the snapshot stamp and per-unit staleness; python flow is unavailable at P1, so data-flow items are
+  `possible` and the answer carries a flow notice (`docs/plans/connected-code-graph-answer-spec2.md` §5).
+- **`raw_query` has no memory cap** (a documented P1 limit): one query can exhaust the instance's memory, the 2g container
+  cap is the only bound, and an OOM kill drops the no-persistence snapshot, which `refresh` restores
+  (`docs/plans/connected-code-graph-p1-raw-query-memory-graph.md`). Per-user limits are P4.
+- Joern and the indexers run only in the offline sandbox (`sandbox/`), and the egress broker (below) mediates anything
+  that leaves the host. Joern needs the toolchain image of `infra/toolchain/README.md`.
+- The closed set of known limits and the open ACs: `docs/test-reports/connected-code-graph-p1-closure-report.md`.
 
 ## Ids, in one paragraph
 

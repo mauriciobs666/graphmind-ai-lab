@@ -5,6 +5,129 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-11-24 — C-1001 P1 close: impact and depends-on over the local store, every client; the open ACs are carried ✅
+
+Phase P1 of the connected code graph (plan index `docs/plans/connected-code-graph-p1.md`, sub-plans
+`-p1-extraction.md`, `-p1-linking.md`, `-p1-answers.md`, `-p1-gates.md`; coordinated in
+`docs/plans/connected-code-graph-coordination.md`) is delivered in five waves (the entries just below). **Which ACs
+closed, for what scope, and which did not, with the closing step and evidence file for each, is the AC-closure table in
+`docs/test-reports/connected-code-graph-p1-closure-report.md` (§2 verdict, §4 per AC, §5 items contradicting the AC
+text); the later runs that table cites are `docs/test-reports/connected-code-graph-p1-closing-items-report.md` (P1T-19,
+P1T-20, P1T-38) and `docs/test-reports/connected-code-graph-p1-ac8-report.md` (P1-40 part 1).** Not restated here.
+The whole-phase `analyst` review is `docs/reviews/connected-code-graph-p1-impl.md` (not yet written when this entry was
+drafted; its verdict gates this close). Open work: `docs/BACKLOG.md` C-1001.
+
+**Stakeholder decisions** (all from the ledger, `docs/plans/connected-code-graph-coordination.md`):
+
+- **Q1 = C** (egress): git-remote fetch deferred, the proxy is a detector; **Q-E** (how AC-8 closes without the fetch
+  path) is unanswered (`docs/plans/connected-code-graph-p1.md` §6, §10).
+- **V-both ships** (2026-11-19): the default walk answers with a flow notice because python flow is unavailable
+  (`docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md`); FR-8 is not met for flag-false flow, accepted.
+- **Q-AC6 B'** (2026-11-20): PM-3 = Markdown list item, floor 3 kept; EX-1 = a Markdown mention bound through a second
+  `.mcp.example.json` URL entry, floor 2 kept. **AC-6 two instances** accepted at P1 for example config (2026-11-23).
+- **Q-DYN B** (2026-11-21): dynamic import (`library_api`) is not met at P1 (AC6-DYN-1..3, TW-1 to P2).
+- **AC-24 not met** for the local model, carried to P2 (2026-11-22): see the AC-24 row of the closure report.
+- **Narrow the gate to http+mcp** (2026-11-23), then **defer the held-out AC-5 gate to P2** (2026-11-23): P1-37 not run,
+  P1-43 does not apply, the held-out list is unspent; scripts and wiring are "not delivered at P1" (RCA
+  `docs/reviews/connected-code-graph-p1-gate-zero-hit-rca.md`).
+- **AC-8 carry** (2026-11-24): P1-40's real-component run is carried to P2 (the component image and an in-scenario
+  local-model path do not exist); P1 records the harness live-tested, `test_ac8.sh` 72 passed, 0 failed with the
+  authorised host probes (`docs/test-reports/connected-code-graph-p1-ac8-report.md` §1).
+- **AC-10 closes on review**, flagged "behaviour unobserved" (2026-11-23, Q-4). **AC-18 reading:** "file and line at each
+  step" excludes contract-point hops (2026-11-23). **AC-1 sub-scope** (2026-11-24): closed for a stated sub-scope,
+  DEF-1 carried (`docs/test-reports/connected-code-graph-p1-closing-items-report.md` §3.3, §6).
+- The 40-item spot-check redo went to an AI reviewer on the `fable` model, and item 26's key-error was accepted as the
+  AI's call (2026-11-22).
+
+**Disclosures** (ledger entries of the dates shown; the figures are the cited file's):
+
+- **Custodian role.** The coordinator, not the human owner, held the P1-34 flow-draw custodian role (user-authorised,
+  2026-11-21); no anchor or held-out value was read or printed.
+- **S36 redo and key-error were AI-only.** The 40-item EP §7.3 redo took about 4 minutes on the `fable` model, 39 correct
+  and 1 incorrect (`docs/test-reports/connected-code-graph-p1-s36-redo-report.md`); three `doubt:` items (1, 9, 37) stay
+  as marked, and a stricter reading gives 4 of 40, which would fire the escalation trigger. No human confirmed any item
+  or the key-error (EP §12.1 asks the stakeholder to confirm each key-error).
+- **AC-24 prompt revised and dev2 shape.** The prompt was revised after the first dev check failed; dev2
+  (`cpg/eval/dev/ac24-r2.jsonl`) has no `two-use-cases` item, and its contract-point split is 2 en + 4 pt
+  (`docs/test-reports/connected-code-graph-p1-ac24-dev2-report.md`, ledger 2026-11-22).
+- **A denied `ls`.** The dev2 custodian's `ls` of the held-out custodian directory was denied by the classifier
+  (ledger 2026-11-21); no held-out content was read.
+- **`raw_query` memory limit (a documented P1 limit, stakeholder decision 2026-11-19).** A raw query can exhaust instance
+  memory and drop the no-persistence snapshot: `GRAPH.RO_QUERY` is not gated by `maxmemory`, only the 2g container cap
+  bounds it, and `QUERY_MEM_CAPACITY` exists but is off; per-user limits are P4 (FR-24)
+  (`docs/plans/connected-code-graph-p1-raw-query-memory-graph.md`). This is not a safety claim.
+- **Suite state.** The full default suite on the committed tree (ledger 2026-11-24): 9 failed, 17330 passed, 10 skipped,
+  531 deselected, 1 xfailed; the 9 are the known reds, none P1's: `test_ac8_lib` signal flake, `test_p1_11b_*` (mcp.json),
+  leaf-harness survivor-tell, package-data-glob, `test_scip_parse` x4, `test_units` golden. The falkor-chat
+  `test_queries.sh` §14.8 failure is also not P1's (`docs/reviews/connected-code-graph-p1-47-impl.md` m3). The throwaway
+  `ccg-falkordb-tw-16390` is still up; its teardown needs the user's `--yes`.
+
+**Spike dispositions (index D7).** `cpg/spikes/vertical-slice/` is frozen, not deleted: 60 tracked hits in 39 files were
+ruled one by one in `docs/test-reports/connected-code-graph-p1-spike-dispositions-report.md`; the directory carries a
+`FROZEN` README and `cpg/README.md` marks it. Deletion is a backlog item (C-1001).
+
+**Other documentation updated at this close:** `cpg/README.md` (Layout, Setup extras, Tests markers, a "Running a build
+and an answer" section, the frozen marker) and the `cpg/` bullet of root `AGENTS.md`. Left to their owners: the
+rule-pack spec rows, `skills/joern-cpg`/`skills/cpg-analysis`, the archive flips and the whole-component `cpg/` live spec
+(owed at the feature close after P2), all listed in `docs/plans/connected-code-graph-p1.md` §11.
+
+## 2026-11-24 — C-1001 P1 wave W4: egress, gates, flow re-measure, smoke, noise, oracle, exit runs ✅
+
+The egress broker core (P1-29) and the AC-8 part 1 harness (P1-31) landed first (`docs/reviews/connected-code-graph-p1-29.md`,
+`-31.md`; security advisories `-29-security.md`, `-31-security.md`); the dedicated `ccg-falkordb` script and its
+throwaway mode are P1-48. **Flow re-measure (P1-34):** python flow is **not** available at P1 (`FALSE:measured`): decision
+cell 296/334 = 0.8862, Wilson 95% [0.8477, 0.9160], rule not met, no registry flip
+(`cpg/eval/decisions/ccg-p1-flow-python-v2-decision.json`; `docs/reviews/connected-code-graph-p1-34-impl.md`;
+`cpg/ccg/registry/flow-availability.yaml`). **AC-24 smoke (P1-35):** harness delivered, dev results recorded, the local
+model target not met (`docs/reviews/connected-code-graph-p1-35-impl.md`,
+`docs/plans/connected-code-graph-p1-interpreter-design-fault.md`). **Noise export and oracle capture (P1-36, P1-47):**
+`docs/reviews/connected-code-graph-p1-36-impl.md`, `-47-impl.md` (13 of 13 scripted steps, 18 app edges over 17 keys,
+ledger 2026-11-21). **Gate harness (P1-32a/b):** verbs, `gate.py` and `gate_run.py`, gated at Pass 5, approve with
+suggestions (`docs/reviews/connected-code-graph-p1-32b-impl.md`); the dress rehearsal was RED and was fixed by rounds E and
+F (`docs/test-reports/connected-code-graph-p1-gate-rehearsal-report.md`). The gate itself was not run: the held-out AC-5
+gate is deferred to P2 (the P1 close entry above; held-out counts `docs/test-reports/connected-code-graph-p1-heldout-strata-counts-report.md`).
+**Exit runs (P1-38, P1-40):** the closing items run (proving-system build 1335 of 1335 units fresh), `test_ac8.sh` 72
+passed with the authorised host probes, and the spike dispositions are in the reports cited above.
+
+## 2026-11-21 — C-1001 P1 wave W3: the answer engine and all four clients ✅
+
+Reader and anchors, the walk with the V-both flow fallback, grouping, staleness and the answer builder (P1-21..23d, P1-39,
+P1-45/45b: `docs/reviews/connected-code-graph-p1-21.md` through `-39d-impl.md`, `-45b-impl.md`); the grouped text and
+Markdown renderers (P1-24/24b); the CLI, the MCP server (tools `ask`, `resolve`, `refresh`, `raw_query`), the raw leg and
+the plain-language front (P1-25a/b, P1-26: `-25a-impl.md`, `-25b-impl.md`, `-26a-impl.md`); the `teco` v1 seam (P1-27,
+`docs/reviews/connected-code-graph-p1-27-impl.md`). The AC-level driver over the fixture system is P1-42
+(`docs/reviews/connected-code-graph-p1-42-impl.md`, approve with suggestions); its per-AC results are in the closure report
+(AC-9, AC-11, AC-16, AC-17, AC-18, AC-21, AC-25 rows).
+
+## 2026-11-21 — C-1001 P1 wave W2: pack runtime, linker, assembler, store, refresh, consumer packs ✅
+
+The pack runtime (P1-16), the linker with binding chains (P1-17), the assembler (P1-18/18b), the store loader and ACL
+users (P1-19/19b), refresh and staleness (P1-20), the build dispatch (P1-44/44a), and the consumer packs
+`packs/shell-mcp-call/`, `packs/python-http-client/`, `packs/ts-mcp-client/` (P1-46, P1-49..52); the live-QA defects were
+triaged into P1-53..57 (`docs/reviews/connected-code-graph-p1-51-53.md` through `-57-impl.md`). The fixture gate passed
+81 of 81 P1 rows on the live tier, closed world 0 unplanted (`docs/test-reports/connected-code-graph-p1-report.md`,
+"P1-41 dispatch C"). The proving-system build links 934 Links (http 376, mcp_tool 558; confirmed 104, possible 830) over
+1335 fresh units (`docs/test-reports/connected-code-graph-p1-closing-items-report.md` §2). **Not delivered:** shell
+exec/URL/script-hop facts and a shell URL source, so scripts and wiring link nothing (engine gap, carried to P2; RCA
+`docs/reviews/connected-code-graph-p1-gate-zero-hit-rca.md`).
+
+## 2026-11-20 — C-1001 P1 wave W1: extraction ✅
+
+The manifest and unit discovery (P1-03), the Joern extractor port (P1-04) and the Python/TypeScript normalizer
+(P1-05, with its 5c and 5d rounds and P1-50), the writer rules and `bindParts` (P1-07, P1-13/14), the projection fix
+(P1-09), and the shell, configuration, Compose, `.mcp.json` and prompt/Markdown extractors (P1-10, P1-11/11b, P1-12);
+indexer adoption is code-only (P1-15: the corpus measurement and the `ccg-p1-indexer-v1` record are not built; `cpg/README.md`).
+Reviews: `docs/reviews/connected-code-graph-p1-03.md` through `-p1-15.md` (one per step; P1-05 also `-p1-05-5b.md`, `-p1-5c.md`).
+Equivalence to the frozen slice is asserted by `cpg/tests/slice/` (marker `slice`; a skipped oracle is reported unrun,
+index D9).
+
+## 2026-11-10 — C-1001 P1 wave W0: specs and intake ✅
+
+Package stubs, extras and the `slice` marker (P1-01), bundle-at-rest and the dedicated store script (P1-02, P1-48), and the
+successor specs the builders needed: `docs/plans/connected-code-graph-bundle-spec5.md` (`bindParts`),
+`-egress-spec4.md`, `-answer-spec2.md`, `-bundle-spec6.md`, plus the `-p1-ml.md` and `-p1-graph.md` notes (reviews
+`docs/reviews/connected-code-graph-p1.md`, `-p1-01.md`, `-p1-02-48.md`).
+
 ## 2026-11-09 — C-1002: the contact-map pin survives a rebase ✅
 
 `cpg/spikes/frontend-fitness/contact.json` now pins `derivedFromTree`, the git **tree** hash the derivation

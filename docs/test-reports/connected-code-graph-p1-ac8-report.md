@@ -60,5 +60,5 @@ Decision for the coordinator:
 
 ## 5. Notes
 
-- The earlier "no, later" decline is replaced by the 2026-11-23 authorisation; the host-probe part of AC-8 is therefore no longer withheld, only the real-component run is blocked.
+- The earlier "no, later" decline is replaced by the 2026-11-23 authorisation; the host-probe part of AC-8 is therefore no longer withheld, only the real-component run is blocked. Outcome (2026-11-24): the real-component run is carried to P2 by stakeholder decision (the component image and an in-scenario local-model path do not exist); AC-8 part 1 closes at P1 as not run beyond the harness's own test.
 - Row 8.16's `strace` route: the gates doc says `devops` installs it; it was already present, nothing installed.

@@ -11,7 +11,7 @@
 > Item IDs use the `C-` prefix (distinct from falkor-chat's `K-`); the hundreds digit tracks the
 > milestone the item was opened under (C-2xx = M2, C-3xx = M3).
 > Status: 🔵 proposed · 🟡 in-progress · ⚪ deferred
-> Last reviewed: 2026-11-06.
+> Last reviewed: 2026-11-24.
 
 **Where the component is:** M1…M8 delivered, M8 (kaizen agent/learning-note ontology) closed
 2026-08-22. Each milestone's scope, items and gate trail is one entry in
@@ -27,18 +27,71 @@
 
 The use cases are impact mapping, root-cause analysis,
 code review, test coverage map and security. Requirements: `docs/requirements/connected-code-graph.md`;
-architecture proposal: `docs/plans/connected-code-graph.md`. **Phase P0 is delivered**
-(contracts and graph model frozen, fixtures, ground truth, frontend fitness; record in
-`HISTORY.md`, the 2026-11-06 close entry and the eight group entries beneath it). **What remains:** phases P1, P3, P4, P5
-and then P2 (optional, last, per the stakeholder's 2026-11-01 order P0 → P1 → P3 → P4 → P5 → P2),
-then the Arduino `.ino` slot, which needs P2's C/C++ extractor and gates no phase. The feature
-stays open until P2 is built: AC-8 closes at P2 exit and nothing is descoped. **Next step: the P1
-plan** (`architect`, coordinated by `teco`). It starts from the P1-bound obligations in
-`docs/plans/connected-code-graph-p0-2.md` §15 ("Named handoffs to P1"), the P0 disclosures in
-`docs/test-reports/connected-code-graph-p0-ground-truth-report.md` (`## P0 disclosures`), and the
-fact that `flowAvailable` is false for the six measured languages, so P1's flow gate has to be
-settled in the plan (`HISTORY.md`, P0 group 5). The stakeholder's egress decision (git tunnel
-granularity, egress Q1) is due at P1. Owner: `teco`.
+architecture proposal: `docs/plans/connected-code-graph.md`. **Phases P0 and P1 are delivered** (record: `HISTORY.md`, the
+2026-11-24 P1 close entry; per-AC status: `docs/test-reports/connected-code-graph-p1-closure-report.md`). **What remains:**
+P2 onward, in the stakeholder's order P0 → P1 → P3 → P4 → P5 → P2 (P2, generality, is scheduled last, not descoped), then
+the Arduino `.ino` slot, which needs P2's C/C++ extractor and gates no phase. P1's open ACs are filed against P2 by the
+2026-11-22 to 2026-11-24 decisions, as the carry-over below; the feature stays open until P2 is built, and AC-8 closes at
+P2 exit. The whole-component `cpg/` live spec is owed at the feature close after P2 (`analyst` checks it). Owner: `teco`.
+
+**P1 carry-over (each: what, owner, trigger).** New item IDs are allocated by `teco` with `wi` at the close.
+
+- **AC-5 held-out gate** (`teco`; trigger: scripts and wiring linking exists): one combined gate over the four strata
+  (http, mcp, scripts, wiring). Held-out http 26 plus mcp 46 is 72 counting items, 3 under 75; the held-out list is unspent
+  (`docs/test-reports/connected-code-graph-p1-heldout-strata-counts-report.md`).
+- **Gate harness before the list is spent** (`tdd-engineer`; trigger: the gate is scheduled): minors P5-1..P5-3
+  (`docs/reviews/connected-code-graph-p1-32b-impl.md`), the stale `STRATA_GATED`/`MIN_COUNTING` and `ac5-gate-1` record,
+  the dev-gold pre-gate probe, the per-kind miss breakdown, and a no-workaround rehearsal rerun.
+- **AC-24 local-model target** (`data-scientist`; trigger: a P2 measurement): not met at P1 (dev 9/12 and 8/12, closure
+  report AC-24 row); a larger-model try, R4b out of sample, the "path line N" span residual; the lower target is set from
+  that measurement.
+- **AC-8 real-component run and Q-E** (`devops`, `security-expert` advisory; trigger: a component image and a local-model
+  path reachable from a no-route network exist): P1-40's four spec §8.1 features
+  (`docs/plans/connected-code-graph-egress-spec3.md` §8.1, `docs/test-reports/connected-code-graph-p1-ac8-report.md` §4);
+  Q-E (how AC-8 closes without the git-fetch path) is for the stakeholder via `tico`.
+- **Shell and Markdown URL and launch facts** (`architect`; trigger: the P2 linking plan): DEF-1, the shell/Markdown `curl`
+  URL source (AC-1's one dev miss, `docs/test-reports/connected-code-graph-p1-closing-items-report.md` §3.3), and the shell
+  exec, URL and script-hop facts behind scripts 0/49 and wiring 0/7 asked (AC-4, AC-2 wiring half).
+- **AC-25 control half** (`architect`; trigger: python flow flips by an accepted re-measurement record): V-both ships;
+  the guarded-code rows are not listed (`docs/plans/connected-code-graph-p1-flow-fallback-result-ml.md`).
+- **Linking and pack work** (`architect`; trigger: the P2 linking plan): a string-only guard for `ts-mcp-client`
+  (a pack-format change), JS `import.meta.env` environment records (AC6-EX-2), the `/api` base-constant join, Python
+  string-constant prompt mentions (AC6-PM-3's original shape), a code consumer binding a config URL (AC6-EX-1's original
+  `launch` shape), `library_api` linking (Q-DYN B: AC6-DYN-1..3, TW-1), indexer adoption (the corpus measurement and the
+  `ccg-p1-indexer-v1` record), a receiver check for the TypeScript `store.fetch`, AC-9b's wider rule (an unbound crossing
+  into a never-built unit), and one sentence in `extractors/joern/README.md` (D13: the default file filter has no left
+  boundary on `test`/`spec`/`conf`, so `latest.ts` is `frontend-ignore`).
+- **`ccg-oracle-v5` and a runner test** (`tdd-engineer`; trigger: before any further oracle capture): a roughly
+  20-line `oracle_runner.py` test pinning the per-phase fence and the 16390 exclusion, and its pre-registration record
+  (ledger 2026-11-22, analyst Pass 2 m1).
+- **`raw_query` memory hardening** (`devops`; trigger: before any untrusted `raw_query` use): set `QUERY_MEM_CAPACITY`
+  (256 MiB recommended) in `cpg/infra/ccg-falkordb.sh up` and its `status` drift check, after confirming the engine's and
+  the build's heaviest queries stay under it; today a raw query can exhaust instance memory, a documented P1 limit
+  (`docs/plans/connected-code-graph-p1-raw-query-memory-graph.md`); per-user limits are P4 (FR-24).
+- **`skills/joern-cpg/scripts/test-stamp-wiring.sh` parse error** (`coder`; minor): a tree-sitter parse error.
+- **S10 product defect** (`falkor-chat`/`salesperson` owners; belongs in `falkor-chat/docs/BACKLOG.md` on filing): the
+  salesperson JoinScreen posts `displayName ''` after a reset and gets 422; the SPA must resend the name or the server
+  accept a language-only re-join (`docs/reviews/connected-code-graph-p1-47-impl.md`). With it, the `falkor-chat`
+  `test_queries.sh` §14.8 failure (460/461, `SUPERSEDES.matchId` relationship index, same review m3) and the per-item
+  baseline hits named in the close brief.
+- **Data-scientist HA-6 row** (`data-scientist`; trigger: the next evaluation-protocol edit): add an HA-6 row to EP §5.2.1
+  (`docs/plans/connected-code-graph-p1-gate-marker-ml.md` §3: a non-transient engine exception is a miss, `engine-error`).
+- **S1 noise-reduction bar** (`data-scientist`; trigger: before the next gate's preregistration): decide whether the
+  at-least-5x bar is kind-wide, key-scoped or both (`cpg/eval/decisions/ccg-noise-recall-rule-v1.json`,
+  `docs/reviews/connected-code-graph-p1-noise-export-ml.md`).
+- **Delete or vendor `cpg/spikes/vertical-slice/`** (`coder`): frozen, not deleted. Blocked by (a) `cpg/tests/slice/*`
+  and `tests/test_engine_answer_v18.py` oracle imports (trigger: P2 retires the slice equivalence gates, or the oracles
+  are vendored as golden-free fixtures); (b) `cpg/spikes/store/{bfs,synth,lock_replay}.py` and
+  `store/tests/test_store_spikes.py` line 404 (re-point to vendored copies or retire the store spikes with their
+  results); (c) `s28_run.py`'s default `EXTRACT` and `tests/test_s28_run_extract.py` (re-point only if the S28 record is
+  retired). Done when `git grep -n vertical-slice` outside `docs/` shows only historical hits and the suite is green
+  (`docs/test-reports/connected-code-graph-p1-spike-dispositions-report.md`).
+- **Git-fetch path** (`architect`; trigger: a manifest first naming an https `remote`): deferred by Q1 = C; design inputs in
+  `docs/plans/connected-code-graph-egress-spec3.md`.
+- **TS/JS flow remedy** (`architect`; trigger: JavaScript flow is measured): `switch`-case cond synthesis.
+- **Known reds, not P1's** (`devops`; fix or retire): `test_ac8_lib` signal flake, `test_p1_11b_*` (mcp.json), the
+  leaf-harness survivor-tell, package-data-glob, `test_scip_parse` x4, the `test_units` golden.
+- **Teardown of `ccg-falkordb-tw-16390`** (`devops`): needs the user's `--yes`.
 
 
 ### Proposed 🔵
