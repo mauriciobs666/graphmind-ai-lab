@@ -74,3 +74,6 @@ D9a/D8 analyst gates: Pass 14 (D9a) and Pass 15 (D8) approve with suggestions; K
 | D9b gates | `analyst` `aa88268ad17048330` (Pass 16), `security-expert` `a7b80d0ec280cf976` (Pass 10) | — | in-flight | `docs/reviews/…` | — → — | — |
 
 Blocked: D11/D12 (ccg switchover) need "ccg P1 phase exit closed" — `docs/plans/connected-code-graph-coordination.md` last records P1-38 phase exit STARTED (2026-11-23), not closed; closing it is ccg's coordination, not this one. D13 (suites) needs D12; D14 (tier 2) needs the human's sudo run; D15 (docs) partly doable now (AGENTS.md/README refresh owed).
+| D9b gates | analyst Pass 16 (approve w/ suggestions; L1 major: production `trusted_uids` default unpinned) + security Pass 10 (approve w/ suggestions) | — | gated | reviews | → D9c |
+| D9c | `coder` | `a766eb7f93cf1ab35` | in-flight | L1–L3 tests, ccg golden units list regen (red `test_units` caused by new `llm-gateway/` component), AGENTS.md/README refresh | `analyst` spot-check → — | — |
+| spec5 match D9b | `architect` | `a6c231652670eed13` | in-flight | `docs/plans/connected-code-graph-egress-spec5.md` | — → — | — |
