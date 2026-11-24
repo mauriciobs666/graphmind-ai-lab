@@ -1,6 +1,6 @@
 # Anthropic API adoption across modules — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-19
+> **Status:** superseded · **Owner:** `tico` · **Tracks:** — · **Superseded by:** `docs/requirements/llm-gateway.md` · **Last updated:** 2026-11-23
 
 ## Intent
 The stakeholder has received Anthropic API credits and wants to experiment with them. They want the Anthropic API usable from **every module of the repository that calls an LLM**, configured through the default-and-fallback mechanism `falkor-chat` already has, and used as well as possible.
