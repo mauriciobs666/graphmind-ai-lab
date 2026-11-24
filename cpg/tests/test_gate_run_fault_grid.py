@@ -320,4 +320,5 @@ def test_only_a_store_error_is_transient_by_what_it_wrapped_any_other_outer_type
     handling a host fault has handled it, so the fault is the product's (``engine-error``), as ``classify`` always read it."""
     own = implicit(ValueError("the product's own"), OSError(errno.ENOSPC, "full"))
     assert R.classify(own) == "deterministic"
-    assert R.ask_failure_entry(explicit(R.EngineAskError("ValueError"), own)) == {"outcome": "engine-error", "exceptionClass": "OSError"}
+    # CO-5 / P5-2: the class recorded for a non-``StoreError`` outer is the outer's own (was the innermost, which reported the engine's own error as a host fault)
+    assert R.ask_failure_entry(explicit(R.EngineAskError("ValueError"), own)) == {"outcome": "engine-error", "exceptionClass": "ValueError"}

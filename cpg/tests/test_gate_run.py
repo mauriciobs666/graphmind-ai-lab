@@ -8,6 +8,7 @@ import pytest
 
 import gate_helpers as H
 from gate_helpers import G
+from gate_run_helpers import dev_probe_doc
 
 
 # ---------------------------------------------------------------- run_asks
@@ -393,6 +394,8 @@ class ScoreEnv:
         pf = G.preflight(self.repo, "ac5-gate-1", observed=OBS)
         self.ctx = {**G.run_context(self.repo, pf, allow_after_adaptation=True), "label": label}
         self.run = self.cust / "run.json"
+        self.dev_probe = tmp_path / "dev-probe.json"
+        self.dev_probe.write_text(json.dumps(dev_probe_doc()))
         self.key = G.list_key([self.w.rec])
         self.write_marker("asked")
         self.write_run(run_pin)
@@ -401,7 +404,7 @@ class ScoreEnv:
         """The list changes, so its key does: the marker and the run file follow it (as they would for a run of that list)."""
         self.lists.write_text("".join(json.dumps(r) + "\n" for r in recs))
         self.key = G.list_key(recs)
-        self.withheld = G.withhold_strata(recs, G.STRATA if self.flow_flag else G.STRATA_GATED)[1]       # what a run of these lists would have recorded
+        self.withheld = G.withhold_strata(recs, G.gated_strata(self.flow_flag))[1]       # what a run of these lists would have recorded
         self.write_marker("asked")
         self.write_run()
 
@@ -413,7 +416,8 @@ class ScoreEnv:
         self.run.write_text(json.dumps(run))
 
     def argv(self, **over):
-        a = {"--gate-id": "ac5-gate-1", "--lists": str(self.lists), "--run": str(self.run), "--custodian": str(self.cust), "--port": "16420"}
+        a = {"--gate-id": "ac5-gate-1", "--lists": str(self.lists), "--run": str(self.run), "--custodian": str(self.cust), "--port": "16420",
+             "--dev-probe": str(self.dev_probe)}
         a.update(over)
         return ["score", *[x for k, v in a.items() if v is not None for x in (k, v)]]
 
@@ -533,7 +537,7 @@ def test_a2_score_of_a_run_with_an_errored_anchor_reports_blocked_with_counts_an
 
 def test_cli_score_refuses_a_custodian_dir_outside_the_area(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("HOME", str(tmp_path))
-    rc = G.main(["score", "--gate-id", "g", "--lists", "x", "--run", "y", "--custodian", str(tmp_path / "elsewhere")])
+    rc = G.main(["score", "--gate-id", "g", "--lists", "x", "--run", "y", "--custodian", str(tmp_path / "elsewhere"), "--dev-probe", "z"])
     assert rc == 2 and "REFUSED" in capsys.readouterr().err
 
 
@@ -646,7 +650,7 @@ def test_m1_flow_items_are_withheld_and_only_counted(tmp_path, monkeypatch, caps
 def test_m7_the_moved_out_counts_of_the_record_reach_the_verdict(tmp_path, monkeypatch, capsys):
     def run(moved):
         e = ScoreEnv(tmp_path / f"m{moved}", monkeypatch, record={"kind": "re-gate", "movedOut": {"http": moved}})
-        recs = [H.item(n, e.w.anchor, H.sym(e.w.qname), stratum=("http", "mcp", "scripts", "wiring")[n % 4]) for n in range(1, 81)]
+        recs = [H.item(n, e.w.anchor, H.sym(e.w.qname), stratum=("http", "mcp", "scripts")[n % 3]) for n in range(1, 81)]
         e.set_records(recs)
         fresh = [r for r in recs if r["derivedStratum"] == "http"][:20] + [r for r in recs if r["derivedStratum"] == "mcp"][:15]
         flags = e.cust / "flags.jsonl"

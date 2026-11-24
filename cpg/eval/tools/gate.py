@@ -50,11 +50,17 @@ from oracle import wilson as _wilson        # noqa: E402  (the one Wilson implem
 PREREG_SCHEMA = "ccg-prereg-v1"
 PREREG_FIELDS = ("packSetHash", "coreTreeHash", "algorithm", "defaultDepthBound")
 FLOOR = 35                                   # EP §12.1 step 5 (E12)
-MIN_COUNTING = 75                            # AC-5 pooled
-MIN_STRATUM = 8                              # AC-5 per stratum
+MIN_COUNTING = 75                            # AC-5 pooled, over the gated strata
+MIN_STRATUM = 8                              # AC-5 per GATED stratum (a withheld stratum has no floor)
 EMPTY_VERDICT_LOG_HASH = "c482b1cf54631b37eb4572dc86a68fb1"     # HA-4: the literal, never ``answer.EMPTY_VERDICT_LOG_HASH``
 STRATA = _mk.STRATA
-STRATA_GATED = ("http", "mcp", "scripts", "wiring")      # P1-37 while the flow flag is false: flow is withheld, not gated (``-p1-gate-marker-ml.md`` §4)
+STRATA_GATED = ("http", "mcp", "scripts")      # the gated strata of the first held-out spend (stakeholder, 2026-11-24, ``docs/plans/connected-code-graph-p1-closeout.md`` §1); the rest are withheld
+#: the reason each non-gated stratum is withheld, reported beside its COUNT (never ids). ``flow`` is gated only when the flow flag is true (:func:`gated_strata`).
+WITHHELD_REASONS = {
+    "flow": "flow-unavailable, not closed: the language's flow flag is false, so flow items are neither asked nor scored (``-p1-gate-marker-ml.md`` §4)",
+    "wiring": "withheld by stakeholder decision: wiring linking is not built (the dev wiring items need an answer-spec change), so wiring items are neither asked nor scored",
+}
+DEV_PROBE_SCHEMA = "ccg-dev-probe-v1"            # the dev-gold probe result the rehearsal writes (:func:`dev_probe_check`)
 FLOW_DECISION = Path("cpg") / "eval" / "decisions" / "ccg-p1-flow-python-v2-decision.json"
 ENTRY_POINTS = ("gate.py", "gate_run.py")                # the modules that run the gate; the pin is their import closure under ``cpg/eval/tools/``
 STATUSES = ("confirmed", "possible")        # H2
@@ -878,11 +884,16 @@ def _counts(items: Mapping) -> dict:
     return {"scored": len(sc), "counting": sum(1 for o in sc.values() if o["counting"]), "byStratum": dict(by)}
 
 
-def withhold_strata(records: Sequence[Mapping], gated_strata: Sequence[str] = STRATA_GATED) -> tuple[list, dict]:
+def gated_strata(flow_flag: bool) -> tuple[str, ...]:
+    """The strata a run asks and a score counts: :data:`STRATA_GATED`, plus ``flow`` only when the flow flag is true. ``wiring`` is withheld whatever the flag."""
+    return (*STRATA_GATED, "flow") if flow_flag else STRATA_GATED
+
+
+def withhold_strata(records: Sequence[Mapping], gated: Sequence[str] = STRATA_GATED) -> tuple[list, dict]:
     """The records of the gated strata, and the COUNT withheld per stratum (never ids): a withheld item is not asked, scored or resolved
     (``-p1-gate-marker-ml.md`` §4.2). Used by ``score`` here and by the run verb."""
-    kept = [r for r in records if r["derivedStratum"] in gated_strata]
-    return kept, dict(Counter(r["derivedStratum"] for r in records if r["derivedStratum"] not in gated_strata))
+    kept = [r for r in records if r["derivedStratum"] in gated]
+    return kept, dict(Counter(r["derivedStratum"] for r in records if r["derivedStratum"] not in gated))
 
 
 def flow_flag(record_path: Path, committed_text: Callable[[Path], str] | None = None) -> bool:
@@ -901,9 +912,9 @@ def flow_flag(record_path: Path, committed_text: Callable[[Path], str] | None = 
 
 
 def decide_gate(result: Mapping, flags: Mapping[str, str] | None = None, moved_out: Mapping[str, int] | None = None,
-                gated_strata: Sequence[str] = STRATA) -> dict:
+                gated_strata: Sequence[str] = STRATA_GATED) -> dict:
     """EP §12.1. With no ``flags`` this is gate 1: pass iff every scored item is a hit over >= 75 counting items and >= 8 items per GATED stratum
-    (``gated_strata``; default all five, P1-37 passes :data:`STRATA_GATED` while the flow flag is false). With ``flags`` (itemId -> kept /
+    (``gated_strata``; default :data:`STRATA_GATED`: a withheld stratum is neither scored nor counted toward ``minimumsMet``). With ``flags`` (itemId -> kept /
     kept-cluster-fresh / fresh-cluster) it is a re-gate: a pass needs (1) every item a hit, (2) the composition rule (H >= 75, every H_s >= 8, and per
     stratum that had a miss at least as many fresh-cluster items as were ``moved_out``) and (3) at least F = 35 COUNTING items on fresh clusters; (1) and
     (2) without (3) is "all hits, floor not met", never a pass.
@@ -1078,12 +1089,12 @@ def _chain_length(rows: Sequence[Mapping]) -> dict:
 
 def build_report(result: Mapping, decision: Mapping, *, flags: Mapping[str, str] | None = None, cluster_of: Mapping | None = None,
                  exposure: Sequence[Mapping] = (), exposure_strata: Mapping | None = None, context: Mapping | None = None,
-                 gated_strata: Sequence[str] = STRATA, withheld: Mapping[str, int] | None = None, flow_flag: bool | None = None) -> dict:
+                 gated_strata: Sequence[str] = STRATA_GATED, withheld: Mapping[str, int] | None = None, flow_flag: bool | None = None) -> dict:
     """Counts, hashes and classes only (never item content, never an id). Recall is given over items, distinct anchors and clusters, per
     stratum and pooled, each with its Wilson interval, and the cluster interval of P0-ML §7.3 (anchors as clusters when no map is given).
-    ``context`` carries the preflight blocks (first contact, pins, harness pin, scope) verbatim. When ``flow`` is not in ``gated_strata`` the report
-    says "flow-unavailable, not closed" with the flag and the withheld count, labels a wiring stratum at its floor "screened, not certified", and
-    carries no flow recall or interval."""
+    ``context`` carries the preflight blocks (first contact, pins, harness pin, scope) verbatim. Every stratum
+    outside ``gated_strata`` is reported by COUNT only, as withheld, with its reason (``withheld``); a withheld stratum has no recall, interval or floor, and when
+    ``flow`` is withheld the report also says "flow-unavailable, not closed" with the flag and the count."""
     items = _scored(result)
     rows = list(items.items())
     per = {s: _rec_block([o for _, o in rows if o["stratum"] == s], cluster_of) for s in gated_strata if any(o["stratum"] == s for _, o in rows)}
@@ -1096,7 +1107,7 @@ def build_report(result: Mapping, decision: Mapping, *, flags: Mapping[str, str]
     rep = {"verdict": decision["verdict"], "kind": decision["kind"], "H": decision["H"], "H_all": len(rows), "scored": len(rows),
            "minimumsMet": decision["minimumsMet"], "blockers": decision["blockers"],
            "recall": {"pooled": _rec_block([o for _, o in rows], cluster_of), "byStratum": per},
-           "misses": {"count": len(miss), "byReason": dict(Counter(o["reason"] for o in miss)), "byStage": dict(Counter(o.get("stage", "-") for o in miss)),
+           "misses": {"count": len(miss), "byStratum": dict(Counter(o["stratum"] for o in miss)), "byReason": dict(Counter(o["reason"] for o in miss)), "byStage": dict(Counter(o.get("stage", "-") for o in miss)),
                       "anchorNotInGraph": sum(1 for o in miss if o["reason"] == "anchor-not-in-graph"),
                       "extractionAbsent": sum(1 for o in miss if o.get("extractionAbsent")), "depthBoundCut": sum(1 for o in miss if o.get("depthBoundCut")),
                       "triage": {c: 0 for c in TRIAGE}, "triageNote": "to be filled by the gate runner and the method owner (EP §12.1 step 2)"},
@@ -1109,10 +1120,9 @@ def build_report(result: Mapping, decision: Mapping, *, flags: Mapping[str, str]
            "chainLength": {s: _chain_length([o for _, o in rows if o["stratum"] == s and o["outcome"] == "hit"]) for s in per},
            "chainLengthUnit": "the engine's `distance` over hit items (the shortest qualifying chain); `symbolHops` = Symbol hops after the first, beside it",
            "units": "items, distinct anchors, clusters (`clusterUnit` says which map was given)"}
+    rep["withheld"] = {s: {"count": int((withheld or {}).get(s, 0)), "reason": WITHHELD_REASONS[s]} for s in STRATA if s not in gated_strata}      # counts and reasons only
     if "flow" not in gated_strata:
         rep["flow"] = {"status": "flow-unavailable, not closed", "flag": bool(flow_flag), "withheld": int((withheld or {}).get("flow", 0))}
-        if "wiring" in gated_strata and decision["byStratum"].get("wiring", 0) <= MIN_STRATUM:
-            rep["wiring"] = "screened, not certified"
     if flags is not None:
         rep["regate"] = _regate_block(items, flags, decision, exposure, exposure_strata)
     rep.update(context or {})
@@ -1139,6 +1149,20 @@ def _regate_block(items: Mapping, flags: Mapping, decision: Mapping, exposure: S
             "keptClusterFresh": {**fig("kept-cluster-fresh"), "note": "scored, not fresh-anchor evidence"}, "cumulativeFirstExposure": cum,
             "freshCounting": decision.get("freshCounting"), "floor": FLOOR, "floorMet": decision.get("floorMet"), "claim": claim,
             "note": "0.951 is claimed only for a first gate and is never claimed for a re-gate (EP §5.3)"}
+
+
+def miss_breakdown(records: Sequence[Mapping], result: Mapping) -> list[dict]:
+    """The fine per-kind breakdown ``{stratum, anchorType, impactedType, items, hits, misses}`` over the scored items (CO-5). Held-out-derived: the caller writes
+    it to the custodian ``work/`` directory only (:func:`write_custodian`) and never prints it or puts it in the report; types and counts, no id, path or name."""
+    scored, cells = _scored(result), {}
+    for rec in records:
+        o = scored.get(rec["itemId"])
+        if o is None:
+            continue
+        c = cells.setdefault((o["stratum"], rec["anchor"]["type"], rec["impacted"]["type"]), {"items": 0, "hits": 0, "misses": 0})
+        c["items"] += 1
+        c["hits" if o["outcome"] == "hit" else "misses"] += 1
+    return [{"stratum": k[0], "anchorType": k[1], "impactedType": k[2], **v} for k, v in sorted(cells.items())]
 
 
 def exposure_rows(result: Mapping, flags: Mapping | None = None) -> list[dict]:
@@ -1251,11 +1275,44 @@ class PrecheckRefusal(Refusal):
     """A refusal of :func:`score_inputs_check`: raised by ``run`` before the marker (nothing spent) and by ``score``."""
 
 
-def score_inputs_check(repo: Path, gate_id: str, pf: Mapping, records: Sequence[Mapping], *, flags_given: bool | None = None, committed_text=None) -> dict:
+def read_dev_probe(path: Path) -> dict:
+    """The dev-gold probe result the rehearsal wrote (dev data, builder-visible: any path). Unreadable or not JSON -> :class:`PrecheckRefusal`."""
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise PrecheckRefusal("the dev-gold probe result is missing or unreadable: the rehearsal writes it, and the gate does not start without it") from None
+
+
+def _count(v: Any) -> bool:
+    return type(v) is int and v >= 0
+
+
+def dev_probe_check(probe: Any, gated: Sequence[str] = STRATA_GATED) -> None:
+    """The pre-gate probe of ``docs/plans/connected-code-graph-p1-closeout.md`` §3.5: for every GATED stratum the dev hits must equal the dev items, or the
+    whole shortfall must be a stakeholder-confirmed ``key-error``. ``probe`` is ``{"schema": DEV_PROBE_SCHEMA, "byStratum": {stratum: {"items", "hits",
+    "keyErrors"}}}`` (the rehearsal writes ``keyErrors`` only from the stakeholder-confirmed list); a stratum outside ``gated`` is not read. Fewer hits than items
+    blocks, not only zero hits; a missing, empty or inconsistent stratum is a refusal, never a pass. Counts and strata only (dev data)."""
+    if not isinstance(probe, Mapping) or probe.get("schema") != DEV_PROBE_SCHEMA or not isinstance(probe.get("byStratum"), Mapping):
+        raise PrecheckRefusal(f"the dev-gold probe result is not a `{DEV_PROBE_SCHEMA}` document: the gate does not start without one")
+    for s in gated:
+        row = probe["byStratum"].get(s)
+        if not isinstance(row, Mapping) or not all(_count(row.get(k)) for k in ("items", "hits", "keyErrors")) or row["items"] == 0:
+            raise PrecheckRefusal(f"the dev-gold probe has no usable counts for the gated stratum {s}")
+        items, hits, key_errors = row["items"], row["hits"], row["keyErrors"]
+        if hits + key_errors > items:
+            raise PrecheckRefusal(f"the dev-gold probe is inconsistent for {s}: {hits} hits and {key_errors} key-errors exceed {items} dev items")
+        if hits + key_errors < items:
+            raise PrecheckRefusal(f"dev-gold probe: {s} has {hits} hits of {items} dev items ({key_errors} stakeholder-confirmed key-errors): "
+                                  f"every dev item of a gated stratum must be a hit before the gate starts")
+
+
+def score_inputs_check(repo: Path, gate_id: str, pf: Mapping, records: Sequence[Mapping], *, flags_given: bool | None = None, committed_text=None,
+                       dev_probe: Any = None, gated: Sequence[str] = STRATA_GATED) -> dict:
     """EVERY refusal of ``score`` that depends only on inputs known BEFORE the marker, in one place that both verbs call (``run`` before it takes the
     marker, exit 5, nothing spent; ``score`` first thing after it has read the lists): the stored gold re-normalises cleanly, the working tree is clean,
     the committed record states a valid gate kind (and, for a re-gate, usable ``movedOut``), ``--flags`` matches that kind (``flags_given`` is ``None``
-    where the flags file is not known yet, as at ``run``), and the eval manifest parses. -> ``{"kind", "movedOut", "patterns"}``. A refusal that a later
+    where the flags file is not known yet, as at ``run``), the eval manifest parses, and the dev-gold probe (``dev_probe``, the parsed rehearsal result;
+    ``None`` is a refusal) shows every dev item of each ``gated`` stratum a hit (:func:`dev_probe_check`). -> ``{"kind", "movedOut", "patterns"}``. A refusal that a later
     command can raise from such an input and the first irreversible step does not is a list spent for nothing."""
     require_clean_renormalize(renormalize_stored_gold(records))
     if pf["firstContact"]["dirtyPaths"]:
@@ -1276,6 +1333,7 @@ def score_inputs_check(repo: Path, gate_id: str, pf: Mapping, records: Sequence[
         patterns = scope_patterns(_load_yaml(Path(repo) / "cpg" / "eval" / "eval-manifest.yaml"))
     except Exception as e:                                       # noqa: BLE001 - an unreadable manifest is a refusal, whatever the parser raised
         raise PrecheckRefusal(f"the eval manifest is unusable ({type(e).__name__})") from None
+    dev_probe_check(dev_probe, gated)
     return {"kind": kind, "movedOut": moved_out, "patterns": patterns}
 
 
@@ -1336,6 +1394,7 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         sc.add_argument(f, required=True)
     sc.add_argument("--flags", help="re-gate only: regate-flags.jsonl (the kind itself comes from the committed record)")
     sc.add_argument("--exposure")
+    sc.add_argument("--dev-probe", required=True, help="the dev-gold probe result the rehearsal wrote (dev data; the check is the one `run` made before its marker)")
     sc.add_argument("--flow-decision", help="the committed ccg-p1-flow-python-v2-decision record (default: the repository's)")
     sc.add_argument("--host", default="127.0.0.1")
     sc.add_argument("--port", type=int)
@@ -1354,13 +1413,16 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         for f in a.lists.split(","):
             records += _jsonl(within_custodian(Path(f), None, "--lists"))
         pf = (preflight_fn or preflight)(repo, a.gate_id)
-        chk = score_inputs_check(repo, a.gate_id, pf, records, flags_given=bool(a.flags), committed_text=committed_text)      # what run checked before its marker
+        dev_probe = read_dev_probe(Path(a.dev_probe))
+        chk = score_inputs_check(repo, a.gate_id, pf, records, flags_given=bool(a.flags), committed_text=committed_text, dev_probe=dev_probe)      # what run checked before its marker
         kind, moved_out = chk["kind"], chk["movedOut"]
         key = list_key(records)                           # over every record of --lists, withheld strata included (the key gate_run took the marker under)
         if marker_state(cust, key) != "asked":            # -p1-gate-marker-ml.md §1.1.7: a started or failed run, or none, is never scored; first, so a run that
             raise Refusal("the run has no marker in state `asked` for this list: score refuses")    # never completed (no run file) is this refusal (D7)
         run = json.loads(within_custodian(Path(a.run), None, "--run").read_text(encoding="utf-8"))
         ctx = require_run_context(run)
+        if pf.get("recordCommit") != ctx["recordCommit"]:          # CO-5 / P5-3: the named checkout is the run's checkout, whatever --repo says
+            raise Refusal("the checkout's record commit differs from the one the run recorded: score refuses (score from the run's own checkout)")
         if run.get("listKey") != key:
             raise Refusal("the run file is not the run of these lists (its list key differs or is missing)")
         if snapshot is None:
@@ -1377,7 +1439,8 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
             raise Refusal("the run file carries no recorded flow flag and withheld set: the run did not record them")
         if (read_marker(cust, key) or {}).get("pins", {}).get("flowFlag") != flag:
             raise Refusal("the run file's flow flag differs from the marker's pin: score refuses")
-        gated = STRATA if flag else STRATA_GATED
+        gated = gated_strata(flag)
+        dev_probe_check(dev_probe, gated)                  # the run's own gated set (flow included when its flag was true): the check `run` made
         records, withheld = withhold_strata(records, gated)
         if withheld != run["withheld"]:
             raise Refusal("the lists do not reproduce the withheld set the run recorded: score refuses")
@@ -1390,6 +1453,7 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
                            context={"label": label, "preflight": ctx, "scoreLabel": pf["label"]})
         write_custodian(cust, "gate-outcomes.jsonl", [{"itemId": i, **o} for i, o in sorted(res["items"].items())])
         write_custodian(cust, "gate-exposure.jsonl", exposure_rows(res))
+        write_custodian(cust / "work", "gate-miss-breakdown.jsonl", miss_breakdown(records, res))     # CO-5: the fine breakdown is custodian-only, never printed
         write_custodian(cust, "gate-report.json", rep)
         print(json.dumps(rep, sort_keys=True))
         return 0 if dec["verdict"] == "pass" else 1

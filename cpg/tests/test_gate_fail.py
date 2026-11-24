@@ -6,7 +6,7 @@ import pytest
 import gate_helpers as H
 from gate_helpers import G
 
-STRATA = list(G.STRATA)
+STRATA = list(G.STRATA_GATED)               # CO-5: three gated strata (http, mcp, scripts); flow and wiring are withheld
 
 
 def result(rows, **extra):
@@ -21,7 +21,7 @@ def hits(prefix, n, stratum, counting=True, anchor_every=2):
     return [(f"{prefix}{k:03d}", stratum, "hit", counting, f"{prefix}a{k // anchor_every:03d}") for k in range(n)]
 
 
-def gate1_rows(per=15):
+def gate1_rows(per=25):
     return [r for s in STRATA for r in hits(s[:2], per, s)]
 
 
@@ -37,15 +37,15 @@ def test_gate1_74_counting_items_is_not_a_pass():
 
 
 def test_gate1_a_stratum_at_exactly_8_items_passes():
-    rows = [r for s in STRATA[:-1] for r in hits(s[:2], 17, s)] + hits("fl", 8, "flow")
+    rows = [r for s in STRATA[:-1] for r in hits(s[:2], 34, s)] + hits("sc", 8, "scripts")
     d = G.decide_gate(result(rows))
-    assert d["verdict"] == "pass" and d["byStratum"]["flow"] == 8 and d["H"] == 76
+    assert d["verdict"] == "pass" and d["byStratum"]["scripts"] == 8 and d["H"] == 76
 
 
 def test_gate1_a_stratum_below_8_is_not_a_pass():
-    rows = [r for s in STRATA[:-1] for r in hits(s[:2], 20, s)] + hits("fl", 7, "flow")
+    rows = [r for s in STRATA[:-1] for r in hits(s[:2], 43, s)] + hits("sc", 7, "scripts")
     d = G.decide_gate(result(rows))
-    assert d["verdict"] == "minimums-not-met" and d["H"] == 87 and d["byStratum"]["flow"] == 7
+    assert d["verdict"] == "minimums-not-met" and d["H"] == 93 and d["byStratum"]["scripts"] == 7
 
 
 def test_gate1_one_miss_fails_and_reports_the_cluster_and_stratum_to_move():
@@ -56,9 +56,9 @@ def test_gate1_one_miss_fails_and_reports_the_cluster_and_stratum_to_move():
 
 
 def test_gate1_non_counting_items_do_not_count_toward_75():
-    rows = gate1_rows(per=14) + hits("nc", 10, "http", counting=False)
+    rows = gate1_rows(per=23) + hits("nc", 10, "http", counting=False)
     d = G.decide_gate(result(rows))
-    assert d["verdict"] == "minimums-not-met" and d["H"] == 70 and d["scored"] == 80
+    assert d["verdict"] == "minimums-not-met" and d["H"] == 69 and d["scored"] == 79
 
 
 def test_out_of_scope_items_are_neither_hits_nor_misses_and_never_fail_the_gate():
@@ -94,17 +94,17 @@ def test_a_miss_is_a_fail_even_when_blockers_are_listed():
 
 
 # ---------------------------------------------------------------- re-gate: the floor
-KEPT_STRATA = ("http", "mcp", "scripts", "flow")
+KEPT_STRATA = ("http", "mcp", "scripts")
 
 
-def kept_rows(per=10):
+def kept_rows(per=14):
     return [r for s in KEPT_STRATA for r in hits("k" + s[:2], per, s)]
 
 
-def regate(fresh_counting, fresh_noncounting=0, kept=11, moved_out=None, miss=False):
+def regate(fresh_counting, fresh_noncounting=0, kept=14, moved_out=None, miss=False):
     rows = kept_rows(kept)
     flags = {r[0]: "kept" for r in rows}
-    fresh = hits("fr", fresh_counting, "wiring") + hits("fn", fresh_noncounting, "wiring", counting=False)
+    fresh = hits("fr", fresh_counting, "scripts") + hits("fn", fresh_noncounting, "scripts", counting=False)
     rows += fresh
     flags.update({r[0]: "fresh-cluster" for r in fresh})
     if miss:
@@ -128,7 +128,7 @@ def test_regate_non_counting_fresh_items_do_not_reach_the_floor():
 
 
 def test_regate_kept_cluster_fresh_items_do_not_count_as_fresh():
-    rows = kept_rows() + hits("fr", 34, "wiring") + hits("kc", 5, "wiring")
+    rows = kept_rows() + hits("fr", 34, "scripts") + hits("kc", 5, "scripts")
     flags = {r[0]: "fresh-cluster" if r[0].startswith("fr") else "kept-cluster-fresh" if r[0].startswith("kc") else "kept" for r in rows}
     d = G.decide_gate(result(rows), flags)
     assert d["freshCounting"] == 34 and d["verdict"] == "all hits, floor not met"
@@ -140,24 +140,24 @@ def test_regate_a_miss_is_a_fail_even_with_35_fresh():
 
 
 def test_regate_composition_needs_75_counting_items():
-    d, _ = regate(35, kept=8)                                       # 32 kept + 35 fresh = 67 < 75: the floor is met, the composition is not
-    assert d["verdict"] == "all hits, composition not met" and d["floorMet"] is True and d["H"] == 67
+    d, _ = regate(35, kept=8)                                       # 24 kept + 35 fresh = 59 < 75: the floor is met, the composition is not
+    assert d["verdict"] == "all hits, composition not met" and d["floorMet"] is True and d["H"] == 59
 
 
 def test_regate_composition_needs_8_items_in_every_stratum():
-    rows = hits("fr", 76, "wiring") + hits("ke", 7, "http")
+    rows = hits("fr", 60, "scripts") + hits("km", 20, "mcp") + hits("ke", 7, "http")
     flags = {r[0]: "fresh-cluster" if r[0].startswith("fr") else "kept" for r in rows}
     d = G.decide_gate(result(rows), flags)
     assert d["verdict"] == "all hits, composition not met" and d["floorMet"] is True
 
 
 def test_regate_composition_needs_fresh_items_for_each_stratum_that_had_a_miss():
-    d, _ = regate(35, moved_out={"wiring": 35, "http": 2})
+    d, _ = regate(35, moved_out={"scripts": 35, "http": 2})
     assert d["verdict"] == "all hits, composition not met" and d["compositionShortfall"] == {"http": 2}
 
 
 def test_regate_blockers_block_a_would_be_pass():
-    rows = kept_rows() + hits("fr", 35, "wiring")
+    rows = kept_rows() + hits("fr", 35, "scripts")
     flags = {r[0]: "fresh-cluster" if r[0].startswith("fr") else "kept" for r in rows}
     d = G.decide_gate(result(rows, defects={"request-echo": 1}), flags)
     assert d["verdict"] == "blocked" and d["floorMet"] is True
@@ -269,7 +269,7 @@ def test_report_miss_flags_are_counted_per_class():
 
 
 def test_regate_report_fresh_recall_kept_check_and_cumulative_record():
-    rows = kept_rows() + hits("fr", 35, "wiring")
+    rows = kept_rows() + hits("fr", 35, "scripts")
     flags = {r[0]: "fresh-cluster" if r[0].startswith("fr") else "kept" for r in rows}
     res = result(rows)
     d = G.decide_gate(res, flags)
@@ -277,14 +277,14 @@ def test_regate_report_fresh_recall_kept_check_and_cumulative_record():
     rep = G.build_report(res, d, flags=flags, exposure=exposure)
     r = rep["regate"]
     assert rep["verdict"] == "pass" and (r["freshCluster"]["k"], r["freshCluster"]["n"]) == (35, 35) and r["freshCluster"]["wilson"]["lower"] == 0.901
-    assert r["keptRegressionCheck"]["n"] == 40 and "not recall evidence" in r["keptRegressionCheck"]["note"]
+    assert r["keptRegressionCheck"]["n"] == 42 and "not recall evidence" in r["keptRegressionCheck"]["note"]
     cum = r["cumulativeFirstExposure"]["pooled"]
-    assert (cum["k"], cum["n"], cum["lower"], cum["upper"]) == (73 + 40 + 35, 75 + 40 + 35, cum["lower"], cum["upper"])
+    assert (cum["k"], cum["n"], cum["lower"], cum["upper"]) == (73 + 42 + 35, 75 + 42 + 35, cum["lower"], cum["upper"])
     assert "0.951" in r["note"] and "35/35" in r["claim"] and "0.951" not in r["claim"]
 
 
 def test_regate_cumulative_record_matches_the_specs_108_of_110():
-    rows = hits("fr", 35, "wiring")
+    rows = hits("fr", 35, "scripts")
     flags = {r[0]: "fresh-cluster" for r in rows}
     res = result(rows)
     prior = [{"itemId": f"old{k}", "firstGate": 1, "hit": k >= 2} for k in range(75)]
@@ -293,14 +293,14 @@ def test_regate_cumulative_record_matches_the_specs_108_of_110():
 
 
 def test_regate_cumulative_counts_each_item_once_and_by_stratum_when_known():
-    rows = hits("fr", 35, "wiring")
+    rows = hits("fr", 35, "scripts")
     flags = {r[0]: "fresh-cluster" for r in rows}
     res = result(rows)
     prior = [{"itemId": "fr000", "firstGate": 1, "hit": False}, {"itemId": "old1", "firstGate": 1, "hit": True}]
-    cum = G.build_report(res, G.decide_gate(res, flags), flags=flags, exposure=prior, exposure_strata={"fr000": "wiring", "old1": "http"}
+    cum = G.build_report(res, G.decide_gate(res, flags), flags=flags, exposure=prior, exposure_strata={"fr000": "scripts", "old1": "http"}
                          )["regate"]["cumulativeFirstExposure"]
     assert (cum["pooled"]["k"], cum["pooled"]["n"]) == (1 + 34, 2 + 34)         # fr000 is counted once, at its first gate (a miss there)
-    assert (cum["byStratum"]["wiring"]["k"], cum["byStratum"]["wiring"]["n"]) == (34, 35) and cum["byStratum"]["http"]["n"] == 1
+    assert (cum["byStratum"]["scripts"]["k"], cum["byStratum"]["scripts"]["n"]) == (34, 35) and cum["byStratum"]["http"]["n"] == 1
 
 
 def test_report_excludes_out_of_scope_items_from_every_figure():
@@ -312,7 +312,7 @@ def test_report_excludes_out_of_scope_items_from_every_figure():
 
 
 def test_regate_report_claims_nothing_when_it_is_not_a_pass():
-    rows = kept_rows(11) + hits("fr", 34, "wiring")
+    rows = kept_rows(14) + hits("fr", 34, "scripts")
     flags = {r[0]: "fresh-cluster" if r[0].startswith("fr") else "kept" for r in rows}
     res = result(rows)
     rep = G.build_report(res, G.decide_gate(res, flags), flags=flags)
@@ -355,7 +355,7 @@ def test_b5_stopped_outranks_a_harness_error():
 
 
 def test_b5_a_harness_error_blocks_a_regate_ahead_of_a_miss():
-    rows = kept_rows() + hits("fr", 35, "wiring")
+    rows = kept_rows() + hits("fr", 35, "scripts")
     flags = {r[0]: "fresh-cluster" if r[0].startswith("fr") else "kept" for r in rows}
     rows[0] = (rows[0][0], rows[0][1], "miss", True, "AX")
     d = G.decide_gate(result(rows, harnessErrors={"class-X": 1}), flags)
@@ -363,56 +363,66 @@ def test_b5_a_harness_error_blocks_a_regate_ahead_of_a_miss():
 
 
 # ---------------------------------------------------------------- M1: the strata the run gates are an input; flow is withheld at P1
-def withheld_rows(per=8, wiring=8):
-    return [r for s, n in (("http", per), ("mcp", per), ("scripts", per), ("wiring", wiring)) for r in hits(s[:2], n, s)] + hits("xx", 30, "http")
+def withheld_rows(per=8, scripts=8):
+    return [r for s, n in (("http", per), ("mcp", per), ("scripts", scripts)) for r in hits(s[:2], n, s)] + hits("xx", 30, "http")
 
 
-def test_m1_strata_gated_is_http_mcp_scripts_wiring():
-    assert G.STRATA_GATED == ("http", "mcp", "scripts", "wiring")
+def test_m1_strata_gated_is_http_mcp_scripts():
+    assert G.STRATA_GATED == ("http", "mcp", "scripts") and G.MIN_COUNTING == 75 and G.MIN_STRATUM == 8
 
 
-def test_m1_a_perfect_four_strata_run_passes_when_flow_is_withheld():
-    res = result(withheld_rows(per=30, wiring=8))
-    d = G.decide_gate(res, gated_strata=G.STRATA_GATED)
-    assert d["verdict"] == "pass" and d["H"] >= 75
-    assert G.decide_gate(res)["verdict"] == "minimums-not-met"                # the default still demands all five
+def test_m1_a_perfect_three_strata_run_passes_with_flow_and_wiring_withheld():
+    res = result(withheld_rows(per=30, scripts=8))
+    d = G.decide_gate(res)
+    assert d["verdict"] == "pass" and d["H"] >= 75 and d["gatedStrata"] == ["http", "mcp", "scripts"]
+    assert G.decide_gate(res, gated_strata=G.STRATA)["verdict"] == "minimums-not-met"          # asking for all five still demands flow and wiring floors
 
 
 def test_m1_each_gated_stratum_still_needs_8_and_H_75():
-    short = result(withheld_rows(per=30, wiring=7))
-    assert G.decide_gate(short, gated_strata=G.STRATA_GATED)["verdict"] == "minimums-not-met"
-    low = result([r for s in G.STRATA_GATED for r in hits(s[:2], 18, s)])         # H = 72
-    assert G.decide_gate(low, gated_strata=G.STRATA_GATED)["verdict"] == "minimums-not-met"
+    short = result(withheld_rows(per=30, scripts=7))
+    assert G.decide_gate(short)["verdict"] == "minimums-not-met"
+    low = result([r for s in G.STRATA_GATED for r in hits(s[:2], 24, s)])         # H = 72
+    assert G.decide_gate(low)["verdict"] == "minimums-not-met"
 
 
-def test_m1_a_scored_item_in_a_withheld_stratum_is_refused_not_silently_counted():
-    res = result(withheld_rows(per=30) + hits("fl", 1, "flow"))
+@pytest.mark.parametrize("stratum", ["flow", "wiring"])
+def test_m1_a_scored_item_in_a_withheld_stratum_is_refused_not_silently_counted(stratum):
+    res = result(withheld_rows(per=30) + hits("fl", 1, stratum))
     with pytest.raises(G.Refusal, match="not gated"):
-        G.decide_gate(res, gated_strata=G.STRATA_GATED)
+        G.decide_gate(res)
 
 
-def test_m1_withhold_strata_removes_flow_records_and_counts_them():
-    recs = [{"itemId": "a", "derivedStratum": "flow"}, {"itemId": "b", "derivedStratum": "http"}, {"itemId": "c", "derivedStratum": "flow"}]
+def test_m1_gated_strata_adds_flow_only_when_the_flag_is_true_and_never_wiring():
+    assert G.gated_strata(False) == ("http", "mcp", "scripts") and G.gated_strata(True) == ("http", "mcp", "scripts", "flow")
+
+
+def test_m1_withhold_strata_removes_flow_and_wiring_records_and_counts_them():
+    recs = [{"itemId": "a", "derivedStratum": "flow"}, {"itemId": "b", "derivedStratum": "http"}, {"itemId": "c", "derivedStratum": "flow"},
+            {"itemId": "d", "derivedStratum": "wiring"}]
     kept, withheld = G.withhold_strata(recs, G.STRATA_GATED)
-    assert [r["itemId"] for r in kept] == ["b"] and withheld == {"flow": 2}
+    assert [r["itemId"] for r in kept] == ["b"] and withheld == {"flow": 2, "wiring": 1}
 
 
-def test_m1_report_says_flow_unavailable_labels_wiring_and_gives_no_flow_figure():
-    res = result(withheld_rows(per=30, wiring=8))
-    d = G.decide_gate(res, gated_strata=G.STRATA_GATED)
-    rep = G.build_report(res, d, gated_strata=G.STRATA_GATED, withheld={"flow": 12}, flow_flag=False)
+def test_m1_report_gives_each_withheld_stratum_a_count_and_a_reason_and_no_figure():
+    res = result(withheld_rows(per=30, scripts=8))
+    d = G.decide_gate(res)
+    rep = G.build_report(res, d, withheld={"flow": 12, "wiring": 8}, flow_flag=False)
+    assert rep["withheld"] == {"flow": {"count": 12, "reason": G.WITHHELD_REASONS["flow"]}, "wiring": {"count": 8, "reason": G.WITHHELD_REASONS["wiring"]}}
+    assert all(v["reason"] for v in rep["withheld"].values())
     assert rep["flow"] == {"status": "flow-unavailable, not closed", "flag": False, "withheld": 12}
-    assert "flow" not in rep["recall"]["byStratum"] and "flow" not in rep["chainLength"]
-    assert rep["wiring"] == "screened, not certified"
-    assert rep["H"] == d["H"] and rep["H_all"] == d["scored"]
-    text = json.dumps(rep)
-    assert "AC-5 passed for flow" not in text
+    for st in ("flow", "wiring"):
+        assert st not in rep["recall"]["byStratum"] and st not in rep["chainLength"]
+    assert "wiring" not in rep and rep["H"] == d["H"] and rep["H_all"] == d["scored"]
+    assert "AC-5 passed for flow" not in json.dumps(rep)
 
 
-def test_m1_wiring_above_its_floor_is_not_labelled():
-    res = result(withheld_rows(per=30, wiring=9))
-    rep = G.build_report(res, G.decide_gate(res, gated_strata=G.STRATA_GATED), gated_strata=G.STRATA_GATED, withheld={}, flow_flag=False)
-    assert "wiring" not in rep
+def test_m1_report_withheld_counts_default_to_zero_and_a_gated_flow_is_not_listed_as_withheld():
+    res = result(withheld_rows(per=30, scripts=8))
+    assert G.build_report(res, G.decide_gate(res))["withheld"]["wiring"]["count"] == 0
+    rows = withheld_rows(per=30, scripts=8) + hits("fl", 8, "flow")
+    res2 = result(rows)
+    rep = G.build_report(res2, G.decide_gate(res2, gated_strata=G.gated_strata(True)), gated_strata=G.gated_strata(True), withheld={"wiring": 3}, flow_flag=True)
+    assert set(rep["withheld"]) == {"wiring"} and "flow" not in rep and "flow" in rep["recall"]["byStratum"]
 
 
 def _decision(tmp_path, verdict):
@@ -468,12 +478,12 @@ def test_m1_flow_flag_true_only_for_a_committed_true_verdict(tmp_path):
 
 
 def test_m1_exposure_rows_carry_the_stratum():
-    res = result(hits("a", 2, "http") + hits("b", 1, "wiring"))
-    assert {r["itemId"]: r["stratum"] for r in G.exposure_rows(res)} == {"a000": "http", "a001": "http", "b000": "wiring"}
+    res = result(hits("a", 2, "http") + hits("b", 1, "scripts"))
+    assert {r["itemId"]: r["stratum"] for r in G.exposure_rows(res)} == {"a000": "http", "a001": "http", "b000": "scripts"}
 
 
 def test_m1_the_report_reads_the_stratum_from_exposure_rows():
-    rows = hits("fr", 35, "wiring")
+    rows = hits("fr", 35, "scripts")
     flags = {r[0]: "fresh-cluster" for r in rows}
     res = result(rows)
     prior = [{"itemId": "old1", "hit": True, "stratum": "http"}]
@@ -490,9 +500,9 @@ def test_m1_chain_length_reports_the_engines_distance_and_the_symbol_count_besid
 
 
 def test_m1_build_report_carries_no_stratum_figure_for_a_withheld_stratum_even_if_one_slipped_in():
-    res = result(withheld_rows(per=30, wiring=8) + hits("fl", 3, "flow"))
-    rep = G.build_report(res, G.decide_gate(res), gated_strata=G.STRATA_GATED, withheld={"flow": 1}, flow_flag=False)
-    assert "flow" not in rep["recall"]["byStratum"] and "flow" not in rep["chainLength"]
+    res = result(withheld_rows(per=30, scripts=8) + hits("fl", 3, "flow") + hits("wi", 3, "wiring"))
+    rep = G.build_report(res, G.decide_gate(result(withheld_rows(per=30, scripts=8))), withheld={"flow": 1}, flow_flag=False)
+    assert "flow" not in rep["recall"]["byStratum"] and "flow" not in rep["chainLength"] and "wiring" not in rep["recall"]["byStratum"]
 
 
 def test_list_key_does_not_depend_on_the_hash_seed_of_the_process():

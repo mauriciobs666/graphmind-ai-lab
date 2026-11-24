@@ -305,7 +305,7 @@ def test_a_unit_item_is_asked_and_resolved_from_its_s47_probe_and_the_map_is_kep
     e = Env(tmp_path)
     c1, c2 = H.contract("mcp_tool", "alpha"), H.contract("mcp_tool", "beta")
     unit = {"type": "unit", "repoId": "r", "rootPath": "svc", "lang": "python"}
-    rec = H.item(1, unit, H.cfg("compose.yaml", "services.s"), serves=[c1, c2], stratum="wiring")
+    rec = H.item(1, unit, H.cfg("compose.yaml", "services.s"), serves=[c1, c2], stratum="scripts")
     probe = G._mk.contract_id(c1)                                     # S47 picks alpha: NOT the record-local rule's beta (its own item count is 0)
     e.set_probes({rec["anchorId"]: probe})
     e.set_records([rec, H.item(2, c2, H.sym("a.py::f"), stratum="mcp")])
@@ -320,7 +320,7 @@ def test_a_unit_item_is_asked_and_resolved_from_its_s47_probe_and_the_map_is_kep
 def test_a_unit_item_without_a_probe_entry_is_refused_before_the_marker(tmp_path):
     e = Env(tmp_path)
     unit = {"type": "unit", "repoId": "r", "rootPath": "svc", "lang": "python"}
-    rec = H.item(1, unit, H.cfg("compose.yaml", "services.s"), serves=[H.contract("mcp_tool", "alpha")], stratum="wiring")
+    rec = H.item(1, unit, H.cfg("compose.yaml", "services.s"), serves=[H.contract("mcp_tool", "alpha")], stratum="scripts")
     e.set_records([e.w.rec])                                          # the table cannot be built for it: write the list by hand
     e.lists.write_text(json.dumps(rec) + "\n")
     with pytest.raises(G.HarnessError, match="probe"):
@@ -338,6 +338,23 @@ def test_flow_items_are_withheld_before_the_resolve_dry_run_and_before_asking_wh
     run = json.loads(e.run_files()[0].read_text())
     assert run["withheld"] == {"flow": 1} and run["flowFlag"] is False and set(run["answers"]) == {e.w.cp}
     assert flow["itemId"] not in json.dumps(run) and flow["anchorId"] not in json.dumps(run)
+
+
+def test_wiring_items_are_withheld_before_resolve_and_asking_and_counted_whatever_the_flow_flag(tmp_path):
+    """CO-5: the stakeholder withheld wiring; it is neither resolved nor asked nor scored, and a true flow flag does not gate it."""
+    e = Env(tmp_path)
+    wiring = H.item(2, H.sym("svc/f.py::wi"), H.cfg("compose.yaml", "services.s"), stratum="wiring")
+    e.set_records([e.w.rec, wiring])
+    e.snap.add_symbol(wiring["anchorId"], "svc/f.py::wi", 1, 9)        # in the graph: it WOULD be resolved and asked if it were not withheld
+    e.go()
+    assert len(e.resolved) == 1 and e.asked == [e.w.cp]
+    run = json.loads(e.run_files()[0].read_text())
+    assert run["withheld"] == {"wiring": 1} and set(run["answers"]) == {e.w.cp}
+    assert wiring["itemId"] not in json.dumps(run) and wiring["anchorId"] not in json.dumps(run)
+
+
+def test_a_true_flow_flag_gates_flow_but_still_withholds_wiring():
+    assert G.gated_strata(True) == ("http", "mcp", "scripts", "flow") and "wiring" not in G.gated_strata(True)
 
 
 # --- ruling (a): the pre-marker resolve dry-run
@@ -477,7 +494,7 @@ def test_cli_run_refusal_exits_2_with_no_content_and_one_REFUSED_prefix(tmp_path
     e = Env(tmp_path)
     monkeypatch.setenv("HOME", str(e.home))
     custodian_arg = ["--lists", str(e.lists), "--custodian", str(tmp_path / "elsewhere")]
-    rc = R.main(["run", "--gate-id", GATE, *custodian_arg, "--repo", str(e.repo)], deps=e.deps())
+    rc = R.main(["run", "--gate-id", GATE, *custodian_arg, "--repo", str(e.repo), "--dev-probe", str(e.dev_probe)], deps=e.deps())
     cap = capsys.readouterr()
     assert rc == 2 and cap.out == "" and cap.err.count("REFUSED") == 1 and "SENTINEL" not in cap.err + cap.out
 

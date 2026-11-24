@@ -320,7 +320,7 @@ def test_d6_the_live_graph_refusal_names_the_remedy(tmp_path):
 # ================================================================================================ D7: score on a run that never completed is the marker refusal
 def score_cli(e, monkeypatch, run_path):
     monkeypatch.setenv("HOME", str(e.home))
-    argv = ["score", "--gate-id", GATE, "--lists", str(e.lists), "--run", str(run_path), "--custodian", str(e.cust), "--port", "16420"]
+    argv = ["score", "--gate-id", GATE, "--lists", str(e.lists), "--run", str(run_path), "--custodian", str(e.cust), "--dev-probe", str(e.dev_probe), "--port", "16420"]
     return G.main(argv, snapshot=e.snap, repo=e.repo, preflight_fn=lambda repo, gid: G.preflight(repo, gid, observed=OBS))
 
 

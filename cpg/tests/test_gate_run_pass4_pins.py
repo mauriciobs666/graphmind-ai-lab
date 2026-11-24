@@ -42,7 +42,7 @@ def test_e21_score_without_system_reads_the_graph_of_the_manifests_system_not_cc
         raise G.Refusal("stop here: the system was chosen")
     monkeypatch.setattr(G, "snapshot_graph", snapshot_graph)
     monkeypatch.setenv("HOME", str(e.home))
-    argv = ["score", "--gate-id", GATE, "--lists", str(e.lists), "--run", str(e.run_files()[0]), "--custodian", str(e.cust), "--port", "16431"]
+    argv = ["score", "--gate-id", GATE, "--lists", str(e.lists), "--run", str(e.run_files()[0]), "--custodian", str(e.cust), "--dev-probe", str(e.dev_probe), "--port", "16431"]
     assert G.main(argv, repo=e.repo, preflight_fn=lambda repo, gid: G.preflight(repo, gid, observed=OBS)) == 2
     assert seen == {"system": "manifestsys"}
 
@@ -58,7 +58,7 @@ def test_e21_an_explicit_system_wins_over_the_manifests(tmp_path, monkeypatch):
         raise G.Refusal("stop here: the system was chosen")
     monkeypatch.setattr(G, "snapshot_graph", snapshot_graph)
     monkeypatch.setenv("HOME", str(e.home))
-    argv = ["score", "--gate-id", GATE, "--lists", str(e.lists), "--run", str(e.run_files()[0]), "--custodian", str(e.cust), "--port", "16431", "--system", "explicit"]
+    argv = ["score", "--gate-id", GATE, "--lists", str(e.lists), "--run", str(e.run_files()[0]), "--custodian", str(e.cust), "--dev-probe", str(e.dev_probe), "--port", "16431", "--system", "explicit"]
     G.main(argv, repo=e.repo, preflight_fn=lambda repo, gid: G.preflight(repo, gid, observed=OBS))
     assert seen == {"system": "explicit"}
 
@@ -99,7 +99,7 @@ def test_d18_the_valid_manifest_passes_the_same_check(tmp_path):
     many_world(e, 1)
     pf = G.preflight(e.repo, GATE, observed=OBS)
     records = [json.loads(l) for l in e.lists.read_text().splitlines()]
-    assert set(G.score_inputs_check(e.repo, GATE, pf, records)) == {"kind", "movedOut", "patterns"}
+    assert set(G.score_inputs_check(e.repo, GATE, pf, records, dev_probe=json.loads(e.dev_probe.read_text()))) == {"kind", "movedOut", "patterns"}
 
 
 # ------------------------------------------------------------------------------------------------ E14 / E16: only the server's "empty key" reply is an absent graph
@@ -194,6 +194,6 @@ def test_p47_gate_score_takes_repo_and_derives_the_system_from_that_repos_manife
         raise G.Refusal("stop here")
     monkeypatch.setattr(G, "snapshot_graph", snapshot_graph)
     monkeypatch.setenv("HOME", str(e.home))
-    argv = ["score", "--gate-id", GATE, "--lists", str(e.lists), "--run", str(e.run_files()[0]), "--custodian", str(e.cust), "--port", "16431", "--repo", str(e.repo)]
+    argv = ["score", "--gate-id", GATE, "--lists", str(e.lists), "--run", str(e.run_files()[0]), "--custodian", str(e.cust), "--dev-probe", str(e.dev_probe), "--port", "16431", "--repo", str(e.repo)]
     G.main(argv, preflight_fn=lambda repo, gid: G.preflight(repo, gid, observed=OBS))
     assert seen == {"system": "reposys"}

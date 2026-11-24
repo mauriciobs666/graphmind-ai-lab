@@ -114,7 +114,7 @@ def test_live_the_resolve_dry_run_and_the_whole_run_verb_over_the_default_wiring
     deps["live_graph_present"] = lambda: False                       # this test stands the graph up itself and replaces the build with a no-op
     deps["engine_snapshot_id"] = None                                # needs the raw ACL role
     out = R.run_gate(e.repo, "ac5-gate-1", [e.lists], e.cust, home=e.home, observed={"algorithm": {"id": "bfs-v1", "version": "1.2"}, "defaultDepthBound": 2},
-                     probe_map=e.probes, **deps)
+                     probe_map=e.probes, dev_probe=e.dev_probe, **deps)
     assert out["asked"] == 1
     run = json.loads(e.run_files()[0].read_text())
     snap = deps["snapshot_factory"](None)

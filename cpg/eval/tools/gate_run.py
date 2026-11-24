@@ -9,7 +9,8 @@
   anchor IN the graph that does not resolve is a :class:`~gate.HarnessError` (never a synthesized document).
 * :func:`resolve_preflight`: the read-only dry-run ``resolve`` of every asked in-graph anchor before the marker (counts by status only).
 * :func:`run_gate` and the ``run`` verb: refuse unless the preflight is first-contact and clean (``G.run_context``), the list was not run, the probe
-  map and the lists lie under the custodian area, the store does not already hold the gate system's live graph, the resolve dry-run passes; build the
+  map and the lists lie under the custodian area, the dev-gold probe result (``--dev-probe``, written by the rehearsal) shows every dev item of each gated
+  stratum a hit (``gate.dev_probe_check``; exit 5), the store does not already hold the gate system's live graph, the resolve dry-run passes; build the
   refresh Target at ``EVAL_COMMIT`` with PRIVATE ``work_root`` / ``keys_root`` / ``audit_dir`` under the custodian root (the developer's ``ccg`` area is
   never touched); take the marker (``started``: temp file + ``os.link``, so it is never empty or torn) under a per-list ``flock``; persist every answer
   (append + fsync) before the next ask; write ``run-<list key>.json`` (what ``gate.py score --run`` reads) and the marker ``asked``. The marker pins
@@ -23,7 +24,7 @@
 
 Stdout and stderr carry counts and refusal reasons only: never gold, ids or item content.
 Exit: 0 ok, 2 refused (incl. a resume refusal), 3 failed after the marker, deterministic (list spent), 4 bad input / failed before the marker (nothing
-spent), 5 the pre-marker resolve dry-run refused (counts only; nothing spent, the failing anchors' clusters go to dev), 6 failed after the marker,
+spent), 5 the pre-marker resolve dry-run or the dev-gold probe refused (counts only; nothing spent, the failing anchors' clusters go to dev), 6 failed after the marker,
 transient (resumable with ``--resume``).
 """
 from __future__ import annotations
@@ -166,7 +167,7 @@ def exception_chain(exc: BaseException) -> list[BaseException]:
 def _placed(exc: BaseException) -> list[BaseException]:
     """The links whose type says WHERE the failure happened. A ``StoreError`` is the client's wrapper (it carries what the store did, in its chain), so its
     whole chain counts; any other type is the raiser's own and stands for itself: an engine that raised its own ``ValueError`` while handling an
-    ``OSError`` handled it. (A run-wide fault is read over the whole chain whatever the outer type: :func:`_is_run_wide`.)"""
+    ``OSError`` handled it. (A run-wide fault is read over the same links: :func:`_run_wide_links`.)"""
     from clients.common import StoreError
     chain = exception_chain(exc)
     return chain if isinstance(exc, StoreError) else chain[:1]
@@ -181,8 +182,19 @@ def _is_redis(exc: BaseException) -> bool:
 
 
 def _is_run_wide(exc: BaseException) -> bool:
+    """One link: the driver's own credential/role/topology classes (by name AND the redis module: a product class that shares a name is the product's) or a
+    harness/client class of the run-wide set."""
     from clients.common import ModelUnavailable, NoCredentials, NotBuilt, StoreAuthError
-    return bool(_names(exc) & RUN_WIDE_FAULTS) or isinstance(exc, (Refusal, NoCredentials, StoreAuthError, ModelUnavailable, NotBuilt))
+    return (_is_redis(exc) and bool(_names(exc) & RUN_WIDE_FAULTS)) or isinstance(exc, (Refusal, NoCredentials, StoreAuthError, ModelUnavailable, NotBuilt))
+
+
+def _run_wide_links(exc: BaseException) -> list[BaseException]:
+    """The links a run-wide fault is looked for on: the whole chain when the outer is the client's own wrapper (``StoreError`` or any ``clients.common`` class:
+    the real ``Client`` carries what the store did in its chain), only the outer for any other type (a product that raised its own error while handling a
+    credential fault has handled it: the tier follows where the fault was raised, never a name or a chain the product can arrange)."""
+    from clients.common import ClientError
+    chain = exception_chain(exc)
+    return chain if isinstance(exc, ClientError) else chain[:1]
 
 
 def _is_timeout(exc: BaseException) -> bool:
@@ -206,7 +218,7 @@ def ask_failure_entry(exc: BaseException) -> dict | None:
 
     * run-wide faults anywhere on the chain (a refused credential, ``NOPERM``, ``READONLY``, an unusable store or model, a :class:`~gate.Refusal` such as a
       changed snapshot), a host fault (:data:`PROCESS_FAULTS`) and a transient one (:func:`classify`; a timeout included) -> ``None``;
-    * raised inside the engine's ask (:class:`EngineAskError`) -> ``{"outcome": "engine-error", "exceptionClass": <the chain's innermost class>}``: a miss for the
+    * raised inside the engine's ask (:class:`EngineAskError`) -> ``{"outcome": "engine-error", "exceptionClass": <the chain's innermost class under a ``StoreError`` outer, else the outer's own>}``: a miss for the
       item, in the ``fail`` tier, never re-asked on a resume;
     * everything else (a :class:`~gate.HarnessError`, a translation fault, an exception that cannot be placed on the engine's side of the boundary) ->
       ``{"harnessError": <class>}``: the item is neither hit nor miss and the verdict is ``blocked``.
@@ -214,11 +226,12 @@ def ask_failure_entry(exc: BaseException) -> dict | None:
     Only a class name is ever recorded: a message may embed an id or a path."""
     subject = exc.__cause__ if isinstance(exc, EngineAskError) and exc.__cause__ is not None else exc
     chain = exception_chain(subject)
-    if any(_is_run_wide(c) for c in chain) or any(isinstance(c, PROCESS_FAULTS) for c in _placed(subject)) or isinstance(exc, PROCESS_FAULTS) \
+    if any(_is_run_wide(c) for c in _run_wide_links(subject)) or any(isinstance(c, PROCESS_FAULTS) for c in _placed(subject)) or isinstance(exc, PROCESS_FAULTS) \
             or classify(subject) == "transient":
         return None
     if isinstance(exc, EngineAskError):
-        return {"outcome": G.ENGINE_ERROR, "exceptionClass": type(chain[-1]).__name__}
+        from clients.common import StoreError
+        return {"outcome": G.ENGINE_ERROR, "exceptionClass": type(chain[-1] if isinstance(subject, StoreError) else subject).__name__}
     return {"harnessError": type(exc).__name__}
 
 
@@ -283,8 +296,7 @@ def classify(exc: BaseException) -> str:
     a ``StoreError`` is transient only when something on its cause chain is. A run-wide fault anywhere on the chain (a refused credential, ``NOPERM``,
     ``READONLY``: redis' ``AuthenticationError`` is a ``ConnectionError`` subclass, not a blip) outranks everything. EVERYTHING else, an unknown class
     included, is ``deterministic`` (fail closed)."""
-    chain = exception_chain(exc)
-    if any(_is_run_wide(c) for c in chain):
+    if any(_is_run_wide(c) for c in _run_wide_links(exc)):
         return "deterministic"
     if any(_is_transient_leaf(c) for c in _placed(exc)):
         return "transient"
@@ -537,16 +549,28 @@ def _resume_checks(marker: Mapping, pins: Mapping, key: str, cust: Path, recorde
         raise Refusal("resume refused: the cache holds more than the one in-flight entry (C5)")
 
 
+_ALWAYS = object()
+
+
 @contextlib.contextmanager
-def _stranded_on_exit(active: bool):
+def _stranded_on_exit(active: bool, live: Any = _ALWAYS):
     """Marks whatever leaves the block (an exception or an interrupt) as one that leaves the built graph in the store (``exc.strandedStore``); :func:`main`
-    then appends :data:`gate.STORE_REMEDY` to its line. ``active`` is false on a resume (no build ran in this process)."""
+    then appends :data:`gate.STORE_REMEDY` to its line. ``active`` is false on a resume (no build ran in this process). With ``live`` (the live-graph probe)
+    the mark is set only when the probe says the graph is live NOW: inside the build a failure before ``swap``'s rename leaves nothing, so the next fresh run
+    is clean, and a probe that is absent or itself fails makes no claim about the store."""
     try:
         yield
     except BaseException as exc:                                    # noqa: BLE001 - re-raised unchanged
-        if active:
+        if active and (live is _ALWAYS or (live is not None and _probe_says_live(live))):
             exc.strandedStore = True
         raise
+
+
+def _probe_says_live(live: Callable[[], bool]) -> bool:
+    try:
+        return bool(live())
+    except Exception:                                               # noqa: BLE001 - an unreadable store: no claim about it
+        return False
 
 
 def run_gate(*args, **kw) -> dict:
@@ -563,7 +587,7 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
              probe_map: Path | None = None, home: Path | None = None, observed: Mapping | None = None, tree: Mapping | None = None,
              committed_text=None, record_commit_sha: str | None = None, refresh_fn: Callable[..., Any] | None = None,
              cache_len: Callable[[], int] = lambda: 0, system: str = "ccg", engine_snapshot_id: Callable[[], str] | None = None,
-             allow_after_adaptation: bool = False, resume: bool = False, flow_decision: Path | None = None,
+             allow_after_adaptation: bool = False, resume: bool = False, flow_decision: Path | None = None, dev_probe: Path | None = None,
               live_graph_present: Callable[[], bool] | None = None, lock: _Lock | None = None, canary: Callable[[], Any] | None = None,
               stall_k: int = STALL_K, stall_deadline_s: float = STALL_DEADLINE_S, canary_request: str = CANARY_REQUEST) -> dict:
     """The AC-5 gate run: every refusal happens before the marker and the first question. -> counts only."""
@@ -584,9 +608,10 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     if declared is not None and declared != system:
         raise Refusal("the system disagrees with the system manifest's own: pass the manifest's system, or none")
     all_records, key = _read_lists(lists, home)
-    G.score_inputs_check(repo, gate_id, pf, all_records, committed_text=committed_text)       # every refusal `score` already knows, before the marker
     flag = G.flow_flag(Path(flow_decision) if flow_decision else repo / G.FLOW_DECISION, committed_text)
-    records, withheld = G.withhold_strata(all_records, G.STRATA if flag else G.STRATA_GATED)
+    G.score_inputs_check(repo, gate_id, pf, all_records, committed_text=committed_text,           # every refusal `score` already knows, before the marker
+                         dev_probe=G.read_dev_probe(dev_probe) if dev_probe else None, gated=G.gated_strata(flag))
+    records, withheld = G.withhold_strata(all_records, G.gated_strata(flag))
     marker = _marker_path(cust, key)
     if lock is not None:
         lock.take(cust, key)
@@ -605,7 +630,8 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
                           "empty throwaway store only. Provision a new empty store (create its ACL users again) and rebuild; if an earlier run of this list was refused "
                           "after its build, the list is not spent (no marker was taken) and runs on the new store")
         _clean_leftover(cust, built, "gate-build-")
-        G.build_at_eval_commit(eval_commit, built, repo=repo, refresh_fn=refresh_fn, system=system, manifest=manifest, **_private_build_areas(cust, key))
+        with _stranded_on_exit(True, live_graph_present):          # a failure after ``swap``'s rename leaves the live graph in the store (P5-1)
+            G.build_at_eval_commit(eval_commit, built, repo=repo, refresh_fn=refresh_fn, system=system, manifest=manifest, **_private_build_areas(cust, key))
     with _stranded_on_exit(not resume):                          # the build has loaded the live graph: every exit before the marker leaves the store stranded
         snap = snapshot_factory(built)
         sid = snap.snapshot_id()
@@ -760,6 +786,7 @@ def main(argv=None, deps: Mapping | None = None) -> int:
     r.add_argument("--graph")
     r.add_argument("--probe-map", help=f"the S47 probe map under the custodian root (default <custodian>/{PROBE_MAP_NAME})")
     r.add_argument("--flow-decision", help="the committed flow decision record (default: the repository's)")
+    r.add_argument("--dev-probe", required=True, help="the dev-gold probe result the rehearsal wrote: a gated stratum with fewer dev hits than dev items refuses the start (exit 5)")
     r.add_argument("--resume", action="store_true", help="continue a started / failed:transient run of the same list under equal pins")
     r.add_argument("--allow-after-adaptation", action="store_true", help="run with the after-adaptation label (recorded in the marker and run.json)")
     a = ap.parse_args(argv)
@@ -772,7 +799,7 @@ def main(argv=None, deps: Mapping | None = None) -> int:
         kw = dict(deps) if deps is not None else _default_deps(a)
         out = run_gate(Path(a.repo), a.gate_id, [Path(f) for f in a.lists.split(",")], Path(a.custodian),
                        probe_map=Path(a.probe_map) if a.probe_map else None, resume=a.resume, allow_after_adaptation=a.allow_after_adaptation,
-                       flow_decision=Path(a.flow_decision) if a.flow_decision else None, **kw)
+                       flow_decision=Path(a.flow_decision) if a.flow_decision else None, dev_probe=Path(a.dev_probe), **kw)
         print(json.dumps(out, sort_keys=True))
         return EXIT_OK
     except (ResolveRefusal, G.PrecheckRefusal) as e:

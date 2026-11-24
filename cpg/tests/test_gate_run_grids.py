@@ -330,6 +330,7 @@ AFTER_THE_RUN = {
     ("main", "the run file carries no recorded flow fl"): "the run file's content",
     ("main", "the run file's flow flag differs from th"): "the run file against the marker's pin",
     ("main", "the lists do not reproduce the withheld "): "the run file's withheld counts",
+    ("main", "the checkout's record commit differs fro"): "the run file's recorded record commit (P5-3)",
     ("require_run_context", "the run file carries no preflight block:"): "the run file's content",
     ("decide_gate", "{} scored items lie in a stratum that is"): "the scored items; withheld strata never reach them by construction",
     ("write_custodian", "held-out-derived files go under the cust"): "score's output guard; run guards the same root with within_custodian",

@@ -15,6 +15,12 @@ OBS = {"algorithm": {"id": "bfs-v1", "version": "1.2"}, "defaultDepthBound": 2}
 GATE = "ac5-gate-1"
 
 
+def dev_probe_doc(**by_stratum) -> dict:
+    """The dev-gold probe result the rehearsal writes (``gate.DEV_PROBE_SCHEMA``): every gated stratum all hits unless ``by_stratum`` overrides it."""
+    base = {s: {"items": 10, "hits": 10, "keyErrors": 0} for s in ("http", "mcp", "scripts", "flow")}
+    return {"schema": G.DEV_PROBE_SCHEMA, "byStratum": {**base, **by_stratum}}
+
+
 DROP = object()                      # ``Env(record_extra={'kind': DROP})``: the committed record lacks that field
 
 
@@ -85,6 +91,8 @@ class Env:
         (repo / "cpg/eval/preregistration.jsonl").write_text(json.dumps(rec) + "\n")
         H.git(repo, "add", "-A")
         H.git(repo, "commit", "-qm", "record")
+        self.dev_probe = tmp_path / "dev-probe.json"                                         # builder-visible dev data: not under the custodian root
+        self.dev_probe.write_text(json.dumps(dev_probe_doc()))
         self.events = []
         self.refresh_kw = None
         self.asked: list[str] = []
@@ -138,12 +146,13 @@ class Env:
     def go(self, **over):
         kw = dict(repo=self.repo, gate_id=GATE, lists=[self.lists], custodian=self.cust, home=self.home, observed=OBS, refresh_fn=self.refresh,
                   snapshot_factory=lambda built: self.snap, ask_factory=lambda built, snap: self.ask, cache_len=lambda: 0,
-                  resolve_factory=lambda built, snap: self.resolve, probe_map=self.probes, engine_snapshot_id=lambda: self.engine_sid)
+                  resolve_factory=lambda built, snap: self.resolve, probe_map=self.probes, engine_snapshot_id=lambda: self.engine_sid,
+                  dev_probe=self.dev_probe)
         kw.update(over)
         return R.run_gate(**kw)
 
     def argv(self, *extra):
-        return ["run", "--gate-id", GATE, "--lists", str(self.lists), "--custodian", str(self.cust), "--repo", str(self.repo), *extra]
+        return ["run", "--gate-id", GATE, "--lists", str(self.lists), "--custodian", str(self.cust), "--repo", str(self.repo), "--dev-probe", str(self.dev_probe), *extra]
 
     def deps(self, **over):
         d = dict(observed=OBS, refresh_fn=self.refresh, snapshot_factory=lambda b: self.snap, ask_factory=lambda b, s: self.ask,

@@ -67,7 +67,7 @@ def kill_after_rename_of(suffix: str):
 def score(e, monkeypatch, capsys):
     """``gate.py score`` over the Env's custodian, exactly as the CLI would be called; -> (exit status, stdout JSON or None)."""
     monkeypatch.setenv("HOME", str(e.home))
-    argv = ["score", "--gate-id", GATE, "--lists", str(e.lists), "--run", str(e.run_files()[0]), "--custodian", str(e.cust), "--port", "16420"]
+    argv = ["score", "--gate-id", GATE, "--lists", str(e.lists), "--run", str(e.run_files()[0]), "--custodian", str(e.cust), "--dev-probe", str(e.dev_probe), "--port", "16420"]
     rc = G.main(argv, snapshot=e.snap, repo=e.repo, preflight_fn=lambda repo, gid: G.preflight(repo, gid, observed=OBS))
     cap = capsys.readouterr()
     return rc, (json.loads(cap.out) if cap.out.strip() else None), cap.err
