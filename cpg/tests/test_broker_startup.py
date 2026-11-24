@@ -245,6 +245,21 @@ def test_a_manifest_that_is_not_utf8_is_a_configuration_error_not_a_crash(tmp_pa
         server.load_systems([str(p)], fake_iface(), require_owner_protected=True, trusted_uids=TRUSTED)
 
 
+def test_a_non_utf8_manifest_is_the_same_configuration_error_with_and_without_owner_protection(tmp_path):
+    p = tmp_path / "bin.yaml"
+    p.write_bytes(b"\xff\xfe\x00bad")
+    p.chmod(0o644)
+    for kw in ({}, {"require_owner_protected": True, "trusted_uids": TRUSTED}):
+        with pytest.raises(mf.ManifestError, match=r"bin\.yaml: manifest is not valid UTF-8"):
+            server.load_systems([str(p)], fake_iface(), **kw)
+
+
+def test_the_production_trusted_uids_default_is_root_alone_in_main_and_load_systems():
+    import inspect
+    for fn in (server.main, server.load_systems):
+        assert inspect.signature(fn).parameters["trusted_uids"].default == frozenset({0})
+
+
 # ------------------------------------------------------------------ main: option rules (item 8), no side effects
 
 
@@ -411,3 +426,19 @@ def test_reexec_runs_only_in_the_main_guard_and_main_reads_the_credential_after_
     guard = src.index('if __name__ == "__main__":\n    reexec_if_needed')
     assert src.count("reexec_if_needed(") == 2  # its definition and the one call in the guard
     assert src.index("def main(") > guard and src.index("read_credential(args.holder_cred") > guard
+
+
+def test_a_bad_credential_outranks_a_bad_manifest(tmp_path, monkeypatch, capsys):
+    """The credential is read before the manifests are loaded (spec5 s1): the missing credential's 69 wins over the
+    manifest's 64."""
+    d = tmp_path / "b"
+    d.mkdir(mode=0o700)
+    bad = d / "bad.yaml"
+    bad.write_text("- not a mapping\n")
+    bad.chmod(0o644)
+    args = ["--system", str(bad), "--socket", str(d / "broker.sock"), "--require-owner-protected",
+            "--key-holder-socket", "/x/h.sock", "--holder-uid", str(ME + 1), "--holder-cred", str(tmp_path / "nope")]
+    rc, err, _ = run_main(tmp_path, monkeypatch, capsys, args)
+    assert rc == 69 and "holder credential" in err and "bad.yaml" not in err
+    rc, err, _ = run_main(tmp_path, monkeypatch, capsys, args[:-6])  # without the holder: the manifest error shows
+    assert rc == 64 and "bad.yaml" in err

@@ -391,11 +391,7 @@ def load_systems(paths: list[str], iface: Callable[[], addr_mod.IfaceData], *, r
     for p in paths:
         try:
             if require_owner_protected:
-                raw = ownerprot.require_owner_file(p, trusted_uids)
-                try:
-                    m = manifest_mod.load_manifest_text(raw.decode("utf-8"))
-                except UnicodeDecodeError:
-                    raise manifest_mod.ManifestError("manifest is not valid UTF-8") from None
+                m = manifest_mod.load_manifest_text(ownerprot.require_owner_file(p, trusted_uids).decode("utf-8"))
             else:
                 m = manifest_mod.load_manifest(p)
             bad = addr_mod.check_local_entries(m.egress, iface)
@@ -408,6 +404,8 @@ def load_systems(paths: list[str], iface: Callable[[], addr_mod.IfaceData], *, r
             raise manifest_mod.ManifestError(f"{p}: the checks need the interface data: {exc}") from None
         except (manifest_mod.ManifestError, OSError) as exc:
             raise manifest_mod.ManifestError(f"{p}: {exc}") from None
+        except UnicodeDecodeError:  # on both paths: the bytes of a manifest are UTF-8 or it is a configuration error
+            raise manifest_mod.ManifestError(f"{p}: manifest is not valid UTF-8") from None
         if ls.system in systems:
             raise manifest_mod.ManifestError(f"{p}: system {ls.system!r} is loaded twice")
         systems[ls.system] = ls

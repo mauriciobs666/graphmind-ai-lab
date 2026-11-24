@@ -153,7 +153,11 @@ def check_socket_dir(socket_path: str, holder_uid: int) -> None:
 
 
 class HolderClient:
-    """The broker's ``hosted_exchanger``: ``(endpoint, method, path, body, gateway_run_id) -> Exchange``."""
+    """The broker's ``hosted_exchanger``: ``(endpoint, method, path, body, gateway_run_id) -> Exchange``.
+
+    The rule ``holder_uid != the broker's own uid`` (egress-spec5 s1) is enforced by the caller, in
+    `ccg.broker.server._parse` (reached from `server.main`, the only production constructor), not here: a constructor
+    check would be a second copy of it."""
 
     def __init__(self, socket_path: str, holder_uid: int, secret: bytes, *,
                  now: Callable[[], float] = time.time, monotonic: Callable[[], float] = time.monotonic,

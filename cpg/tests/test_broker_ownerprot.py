@@ -5,6 +5,8 @@ symlinks and FIFOs in a temporary directory with an injected trusted uid (the re
 from __future__ import annotations
 
 import os
+import stat
+import types
 
 import pytest
 
@@ -244,3 +246,42 @@ def test_it_agrees_with_the_gateway_check_on_an_oversize_file_and_a_bad_path(roo
         assert (ours.ok, ours.reason, ours.data) == (theirs.ok, theirs.reason, theirs.data)
     for bad in ("relative/path", "/a/../b"):
         assert read_owner_file(bad, TRUSTED).reason == gateway_read(bad, TRUSTED).reason
+
+
+def test_the_production_cap_is_one_mebibyte_and_is_the_default(root):
+    assert ownerprot.MAX_BYTES == 1 << 20
+    f = root / "etc" / "edge.yaml"
+    f.write_bytes(b"x" * (1 << 20))
+    f.chmod(0o644)
+    assert check(root, f).ok
+    f.write_bytes(b"x" * ((1 << 20) + 1))
+    assert check(root, f).reason == "file too large"
+
+
+def _lying_fstat(monkeypatch, size):
+    real = os.fstat
+
+    def fstat(fd):
+        st = real(fd)
+        if not stat.S_ISREG(st.st_mode):
+            return st
+        return types.SimpleNamespace(**{**{k: getattr(st, k) for k in dir(st) if k.startswith("st_")}, "st_size": size})
+
+    monkeypatch.setattr(os, "fstat", fstat)
+
+
+def test_a_file_whose_size_exceeds_the_cap_is_refused_before_it_is_read(root, monkeypatch):
+    f = root / "etc" / "small.yaml"
+    f.write_text("a: 1\n")
+    f.chmod(0o644)
+    _lying_fstat(monkeypatch, 51)
+    monkeypatch.setattr(os, "read", lambda *a: pytest.fail("read after the size check"))
+    assert check(root, f, max_bytes=50).reason == "file too large"
+
+
+def test_a_file_that_grows_past_the_cap_during_the_read_is_refused(root, monkeypatch):
+    f = root / "etc" / "grows.yaml"
+    f.write_bytes(b"x" * 51)
+    f.chmod(0o644)
+    _lying_fstat(monkeypatch, 0)  # the size looked fine at fstat time
+    assert check(root, f, max_bytes=50).reason == "file too large"

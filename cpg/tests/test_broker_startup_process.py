@@ -160,6 +160,23 @@ def test_the_product_entry_refuses_a_manifest_that_is_not_root_owned_with_69_nam
     untouched(p)
 
 
+def test_the_product_entry_with_no_seams_refuses_a_user_owned_manifest_by_its_own_owner(tmp_path):
+    """`python -m ccg.broker.server --require-owner-protected`, nothing injected: the trusted uids are `{0}` and not the
+    broker's own uid. Under `{own uid}` the walk would stop at the root-owned `/` instead, so the message names which."""
+    d = tmp_path / "b"
+    d.mkdir(mode=0o700)
+    m = manifest(d)
+    p = spawn(tmp_path, ["--system", m, "--require-owner-protected"], module=True, wait=False)
+    try:
+        rc = p.wait()
+    finally:
+        if p.p.poll() is None:
+            p.p.kill()
+    assert rc == 69 and str(m) in p.err
+    assert f"untrusted uid {ME}" in p.err and "untrusted uid 0" not in p.err
+    untouched(p)
+
+
 def test_the_product_entry_has_no_way_to_widen_the_trusted_uids_or_to_skip_the_hosted_check(tmp_path):
     d = tmp_path / "b"
     d.mkdir(mode=0o700)
