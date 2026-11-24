@@ -34,4 +34,5 @@ Build phase (plan accepted, committed `749633ae`). Plan dispatch table is the un
 | D7 | `coder` | `aba8fe4bb4e2cc4a7` | in-flight | `framing.py`, `keyholder.py`, `ledger.py`, `bin/keyholder.py`, `deploy/install.sh` + tests | `analyst` + `security-expert` (own gate) → — | — |
 
 Note: D3 ∥ D7 file-disjoint (D7 does not touch records/policy); `llm-gateway/AGENTS.md` "State" line stale — teco updates after D6.
-| D4 | `coder` | `ab53d36fa731b7a6b` | in-flight | `engine.py`, `transport.py`, `providers/{__init__,base}.py` + tests | `analyst` (batched D1–D6) → — | — |
+| D4 | `coder` | `ab53d36fa731b7a6b` | delivered (87 tests re-run green; teco mutation: DirectTransport locality check disabled → test fails; 18 mutants killed per report; committed 50a3820e) | `engine.py`, `transport.py`, `providers/{__init__,base}.py` + tests | `analyst` (batched D1–D6) → — | — |
+| D5 | `coder` | `abe1111f3fafcec78` | in-flight | `providers/{openai_compat,lmstudio,ollama,anthropic}.py` + tests | `analyst` (batched D1–D6) → — | — |
