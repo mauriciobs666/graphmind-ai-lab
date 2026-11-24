@@ -39,3 +39,5 @@ Note: D3 ∥ D7 file-disjoint (D7 does not touch records/policy); `llm-gateway/A
 | D6 | `coder` | `a31443104be371b47` | delivered (517 non-D7 tests re-run green; teco mutation: embedding filter removed → test fails; 18 mutants killed per report; committed) | `load.py`, `engine.py` (edit) + tests | `analyst` (batched D1–D6) → — | — |
 
 Open for stakeholder (from D5): Anthropic adapter refuses `tools` (OpenAI-style tool-call translation not built) — FR-1 says chat completions with tool calls; ccg does not use tools, falkor-chat follow-on will. `min_p` unsupported on lmstudio/openai_compat and Ollama frequency/presence penalties unsupported (vendor docs do not list them; ccg does not send them). Unverified vendor facts listed in D5 report: LM Studio `stats`/`runtime` on /v1, `/v1/decisions` shape, Anthropic temperature family and thinking-token inclusion, Ollama `eval_count` thinking and `num_ctx` effect.
+| Gate D1–D6 | `analyst` | `aa88268ad17048330` | in-flight | `docs/reviews/llm-gateway.md` Pass 10 | — → — | — |
+| U-S5 | `architect` | `a6c231652670eed13` | in-flight | `docs/plans/connected-code-graph-egress-spec5.md` | `analyst` + `security-expert` → — | — |
