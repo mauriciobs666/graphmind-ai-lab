@@ -30,6 +30,7 @@ _ESCAPE = re.compile(r"%([0-9A-Fa-f]{2})")
 _AUTHORITY = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.\-]*:)?//")     # `scheme://` or a scheme-relative `//`
 _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*://")
 _MARKER_RUN_THEN_SLASH = re.compile("^[\x00\x01]+/")
+_HTTP_SCHEME = re.compile(r"^https?://", re.IGNORECASE)
 _FIXED = frozenset({"{}", "{**}", CONSUMER, PROVIDER})
 _WHOLE_PARAM = (
     (re.compile(r"^\{[^{}/]*:path\}$"), "{**}"),
@@ -110,6 +111,13 @@ def is_url_like(alt: str) -> bool:
     """Does ``alt`` read as a URL or a URL path: it starts with ``/`` (so ``//``), starts with ``scheme://``, or is a run of
     markers followed by ``/``? A wholly unresolved piece is not URL-like (the caller decides what to do with it)."""
     return alt.startswith("/") or bool(_SCHEME.match(alt)) or bool(_MARKER_RUN_THEN_SLASH.match(alt))
+
+
+def is_url_like_scheme(alt: str) -> bool:
+    """The strict form of :func:`is_url_like` (``urlLike: scheme``): only ``http://`` or ``https://`` (any case), or a run of markers
+    followed by ``/`` (a computed origin). A leading ``/`` alone is not: a command's operand ``/tmp/out`` or ``/dev/null`` is a file path,
+    and ``ftp://``/``file://`` name no HTTP contract."""
+    return bool(_HTTP_SCHEME.match(alt)) or bool(_MARKER_RUN_THEN_SLASH.match(alt))
 
 
 def names_no_literal_segment(key: str) -> bool:

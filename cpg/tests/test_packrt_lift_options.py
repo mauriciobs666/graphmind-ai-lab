@@ -98,6 +98,45 @@ def test_is_url_like(alt, url_like):
     assert httpkey.is_url_like(alt) is url_like
 
 
+@pytest.mark.parametrize("alt,strict", [
+    ("http://h/a", True), ("https://h/a", True), ("HTTP://h/a", True), ("http://h", True), (X + "/a", True), (Z + X + "/a", True),
+    ("http://" + X + "/a", True),
+    ("/a", False), ("//h/a", False), ("/dev/null", False), ("/tmp/health", False), ("ftp://h/a", False), ("file:///etc/passwd", False),
+    ("ws://h/x", False), ("h://x", False), ("", False), ("a", False), (X, False), (X + "a/b", False), ("mailto:x", False),
+])
+def test_is_url_like_scheme_accepts_only_http_or_a_computed_origin_then_a_slash(alt, strict):
+    assert httpkey.is_url_like_scheme(alt) is strict
+
+
+def test_url_like_scheme_drops_a_leaf_of_a_leading_slash_path_that_true_keeps():
+    recs = with_caller("/own/x")
+    assert [view(c) for c in run(recs, fetch_with(url_like=True)).consumers] == [("c1", "GET /own/x", "confirmed", "lifted-role")]
+    out = run(recs, fetch_with(url_like="scheme"))
+    assert out.consumers == [] and [i["siteId"] for i in out.lifted] == ["fe"]
+
+
+def test_url_like_scheme_keeps_an_http_url_and_a_computed_origin_and_only_those_alternatives_of_a_leaf():
+    recs = fetch_chain()
+    recs[-1] = vs("c1", "a0", "/tmp/x", "http://h/x", X + "/y", "ftp://h/z")
+    out = run(recs, fetch_with(url_like="scheme"))
+    (leaf,) = [i for i in out.lifted if i["siteId"] == "c1"]
+    assert sorted(leaf["alternatives"]) == sorted(["http://h/x", X + "/y"])
+    assert sorted(c["key"] for c in out.consumers) == ["GET /x", "GET /y"]
+
+
+def test_url_like_scheme_decides_partial_alternatives_before_the_filter_and_keeps_a_wholly_unresolved_one():
+    recs = fetch_chain()
+    recs[-1] = vs("c1", "a0", "http://h/a", X)
+    out = run(recs, fetch_with(url_like="scheme"))
+    assert [view(c) for c in out.consumers] == [("c1", "GET /a", "possible", "partial-key")]
+
+
+def test_url_like_scheme_applies_to_a_leaf_made_by_own_site_too():
+    out = run(without_caller("/own/x"), fetch_with(own=True, url_like="scheme"))
+    assert out.consumers == []
+    assert [c["key"] for c in run(without_caller("http://h/own/x"), fetch_with(own=True, url_like="scheme")).consumers] == ["GET /own/x"]
+
+
 def test_url_like_drops_a_leaf_with_no_url_like_alternative_and_keeps_the_intermediate_slot_untouched():
     out = run(with_caller("timeout"), fetch_with(url_like=True))
     assert out.consumers == []
@@ -202,13 +241,18 @@ def test_the_schema_accepts_the_three_optional_words_and_packformat_stays_1():
     assert _errors(p) == [] and p["packFormat"] == 1
 
 
+def test_the_schema_accepts_url_like_scheme():
+    assert _errors(fetch_with(url_like="scheme")) == []
+
+
 @pytest.mark.parametrize("edit", [
     lambda p: p["liftings"][0].update(ownSite="yes"),
     lambda p: p["liftings"][0].update(urlLike=1),
+    lambda p: p["liftings"][0].update(urlLike="strict"),
     lambda p: p["liftings"][0]["seeds"][0].update(scope={"imports": [{"module": {"prefix": "x"}}], "bogus": 1}),
     lambda p: p["liftings"][0]["seeds"][0].update(scope={"role": ["nowhere"]}),
     lambda p: p["liftings"][0].update(ownsite=True),
-], ids=["ownSite-type", "urlLike-type", "scope-unknown-key", "scope-role-enum", "misspelt-word"])
+], ids=["ownSite-type", "urlLike-type", "urlLike-unknown-mode", "scope-unknown-key", "scope-role-enum", "misspelt-word"])
 def test_the_schema_rejects_a_malformed_optional_word(edit):
     p = fetch_with()
     edit(p)

@@ -1296,15 +1296,21 @@ print(json.dumps(sorted(out)))
 """
 
 
+# The packs the record was built with (the ``DEFAULT_PACKS`` of the pin): frozen, so a pack added to ``DEFAULT_PACKS`` later
+# (``shell-http-client``, CO-3) is not a pin the record owes. Removing a name here reddens the test; adding a later pack does not.
+RECORD_PACKS = ("fastapi", "fastmcp", "fetch", "infra-signatures", "kafka", "python-http-client", "severity-rules", "shell-mcp-call", "ts-mcp-client")
+
+
 def test_every_cpg_file_the_build_path_imports_or_reads_is_pinned_by_the_record_or_the_tool_line():
-    """An unfiltered ``sys.modules`` sweep in a fresh interpreter of the build path (what ``build_and_load`` and ``LiveGraph`` import) plus the packs ``DEFAULT_PACKS`` read:
+    """An unfiltered ``sys.modules`` sweep in a fresh interpreter of the build path (what ``build_and_load`` and ``LiveGraph`` import) plus the packs the record was built with (``RECORD_PACKS``, a subset of ``DEFAULT_PACKS``):
     each file is in the record's pins, in ``TOOL_FILES`` or in ``EXTRA_PIN_FILES``; the extra files exist and the record pins none of them."""
     import os
     env = {"PATH": "/usr/bin:/bin", "PYTHONPATH": str(CPG), "HOME": str(CPG)}
     got = subprocess.run([sys.executable, "-c", SWEEP, str(sd.REPO)], capture_output=True, text=True, env=env, cwd=str(CPG), timeout=60, check=True).stdout
     imported = set(json.loads(got))
     from ccg import refresh
-    packs = {p.relative_to(sd.REPO).as_posix() for n in refresh.DEFAULT_PACKS for p in (CPG / "packs" / n).glob("*.yaml")}
+    packs = {p.relative_to(sd.REPO).as_posix() for n in RECORD_PACKS for p in (CPG / "packs" / n).glob("*.yaml")}
+    assert set(RECORD_PACKS) <= set(refresh.DEFAULT_PACKS)
     pinned = set(sd.pinned_files(sd._line_of(sd.committed_record_lines(sd.REPO, sd.capture_head(sd.REPO)), sd.RECORD_ID)))
     assert imported - pinned - set(sd.TOOL_FILES) - set(sd.EXTRA_PIN_FILES) == set()
     assert packs <= set(sd.EXTRA_PIN_FILES) and len(packs) == 13

@@ -1,5 +1,5 @@
 {
- "files": 1332,
+ "files": 1335,
  "items": 6,
  "truncated": null,
  "devTargets": [
@@ -29,13 +29,13 @@
   }
  ],
  "consumersByRuleStatusReason": {
-  "command/confirmed/lifted-role": 7,
+  "command/confirmed/lifted-role": 3,
   "command/possible/partial-key": 7,
   "command/possible/runtime-built": 1,
   "mention/possible/prompt-mention": 5
  },
  "consumersByKeyShape": {
-  "other": 15,
+  "other": 11,
   "GET /health": 5
  }
 }

@@ -13,7 +13,8 @@ Three kinds of evidence, as in `test_pack_shell_mcp_call.py`:
 * `behaviour_failures(pack)` is the whole contract as one function; the leaf-mutation registration mutates every leaf of the
   pack file and requires it to fail for each.
 
-Known limits (pinned, not endorsed): see the three `test_known_limit_*` tests.
+Known limits (pinned, not endorsed): see the `test_known_limit_*` tests. The command lifting is `urlLike: scheme`, so an operand that is
+a path (`-o /tmp/out`, `-d /health`) or a non-HTTP URL (`ftp://`, `file://`) is no consumer.
 """
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ import yaml
 
 from packrt_helpers import CPG, PACKS, call, file_, pack, sym, vs
 from ccg.packrt import run_packs
+from co3_helpers import assemble_http
 from ccg.rulepack import load_pack, pack_errors
 from extractors.markdown.extract import extract_markdown
 from extractors.markdown.globs import load_globs
@@ -158,7 +160,7 @@ def test_the_real_markdown_extractor_inline_span_gives_the_consumer():
     ('curl -fsS "$BASE_URL/health" >/dev/null\n', [("GET /health", "possible", "partial-key")]),
     ('curl -sf -m 5 "${BASE}/health" || exit 1\n', [("GET /health", "possible", "partial-key")]),
     ('code="$(curl -s -o /dev/null -w \'%{http_code}\' --max-time 2 "http://127.0.0.1:$PORT/health" 2>/dev/null)"\n',
-     [("GET /health", "possible", "partial-key"), ("GET /dev/null", "confirmed", "lifted-role")]),   # the second is the known limit
+     [("GET /health", "possible", "partial-key")]),
     ('wget -qO- http://localhost:8200/health\n', [("GET /health", "confirmed", "lifted-role")]),
     ('if curl -sf http://127.0.0.1:8200/health; then echo up; fi\n', [("GET /health", "confirmed", "lifted-role")]),
 ])
@@ -198,14 +200,47 @@ def test_known_limit_the_verb_is_always_get_whatever_the_flags():
     assert [c["key"] for c in consumers(shell_records("curl -X POST -d x http://127.0.0.1:8200/documents\n"))] == ["GET /documents"]
 
 
-def test_known_limit_an_output_path_after_a_flag_is_a_url_like_argument():
-    """`urlLike` accepts a leading `/`; curl never takes a path-only URL, but `-o /tmp/out` is one: a consumer with no provider."""
-    assert sorted(c["key"] for c in consumers(shell_records("curl -o /tmp/out http://127.0.0.1:8200/health\n"))) == ["GET /health", "GET /tmp/out"]
+@pytest.mark.parametrize("script,want", [
+    ("curl -o /tmp/health http://127.0.0.1:8200/x\n", ["GET /x"]),
+    ("curl -sf -o /dev/null -w '%{http_code}' http://127.0.0.1:8200/x\n", ["GET /x"]),
+    ("curl -d /health http://127.0.0.1:8200/other\n", ["GET /other"]),
+    ("curl -H /health http://127.0.0.1:8200/other\n", ["GET /other"]),
+    ("curl --data-raw /health http://127.0.0.1:8200/other\n", ["GET /other"]),
+    ("curl -K /etc/curlrc http://127.0.0.1:8200/other\n", ["GET /other"]),
+    ("curl ftp://127.0.0.1/pub/file\n", []),
+    ("curl file:///etc/passwd\n", []),
+    ("curl /health\n", []),
+    ("wget -O /work/plugins/x.jar http://127.0.0.1:8200/x\n", ["GET /x"]),
+], ids=["o-tmp", "o-devnull", "d-path", "H-path", "data-raw", "K-path", "ftp", "file", "bare-path", "wget-O"])
+def test_a_non_url_operand_with_a_leading_slash_or_another_scheme_is_no_consumer(script, want):
+    """`urlLike: scheme`: curl needs a host, so a `/`-leading operand is an output path or data, never the URL (M1 of the CO-3 gate)."""
+    assert sorted(c["key"] for c in consumers(shell_records(script))) == want
 
 
-def test_known_limit_a_constant_url_of_another_scheme_is_url_like():
-    """`urlLike` accepts any `scheme://`; the shell extractor writes the const. The Markdown carrier writes only `http(s)`."""
-    assert [c["key"] for c in consumers(shell_records("curl ftp://127.0.0.1/health\n"))] == ["GET /health"]
+@pytest.mark.parametrize("script,keys", [
+    ("curl -sf http://127.0.0.1:8200/health\n", ["GET /health"]),
+    ("curl -sf https://h.example/health\n", ["GET /health"]),
+    ('curl -sf "$BASE/health"\n', ["GET /health"]),
+    ('curl -sf "http://127.0.0.1:$PORT/health"\n', ["GET /health"]),
+    ("curl -sf http://u:pw@127.0.0.1:8200/health\n", ["GET /health"]),
+], ids=["http", "https", "dynamic-origin", "dynamic-port", "plain-userinfo"])
+def test_the_live_twins_of_the_non_url_operands_stay_consumers(script, keys):
+    assert [c["key"] for c in consumers(shell_records(script))] == keys
+
+
+@pytest.mark.parametrize("script,key", [
+    ("curl -o /tmp/health http://127.0.0.1:8200/x\n", "GET /tmp/health"),
+    ("curl -d /health http://127.0.0.1:8200/other\n", "GET /health"),
+    ("curl ftp://127.0.0.1/pub/file\n", "GET /pub/file"),
+])
+def test_a_non_url_operand_does_not_link_to_a_provider_of_the_same_key(tmp_path, script, key):
+    tree = {"svc/api.sh": "#!/bin/bash\necho serve\n", "ops/x.sh": "#!/bin/bash\n" + script}
+    assert assemble_http(tmp_path, tree, "svc/api.sh", key).links.links == []
+
+
+def test_the_twin_of_a_non_url_operand_links_to_a_provider_of_the_same_key(tmp_path):
+    tree = {"svc/api.sh": "#!/bin/bash\necho serve\n", "ops/x.sh": "#!/bin/bash\ncurl -o /tmp/out http://127.0.0.1:8200/health\n"}
+    assert len(assemble_http(tmp_path, tree, "svc/api.sh", "GET /health").links.links) == 1
 
 
 def test_known_limit_a_shell_url_with_plain_userinfo_keeps_its_path_key():
@@ -310,6 +345,9 @@ def behaviour_failures(the_pack: dict) -> list[str]:
         (planted("curl", (0, "-fsS"), (1, DYN_PORT)), [("http", "GET /health", "possible", "partial-key", "command")]),
         (planted("curl", (0, DYN_ORIGIN)), [("http", "GET /health", "possible", "partial-key", "command")]),
         (planted("curl", (0, "-sf"), (1, "5")), []),
+        (planted("curl", (0, "-o"), (1, "/tmp/health"), (2, URL)), [("http", "GET /health", "confirmed", "lifted-role", "command")]),
+        (planted("curl", (0, "/dev/null")), []),
+        (planted("curl", (0, "ftp://127.0.0.1/health")), []),
         (planted("curl", (0, {"unknown": "u"})), []),
         (planted("curl"), []),
         (planted("curls", (0, URL)), []),

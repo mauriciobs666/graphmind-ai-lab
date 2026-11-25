@@ -1004,10 +1004,18 @@ def test_a_semicolon_in_a_brace_group_inside_a_substitution_inside_an_expansion_
     assert [c["calleeName"] for c in calls_in(recs, "s.sh::<script>")] == ["foo", "bar", "echo", "baz"]
 
 
-def test_quotes_are_not_tracked_so_an_unbalanced_expansion_in_a_quote_keeps_the_hidden_semicolons_in_the_names(tmp_path):
-    # documented limit (`_hide_expansion_semicolons`): the callee text keeps its `;`, which the scripts resolver refuses
-    recs, _ = snippet(tmp_path, 'x="${v:+$v; }"\necho \'${\'\n./a.sh; ./b.sh\n')
-    assert "./a.sh;" in [c["calleeName"] for c in calls_in(recs, "s.sh::<script>")]
+def test_an_unbalanced_expansion_at_end_of_file_keeps_the_original_bytes_so_the_retry_fails_and_no_call_has_a_polluted_name(tmp_path):
+    """CO-2 Pass 2 P2-1: quotes are not tracked, so `'${'` leaves a context open at EOF; the hidden `;` would otherwise end up in a call name
+    (`./a.sh;`). The retry then fails like the first parse: a `parse-error` warning and no calls, never a wrong name."""
+    recs, warns = snippet(tmp_path, 'x="${v:+$v; }"\necho \'${\'\n./a.sh; ./b.sh\n')
+    assert [w["code"] for w in warns] == ["parse-error"]
+    assert calls_in(recs, "s.sh::<script>") == []
+
+
+def test_an_unbalanced_open_paren_inside_an_expansion_at_end_of_file_also_gives_no_calls(tmp_path):
+    recs, warns = snippet(tmp_path, 'x="${v:+$v; }"\necho \'${a:-$(\'\nfoo; bar\n')
+    assert [w["code"] for w in warns] == ["parse-error"]
+    assert calls_in(recs, "s.sh::<script>") == []
 
 
 def test_a_semicolon_after_a_closed_substitution_inside_an_expansion_is_still_hidden(tmp_path):

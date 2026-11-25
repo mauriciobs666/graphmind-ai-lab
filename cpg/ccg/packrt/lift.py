@@ -16,7 +16,7 @@ from collections import defaultdict
 
 from ccg.packrt.extract import Corpus
 from ccg.keynorm import CONSUMER
-from ccg.packrt.httpkey import VERBS, is_url_like, is_wholly_unresolved, normalize_key_parts, split_url
+from ccg.packrt.httpkey import VERBS, is_url_like, is_url_like_scheme, is_wholly_unresolved, normalize_key_parts, split_url
 from ccg.packrt.match import clause_hit, scope_ok
 
 _PARAM_PATH = re.compile(r"^p(\d+)(.*)$")
@@ -191,11 +191,13 @@ def _opaque_slot(corpus: Corpus, pred: dict, node: tuple) -> dict | None:
     return None
 
 
-def _url_like_alternatives(alts: list[str]) -> list[str] | None:
-    """``alts`` without the alternatives that are neither URL-like nor wholly unresolved; ``None`` when none is URL-like."""
-    if not any(is_url_like(a) for a in alts):
+def _url_like_alternatives(alts: list[str], mode=True) -> list[str] | None:
+    """``alts`` without the alternatives that are neither URL-like nor wholly unresolved; ``None`` when none is URL-like.
+    ``mode`` is the lifting's ``urlLike`` value: ``"scheme"`` is the strict test (:func:`is_url_like_scheme`), else :func:`is_url_like`."""
+    like = is_url_like_scheme if mode == "scheme" else is_url_like
+    if not any(like(a) for a in alts):
         return None
-    return [a for a in alts if is_url_like(a) or is_wholly_unresolved(a)]
+    return [a for a in alts if like(a) or is_wholly_unresolved(a)]
 
 
 def _informative(alt: str) -> bool:
@@ -227,7 +229,7 @@ def run_lifting(corpus: Corpus, pack_id: str, lifting: dict) -> list[dict]:
 
     Optional format words: a seed's ``scope`` gates the seed call's own file; ``ownSite`` makes a slot a leaf when no slot lies
     beyond it (a wrapper no call edge reaches is a consumer at its own site); ``urlLike`` keeps at a leaf only the URL-like
-    alternatives (``partialAlternatives`` is decided before the filter) and drops a leaf with none; ``wrapperSite`` replaces a leaf
+    alternatives (``urlLike: scheme``: only ``http(s)://`` or a computed origin then ``/``, no bare leading-``/`` path; ``partialAlternatives`` is decided before the filter) and drops a leaf with none; ``wrapperSite`` replaces a leaf
     by the first informative slot below it on its chain (the wrapper's own template), which becomes the leaf. A lifted fact whose chain
     below the leaf is not transparent records ``opaqueSlot`` and is ``possible``/``partial-key``.
     """
@@ -262,7 +264,7 @@ def run_lifting(corpus: Corpus, pack_id: str, lifting: dict) -> list[dict]:
         leaf = node not in has_child or node in promoted
         partial = any(is_wholly_unresolved(a) for a in alts or ())
         if lifting.get("urlLike") and leaf:
-            kept = _url_like_alternatives(alts or [])
+            kept = _url_like_alternatives(alts or [], lifting["urlLike"])
             if kept is None:
                 continue
             alts, resolved = kept, True

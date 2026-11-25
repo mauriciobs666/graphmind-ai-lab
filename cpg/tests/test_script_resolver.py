@@ -232,6 +232,23 @@ def test_a_markdown_mention_still_matches_by_suffix_after_the_literal_restrictio
     assert [e["targetPath"] for e in edge_from(w, "AGENTS.md", "scripts/gone.sh")] == ["lib/scripts/gone.sh"]
 
 
+def test_a_markdown_absolute_path_is_not_matched_by_its_tail_even_when_a_script_ends_the_same_way(tmp_path):
+    """CO-2 Pass 2 P2-2: no edge for an absolute Markdown token. Through the real pipeline the Markdown extractor already refuses it (its
+    `_SCRIPT` pattern has no leading `/`), so the resolver's own refusal (`rows.py`, `text.startswith("/") and not dynamic`) is a second line
+    not reachable from Markdown: removing it alone leaves this test green (mutant checked); the outcome is what is pinned."""
+    w = assemble(tmp_path, {"AGENTS.md": "# G\n\nRun `/opt/app/scripts/u.sh` first.\n", "opt/app/scripts/u.sh": TARGET})
+    assert edges_into(w, "opt/app/scripts/u.sh") == []
+    assert edge_from(w, "AGENTS.md", "/opt/app/scripts/u.sh") == []
+
+
+def test_a_markdown_path_climbing_out_of_the_repository_still_matches_its_in_repository_tail_by_design(tmp_path):
+    """The prose-mention tier drops the leading `..` and suffix-matches (`possible`/`prompt-mention`); a shell literal does not (above)."""
+    w = assemble(tmp_path, {"a/b/AGENTS.md": "# G\n\nRun `../../../x/t.sh`.\n", "x/t.sh": TARGET, "y/other.sh": DECOY})
+    (e,) = edge_from(w, "a/b/AGENTS.md", "../../../x/t.sh")
+    assert (e["targetPath"], e["status"], e["reason"]) == ("x/t.sh", "possible", "prompt-mention")
+    assert edges_into(w, "y/other.sh") == []
+
+
 # M2: the guards the gate's mutants found untested
 def test_a_suffix_tail_names_a_script_at_the_repository_root(tmp_path):
     w = assemble(tmp_path, {"bin/run.sh": '"$HERE/scripts/t.sh" a\n', "scripts/t.sh": TARGET}, langs=("shell",))

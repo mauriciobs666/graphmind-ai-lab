@@ -264,6 +264,14 @@ whose companion path resolves; `bareDefault` applies when the seed call has no s
 A rule with `match: {lifted: {lifting: fetch-url}}` emits for each lifted slot that resolves and has
 no lifted child (an intermediate hop is not a consumer).
 
+Optional lifting words (all default off; `packFormat` stays 1): `ownSite` (a wrapper no call edge reaches is a consumer at its own
+site), `wrapperSite` (the first informative slot below a leaf becomes the consumer) and `urlLike`. `urlLike: true` keeps at a leaf only
+the URL-like alternatives (`httpkey.is_url_like`: a leading `/`, a `scheme://`, or an unresolved-marker run then `/`) and the wholly
+unresolved ones; a leaf with none is dropped. `urlLike: scheme` is the strict form (`httpkey.is_url_like_scheme`): only `http://` or
+`https://` (any case) or a marker run then `/`, so a bare leading-`/` operand (`curl -o /tmp/out`, `-d /health`) and `ftp://`/`file://`
+are dropped; a pack whose call takes non-URL operands (the shell `curl` pack) uses it, a pack whose argument is a relative path
+(`python-http-client`) keeps `true`. Detail: `docs/plans/connected-code-graph-p1-linking.md` (P1-49 format additions).
+
 **`embedded`**: `[{call: <clause>, arg: <argPath>, language: sql|cypher, scope?}]`. The core parses
 the argument into `READS`/`WRITES` on `data_entity` points; an unparseable or runtime-built text
 is `possible/runtime-built` (proposal §3.3). Declared in the format; not exercised by the five packs.

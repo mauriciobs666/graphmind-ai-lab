@@ -1168,7 +1168,11 @@
      "type": "boolean"
     },
     "urlLike": {
-     "type": "boolean"
+     "enum": [
+      true,
+      false,
+      "scheme"
+     ]
     },
     "wrapperSite": {
      "type": "boolean"
