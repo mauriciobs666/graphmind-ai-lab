@@ -125,8 +125,27 @@ def test_the_cli_verb_writes_the_file_and_prints_counts_only(tmp_path, capsys):
     rc = G.main(["dev-probe", "--run", str(run), "--out", str(out), "--repo", str(r.repo)], snapshot=r.w.snap, repo=r.repo)
     text = capsys.readouterr().out
     assert rc == 0 and json.loads(out.read_text())["schema"] == G.DEV_PROBE_SCHEMA
-    assert json.loads(text) == {"strata": {s: {"items": 3, "hits": 3, "keyErrors": 0} for s in STRATA}, "complete": True}
+    assert json.loads(text) == {"strata": {s: {"items": 3, "hits": 3, "keyErrors": 0, "withheld": 0, "withheldByShape": {}} for s in STRATA}, "complete": True}
     r2 = Rehearsal(tmp_path / "m", miss_in="http")
     run.write_text(json.dumps(r2.run))
     assert G.main(["dev-probe", "--run", str(run), "--out", str(out), "--repo", str(r2.repo)], snapshot=r2.w.snap, repo=r2.repo) == 1
     assert json.loads(capsys.readouterr().out)["complete"] is False
+
+
+def test_the_cli_verb_counts_a_withheld_miss_as_complete_and_prints_the_shape_count(tmp_path, capsys, monkeypatch):
+    r = Rehearsal(tmp_path, miss_in="scripts")
+    miss = H.dev_ids("scripts")[0]
+    monkeypatch.setattr(G, "item_withheld_shape", lambda rec, reader: "B" if rec["itemId"] == miss else None)
+    run = tmp_path / "run.json"
+    run.write_text(json.dumps(r.run))
+    out = tmp_path / "probe.json"
+    assert G.main(["dev-probe", "--run", str(run), "--out", str(out), "--repo", str(r.repo)], snapshot=r.w.snap, repo=r.repo) == 0
+    row = json.loads(capsys.readouterr().out)["strata"]["scripts"]
+    assert row["items"] == 3 and row["hits"] == 2 and row["keyErrors"] == 0 and row["withheld"] == 1 and row["withheldByShape"] == {"B": 1}
+
+
+def test_the_writer_reads_the_record_at_the_runs_record_commit_so_a_later_widening_confirms_nothing(tmp_path):
+    r = Rehearsal(tmp_path, miss_in="scripts")
+    confirm(r.repo, [H.dev_ids("scripts")[0]])                          # committed AFTER r.rc, the commit the rehearsal's run recorded
+    with pytest.raises(G.PrecheckRefusal, match="confirmation"):
+        r.write()

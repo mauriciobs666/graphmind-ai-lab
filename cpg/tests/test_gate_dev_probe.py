@@ -145,11 +145,11 @@ def test_a_gold_hash_missing_for_a_gated_stratum_is_refused(tmp_path):
     refuses(e, doc, "dev gold")
 
 
-def test_the_probe_carries_no_rehearsal_id_and_none_is_required(tmp_path):
-    """P7-2: the id bound nothing (it was the run's list key, compared with nothing); it is dropped, not left decorative."""
+def test_a_stray_rehearsal_id_of_any_value_is_ignored_not_required_or_validated(tmp_path):
+    """P7-2: the id bound nothing and was dropped; a probe written before that, carrying a garbage id, still passes and one without it passes too."""
     e = repo_of(tmp_path)
-    assert "rehearsalId" not in probe(e)
     check(e, probe(e))
+    check(e, probe(e, rehearsalId="not hex"))
 
 
 @pytest.mark.parametrize("value", [None, "", 7])
@@ -502,3 +502,139 @@ def test_the_real_key_error_record_is_valid_and_names_only_dev_gold_items():
     ids = G.confirmed_key_errors(root, lambda _p: path.read_text(encoding="utf-8"))
     dev = {json.loads(l)["itemId"] for s in G.STRATA for l in (root / G.DEV_GOLD.format(s)).read_text().splitlines() if l.strip()}
     assert ids and ids <= dev
+
+
+# ------------------------------------------------------------------------------------------------ F7: the exemption over every stratum
+@pytest.mark.parametrize("stratum", ["http", "mcp", "scripts", "flow", "wiring"])
+def test_a_committed_record_of_each_stratum_is_exempt_and_its_content_twin_is_not(tmp_path, stratum):
+    e = repo_of(tmp_path)
+    mixed = [_dev_records(e, s)[0] for s in ("http", "mcp", "scripts", "flow", "wiring")]
+    assert G.is_dev_rehearsal(e.repo, mixed) is True
+    twin = {**_dev_records(e, stratum)[0], "lines": [999]}
+    assert G.is_dev_rehearsal(e.repo, [twin if r["derivedStratum"] == stratum else r for r in mixed]) is False
+
+
+# ------------------------------------------------------------------------------------------------ F4: the record is read at the freeze commit
+def test_a_key_error_record_widened_after_the_record_commit_is_refused(tmp_path):
+    """The analyst's F4 scenario: freeze with an empty record, then a later commit confirms a miss as a key-error."""
+    e = repo_of(tmp_path)
+    frozen = H.head(e.repo)
+    ids = H.dev_ids("http")[:1]
+    confirm(e.repo, ids)                                                               # a later, committed widening
+    G.dev_probe_check(probe(e, key_errors=ids), e.repo, H.head(e.repo), G.STRATA_GATED)                  # at the later commit it IS the record: accepted
+    with pytest.raises(G.PrecheckRefusal, match="confirmation"):
+        G.dev_probe_check(probe(e, key_errors=ids, record_commit=frozen), e.repo, frozen, G.STRATA_GATED)   # the freeze commit's record is empty: refused
+
+
+def test_a_record_that_does_not_exist_at_the_record_commit_is_refused(tmp_path):
+    e = repo_of(tmp_path)
+    H.git(e.repo, "commit", "--allow-empty", "-qm", "x")
+    with pytest.raises(G.PrecheckRefusal, match="confirmation"):
+        G.confirmed_key_errors(e.repo, record_commit="0" * 40)
+
+
+# ------------------------------------------------------------------------------------------------ F1: the Q8 predicate excuses dev items, with counts
+FENCED = "```\nplain\n```\n"                    # line 2 is inside a fence: shape B for a markdown file
+
+
+def _scripts_gold(e, *, path="doc.md", http_too=False):
+    """Rewrite the scripts dev gold so each record carries an impacted path and gold line, and commit; -> the records."""
+    recs = [{"itemId": i, "derivedStratum": "scripts", "counting": True, "lines": [2], "impacted": {"path": path}} for i in H.dev_ids("scripts")]
+    (e.repo / "cpg/eval/dev/ac5-scripts.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+    H.git(e.repo, "add", "-A")
+    H.git(e.repo, "commit", "-qm", "scripts gold")
+    return recs
+
+
+def _no_hit_for(doc, ids):
+    for s in doc["byStratum"].values():
+        s["hitIds"] = [i for i in s["hitIds"] if i not in ids]
+    return doc
+
+
+def test_a_dev_item_the_predicate_withholds_is_excused_from_the_hit_requirement(tmp_path):
+    e = repo_of(tmp_path)
+    _scripts_gold(e)
+    gone = H.dev_ids("scripts")[:1]
+    doc = _no_hit_for(probe(e), gone)
+    with pytest.raises(G.PrecheckRefusal, match="scripts"):
+        G.dev_probe_check(doc, e.repo, H.head(e.repo), G.STRATA_GATED, file_text=lambda rel: None)     # no text: nothing is withheld, the miss stands
+    G.dev_probe_check(doc, e.repo, H.head(e.repo), G.STRATA_GATED, file_text=lambda rel: FENCED)      # fenced: excused
+
+
+def test_the_excuse_is_the_predicates_alone_a_plain_line_that_is_not_listed_is_refused(tmp_path):
+    e = repo_of(tmp_path)
+    _scripts_gold(e)
+    doc = _no_hit_for(probe(e), H.dev_ids("scripts")[:1])
+    with pytest.raises(G.PrecheckRefusal, match="scripts"):
+        G.dev_probe_check(doc, e.repo, H.head(e.repo), G.STRATA_GATED, file_text=lambda rel: "plain\nplain\n")
+
+
+def test_only_the_scripts_stratum_is_excusable(tmp_path):
+    """The shapes are scripts-stratum shapes: a fenced-looking http dev item that is not a hit is still a miss."""
+    e = repo_of(tmp_path)
+    recs = [{"itemId": i, "derivedStratum": "http", "counting": True, "lines": [2], "impacted": {"path": "doc.md"}} for i in H.dev_ids("http")]
+    (e.repo / "cpg/eval/dev/ac5-http.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+    H.git(e.repo, "add", "-A")
+    H.git(e.repo, "commit", "-qm", "http gold")
+    doc = _no_hit_for(probe(e), H.dev_ids("http")[:1])
+    with pytest.raises(G.PrecheckRefusal, match="http"):
+        G.dev_probe_check(doc, e.repo, H.head(e.repo), G.STRATA_GATED, file_text=lambda rel: FENCED)
+
+
+def test_withheld_counts_are_per_shape_and_total_over_counting_scripts_items_only():
+    recs = [{"itemId": str(n), "derivedStratum": "scripts", "counting": True, "lines": [2], "impacted": {"path": "d.md"}} for n in range(3)]
+    recs += [{"itemId": "x", "derivedStratum": "scripts", "counting": False, "lines": [2], "impacted": {"path": "d.md"}},
+             {"itemId": "h", "derivedStratum": "http", "counting": True, "lines": [2], "impacted": {"path": "d.md"}}]
+    assert G.withheld_counts(recs, lambda rel: FENCED) == {"scriptsCounting": 3, "withheld": 3, "byShape": {"B": 3}}
+    assert G.withheld_counts(recs, lambda rel: None) == {"scriptsCounting": 3, "withheld": 0, "byShape": {}}
+
+
+@pytest.mark.parametrize("withheld,total,ok", [(19, 79, True), (20, 79, False), (0, 0, True), (1, 4, True), (2, 4, False)])
+def test_the_cap_is_a_quarter_of_the_counting_scripts_items(withheld, total, ok):
+    counts = {"scriptsCounting": total, "withheld": withheld, "byShape": {}}
+    if ok:
+        G.check_withheld_cap(counts)
+    else:
+        with pytest.raises(G.PrecheckRefusal, match="cap"):
+            G.check_withheld_cap(counts)
+
+
+def _scripts_list(e, n):
+    recs = [{**e.w.rec, "itemId": f"s{k:02d}".ljust(32, "0"), "derivedStratum": "scripts", "lines": [2], "impacted": {"path": "doc.md"}} for k in range(n)]
+    e.set_records(recs)
+    return recs
+
+
+def test_run_over_the_cap_exits_5_before_the_marker_and_spends_nothing(tmp_path, monkeypatch, capsys):
+    e = Env(tmp_path)
+    _scripts_list(e, 4)
+    monkeypatch.setattr(G, "eval_commit_reader", lambda repo: (lambda rel: FENCED if rel == "doc.md" else None))
+    assert run_main(e, monkeypatch) == R.EXIT_RESOLVE == 5
+    assert e.markers() == [] and e.refresh_kw is None and "cap" in capsys.readouterr().err
+
+
+def test_run_under_the_cap_records_the_withheld_counts_in_the_marker(tmp_path, monkeypatch):
+    e = Env(tmp_path)
+    _scripts_list(e, 4)
+    monkeypatch.setattr(G, "eval_commit_reader", lambda repo: (lambda rel: None))
+    assert run_main(e, monkeypatch) == R.EXIT_OK
+    assert e.marker()["withheldShapes"] == {"scriptsCounting": 4, "withheld": 0, "byShape": {}}
+
+
+def test_score_reports_the_withheld_shape_counts_beside_the_verdict(tmp_path, monkeypatch, capsys):
+    from test_gate_run import ScoreEnv
+    monkeypatch.setattr(G, "eval_commit_reader", lambda repo: (lambda rel: None))
+    e = ScoreEnv(tmp_path, monkeypatch)
+    assert e.main() in (0, 1)
+    rep = json.loads(capsys.readouterr().out)
+    assert rep["withheldShapes"] == {"scriptsCounting": 0, "withheld": 0, "byShape": {}}
+
+
+def test_the_default_file_reader_returns_text_of_the_tree_at_eval_commit(tmp_path):
+    e = Env(tmp_path)
+    (e.repo / "cpg/eval/tools/gate.py").write_text("# edited after EVAL_COMMIT\n")                  # the reader is the build tree's, not the working copy's
+    read = G.eval_commit_reader(e.repo)
+    assert read("cpg/eval/tools/gate.py") == "# cpg/eval/tools/gate.py\n"
+    assert read("no/such/file.md") is None
+    assert G.eval_commit_reader(H.make_repo(tmp_path / "bare"))("cpg/README.md") is None            # no EVAL_COMMIT file: nothing is withheld

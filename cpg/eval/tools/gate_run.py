@@ -621,6 +621,8 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     G.score_inputs_check(repo, gate_id, pf, all_records, committed_text=committed_text,           # every refusal `score` already knows, before the marker
                          dev_probe=probe_doc, gated=G.gated_strata(flag))
     records, withheld = G.withhold_strata(all_records, G.gated_strata(flag))
+    shapes = G.withheld_counts(records, G.eval_commit_reader(repo))
+    G.check_withheld_cap(shapes)                                 # over the 25% cap: exit 5 here, before the lock, the build and the marker; nothing spent
     marker = _marker_path(cust, key)
     if lock is not None:
         lock.take(cust, key)
@@ -666,7 +668,7 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
             _write_marker(marker, doc)
         else:
             doc = {"state": "started", "gateId": gate_id, "records": len(all_records), "listSha256": key, "pins": pins, "head": ctx["head"],
-                   "label": ctx["label"], "startedAt": now, "resumes": [], "transientClasses": [], "withheld": withheld, "stall": None}
+                   "label": ctx["label"], "startedAt": now, "resumes": [], "transientClasses": [], "withheld": withheld, "withheldShapes": shapes, "stall": None}
             G.first_run_marker(cust, key, doc)
     stall = _Stall(lambda: doc.get("stall"), lambda v: doc.__setitem__("stall", v), canary, stall_k)
     persisting = _Persisting(ask, answers_path, recorded, stall)

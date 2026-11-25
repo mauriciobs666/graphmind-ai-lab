@@ -225,7 +225,7 @@ def _tools(tmp_path, files):
 def test_m3_the_real_harness_pin_covers_the_run_wiring_and_the_snapshot_transport():
     names = {Path(f).name for f in G.HARNESS_FILES}
     assert {"gate.py", "gate_run.py", "snapshot_export.py", "match_keys.py", "split_manifest.py", "noise.py", "oracle.py", "ac24_smoke.py",
-            "export_kit.py", "baseline.py"} <= names
+            "export_kit.py", "baseline.py", "withheld_shapes.py"} <= names
     assert "cpg/eval/EVAL_COMMIT" in G.HARNESS_FILES and all(f.startswith("cpg/eval/") for f in G.HARNESS_FILES)
 
 

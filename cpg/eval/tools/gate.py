@@ -45,6 +45,7 @@ for _p in (str(_HERE), str(_CPG)):
 import ac24_smoke as _ac                    # noqa: E402  (tree hashes, custodian root, committed copy)
 import match_keys as _mk                    # noqa: E402  (E, h1_symbol_credit, renormalize_check, contract_id)
 import noise as _noise                      # noqa: E402  (path_excluded, p90, median)
+import withheld_shapes as _ws               # noqa: E402  (the Q8 withheld-shape predicate: pure, stdlib only; in the harness pin)
 import split_manifest as _sm                # noqa: E402  (verify_manifest)
 from oracle import wilson as _wilson        # noqa: E402  (the one Wilson implementation)
 
@@ -1090,7 +1091,8 @@ def _chain_length(rows: Sequence[Mapping]) -> dict:
 
 def build_report(result: Mapping, decision: Mapping, *, flags: Mapping[str, str] | None = None, cluster_of: Mapping | None = None,
                  exposure: Sequence[Mapping] = (), exposure_strata: Mapping | None = None, context: Mapping | None = None,
-                 gated_strata: Sequence[str] = STRATA_GATED, withheld: Mapping[str, int] | None = None, flow_flag: bool | None = None) -> dict:
+                 gated_strata: Sequence[str] = STRATA_GATED, withheld: Mapping[str, int] | None = None, flow_flag: bool | None = None,
+                 withheld_shapes: Mapping | None = None) -> dict:
     """Counts, hashes and classes only (never item content, never an id). Recall is given over items, distinct anchors and clusters, per
     stratum and pooled, each with its Wilson interval, and the cluster interval of P0-ML §7.3 (anchors as clusters when no map is given).
     ``context`` carries the preflight blocks (first contact, pins, harness pin, scope) verbatim. Every stratum
@@ -1122,6 +1124,8 @@ def build_report(result: Mapping, decision: Mapping, *, flags: Mapping[str, str]
            "chainLengthUnit": "the engine's `distance` over hit items (the shortest qualifying chain); `symbolHops` = Symbol hops after the first, beside it",
            "units": "items, distinct anchors, clusters (`clusterUnit` says which map was given)"}
     rep["withheld"] = {s: {"count": int((withheld or {}).get(s, 0)), "reason": WITHHELD_REASONS[s]} for s in STRATA if s not in gated_strata}      # counts and reasons only
+    if withheld_shapes is not None:                                           # the Q8 shapes, counts only (``withheld_counts``): per family and total, beside the hits
+        rep["withheldShapes"] = dict(withheld_shapes)
     if "flow" not in gated_strata:
         rep["flow"] = {"status": "flow-unavailable, not closed", "flag": bool(flow_flag), "withheld": int((withheld or {}).get("flow", 0))}
     if flags is not None:
@@ -1294,6 +1298,45 @@ _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 KEY_ERROR_CONFIRMER = "user"               # only the stakeholder confirms a dev key-error (``ccg-dev-key-errors-v1``): never an agent
 
 
+WITHHELD_CAP = 0.25                      # the scoped AC-5 wording: over a quarter of the counting scripts items withheld is over the cap (20 or more of 79)
+
+
+def eval_commit_reader(repo: Path) -> Callable[[str], str | None]:
+    """``path -> text`` of ``path`` in the tree at ``cpg/eval/EVAL_COMMIT`` (the tree the gate builds; ``git show``, read-only), ``None`` for a path that is not
+    there or when the repository has no usable ``EVAL_COMMIT``: the predicate then withholds nothing, the conservative side."""
+    try:
+        rev = (Path(repo) / "cpg" / "eval" / "EVAL_COMMIT").read_text(encoding="utf-8").strip()
+    except OSError:
+        return lambda _rel: None
+    return lambda rel: _git_show_text(Path(repo), rev, rel)
+
+
+def item_withheld_shape(rec: Mapping, file_text: Callable[[str], str | None]) -> str | None:
+    """The Q8 shape letter of a SCRIPTS item (the predicate on the impacted file's text at the build tree and the gold lines), else ``None``."""
+    imp = rec.get("impacted") if isinstance(rec.get("impacted"), Mapping) else {}
+    path = imp.get("path")
+    lang = _ws.language_tag(path) if isinstance(path, str) else None
+    text = file_text(path) if lang else None
+    if rec.get("derivedStratum") != "scripts" or text is None:
+        return None
+    return _ws.withheld_shape({"path": path, "lines": rec.get("lines") or []}, text, lang)
+
+
+def withheld_counts(records: Iterable[Mapping], file_text: Callable[[str], str | None]) -> dict:
+    """``{"scriptsCounting": n, "withheld": n, "byShape": {letter: n}}``: counts only, over the counting scripts items."""
+    rows = [r for r in records if r.get("derivedStratum") == "scripts" and r.get("counting", True)]
+    shapes = Counter(x for x in (item_withheld_shape(r, file_text) for r in rows) if x)
+    return {"scriptsCounting": len(rows), "withheld": sum(shapes.values()), "byShape": dict(sorted(shapes.items()))}
+
+
+def check_withheld_cap(counts: Mapping) -> None:
+    """Over the cap (``withheld`` more than :data:`WITHHELD_CAP` of the counting scripts items, i.e. 20 or more of 79) the scoped wording does not hold:
+    :class:`PrecheckRefusal`, so ``run`` exits 5 before the lock, the build and the marker and the list is not spent. Counts only."""
+    if counts["withheld"] > WITHHELD_CAP * counts["scriptsCounting"]:
+        raise PrecheckRefusal(f"the Q8 predicate withholds {counts['withheld']} of {counts['scriptsCounting']} counting scripts items: over the {int(WITHHELD_CAP * 100)}% cap, "
+                              f"the scoped AC-5 wording does not hold and the list is not spent")
+
+
 def read_dev_probe(path: Path) -> tuple[Any, str]:
     """``(document, sha256 of the exact bytes)`` of the rehearsal's probe file (dev data, builder-visible: any path). Unreadable or not JSON -> :class:`PrecheckRefusal`."""
     try:
@@ -1328,14 +1371,26 @@ def is_dev_rehearsal(repo: Path, records: Sequence[Mapping]) -> bool:
         return False
 
 
-def confirmed_key_errors(repo: Path, committed_text: Callable[[Path], str] | None = None) -> set[str]:
+def _git_show_text(repo: Path, rev: str, rel: str) -> str | None:
+    """``git show <rev>:<rel>`` of ``repo`` (read-only), or ``None`` when it fails (no such commit or path)."""
+    try:
+        return subprocess.run(["git", "-C", str(repo), "show", f"{rev}:{rel}"], capture_output=True, text=True, check=True).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return None
+
+
+def confirmed_key_errors(repo: Path, committed_text: Callable[[Path], str] | None = None, record_commit: str | None = None) -> set[str]:
     """The item ids the stakeholder confirmed as dev key-errors, from the COMMITTED record ``cpg/eval/decisions/ccg-dev-key-errors-v1.json``
     (``{"schema", "confirmed": [{"itemId", "confirmedBy": "user", "date": "YYYY-MM-DD"}]}``, ids distinct; the working copy must equal HEAD's). Missing,
-    uncommitted, edited or malformed (an entry with no stakeholder, no real date or a repeated id included) -> :class:`PrecheckRefusal`."""
+    uncommitted, edited or malformed (an entry with no stakeholder, no real date or a repeated id included) -> :class:`PrecheckRefusal`. ``confirmedBy`` is a
+    self-asserted string, not a signature: the control is the commit. With ``record_commit`` (the freeze commit the marker pins) the file at THAT commit must
+    equal the working copy too, so a commit made after the freeze that widens the record is refused (F4)."""
     path = Path(repo) / DEV_KEY_ERRORS
     try:
         text = path.read_text(encoding="utf-8")
         if (committed_text or _ac._git_head_text)(path) != text:
+            raise ValueError
+        if record_commit is not None and _git_show_text(Path(repo), record_commit, DEV_KEY_ERRORS.as_posix()) != text:
             raise ValueError
         doc = json.loads(text)
         ids = [c["itemId"] for c in doc["confirmed"]]
@@ -1354,14 +1409,17 @@ def _harness_sha(repo: Path) -> dict:
     return {rel: hashlib.sha256((Path(repo) / rel).read_bytes()).hexdigest() for rel in HARNESS_FILES if (Path(repo) / rel).is_file()}
 
 
-def dev_probe_check(probe: Any, repo: Path, record_commit: str, gated: Sequence[str] = STRATA_GATED, committed_text: Callable[[Path], str] | None = None) -> None:
+def dev_probe_check(probe: Any, repo: Path, record_commit: str, gated: Sequence[str] = STRATA_GATED, committed_text: Callable[[Path], str] | None = None,
+                    file_text: Callable[[str], str | None] | None = None) -> None:
     """The pre-gate probe of ``docs/plans/connected-code-graph-p1-closeout.md`` §3.5, as an attestation. ``probe`` is ``{"schema": DEV_PROBE_SCHEMA,
     "recordCommit", "snapshotId", "harnessSha256": {file: sha}, "devGoldSha256": {stratum: sha}, "byStratum": {stratum: {"hitIds": [...],
     "keyErrorIds": [...]}}}``. The gate takes NOTHING countable from it: per gated stratum the dev items are those of the committed gold file, and
     ``hitIds`` plus ``keyErrorIds`` must be exactly that set, disjoint and duplicate-free, with every key-error id in the committed confirmation record. The
     file must carry the freeze (record) commit, the current harness sha map (the import-closure files, equal as a set), the hash of each gated gold file and
     a snapshot id (compared with the gate's own build by :func:`check_probe_snapshot`). A stratum outside ``gated`` is not read.
-    Counts, strata and field names only in a refusal (dev data)."""
+    A dev item the Q8 predicate withholds (:func:`item_withheld_shape`, computed here from the committed gold and the build tree's file text, never taken from
+    the probe) is EXCUSED from the hit requirement: every dev item must be a hit, a withheld shape or a committed key-error. Counts, strata and field names
+    only in a refusal (dev data)."""
     if not isinstance(probe, Mapping) or probe.get("schema") != DEV_PROBE_SCHEMA or not isinstance(probe.get("byStratum"), Mapping):
         raise PrecheckRefusal(f"the dev-gold probe result is not a `{DEV_PROBE_SCHEMA}` document: the gate does not start without one")
     if probe.get("recordCommit") != record_commit:
@@ -1371,7 +1429,8 @@ def dev_probe_check(probe: Any, repo: Path, record_commit: str, gated: Sequence[
     if not (isinstance(probe.get("snapshotId"), str) and probe["snapshotId"]):
         raise PrecheckRefusal("the dev-gold probe carries no snapshot id of the build it vouches for")
     gold_sha = probe.get("devGoldSha256") if isinstance(probe.get("devGoldSha256"), Mapping) else {}
-    confirmed = confirmed_key_errors(repo, committed_text)                          # the record must be usable whenever a probe is accepted, key-errors or not
+    confirmed = confirmed_key_errors(repo, committed_text, record_commit)       # the record must be usable whenever a probe is accepted, key-errors or not
+    file_text = file_text or eval_commit_reader(repo)
     for s in gated:
         records, sha = _dev_gold(repo, s)
         if gold_sha.get(s) != sha:
@@ -1387,9 +1446,10 @@ def dev_probe_check(probe: Any, repo: Path, record_commit: str, gated: Sequence[
         if key_errors:
             if not set(key_errors) <= confirmed:
                 raise PrecheckRefusal(f"dev-gold probe: {s} lists {len(set(key_errors) - confirmed)} key-error id(s) the committed stakeholder record does not confirm")
-        if len(set(listed)) < len(set(items)):
-            raise PrecheckRefusal(f"dev-gold probe: {s} has {len(hits)} hits of {len(set(items))} dev items ({len(key_errors)} stakeholder-confirmed key-errors): "
-                                  f"every dev item of a gated stratum must be a hit before the gate starts")
+        excused = {r["itemId"] for r in records if item_withheld_shape(r, file_text)}
+        if len(set(listed) | excused) < len(set(items)):
+            raise PrecheckRefusal(f"dev-gold probe: {s} has {len(hits)} hits of {len(set(items))} dev items ({len(key_errors)} stakeholder-confirmed key-errors, "
+                                  f"{len(excused - set(listed))} withheld shapes): every dev item of a gated stratum must be a hit, a withheld shape or a key-error before the gate starts")
 
 
 def check_probe_snapshot(probe: Mapping, built_snapshot_id: str) -> None:
@@ -1419,7 +1479,7 @@ def write_dev_probe(repo: Path, run: Mapping, snapshot, committed_text: Callable
         recs, shas[s] = _dev_gold(repo, s)
         records += recs
     result = score_gate(records, run, snapshot, patterns)
-    confirmed = confirmed_key_errors(repo, committed_text)
+    confirmed = confirmed_key_errors(repo, committed_text, ctx["recordCommit"])
     by = {}
     for s in strata:
         ids = sorted(r["itemId"] for r in records if r["derivedStratum"] == s)
@@ -1430,7 +1490,8 @@ def write_dev_probe(repo: Path, run: Mapping, snapshot, committed_text: Callable
 
 
 def score_inputs_check(repo: Path, gate_id: str, pf: Mapping, records: Sequence[Mapping], *, flags_given: bool | None = None, committed_text=None,
-                       dev_probe: Any = None, gated: Sequence[str] = STRATA_GATED, probe_check: bool = True) -> dict:
+                       dev_probe: Any = None, gated: Sequence[str] = STRATA_GATED, probe_check: bool = True,
+                       file_text: Callable[[str], str | None] | None = None) -> dict:
     """EVERY refusal of ``score`` that depends only on inputs known BEFORE the marker, in one place that both verbs call (``run`` before it takes the
     marker, exit 5, nothing spent; ``score`` first thing after it has read the lists): the stored gold re-normalises cleanly, the working tree is clean,
     the committed record states a valid gate kind (and, for a re-gate, usable ``movedOut``), ``--flags`` matches that kind (``flags_given`` is ``None``
@@ -1460,7 +1521,7 @@ def score_inputs_check(repo: Path, gate_id: str, pf: Mapping, records: Sequence[
     except Exception as e:                                       # noqa: BLE001 - an unreadable manifest is a refusal, whatever the parser raised
         raise PrecheckRefusal(f"the eval manifest is unusable ({type(e).__name__})") from None
     if probe_check and not is_dev_rehearsal(repo, records):      # a dev-only list cannot spend a held-out list; every other list needs the attestation
-        dev_probe_check(dev_probe, repo, pf.get("recordCommit"), gated, committed_text)
+        dev_probe_check(dev_probe, repo, pf.get("recordCommit"), gated, committed_text, file_text)
     return {"kind": kind, "movedOut": moved_out, "patterns": patterns}
 
 
@@ -1548,8 +1609,14 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
                 snapshot = StoreSnapshot(RoRunner(snapshot_graph(a.host, a.port, a.graph, a.system or manifest_system(repo) or "ccg")))
             doc = write_dev_probe(repo, run, snapshot, committed_text)
             Path(a.out).write_text(json.dumps(doc, sort_keys=True, indent=1) + "\n", encoding="utf-8")
-            rows = {s: {"items": len(_dev_gold(repo, s)[0]), "hits": len(r["hitIds"]), "keyErrors": len(r["keyErrorIds"])} for s, r in doc["byStratum"].items()}
-            complete = all(v["hits"] + v["keyErrors"] == v["items"] for v in rows.values())
+            reader = eval_commit_reader(repo)
+            rows, complete = {}, True
+            for s, r in doc["byStratum"].items():
+                recs = _dev_gold(repo, s)[0]
+                listed = set(r["hitIds"]) | set(r["keyErrorIds"])
+                shapes = Counter(x for x in (item_withheld_shape(rec, reader) for rec in recs if rec["itemId"] not in listed) if x)
+                rows[s] = {"items": len(recs), "hits": len(r["hitIds"]), "keyErrors": len(r["keyErrorIds"]), "withheld": sum(shapes.values()), "withheldByShape": dict(sorted(shapes.items()))}
+                complete = complete and rows[s]["hits"] + rows[s]["keyErrors"] + rows[s]["withheld"] == rows[s]["items"]
             print(json.dumps({"strata": rows, "complete": complete}, sort_keys=True))
             return 0 if complete else 1
         cust = within_custodian(Path(a.custodian), None, "--custodian")
@@ -1599,6 +1666,7 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         dec = decide_gate(res, flags, moved_out, gated_strata=gated)
         label = "first-contact" if ctx["label"] == "first-contact" and pf["label"] == "first-contact" else "after-adaptation"
         rep = build_report(res, dec, flags=flags, exposure=expo, gated_strata=gated, withheld=withheld, flow_flag=flag,
+                           withheld_shapes=withheld_counts(records, eval_commit_reader(repo)),
                            context={"label": label, "preflight": ctx, "scoreLabel": pf["label"]})
         write_custodian(cust, "gate-outcomes.jsonl", [{"itemId": i, **o} for i, o in sorted(res["items"].items())])
         write_custodian(cust, "gate-exposure.jsonl", exposure_rows(res))
