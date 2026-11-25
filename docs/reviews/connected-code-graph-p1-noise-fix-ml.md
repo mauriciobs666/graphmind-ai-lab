@@ -53,3 +53,36 @@ Judgment: confirm as a fourth dev key-error (option a), under conditions. It mee
 ## Proposed REVIEW.md lines
 
 Target `REVIEW.md`, heading "Always check" (source: M1 and M3 of this review). Add: "A gate that is satisfied by changing the engine after reading a labelled result states, in the record before the fix is built, the fix budget (number of trees) and the recall cost on the claimed verdict as an interval, counting every scored class the cut can turn into a miss. A visible counter that resets at a new tree (run count at the record) is not the fix count." No prune: nothing in the file is now enforced elsewhere.
+
+## Pass 2 (R3 record, 13th line of `cpg/eval/preregistration.jsonl`, and `docs/plans/connected-code-graph-p1-closeout-prereg.md` §5a, uncommitted)
+
+**Verdict: approve with suggestions** (0 blockers, 1 major, 4 minors). Every Pass 1 item was carried, and nothing claims a measured t3 value. The gaps are two ways to get a second look at t3 or a fourth tree, and one wording that reads as budget for more fixes.
+
+**Stopping condition, amended (replaces the one above; the record and §5a take the same text).** t3 is the last tree on which a noise-motivated engine change is judged. Spend only if all of these hold at t3: labelled Q <= 4 on the point estimate, pooled and scripts; no dev item of a gated stratum other than the four named is newly unlisted; and a pooled Q under 1.49 is explained in the report before the spend (replay mismatch or label drift), which is a disclosure, not a stop. A t3 Q above 4 stops the spend (the stakeholder chooses between deferring criterion 3 and not spending). The t3 labels are frozen once complete: a relabel is allowed only under the spot-check floor (then the larger Q of the two labellers is used). Any later tree, for whatever reason, is judged under this same rule; it counts as exposure 4 and cannot reset the rule. Falsified by a t3 pooled or scripts Q above 4, or a fifth lost dev hit.
+
+### Carried (one line each)
+- Stopping condition: carried in `noiseFix.stoppingRule`, §5a and the `ordering` rule. Two departures, N1 and N2 below.
+- Corrected held-out cost: carried (2 expected, P(at least one) about 0.86, interval 0.2 to 0.999, 3 to 5 fold), in `noiseFix.heldoutCost` and the claim sentence. The claim wording is N3 below.
+- Refit and gold-versus-rubric disclosures: carried, with the sensitivity figures (3.24 / 3.75, then 1.90 / 1.86), the cluster-adjusted Wilson bounds and the "at the gold's expense" sentence.
+- Raw-hit count and no cross-script-links sentence: carried (`rawDevHits`, §6 hit rule). Expected 50 of 64 is labelled "expected" and "the dev probe observes"; the arithmetic is internally consistent (t2: 54 = 46 + 6 flagged-and-listed + 2 key-errors listed; t3: 46 + 4 flagged-and-listed). It is derived from t2 and assumes A removes exactly the four items.
+- Label reuse by identical `(anchorId, itemId, chain)`: carried (`unchangedPair`, `devLabelling`).
+- `7fc6a23c` key-error: carried. The reason cites CO-2c and the key-error definition, not Q; the record says its status changed because A removed its only listing route; the raw count sits beside the entry criterion.
+- m4 (cost audit): superseded, see Q-audit below.
+
+### N1 (major): "cap 3" for fix iterations contradicts the stopping rule; the fix count and the tree count are different counters
+Both wordings are right about different things, and the record conflates them. Engine fixes against dev labelled noise so far: 1 (A); t1 to t2 was a contact move, not a noise fix. Trees exposed on the same dev items: 3 (t1, t2, t3). "Iterations 1, cap 3" invites the reading that two more fixes are allowed, while the same record says there is no second fix before held-out. The falsifiable wording is two lines: "noise-motivated engine fixes: 1, cap 1 (none further before held-out); dev-noise trees: 3 (t1, t2, t3), cap 3, t3 is the last". Change `noiseFix.tuningIterations` and §5a "Fix count" to that.
+
+### N2 (minor): two routes to a second look at t3
+(a) Same tree, new labels: the record forbids re-rolling the draw (seed and labels reused on rerun) but does not forbid relabelling the t3 sample with a fresh labeller after a Q above 4. Add the freeze sentence above. (b) A new tree through the listing rule: `ordering.rule` says a listing miss means "fix, new F, new record, new rehearsal", while the stopping rule makes a fifth lost hit stop-and-ask. A listing-motivated walk change after t3 would give a t4 with a fresh noise draw. Add the "later tree, same rule, exposure 4" sentence above and strike "fifth lost hit" from one of the two places, so a lost hit stops the spend and any listing fix is a stakeholder decision.
+
+### N3 (minor): the claim sentence states the cost as an observed loss
+The record's claim sentence says the bound "lowered recall ... by an estimated 2 held-out items". The 2 is an expected count with an interval of 0.2 to 7; no held-out item has been lost. Reword to "an expected 2 (interval 0.2 to 7, labelled estimate); observed count N" and fill N after the run.
+
+### N4 (minor): the stakeholder acceptance has no cited home, and the replay interval is read in one direction
+`noiseFix.stakeholderAcceptance` states a 2026-11-25 acceptance after the corrected estimate; cite its requirements-log entry (append-only, one question to one answer) or the ledger line, otherwise it is an unverifiable assertion in a pinned record. In my Pass 1 rule a pooled Q below 1.49 read as "void"; the upper side is moot (above 4 already stops) and a better-than-predicted Q does not damage a pass, so it becomes a disclosure (amended above). The interval is a bootstrap over answers at fixed labels; the t3 draw adds label variance (my simulation: median 2.7, 95% range 1.6 to 4.6), so a breach below 1.49 has roughly a 1-in-20 chance on luck.
+
+### N5 (nit): label drift between reused and new labels
+The t3 sample mixes reused t2 labels with labels from a new qa-engineer instance. Draw the 20 spot-check labels so at least 10 come from newly labelled pairs, otherwise agreement says nothing about the new labeller. §5a says the stopping rule is "verbatim in the record" but omits the record's parenthetical; use one text.
+
+### Q-audit: label 30 to 40 of the 199 unsampled dropped items? Advice: no, not before the spend decision
+It measures the rubric-real share of the cut class. The held-out cost the stakeholder accepted rests on the gold-real coincident rate (2 per 50), which this audit does not touch; Q after A is a direct estimate on kept strata and does not depend on it. So no decision changes with the result. It costs a labelling dispatch and creates a post-result temptation: a few rubric-real items found would be argued as a reason to loosen A, which is the second fix the stopping rule excludes. If the stakeholder wants the disclosure bound tightened (0.11 to 0.23), run it after the t3 result is recorded, offline and blind, report it descriptively, and state in advance that no result changes A or the stopping rule. This replaces m4's "before R3".
