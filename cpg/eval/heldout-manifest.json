@@ -11,28 +11,28 @@
       "sha256": "24237acd7832db4f54d74dfcc84398802ab00e1e2246c421daa87e8ed65add89"
     },
     {
-      "anchors": 4,
-      "bytes": 106216,
-      "countingItems": 46,
-      "items": 46,
+      "anchors": 2,
+      "bytes": 80164,
+      "countingItems": 30,
+      "items": 30,
       "name": "ac5-mcp.jsonl",
-      "sha256": "04f2e39f7a171ffd6226148a2148518281e9677adf79bc6f43e8b0b8f978020c"
+      "sha256": "44e80e9e71ec1a36dbc2072fede34d88a8961dc57d6186b9a4b9915f92cb9f1d"
     },
     {
-      "anchors": 36,
-      "bytes": 158076,
-      "countingItems": 79,
-      "items": 79,
+      "anchors": 35,
+      "bytes": 114434,
+      "countingItems": 64,
+      "items": 64,
       "name": "ac5-scripts.jsonl",
-      "sha256": "842162dff65823bd129673f3dfa9dd3edac07a50af7bfe5525c995ba086818a5"
+      "sha256": "c17fb2fbd47178c452e8c652fa32e2f5385c691035171e5f5d4d4511b085806d"
     },
     {
-      "anchors": 7,
-      "bytes": 26202,
-      "countingItems": 8,
-      "items": 8,
+      "anchors": 3,
+      "bytes": 7871,
+      "countingItems": 3,
+      "items": 3,
       "name": "ac5-wiring.jsonl",
-      "sha256": "55df0ab263b4e9d74fdc46bbae62739029306aabb832d888d21f0152e4ecb8d8"
+      "sha256": "c851c89e57a8be26bfe5da204390eeebb1db58564bba38adc0677421793c822d"
     },
     {
       "anchors": 12,
