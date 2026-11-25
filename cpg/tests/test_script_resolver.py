@@ -235,10 +235,25 @@ def test_a_markdown_mention_still_matches_by_suffix_after_the_literal_restrictio
 def test_a_markdown_absolute_path_is_not_matched_by_its_tail_even_when_a_script_ends_the_same_way(tmp_path):
     """CO-2 Pass 2 P2-2: no edge for an absolute Markdown token. Through the real pipeline the Markdown extractor already refuses it (its
     `_SCRIPT` pattern has no leading `/`), so the resolver's own refusal (`rows.py`, `text.startswith("/") and not dynamic`) is a second line
-    not reachable from Markdown: removing it alone leaves this test green (mutant checked); the outcome is what is pinned."""
+    not reachable from Markdown: this test pins the outcome through the real pipeline; the guard itself is pinned by the hand-made record below."""
     w = assemble(tmp_path, {"AGENTS.md": "# G\n\nRun `/opt/app/scripts/u.sh` first.\n", "opt/app/scripts/u.sh": TARGET})
     assert edges_into(w, "opt/app/scripts/u.sh") == []
     assert edge_from(w, "AGENTS.md", "/opt/app/scripts/u.sh") == []
+
+
+def _absolute_callee(records):
+    """A hand-made mention record the Markdown extractor never emits: the callee is the absolute path."""
+    return [{**r, "calleeName": "/" + r["calleeName"]} if r["type"] == "callsite" and r.get("callKind") == "mention" else r for r in records]
+
+
+def test_the_resolver_refuses_an_absolute_markdown_mention_record_itself(tmp_path):
+    """Second line of defence (CO-3 gate Pass 2): a hand-made `/opt/app/scripts/u.sh` mention would suffix-match `opt/app/scripts/u.sh`
+    without the guard in `rows.py`; the twin without the leading `/` does match, so the refusal is the only difference."""
+    files = {"AGENTS.md": "# G\n\nRun `opt/app/scripts/u.sh` first.\n", "opt/app/scripts/u.sh": TARGET}
+    twin = assemble(tmp_path / "t", files)
+    assert [e["targetPath"] for e in edge_from(twin, "AGENTS.md", "opt/app/scripts/u.sh")] == ["opt/app/scripts/u.sh"]
+    w = assemble(tmp_path / "w", files, tweak=_absolute_callee)
+    assert edge_from(w, "AGENTS.md", "/opt/app/scripts/u.sh") == [] and edges_into(w, "opt/app/scripts/u.sh") == []
 
 
 def test_a_markdown_path_climbing_out_of_the_repository_still_matches_its_in_repository_tail_by_design(tmp_path):

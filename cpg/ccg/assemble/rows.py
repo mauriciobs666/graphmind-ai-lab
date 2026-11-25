@@ -652,6 +652,7 @@ def _script_calls(b: _Builder, scripts: Mapping[str, Mapping[str, str]], sites: 
         if named is None:
             continue
         dynamic, text = named
+        # an absolute literal names no script of the repository; the Markdown extractor never emits one, so for Markdown this is a second line of defence
         if "/" not in text or (text.startswith("/") and not dynamic) or _PATH_TOKEN_REFUSED.search(text):
             continue
         known = scripts.get(repo, {})

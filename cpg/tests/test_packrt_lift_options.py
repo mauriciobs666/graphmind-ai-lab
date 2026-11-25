@@ -101,7 +101,7 @@ def test_is_url_like(alt, url_like):
 @pytest.mark.parametrize("alt,strict", [
     ("http://h/a", True), ("https://h/a", True), ("HTTP://h/a", True), ("http://h", True), (X + "/a", True), (Z + X + "/a", True),
     ("http://" + X + "/a", True),
-    ("/a", False), ("//h/a", False), ("/dev/null", False), ("/tmp/health", False), ("ftp://h/a", False), ("file:///etc/passwd", False),
+    ("http:/x", False), ("https:/x", False), ("/a", False), ("//h/a", False), ("/dev/null", False), ("/tmp/health", False), ("ftp://h/a", False), ("file:///etc/passwd", False),
     ("ws://h/x", False), ("h://x", False), ("", False), ("a", False), (X, False), (X + "a/b", False), ("mailto:x", False),
 ])
 def test_is_url_like_scheme_accepts_only_http_or_a_computed_origin_then_a_slash(alt, strict):

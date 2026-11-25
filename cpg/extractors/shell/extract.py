@@ -113,7 +113,7 @@ def _hide_expansion_semicolons(data: bytes) -> bytes:
 
     Nesting is a context stack: ``${`` opens an expansion context (the first ``}`` closes it, as in bash), a ``(`` (so ``$(``) a command context; a ``;`` is hidden only when the innermost open context is an expansion, so ``${z:-$(foo; bar)}`` keeps its separator.
     Out of scope: quotes, comments and backticks (a backtick command is not modelled) are not tracked. A ``${`` inside single quotes or a comment opens a context that never closes;
-    a context still open at the end of the file therefore means a misread, and the original bytes are returned (the retry fails like the first parse: no calls, a ``parse-error`` warning, never a ``;`` in a call name)."""
+    a context still open at the end of the file therefore means a misread, and the original bytes are returned: an unclosed ``${`` in a quote or comment thus drops every call of that file (fail-closed, a ``parse-error`` warning) (the retry fails like the first parse: no calls, a ``parse-error`` warning, never a ``;`` in a call name)."""
     out, stack, i = bytearray(data), [], 0
     while i < len(out):
         two = out[i:i + 2]

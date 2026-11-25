@@ -243,6 +243,13 @@ def test_the_twin_of_a_non_url_operand_links_to_a_provider_of_the_same_key(tmp_p
     assert len(assemble_http(tmp_path, tree, "svc/api.sh", "GET /health").links.links) == 1
 
 
+@pytest.mark.parametrize("script", ['curl -o "$D/health" http://127.0.0.1:8200/x\n', 'curl -d "$X/health" http://127.0.0.1:8200/x\n'])
+def test_known_limit_a_computed_operand_before_a_slash_is_a_possible_partial_key_consumer(script):
+    """`urlLike: scheme` keeps a dynamic origin then `/`: `-o "$D/health"` is read as a URL with a computed origin. Counted wrong-`possible` at CO-9."""
+    got = sorted((c["key"], c["status"], c["reason"]) for c in consumers(shell_records(script)))
+    assert got == [("GET /health", "possible", "partial-key"), ("GET /x", "confirmed", "lifted-role")]
+
+
 def test_known_limit_a_shell_url_with_plain_userinfo_keeps_its_path_key():
     """The shell extractor keeps a short `user:pw@` constant (it passes the token screen; the Markdown carrier refuses any userinfo).
     The key never holds the userinfo (the authority is dropped); a token-shaped one is `unknown` and gives no consumer (negatives)."""

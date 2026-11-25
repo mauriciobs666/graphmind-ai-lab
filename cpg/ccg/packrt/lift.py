@@ -191,7 +191,7 @@ def _opaque_slot(corpus: Corpus, pred: dict, node: tuple) -> dict | None:
     return None
 
 
-def _url_like_alternatives(alts: list[str], mode=True) -> list[str] | None:
+def _url_like_alternatives(alts: list[str], mode) -> list[str] | None:
     """``alts`` without the alternatives that are neither URL-like nor wholly unresolved; ``None`` when none is URL-like.
     ``mode`` is the lifting's ``urlLike`` value: ``"scheme"`` is the strict test (:func:`is_url_like_scheme`), else :func:`is_url_like`."""
     like = is_url_like_scheme if mode == "scheme" else is_url_like
