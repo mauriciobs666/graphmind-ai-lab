@@ -1,6 +1,6 @@
 # Connected code graph — fact-bundle spec, `sandboxAuditIds` of host-extractor bundles
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Extends:** `docs/plans/connected-code-graph-bundle-spec4.md`, `docs/plans/connected-code-graph-egress-spec3.md` · **Reviews:** `docs/reviews/connected-code-graph-bundle-spec6.md`, `docs/reviews/connected-code-graph-bundle-spec6-security.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Extends:** `docs/plans/connected-code-graph-bundle-spec4.md`, `docs/plans/connected-code-graph-egress-spec3.md` · **Extended by:** `docs/plans/connected-code-graph-bundle-spec7.md` · **Reviews:** `docs/reviews/connected-code-graph-bundle-spec6.md`, `docs/reviews/connected-code-graph-bundle-spec6-security.md`
 
 Step P1-44a (`docs/plans/connected-code-graph-p1-linking.md`). It states only the change. The `sandboxAuditIds` row lives only in `-bundle-spec3.md` §2.2 (superseded; spec4 supersedes it without restating the row, spec5 adds only `bindParts` rows), so that row is the one amended (`-bundle-spec3.md` stays frozen, its "at least 1" text unedited); spec4 carries the `Extended by:` pointer. No id, tuple, record field or `bundleSchemaVersion` changes: one header constraint is relaxed for a closed set of units, so every stored bundle stays valid (all ten stored headers validate under the new schema).
 

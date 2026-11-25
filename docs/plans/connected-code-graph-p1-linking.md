@@ -146,7 +146,7 @@ P1-51, part B). `liftings[].urlLike` (boolean): a leaf keeps only
 the alternatives that are URL-like (`httpkey.is_url_like(alt)`: it starts with `/` or `//`, matches `scheme://`, or is a run of
 unresolved markers followed by `/`) and the wholly unresolved ones; a leaf with no URL-like alternative is dropped from
 `PackFacts.lifted` (no keyless `possible` fact either), and `partialAlternatives` is computed before the filter so `[/a, \x01]`
-stays partial. Intermediate slots are untouched. A format word the runtime spells must be in the schema vocabulary, as
+stays partial. `urlLike: scheme` (CO-3) swaps the test for `httpkey.is_url_like_scheme`: `http(s)://` (any case) or a marker run then `/`; no leading-`/` path, no other scheme. Intermediate slots are untouched. A format word the runtime spells must be in the schema vocabulary, as
 `test_packrt_generic.py` requires.
 
 **Untyped verbs (decided).** In the stored bundles `requests.get(u)` and `cfg.get("k")` are the same record, so no seed can
@@ -560,7 +560,7 @@ Cause and evidence: `docs/reviews/connected-code-graph-p1-fixtures-binding-rca.m
 `ccg/linker/bind.py`; plan gate `docs/reviews/connected-code-graph-p1-51-53.md` (M2). Order: 51a, 51b, 52, 53a, 53b; 53a authors the pin red, 53b makes it green.
 **The contract the fixtures conform to (design).**
 - *Launch chain (R2).* A server binds through its `command` entry and the `Dockerfile` beside the script; the script hop is lexical and
-  stored nowhere; shell `exec` launch facts and `-m` targets are P2. `launch` rows (LNK-21, LNK-22) are not stored `Link`s at P1: they
+  stored nowhere as a `BOUND_BY` hop (the script-to-script `CALLS` edge is built by the P1 close-out, CO-2, `docs/plans/connected-code-graph-p1-closeout.md` §3.1); shell `exec` launch facts and `-m` targets are P2. `launch` rows (LNK-21, LNK-22) are not stored `Link`s at P1: they
   are asserted as Binder outcomes (unit set, `BOUND_BY` entries), as LNK-15's context check already is. The fixture gains
   `fx-svc/scripts/Dockerfile` with `CMD ["uvicorn", "mcp.server:app", "--host", "127.0.0.1", "--port", "8200"]`: it gives LNK-21/45
   their chain, `svc` a `launchUnit`, and `svc` the port 8200 that LNK-12's binding needs. The CMD is **inert** (the real
@@ -734,7 +734,7 @@ Python triple-quoted prompt) has no extractor: the P1 mention extractor is Markd
   isolated EX-1 Link; add the files and regenerate the SHAs and counters; the pin green. Done: both Links as stated, the pin and
   `tests/test_fixtures.py` green, every other Link row of the fixture build unchanged (diff of the link multiset: exactly two Links
   added). Gate `analyst`; `cpg/fixtures/**` is hashed, so it lands before the `ac5-gate-1` record.
-**P2 backlog items (owner `architect`; listed in the close list of `docs/plans/connected-code-graph-p1.md`):** Python string-constant
+**P2 backlog items (owner `architect`; listed in the close list of `docs/plans/connected-code-graph-p1.md`; the close-out unit's items are not among them):** Python string-constant
 prompt mentions (the original AC6-PM-3 shape); a way for a code consumer to bind a config URL (a server name for a code consumer, or a
 unit-scoped config URL rule) and the launch-target export with a reason on `LAUNCHES` (the original AC6-EX-1 `launch` shape and a Python
 example-config consumer).
