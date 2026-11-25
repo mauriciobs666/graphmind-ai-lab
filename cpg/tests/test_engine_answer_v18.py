@@ -169,7 +169,7 @@ def test_a_candidate_table_lists_at_least_what_the_caller_only_one_does_and_the_
 
 def test_a_document_carries_the_version_its_walk_definition_maps_to_and_candidate_version_only_when_none_does(population):
     docs, _ = population
-    want = {SHIPPED: "1.2", "as-built": "1.1", "V-flow": AB.CANDIDATE_VERSION, "V-union": AB.CANDIDATE_VERSION}
+    want = {SHIPPED: "1.3", "as-built": "1.1", "V-flow": AB.CANDIDATE_VERSION, "V-union": AB.CANDIDATE_VERSION}
     assert {d[2] for d in docs} == set(want)
     for name, flag, table, question, a, doc in docs:
         assert doc["recipe"]["algorithm"]["version"] == want[table]

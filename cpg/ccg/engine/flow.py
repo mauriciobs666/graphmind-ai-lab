@@ -19,7 +19,7 @@ labelled hop whose unit has no language, raise :class:`ccg.engine.reader.GraphDa
 **Candidate walks** (:func:`candidate_table`) are row-table variants chosen by an engine-internal argument of ``bfs.walk(table=...)``, never by a request field; only the
 shipped table (V-both) and ``as-built`` have an ``algorithm.version``. ``V-flow`` follows the precise rows in a flag-false unit as well, every hop on them labelled; ``V-both`` lists, for a function
 the walk reached only at call level, the callees as well as the callers, every added hop labelled; ``V-union`` holds both sets of added rows. P1-39's rule
-picked V-both (``-p1-ml.md`` §3.5), which P1-23d and P1-39d ship (``bfs.SHIPPED_ROWS``, ``algorithm.version`` 1.2); ``as-built`` is the caller-only table (1.1).
+picked V-both (``-p1-ml.md`` §3.5), which P1-23d and P1-39d ship (``bfs.SHIPPED_ROWS``, ``algorithm.version`` 1.2 as an explicit table, 1.3 as the default walk with its mention bound); ``as-built`` is the caller-only table (1.1).
 """
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ def candidate_table(name: str):
     * ``as-built``: the caller-only table (``bfs.ROWS``, ``algorithm.version`` 1.1);
     * ``V-flow``: every precise row a flag-false unit does not follow (``DATA``, ``CONTROLLED_BY``, the ``arg(i)`` rows) gains a twin followed *only* where the shipped one is
       not (``src:false``, ``any:false`` for ``CALLS ->`` into a callee, whose twin is followed when either unit is flag-false), every hop on it labelled;
-    * ``V-both``: the shipped table, ``bfs.SHIPPED_ROWS`` (``bfs.ROWS`` plus ``bfs.V_BOTH_ROWS``, the callee run; ``algorithm.version`` 1.2);
+    * ``V-both``: the shipped table, ``bfs.SHIPPED_ROWS`` (``bfs.ROWS`` plus ``bfs.V_BOTH_ROWS``, the callee run; ``algorithm.version`` 1.2 as an explicit table; the default walk, with the mention bound, is 1.3);
     * ``V-union``: both sets of added rows.
     """
     from ccg.engine import bfs   # the table is bfs's record type; bfs imports this module for the gate, so the import waits for the call

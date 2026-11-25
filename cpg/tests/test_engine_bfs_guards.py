@@ -23,6 +23,8 @@ from test_engine_bfs_rows import caller_chain, contract_graph, depends_graph, wi
 PINNED_1_1 = "5cf047c14e43da44d0363707d3036080"
 #: ``bfs.fingerprint(bfs.definition(bfs.SHIPPED_ROWS))``: computed once from the record of the V-both table (53 rows, ``DEFAULT_DEPTH_BOUND``), then pinned as a literal (P1-23d)
 PINNED_1_2 = "39e7ab0280ea38fcba30754caa2595b0"
+#: ``bfs.fingerprint(bfs.definition())``: the V-both table with ``depthBound`` 2 and ``mentionBound`` 1 (the mention bound, ``docs/plans/connected-code-graph-p1-noise-fix.md`` §4), pinned as a literal
+PINNED_1_3 = "0d5d961ea53c3217468ed1e9ed148a28"
 
 
 # --------------------------------------------------------------------------- the level guard (a cycle that escapes the visited set raises, never loops)
@@ -324,10 +326,10 @@ def test_the_fingerprint_is_tuple_id_over_the_canonical_json_of_the_record():
 
 
 def test_the_shipped_definition_maps_to_one_version_pinned_as_a_literal():
-    assert bfs.ALGORITHM_VERSIONS == {"1.1": PINNED_1_1, "1.2": PINNED_1_2}
-    assert bfs.fingerprint(bfs.definition()) == PINNED_1_2 == bfs.fingerprint(bfs.definition(bfs.SHIPPED_ROWS))       # the default walk is the V-both table (P1-39d)
+    assert bfs.ALGORITHM_VERSIONS == {"1.1": PINNED_1_1, "1.2": PINNED_1_2, "1.3": PINNED_1_3}
+    assert bfs.fingerprint(bfs.definition()) == PINNED_1_3 != PINNED_1_2 == bfs.fingerprint(bfs.definition(bfs.SHIPPED_ROWS))   # the default walk is the V-both table with the mention bound
     assert bfs.fingerprint(bfs.definition(bfs.ROWS)) == PINNED_1_1 != PINNED_1_2                                     # the caller-only table keeps its published version
-    assert bfs.algorithm_version() == "1.2" and run(caller_chain(1), ("Symbol", "S0")).version() == "1.2"
+    assert bfs.algorithm_version() == "1.3" and run(caller_chain(1), ("Symbol", "S0")).version() == "1.3"
     assert run(caller_chain(1), ("Symbol", "S0")).table == bfs.SHIPPED_ROWS
     assert bfs.algorithm_version(bfs.definition(bfs.ROWS)) == "1.1" and run(caller_chain(1), ("Symbol", "S0"), table=bfs.ROWS).version() == "1.1"
 
@@ -362,9 +364,178 @@ def test_the_level_guard_and_the_chunk_sizes_are_not_part_of_the_definition(monk
     monkeypatch.setattr(config, "LEVEL_GUARD", 10)
     monkeypatch.setattr(config, "CHUNK", 7)
     monkeypatch.setattr(config, "RESULTSET_SIZE", 77)
-    assert bfs.algorithm_version() == "1.2"
+    assert bfs.algorithm_version() == "1.3"
 
 
 def test_a_walk_with_an_explicit_bound_other_than_the_default_names_no_version():
     with pytest.raises(bfs.WalkError):
         run(caller_chain(1), ("Symbol", "S0"), bound=3).version()
+
+
+# --------------------------------------------------------------------------- the mention bound (``docs/plans/connected-code-graph-p1-noise-fix.md`` §4, §7)
+
+MENTION = ("possible", "prompt-mention")
+CONFIRMED = ("confirmed", "resolved-call")
+NAME_MATCH_LIKE = ("possible", "runtime-built")      # a ``possible`` hop that is not in the mention class
+
+
+def callee_run_world(first=MENTION, second=MENTION):
+    """``m`` (in the flag-false unit's function ``D``) calls the anchor ``A`` by ``first``; ``D`` is reached at call level (distance 1, ``function``), so the V-both callee run lists
+    what ``D`` calls: ``c2`` calls ``B`` by ``second`` (a callee at distance 2)."""
+    g = G(unit="ud", flow=False, lang="markdown")
+    for s in ("A", "D", "B"):
+        g.sym(s)
+    g.site("m", "D"), g.calls("m", "A", status=first[0], reason=first[1])
+    g.site("c2", "D"), g.calls("c2", "B", status=second[0], reason=second[1])
+    return g
+
+
+def reached(w, label, ident):
+    return any(k[0] == label and k[1] == ident for k in w.visited)
+
+
+def test_a_mention_hop_arriving_at_distance_1_is_followed_and_its_chain_is_unchanged():
+    d = items_by_id(run(callee_run_world(), ("Symbol", "A")))["D"]
+    assert d.distance == 1 and nodes(d) == [("Symbol", "A"), ("CallSite", "m"), ("Symbol", "D")]
+    assert d.chain[1]["edge"] == {"type": "CALLS", "dir": "<-", "status": "possible", "reason": "prompt-mention"}
+
+
+def test_a_mention_hop_that_would_arrive_at_distance_2_is_not_followed_and_is_counted_in_unexplored():
+    w = run(callee_run_world(first=CONFIRMED, second=MENTION), ("Symbol", "A"))
+    assert "B" not in items_by_id(w) and not reached(w, "Symbol", "B")
+    assert w.unexplored == 1 and w.cut == frozenset({("CALLS", "c2", "B")})
+    both = run(callee_run_world(), ("Symbol", "A"))              # the t2 shape: the mention site ``m`` is itself walked as a callee run (``m`` -> the anchor), a second counted cut
+    assert "B" not in items_by_id(both) and both.cut == frozenset({("CALLS", "c2", "B"), ("CALLS", "m", "A")}) and both.unexplored == 2
+
+
+def test_the_same_shape_with_a_confirmed_or_non_mention_possible_hop_is_followed():
+    for second in (CONFIRMED, NAME_MATCH_LIKE):
+        w = run(callee_run_world(first=CONFIRMED, second=second), ("Symbol", "A"))
+        assert items_by_id(w)["B"].distance == 2 and w.unexplored == 0, second
+
+
+def test_a_name_match_hop_at_distance_2_is_followed_the_rule_is_by_reason_not_by_position():
+    g = callee_run_world(first=CONFIRMED, second=CONFIRMED)
+    g.rows.edges[("CallSite", "CALLS", "Symbol")] = [e for e in g.rows.edges[("CallSite", "CALLS", "Symbol")] if e["s"] != "c2"]
+    g.calls_name("c2", "B", "b")
+    w = run(g, ("Symbol", "A"))
+    b = items_by_id(w)["B"]
+    assert b.distance == 2 and b.chain[-1]["edge"]["reason"] == "name-match" and w.unexplored == 0
+
+
+def test_a_confirmed_first_hop_does_not_exempt_a_following_mention_hop():
+    w = run(callee_run_world(first=CONFIRMED, second=MENTION), ("Symbol", "A"))
+    assert items_by_id(w)["D"].distance == 1 and "B" not in items_by_id(w) and w.unexplored == 1
+
+
+def test_the_cut_item_is_still_listed_when_another_non_mention_chain_reaches_it_within_the_bound():
+    g = callee_run_world(first=CONFIRMED, second=MENTION)
+    g.site("c3", "D"), g.calls("c3", "B", status="confirmed", reason="resolved-call")
+    w = run(g, ("Symbol", "A"))
+    b = items_by_id(w)["B"]
+    assert b.distance == 2 and b.chain[-2]["node"] == ("CallSite", "c3") and w.unexplored == 1
+
+
+def link_world():
+    """``D1`` (distance 1, ``function``) is the target of a mention ``Link`` ``L``; ``c3`` in ``D2`` calls ``D1`` (``D2`` at distance 2), and ``D2`` is the target of the mention link
+    ``L2`` and of the ``port-shared`` (non-mention possible) link ``L3``: ``TO <-`` is an increment-0 row."""
+    g = G(unit="ud", flow=False, lang="markdown")
+    for s in ("A", "D1", "D2"):
+        g.sym(s)
+    g.site("c1", "D1"), g.calls("c1", "A")
+    g.site("c3", "D2"), g.calls("c3", "D1")
+    g.link("L", provider="D1", status="possible", reason="prompt-mention")
+    g.link("L2", provider="D2", status="possible", reason="prompt-mention")
+    g.link("L3", provider="D2", status="possible", reason="port-shared")
+    return g
+
+
+def test_an_increment_0_mention_hop_is_followed_at_base_distance_1_and_cut_at_base_distance_2():
+    w = run(link_world(), ("Symbol", "A"))
+    assert reached(w, "Symbol", "D2") and reached(w, "Link", "L")
+    assert not reached(w, "Link", "L2") and reached(w, "Link", "L3")
+    assert ("TO", "L2", "D2") in w.cut and not {("TO", "L3", "D2"), ("TO", "L", "D1")} & w.cut
+
+
+def test_an_increment_0_mention_hop_at_base_distance_0_is_followed():
+    g = G(unit="ud", flow=False, lang="markdown")
+    g.sym("A"), g.link("L", provider="A", status="possible", reason="prompt-mention")
+    w = run(g, ("Symbol", "A"))
+    assert reached(w, "Link", "L") and w.unexplored == 0
+
+
+@pytest.mark.parametrize("bound", [1, 2, 60])
+def test_the_limit_is_the_smaller_of_the_request_bound_and_the_mention_bound(bound):
+    w = run(callee_run_world(first=CONFIRMED), ("Symbol", "A"), bound=bound)
+    assert "B" not in items_by_id(w) and ("CALLS", "c2", "B") in w.cut      # a mention hop is cut at 2 whatever the (larger) request bound
+    assert w.unexplored == (2 if bound == 1 else 1)                         # at bound 1 the confirmed callee hop ``m`` -> ``A`` is cut by the request bound as well
+
+
+def test_a_request_bound_of_1_cuts_a_distance_2_non_mention_hop_as_before_and_the_mention_hop_with_it():
+    w = run(callee_run_world(second=CONFIRMED), ("Symbol", "A"), bound=1)
+    assert "B" not in items_by_id(w) and w.cut == frozenset({("CALLS", "c2", "B"), ("CALLS", "m", "A")})
+
+
+def test_a_graph_without_a_mention_hop_walks_bit_identically_to_the_walk_without_the_bound():
+    for g, anchor in ((callee_run_world(first=CONFIRMED, second=CONFIRMED), ("Symbol", "A")), (caller_chain(3), ("Symbol", "S0"))):
+        new, old = run(g, anchor), run(g, anchor, mention_bound=None)
+        assert (new.visited, new.cut, new.levels, new.frontier_sizes) == (old.visited, old.cut, old.levels, old.frontier_sizes)
+        assert {k: [e.cost for e in v] for k, v in new.arrivals.items()} == {k: [e.cost for e in v] for k, v in old.arrivals.items()}
+        assert [(i.id, i.distance, i.chain) for i in new.items()] == [(i.id, i.distance, i.chain) for i in old.items()]
+
+
+def test_a_depends_on_walk_obeys_the_same_cut_the_rule_is_column_free():
+    g = G()
+    for s in ("X", "W", "Y", "Z"):
+        g.sym(s)
+    g.site("c1", "X"), g.calls("c1", "W", status="possible", reason="prompt-mention")     # distance 1: followed
+    g.site("c0", "X"), g.calls("c0", "Y")
+    g.site("c2", "Y"), g.calls("c2", "Z", status="possible", reason="prompt-mention")     # distance 2: cut
+    w = run(g, ("Symbol", "X"), column=bfs.DEPENDS_ON)
+    got = items_by_id(w)
+    assert "W" in got and "Y" in got and "Z" not in got and w.cut == frozenset({("CALLS", "c2", "Z")})
+
+
+def test_the_default_mention_bound_and_reasons_are_the_prompt_mention_class_at_distance_1():
+    assert config.MENTION_BOUND == 1 and config.MENTION_REASONS == frozenset({"prompt-mention"})
+
+
+def test_the_mention_bound_is_read_from_config_at_the_call(monkeypatch):
+    monkeypatch.setattr(config, "MENTION_BOUND", 2)
+    assert items_by_id(run(callee_run_world(), ("Symbol", "A")))["B"].distance == 2
+
+
+def test_the_mention_reasons_are_read_from_config_at_the_call(monkeypatch):
+    monkeypatch.setattr(config, "MENTION_REASONS", frozenset({"runtime-built"}))
+    w = run(callee_run_world(first=CONFIRMED, second=NAME_MATCH_LIKE), ("Symbol", "A"))
+    assert "B" not in items_by_id(w) and w.unexplored == 1
+    assert items_by_id(run(callee_run_world(first=CONFIRMED, second=MENTION), ("Symbol", "A")))["B"].distance == 2
+
+
+def test_the_definition_names_the_mention_bound_only_for_the_shipped_default():
+    assert bfs.definition()["mentionBound"] == 1
+    assert "mentionBound" not in bfs.definition(bfs.SHIPPED_ROWS) and "mentionBound" not in bfs.definition(bfs.ROWS)
+    assert bfs.definition(bfs.SHIPPED_ROWS, mention_bound=1) == bfs.definition()
+
+
+def test_the_shipped_walk_is_algorithm_1_3_and_an_explicit_table_keeps_its_published_version():
+    assert bfs.algorithm_version() == "1.3" and run(caller_chain(1), ("Symbol", "S0")).version() == "1.3"
+    assert run(caller_chain(1), ("Symbol", "S0"), table=bfs.ROWS).version() == "1.1"
+    assert run(caller_chain(1), ("Symbol", "S0"), mention_bound=None).version() == "1.2"
+    assert run(caller_chain(1), ("Symbol", "S0"), table=bfs.SHIPPED_ROWS).version() == "1.2"
+    assert bfs.algorithm_version(bfs.definition(bfs.SHIPPED_ROWS)) == "1.2" and bfs.algorithm_version(bfs.definition(bfs.ROWS)) == "1.1"
+
+
+def test_a_changed_mention_bound_leaves_no_version_mapped(monkeypatch):
+    monkeypatch.setattr(config, "MENTION_BOUND", 2)
+    with pytest.raises(bfs.WalkError):
+        bfs.algorithm_version()
+
+
+def test_an_explicit_mention_bound_larger_than_the_request_bound_is_capped_by_the_request_bound():
+    """``min(bound, mention_bound)``: with a mention bound of 5 the request bound 1 still ends the walk at distance 1, and bound 2 at distance 2."""
+    g = callee_run_world(first=CONFIRMED, second=MENTION)
+    assert "B" not in items_by_id(run(g, ("Symbol", "A"), bound=1, mention_bound=5))
+    assert items_by_id(run(g, ("Symbol", "A"), bound=2, mention_bound=5))["B"].distance == 2
+    assert items_by_id(run(g, ("Symbol", "A"), bound=2, mention_bound=None))["B"].distance == 2
+    assert "B" not in items_by_id(run(g, ("Symbol", "A"), bound=2, mention_bound=1))

@@ -99,7 +99,7 @@ def test_a_direct_caller_builds_a_valid_resolved_1_2_answer_whose_chain_is_the_w
 def test_the_recipe_names_the_shipped_definition_the_guards_and_every_query_the_build_ran():
     g, ids_ = caller_world()
     doc, reader = built(g, ids_, sym_anchor, "A")
-    assert doc["recipe"]["algorithm"] == {"id": "bfs-v1", "version": "1.2"}                  # the shipped V-both table
+    assert doc["recipe"]["algorithm"] == {"id": "bfs-v1", "version": "1.3"}                  # the shipped V-both table with the mention bound
     assert doc["recipe"]["guards"] == {"visitedSeedsAnchor": True, "levelGuard": config.LEVEL_GUARD}
     assert doc["recipe"]["queries"] == sorted(reader.recipe_queries(), key=lambda q: q["name"])
     names = {q["name"] for q in doc["recipe"]["queries"]}
@@ -1122,11 +1122,11 @@ def notice(*langs):
     return [{"code": "flow-not-enumerated", "langs": sorted(langs)}]
 
 
-def test_the_builder_emits_schema_1_2_and_the_v_both_algorithm_1_2_for_the_default_table_and_the_two_columns():
+def test_the_builder_emits_schema_1_2_and_the_v_both_algorithm_1_3_for_the_default_table_and_the_two_columns():
     for question in ("impact", "depends-on"):
         g, ids_ = caller_world(flow=False)
         doc, _ = built(g, ids_, sym_anchor, "A", question=question)
-        assert doc["answerSchemaVersion"] == "1.2" and doc["recipe"]["algorithm"] == {"id": "bfs-v1", "version": "1.2"}
+        assert doc["answerSchemaVersion"] == "1.2" and doc["recipe"]["algorithm"] == {"id": "bfs-v1", "version": "1.3"}
         answer.validate(doc)
 
 

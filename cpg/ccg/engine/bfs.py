@@ -20,7 +20,9 @@ cycles, cond-to-cond ``CONTROLLED_BY``, recursion; F-12, C1).
 
 **Distance** counts inter-function hops (call, link, shared state, config) and steps inside a function count 0 (graph note §6.2). The bound
 (``config.DEFAULT_DEPTH_BOUND``) never cuts an increment-0 row; an increment-1 row from an arrival already at the bound is not followed, its stored edges are kept on
-that arrival, and :attr:`Walk.unexplored` counts the distinct stored edges of the final kept arrivals (``-answer-spec2.md`` §4.2).
+that arrival, and :attr:`Walk.unexplored` counts the distinct stored edges of the final kept arrivals (``-answer-spec2.md`` §4.2). **The mention bound** (``config.MENTION_BOUND``,
+``config.MENTION_REASONS``; ``docs/plans/connected-code-graph-p1-noise-fix.md`` §4) cuts the same way a hop of any increment whose edge reason is in the mention class and whose arrival would be
+past distance 1: a name in prose is a sound first hop and no premise for a second. It is the one rule keyed on a reason, in either column, and part of the shipped definition (``mentionBound``).
 
 **A config entry reaches only the sites it binds** (``-p1-graph.md`` G7, §5): ``BOUND_BY <-`` enters the ``Link`` in a ``site(siteId)`` state and ``VIA <-`` from it lists
 that site's ``CallSite`` only. A ``Link`` is never an anchor (:class:`WalkError`).
@@ -194,16 +196,29 @@ V_BOTH_ROWS: tuple[Row, ...] = (
     Row("name_out:both", IMPACT, "CallSite", ("end",), "name_out", "name_out", "CALLS_NAME", "->", "end:callee", 1, labelled=True, item="symbol"),
 )
 
-#: the V-both table (``algorithm.version`` 1.2): the table P1 ships: the default of :func:`walk` and :func:`definition`
+#: the V-both table (``algorithm.version`` 1.2 as an explicit ``table``; the default walk adds the mention bound and is 1.3): the table P1 ships, the default of :func:`walk` and :func:`definition`
 SHIPPED_ROWS: tuple[Row, ...] = ROWS + V_BOTH_ROWS
 
 
-def definition(table: Sequence[Row] | None = None, *, bound: int | None = None) -> dict[str, Any]:
-    """The walk definition record (``-answer-spec2.md`` §1.2): the table plus one identifier per part that is code, and the depth bound (index D3)."""
+#: the default of ``mention_bound`` (a sentinel, not a bound): the shipped table (``table=None``) takes ``config.MENTION_BOUND``, an explicit table takes none
+_SHIPPED_MENTION = object()
+
+
+def _mention_bound(table: Sequence[Row] | None, mention_bound: Any) -> int | None:
+    if mention_bound is _SHIPPED_MENTION:
+        return config.MENTION_BOUND if table is None else None
+    return mention_bound
+
+
+def definition(table: Sequence[Row] | None = None, *, bound: int | None = None, mention_bound: Any = _SHIPPED_MENTION) -> dict[str, Any]:
+    """The walk definition record (``-answer-spec2.md`` §1.2): the table plus one identifier per part that is code, the depth bound (index D3) and, when the walk has one,
+    the mention bound (``mentionBound``: ``config.MENTION_BOUND`` for the shipped table, none for an explicit one, so ``definition(ROWS)`` is ``1.1`` and
+    ``definition(SHIPPED_ROWS)`` is ``1.2``)."""
     rows = SHIPPED_ROWS if table is None else tuple(table)
-    return {"id": "bfs-v1", "rows": [r.record() for r in rows], "items": {c: sorted([*k, v] for k, v in _ITEM_RULES[c].items()) for c in COLUMNS},
+    mb = _mention_bound(table, mention_bound)
+    return {**{"id": "bfs-v1", "rows": [r.record() for r in rows], "items": {c: sorted([*k, v] for k, v in _ITEM_RULES[c].items()) for c in COLUMNS},
             "extraReads": {k: list(v) for k, v in sorted(EXTRA_READS.items())}, "costOrder": COST_ORDER, "flowFallback": FLOW_FALLBACK, "unexplored": UNEXPLORED_RULE,
-            "depthBound": config.DEFAULT_DEPTH_BOUND if bound is None else bound}
+            "depthBound": config.DEFAULT_DEPTH_BOUND if bound is None else bound}, **({} if mb is None else {"mentionBound": mb})}
 
 
 def fingerprint(record: Mapping[str, Any]) -> str:
@@ -211,10 +226,11 @@ def fingerprint(record: Mapping[str, Any]) -> str:
     return _ids.tuple_id(["walkDefinition", json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=True)])
 
 
-#: ``recipe.algorithm.version`` -> the pinned fingerprint of the definition that version names. ``1.1`` is ``definition(ROWS)`` (caller-only), ``1.2`` is ``definition(SHIPPED_ROWS)`` (V-both, P1-23d). P1-22 pinned ``1.1`` first; P1-23 re-pinned it (the
+#: ``recipe.algorithm.version`` -> the pinned fingerprint of the definition that version names. ``1.1`` is ``definition(ROWS)`` (caller-only), ``1.2`` is ``definition(SHIPPED_ROWS)`` (V-both, P1-23d), ``1.3`` is ``definition()`` (V-both plus the mention bound, ``docs/plans/connected-code-graph-p1-noise-fix.md``). P1-22 pinned ``1.1`` first; P1-23 re-pinned it (the
 #: flag gates, the ``function`` state and its labelled rows, ``flow:r``, ``Row.item``; the V-both-only item rules left the shipped record) because no answer carrying ``1.1`` has been emitted on ``main``: the
 #: builder (P1-39b, ``ccg.engine.answer_build``) is the first thing that emits it: from its first commit on ``main`` ``1.1`` is published and a change is ``1.2`` (``-answer-spec2.md`` §1.2).
-ALGORITHM_VERSIONS: dict[str, str] = {"1.1": "5cf047c14e43da44d0363707d3036080", "1.2": "39e7ab0280ea38fcba30754caa2595b0"}
+ALGORITHM_VERSIONS: dict[str, str] = {"1.1": "5cf047c14e43da44d0363707d3036080", "1.2": "39e7ab0280ea38fcba30754caa2595b0",
+                                    "1.3": "0d5d961ea53c3217468ed1e9ed148a28"}
 
 
 def algorithm_version(record: Mapping[str, Any] | None = None) -> str:
@@ -666,6 +682,7 @@ class Walk:
     cut: frozenset[tuple[str, str, str]]
     facts: dict[Node, dict[str, Any]]
     units: dict[str, flow.UnitInfo]   # the flag and language of every unit the walk's gates read
+    mention_bound: int | None = None  # the bound the walk applied to a mention hop, none when it applied none
 
     @property
     def unexplored(self) -> int:
@@ -674,7 +691,7 @@ class Walk:
 
     def version(self) -> str:
         """The ``algorithm.version`` of the definition this walk ran, or :class:`WalkError` when no version maps to it."""
-        return algorithm_version(definition(self.table, bound=self.bound))
+        return algorithm_version(definition(self.table, bound=self.bound, mention_bound=self.mention_bound))
 
     def flow_langs(self, reader: Reader, facts: Mapping[Node, Mapping[str, Any]]) -> frozenset[str]:
         """The ``Unit.language`` values of the flag-false units hosting a visited code node, the anchor included (``-answer-spec2.md`` §5.1).
@@ -903,11 +920,16 @@ def _expand(reader: Reader, by_group: Mapping[tuple[str, str], Sequence[Row]], e
 
 
 def walk(reader: Reader, anchor: Node, state: State | None = None, *, column: str = IMPACT, bound: int | None = None, table: Sequence[Row] | None = None,
-         level_guard: int | None = None) -> Walk:
+         level_guard: int | None = None, mention_bound: Any = _SHIPPED_MENTION) -> Walk:
     """Level-synchronous BFS from ``anchor`` in ``state`` over ``table`` (the shipped :data:`SHIPPED_ROWS` by default).
 
     ``bound`` defaults to ``config.DEFAULT_DEPTH_BOUND`` and ``level_guard`` to ``config.LEVEL_GUARD``; a walk that needs more levels raises :class:`WalkError`
     rather than looping or truncating. A variant ``table`` is walked as given; only the shipped one has a version (:meth:`Walk.version`).
+
+    **The mention bound** (``config.MENTION_BOUND``, ``MENTION_REASONS``): a hop whose edge reason is in the mention class is followed only while its arrival distance is at most
+    ``min(bound, mention_bound)``, whatever its increment, and a hop past it is cut like a bound cut (counted in :attr:`Walk.unexplored`, never dropped silently). The rule is
+    by reason alone, in either column. ``mention_bound`` defaults to ``config.MENTION_BOUND`` for the shipped table and to none for an explicit ``table`` (so a variant walk
+    and ``definition(ROWS)``/``definition(SHIPPED_ROWS)`` keep their published versions); ``None`` turns the rule off.
 
     The bounded result is everything reachable within the bound (``-answer-spec2.md`` §4.1): at each state the walk keeps every arrival no other arrival dominates
     on ``(possible hops, distance)`` and expands the state once per kept arrival.
@@ -919,6 +941,7 @@ def walk(reader: Reader, anchor: Node, state: State | None = None, *, column: st
     level_guard = config.LEVEL_GUARD if level_guard is None else level_guard
     state = _default_state(anchor[0]) if state is None and isinstance(anchor, tuple) and anchor else state
     _check_request(anchor, state, column, bound, level_guard)
+    mention_bound = _mention_bound(table, mention_bound)
     rows_table = SHIPPED_ROWS if table is None else tuple(table)
     by_group = _group_rows(rows_table, column)
 
@@ -939,7 +962,8 @@ def walk(reader: Reader, anchor: Node, state: State | None = None, *, column: st
         cands: dict[Key, list[tuple]] = {}
         for mv in _expand(reader, by_group, frontier, facts, units):
             base = mv.frm.cost
-            if mv.row.inc and base[1] + mv.row.inc > bound:
+            limit = bound if mention_bound is None or mv.edge.reason not in config.MENTION_REASONS else min(bound, mention_bound)
+            if base[1] + mv.row.inc > limit:
                 cuts.setdefault(id(mv.frm), set()).add(_edge_id(mv.row, mv.frm.key[1], mv.step.id))
                 continue
             # the hop's status counts toward the possible hops, its own edge's toward the tie-break after length: they differ on a labelled row (``-answer-spec2.md`` §5)
@@ -963,4 +987,4 @@ def walk(reader: Reader, anchor: Node, state: State | None = None, *, column: st
     _owner_join(reader, facts, visited)
     best = {k: min(lst, key=lambda e: (e.cost, _stable(e.pred_key), e.edge.sort_key() if e.edge else ())) for k, lst in kept.items()}
     cut = frozenset().union(*(e.cuts for lst in kept.values() for e in lst))
-    return Walk(start, column, bound, rows_table, level, sizes, visited, kept, best, cut, facts, units.info)
+    return Walk(start, column, bound, rows_table, level, sizes, visited, kept, best, cut, facts, units.info, mention_bound)

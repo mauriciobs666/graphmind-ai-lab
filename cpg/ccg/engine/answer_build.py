@@ -40,8 +40,8 @@ no ``calleeName`` (those texts return only its line), so ``owner_of:CallSite`` t
 (the anchor included, whatever the items), and absent otherwise; the walk's merged facts name the anchor's unit. A visited code node with no unit, or with no ``Unit`` row, is a
 ``GraphDataError`` (the omission is never silent), and a language is required only of a flag-false unit.
 
-**Candidate tables.** ``table=`` is an engine-internal row table (``ccg.engine.flow.candidate_table``), never a request field; the default is the shipped ``bfs.SHIPPED_ROWS`` (algorithm
-``1.2``). A document from an explicit table carries the version its walk definition maps to (``bfs.ALGORITHM_VERSIONS``: ``bfs.ROWS`` is ``1.1``) and :data:`CANDIDATE_VERSION` only when none
+**Candidate tables.** ``table=`` is an engine-internal row table (``ccg.engine.flow.candidate_table``), never a request field; the default is the shipped ``bfs.SHIPPED_ROWS`` with the mention bound (algorithm
+``1.3``; ``table=bfs.SHIPPED_ROWS`` passed explicitly carries no mention bound and is ``1.2``). A document from an explicit table carries the version its walk definition maps to (``bfs.ALGORITHM_VERSIONS``: ``bfs.ROWS`` is ``1.1``) and :data:`CANDIDATE_VERSION` only when none
 does. V18 (``-answer-spec2.md`` §5) encodes the shipped table, so a candidate walk's added hops (V-flow's labelled ``DATA``/``CONTROLLED_BY``/``arg(i)`` hops) are refused with rule V18,
 never returned (``tests/test_engine_answer_v18.py`` pins exactly which documents are refused and why). P1-39c measures candidate walks through ``Walk.items()`` and needs no document.
 """
