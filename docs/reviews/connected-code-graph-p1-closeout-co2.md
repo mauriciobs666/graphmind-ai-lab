@@ -113,3 +113,41 @@ Target: root `REVIEW.md`, *Always check*. Source: M1 (the shipped missing-file t
 - A text rewrite that tracks nesting with a depth counter is probed with each other nesting kind the grammar has (command substitution, backticks, quotes, comments) inside and outside the counted one.
 
 Growth-stops check: not applicable (a new review, not a revision of a requirements, plan or earlier review document).
+
+## Pass 2 (CO-2c, commit `bb073e55`)
+
+**Verdict: approve with suggestions.** Every Pass 1 finding that CO-2c claims to fix is confirmed fixed by execution; no blocker. Two small residuals (P2-1, P2-2) and one design decision for the owner (P2-3). Executed on a `git archive` of `bb073e55`: `test_script_resolver.py` + `test_shell_extractor.py` + `test_assemble_rows.py` 255 passed 1 skipped; fixture gate suites exit 0 (3 / 8 / 80); 12 answer-engine and golden files exit 0 (1661 passed, v18 run with the real `.ccg-work` linked read-only); the Pass 1 probes re-run (`an/probe_3.py`, `p2_3.py`, `semi_3.py`).
+
+### Dispositions of earlier findings
+
+- **M1** fixed. `./scripts/gone.sh` with a decoy `lib/scripts/gone.sh`, `../../../x/t.sh`, `../scripts/t.sh`, `../../sibling-repo/...`: all give no edge and count `script-call-unmatched`. Markdown still matches by suffix, by design (see P2-2).
+- **M2** fixed. My six survivors re-run as S1-S6 on the new code: all killed. A fresh batch of 25 on `_resolve_script`/`_site_path`: 22 killed; survivors N13 (`len(word) > 1`, a bare `-`/`+` word; negligible), N19 (Markdown flag `lang != "shell"`, equivalent: only shell and Markdown reach it), N24 (absolute-path refusal removed: genuine, the guard is untested for Markdown, P2-2).
+- **M3** unchanged by this round and still unmeasured (`co2c/summary.json`: `noise: not computed`); the pass removes 6 edges of 432. Carry to CO-9.
+- **m1** fixed (call inside a function, literal and computed: no self-edge; a function calling another script still edges).
+- **m2** see item 5 below: the sentence that should stand is recorded in the code docstring; the plan is not yet amended.
+- **m3** fixed: `--rcfile F ./t.sh`, `-o pipefail ./t.sh`, `+x` resolve to the script; `-c`/`-xc`/`-ec` give none. A cost: `bash -xc './real/run.sh'` now gives no edge (was a right edge); accepted, a command string is not a path.
+- **m4** fixed, by refusing rather than dropping the segment (item 3).
+- **m5** fixed for the `$(...)` axis (`${z:-$(foo; bar)}` now `foo`, `bar`); the quote axis is documented as out of scope and still produces `./a.sh;` with `a0=./b.sh` (P2-1). Extractor mutants (6 on `_hide_expansion_semicolons`): 4 killed; survivors "paren pushed outside an expansion" and "`}` pops any top" are unpinned (nit).
+- **m6** unchanged (nit).
+
+### Answers to the five questions
+
+1. **The 6 removed edges are true cwd-relative calls.** `falkor-chat/scripts/test_queries.sh:114` runs `EMBEDDING_DIM=4 ./scripts/bootstrap_schema.sh test`, with no `cd` anywhere in the file; the suite is documented to run with `falkor-chat/` as cwd. The 5 evidence copies under `falkor-chat/docs/reviews/` carry the same line. I reproduced the corpus: an offline assemble of every tracked `*.sh`/`*.md` (1332 files) gives 8 shell-literal misses, of which exactly these 6 have an *exact* path under an ancestor of the caller's directory (`an/corp.py`). So the removal loses 6 true edges for 0 dev hits (the implementer's count; hit set unchanged). Acceptable for the freeze as a conservative loss, but it is a recall loss on a real, common idiom (cwd = component root). A plan ruling is the right route, and I ran the candidate: **tier 1 also tries the caller's ancestor directories, exact path only, no `..`-leading text, status the site's own (`possible`)**. With it the resolver and assembler suites stay green (145 passed), all M1 plants stay edge-free (the decoy `lib/scripts/gone.sh` is not an ancestor-relative path of `run.sh`), and the 6 edges return. It is not pinned by any test today, so adopting it needs its own decoy test (an ancestor path vs a sibling directory path). Not a precondition for F unless the stakeholder counts these 6 edges as wanted.
+2. **Mutation**: see M2 above.
+3. **m4 deviation is better than the brief.** The brief said drop the first segment; the implementer refuses the whole path when a computed head is glued (`"${D}foo/x.sh"`). A trailing-slash idiom (`ROOT=/x/; "${ROOT}scripts/t.sh"`) has a whole first segment, so dropping it would leave the one-segment tail `t.sh` and hand it to the own-directory tier, a wrong sibling edge; refusing loses at worst a true edge. Cost measured: 0 glued sites in the 1332-file corpus (`an/corp.py`). Accept.
+4. **Interactions, executed.** m3 with m4: `bash -o pipefail "${D}foo/x.sh"` is refused, `bash -o pipefail "$D/scripts/x.sh"` resolves (value skipped, then tier 2). m1 with the own-directory tier: `"$HERE/run.sh"` inside `run.sh` gives no edge (path compare, not symbol compare), and the one-segment tail never leaves the caller's directory (tests present, N14/N15 killed). M1 with tier 3: tier 3 requires a computed head, so a literal never reaches it. A literal path `..foo/t.sh` (a directory whose name starts with two dots) now gives no edge (tier 1 refuses `startswith("..")`, tier 2 no longer retried): a harmless false negative.
+5. **m2: the sentence that should stand is "the edge takes the call site's own status; never `confirmed` on real data".** The shell extractor marks every unresolved site `possible` (`extractors/shell/extract.py` call-site construction), so the plan's "confirmed at tier 1" can never fire, and the requirement is "at least 95% of confirmed items real" (`docs/requirements/connected-code-graph.md` ~l.349, ~l.596): a cwd-dependent literal path cannot meet a confirmed bar (it is exactly the cwd question of Q1). Amend plan §3.1 and the CO-2 row (architect); keep the fabricated-input test, labelled as such (it is).
+
+### New findings
+
+**P2-1 (minor, verified by plant): the quote axis of the retry still yields `;`-polluted call names.** `x="${v:+$v; }"` then `echo '${'` then `./a.sh; ./b.sh` records `./a.sh;` with `a0=./b.sh`. The docstring discloses it and the resolver refuses a name with `;`, but the recorded call is wrong. I ran a one-condition remedy: if the context stack is non-empty at end of file (an unbalanced `${` or `(`), return the original bytes, so the retry fails and the file keeps no calls and the parse-error warning; all plants then give the right result (`unbalanced single-quote + semis` -> no calls, the `$(`, baseline and still-bad plants unchanged). Suggested for the same unit as a test; not a precondition for F (corpus: one retrying file).
+
+**P2-2 (minor, verified by mutant and inferred by reading): Markdown paths keep the repository-escape and the absolute-path guards untested.** Mutant N24 (the `text.startswith("/") and not dynamic` refusal removed) survives: no test plants a Markdown mention of an absolute path, which would otherwise suffix-match an in-repository script. A Markdown token such as `../../x/t.sh` still strips its leading `..` and suffix-matches (the M1 escape class, by design for prose mentions, `possible/prompt-mention`). Suggested: one Markdown test for an absolute token and one for a climbing token, each asserting the intended outcome whichever way the owner rules.
+
+**P2-3 (decision, not a defect): ancestor-directory tier for shell literals.** See answer 1: the owner chooses between accepting the 6-edge loss and adding the ancestor tier (verified safe against all M1 plants, 145 tests green, unpinned).
+
+### Stopping condition (falsifiable)
+
+This gate is closed when: (a) a test plants an absolute and a `..`-climbing Markdown token and asserts the ruled outcome, and the N24 mutant is killed; (b) the owner records, in `docs/plans/connected-code-graph-p1-closeout.md` §3.1, either the ancestor tier (with a planted ancestor-vs-sibling test) or the ruling that the 6 `./scripts/bootstrap_schema.sh` edges are lost by decision; (c) plan §3.1 tier-1 status wording matches the code. If a re-run of `an/probe_3.py`-style plants (decoy, escape, flag value, glued head) shows any edge or call the plant says must not exist, the gate reopens.
+
+Growth-stops check: this pass appends one section to a review revised in place (allowed); earlier findings carry one line each, no restated prose.
