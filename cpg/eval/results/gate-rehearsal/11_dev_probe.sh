@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 11_dev_probe.sh: the dev-gold probe (P6-1) as the PRODUCT of the F1 dev rehearsal (10_f1_run.sh, store $PORT still up): `gate.py dev-probe` scores F1's run.json by the gate's own
-# path against the committed dev gold and writes $DEV_PROBE (record commit, harness sha map, gold hashes, snapshot id, rehearsal id, hit ids, confirmed key-error ids).
+# path against the committed dev gold and writes $DEV_PROBE (record commit, harness sha map, gold hashes, snapshot id, hit ids, confirmed key-error ids).
 # Every later `run` / `score` of a list that is not dev-only needs this exact file (`--dev-probe`; its sha256 is pinned in the marker). Exit 0 = every dev item of a gated stratum
 # is a hit (or a stakeholder-confirmed key-error in cpg/eval/decisions/ccg-dev-key-errors-v1.json), 1 = not: the gate would refuse to start.
 . "$(dirname "$0")/env.sh"

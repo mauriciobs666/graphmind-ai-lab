@@ -59,7 +59,7 @@ def dev_probe_doc(repo: Path, *, record_commit: str | None = None, snapshot_id: 
     hit except ``key_errors``, which are listed as key-errors. ``over`` replaces top-level fields."""
     repo = Path(repo)
     ids = {s: [json.loads(l)["itemId"] for l in (repo / f"cpg/eval/dev/ac5-{s}.jsonl").read_text().splitlines()] for s in strata}
-    doc = {"schema": G.DEV_PROBE_SCHEMA, "rehearsalId": "b" * 64, "recordCommit": record_commit or head(repo), "snapshotId": snapshot_id,
+    doc = {"schema": G.DEV_PROBE_SCHEMA, "recordCommit": record_commit or head(repo), "snapshotId": snapshot_id,
            "harnessSha256": {rel: sha_of(repo / rel) for rel in G.HARNESS_FILES if (repo / rel).is_file()},
            "devGoldSha256": {s: sha_of(repo / f"cpg/eval/dev/ac5-{s}.jsonl") for s in strata},
            "byStratum": {s: {"hitIds": [i for i in ids[s] if i not in key_errors], "keyErrorIds": [i for i in ids[s] if i in key_errors]} for s in strata}}

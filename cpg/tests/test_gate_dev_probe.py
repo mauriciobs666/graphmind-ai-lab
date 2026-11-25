@@ -1,6 +1,6 @@
 """CO-5 / P6-1: the dev-gold probe is an ATTESTATION bound to the run it vouches for, not a typed file (``docs/plans/connected-code-graph-p1-closeout.md`` §3.5,
 ``docs/reviews/connected-code-graph-p1-32b-impl.md`` Pass 6). The gate computes the dev items per stratum from the committed ``cpg/eval/dev/ac5-<s>.jsonl`` itself,
-compares the freeze (record) commit, the harness sha map, the dev gold hashes, the snapshot id and the rehearsal id the file carries, checks every key-error id
+compares the freeze (record) commit, the harness sha map, the dev gold hashes, the snapshot id the file carries, checks every key-error id
 against the committed stakeholder-confirmation record, and pins the file's sha256 in the marker. One plant per field, each written red first. Offline, synthetic."""
 import json
 
@@ -28,8 +28,12 @@ def check(e, doc, gated=G.STRATA_GATED):
     G.dev_probe_check(doc, e.repo, H.head(e.repo), gated)
 
 
+def ke(i, **over):
+    return {"itemId": i, "confirmedBy": "user", "date": "2026-11-24", **over}
+
+
 def confirm(repo, ids):
-    (repo / KE_RECORD).write_text(json.dumps({"schema": "ccg-dev-key-errors-v1", "confirmed": [{"itemId": i} for i in ids]}) + "\n")
+    (repo / KE_RECORD).write_text(json.dumps({"schema": "ccg-dev-key-errors-v1", "confirmed": [ke(i) for i in ids]}) + "\n")
     H.git(repo, "add", "-A")
     H.git(repo, "commit", "-qm", "confirm")
 
@@ -141,10 +145,11 @@ def test_a_gold_hash_missing_for_a_gated_stratum_is_refused(tmp_path):
     refuses(e, doc, "dev gold")
 
 
-@pytest.mark.parametrize("value", [None, "", "short", 7, "z" * 64])
-def test_the_rehearsal_id_must_be_a_64_hex_run_key(tmp_path, value):
+def test_the_probe_carries_no_rehearsal_id_and_none_is_required(tmp_path):
+    """P7-2: the id bound nothing (it was the run's list key, compared with nothing); it is dropped, not left decorative."""
     e = repo_of(tmp_path)
-    refuses(e, probe(e, rehearsalId=value), "rehearsal")
+    assert "rehearsalId" not in probe(e)
+    check(e, probe(e))
 
 
 @pytest.mark.parametrize("value", [None, "", 7])
@@ -215,7 +220,7 @@ def test_a_key_error_not_in_the_record_is_refused_even_when_another_is(tmp_path)
 def test_a_confirmation_record_edited_after_its_commit_is_not_read(tmp_path):
     e = repo_of(tmp_path)
     ids = H.dev_ids("http")[:1]
-    (e.repo / KE_RECORD).write_text(json.dumps({"schema": "ccg-dev-key-errors-v1", "confirmed": [{"itemId": ids[0]}]}) + "\n")      # not committed
+    (e.repo / KE_RECORD).write_text(json.dumps({"schema": "ccg-dev-key-errors-v1", "confirmed": [ke(ids[0])]}) + "\n")      # not committed
     refuses(e, probe(e, key_errors=ids), "key-error")
 
 
@@ -227,6 +232,33 @@ def test_an_unusable_confirmation_record_is_a_refusal_even_with_no_key_errors(tm
     H.git(e.repo, "add", "-A")
     H.git(e.repo, "commit", "-qm", "bad record")
     refuses(e, probe(e), "confirmation")
+
+
+_ID = "a" * 32
+
+
+@pytest.mark.parametrize("entries", [
+    [ke(_ID, confirmedBy=None)], [{k: v for k, v in ke(_ID).items() if k != "confirmedBy"}], [ke(_ID, confirmedBy="")], [ke(_ID, confirmedBy="tdd-engineer")],
+    [ke(_ID, confirmedBy="User")],
+    [{k: v for k, v in ke(_ID).items() if k != "date"}], [ke(_ID, date=None)], [ke(_ID, date="")], [ke(_ID, date="24/11/2026")], [ke(_ID, date="2026-13-40")],
+    [ke(_ID, date="2026-11-24T10:00:00")], [ke(_ID, date=20261124)], [ke(_ID, date="20261124")], [ke(_ID, date="2026-W48-2")],
+    [ke(_ID), ke(_ID, date="2026-11-25")], [{"itemId": _ID}]])
+def test_a_key_error_entry_without_a_stakeholder_and_a_date_is_a_refusal(tmp_path, entries):
+    """The entry says who confirmed it and when; an entry that does not, or that names anyone but the stakeholder, or repeats an id, is not a record."""
+    e = repo_of(tmp_path)
+    (e.repo / KE_RECORD).write_text(json.dumps({"schema": "ccg-dev-key-errors-v1", "confirmed": entries}) + "\n")
+    H.git(e.repo, "add", "-A")
+    H.git(e.repo, "commit", "-qm", "bad entries")
+    refuses(e, probe(e), "confirmation")
+
+
+def test_a_well_formed_entry_is_accepted_whether_or_not_a_probe_lists_it(tmp_path):
+    e = repo_of(tmp_path)
+    (e.repo / KE_RECORD).write_text(json.dumps({"schema": "ccg-dev-key-errors-v1", "confirmed": [ke(_ID)]}) + "\n")
+    H.git(e.repo, "add", "-A")
+    H.git(e.repo, "commit", "-qm", "entry")
+    check(e, probe(e))
+    assert G.confirmed_key_errors(e.repo) == {_ID}
 
 
 def test_a_missing_confirmation_record_is_a_refusal(tmp_path):
@@ -258,12 +290,47 @@ def test_read_dev_probe_returns_the_document_and_the_sha256_of_the_exact_bytes(t
         G.read_dev_probe(f)
 
 
-def test_a_list_made_only_of_dev_gold_items_is_a_dev_rehearsal_and_any_other_is_not(tmp_path):
+def dev_world_records(e, ids):
+    """Records of ``ids`` (dev http items) that EQUAL the committed dev gold: the gold file is rewritten to the world's record per id and committed."""
+    recs = [{**e.w.rec, "itemId": i, "derivedStratum": "http"} for i in H.dev_ids("http")]
+    (e.repo / "cpg/eval/dev/ac5-http.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+    H.git(e.repo, "add", "-A")
+    H.git(e.repo, "commit", "-qm", "dev gold = world")
+    return [r for r in recs if r["itemId"] in ids]
+
+
+def _dev_records(e, stratum="http"):
+    return [json.loads(l) for l in (e.repo / f"cpg/eval/dev/ac5-{stratum}.jsonl").read_text().splitlines()]
+
+
+def test_a_list_made_only_of_dev_gold_records_is_a_dev_rehearsal_and_any_other_is_not(tmp_path):
     e = repo_of(tmp_path)
-    dev = [{"itemId": i} for i in H.dev_ids("http")]
+    dev = _dev_records(e)
     assert G.is_dev_rehearsal(e.repo, dev) is True
     assert G.is_dev_rehearsal(e.repo, dev + [{"itemId": "heldout".ljust(32, "0")}]) is False
     assert G.is_dev_rehearsal(e.repo, []) is False
+
+
+def test_a_record_reusing_a_dev_item_id_with_other_content_is_not_exempt(tmp_path):
+    """P7-1: the exemption is by content, not by id: a held-out-shaped record carrying a dev itemId needs the probe."""
+    e = repo_of(tmp_path)
+    dev = _dev_records(e)
+    relabelled = {**dev[0], "impacted": {"type": "symbol", "repoId": "r", "qname": "held/out.py::Fn", "path": "held/out.py"}}
+    assert G.is_dev_rehearsal(e.repo, [relabelled]) is False
+    assert G.is_dev_rehearsal(e.repo, dev[1:] + [relabelled]) is False
+
+
+def test_the_same_dev_record_with_another_key_order_or_duplicated_is_still_exempt(tmp_path):
+    e = repo_of(tmp_path)
+    dev = _dev_records(e)
+    assert G.is_dev_rehearsal(e.repo, [dict(reversed(list(dev[0].items()))), dev[0]]) is True
+
+
+def test_a_second_record_for_a_dev_id_that_differs_from_the_committed_one_is_not_exempt(tmp_path):
+    """Every canonicalised record for the id must equal a committed record: one honest copy does not cover a relabelled twin."""
+    e = repo_of(tmp_path)
+    dev = _dev_records(e)
+    assert G.is_dev_rehearsal(e.repo, [dev[0], {**dev[0], "lines": [999]}]) is False
 
 
 # ------------------------------------------------------------------------------------------------ through score_inputs_check
@@ -285,7 +352,7 @@ def test_score_inputs_check_needs_a_valid_probe_for_a_non_dev_list(tmp_path):
 
 def test_score_inputs_check_needs_no_probe_for_a_dev_rehearsal_list(tmp_path):
     e = repo_of(tmp_path)
-    recs = [{**e.w.rec, "itemId": i} for i in H.dev_ids("http")]
+    recs = dev_world_records(e, H.dev_ids("http"))
     _check(e, None, recs)
 
 
@@ -345,7 +412,7 @@ def test_a_resume_with_a_different_probe_file_is_refused(tmp_path, monkeypatch, 
     many_world(e, 2)
     e.ask_hook = lambda req, n: (_ for _ in ()).throw(ConnectionError("c")) if n == 2 else None
     assert run_main(e, monkeypatch) == R.EXIT_RESUMABLE
-    e.dev_probe.write_text(json.dumps(dev_probe_doc(e.repo, record_commit=e.record_commit, rehearsalId="c" * 64)))            # a different (still valid) attestation
+    e.dev_probe.write_text(json.dumps(dev_probe_doc(e.repo, record_commit=e.record_commit, note="c")))            # a different (still valid) attestation
     e.ask_hook = None
     assert run_main(e, monkeypatch, "--resume") == R.EXIT_REFUSED
     assert "devProbeSha256" in capsys.readouterr().err
@@ -353,7 +420,7 @@ def test_a_resume_with_a_different_probe_file_is_refused(tmp_path, monkeypatch, 
 
 def test_a_dev_rehearsal_list_runs_with_no_probe_and_pins_none(tmp_path, monkeypatch):
     e = Env(tmp_path)
-    recs = [{**e.w.rec, "itemId": i} for i in H.dev_ids("http")[:1]]
+    recs = dev_world_records(e, H.dev_ids("http")[:1])
     e.set_records(recs)
     e.dev_probe.unlink()
     monkeypatch.setenv("HOME", str(e.home))
@@ -364,7 +431,7 @@ def test_a_dev_rehearsal_list_runs_with_no_probe_and_pins_none(tmp_path, monkeyp
 
 def test_a_dev_only_list_does_not_read_a_probe_file_it_is_given_and_pins_none(tmp_path, monkeypatch):
     e = Env(tmp_path)
-    e.set_records([{**e.w.rec, "itemId": i} for i in H.dev_ids("http")[:1]])
+    e.set_records(dev_world_records(e, H.dev_ids("http")[:1]))
     e.dev_probe.write_text("garbage, not even json")                                           # named on the command line, never read for a dev-only list
     assert run_main(e, monkeypatch) == R.EXIT_OK
     assert e.marker()["pins"]["devProbeSha256"] is None
@@ -383,7 +450,7 @@ def test_the_run_reads_the_flow_stratum_only_when_the_flow_flag_is_true(tmp_path
 def test_score_refuses_a_probe_file_other_than_the_one_the_run_pinned(tmp_path, monkeypatch, capsys):
     from test_gate_run import ScoreEnv
     e = ScoreEnv(tmp_path, monkeypatch)
-    e.dev_probe.write_text(json.dumps(e.probe_doc(rehearsalId="c" * 64)))                       # valid, but not the file the run was started under
+    e.dev_probe.write_text(json.dumps(e.probe_doc(note="c")))                       # valid, but not the file the run was started under
     assert e.main() == 2
     cap = capsys.readouterr()
     assert "probe" in cap.err and cap.out == "" and not (e.cust / "gate-report.json").exists()
@@ -409,7 +476,7 @@ def test_score_accepts_the_pinned_file_after_a_harness_only_cure_changed_the_has
 def test_score_of_a_dev_only_list_ignores_a_probe_file_it_is_given(tmp_path, monkeypatch, capsys):
     from test_gate_run import ScoreEnv
     e = ScoreEnv(tmp_path, monkeypatch)
-    e.set_records([{**e.w.rec, "itemId": H.dev_ids("http")[0]}])
+    e.set_records(dev_world_records(e, H.dev_ids("http")[:1]))
     m = json.loads((e.cust / f"gate-run-{e.key}.marker").read_text())
     m["pins"]["devProbeSha256"] = None
     (e.cust / f"gate-run-{e.key}.marker").write_text(json.dumps(m))
@@ -419,8 +486,19 @@ def test_score_of_a_dev_only_list_ignores_a_probe_file_it_is_given(tmp_path, mon
 def test_score_of_a_dev_only_list_needs_no_probe_and_the_marker_pins_none(tmp_path, monkeypatch, capsys):
     from test_gate_run import ScoreEnv
     e = ScoreEnv(tmp_path, monkeypatch)
-    e.set_records([{**e.w.rec, "itemId": H.dev_ids("http")[0]}])
+    e.set_records(dev_world_records(e, H.dev_ids("http")[:1]))
     m = json.loads((e.cust / f"gate-run-{e.key}.marker").read_text())
     m["pins"]["devProbeSha256"] = None
     (e.cust / f"gate-run-{e.key}.marker").write_text(json.dumps(m))
     assert e.main(e.argv(**{"--dev-probe": None})) in (0, 1) and json.loads(capsys.readouterr().out)["verdict"]
+
+
+# ------------------------------------------------------------------------------------------------ the real record
+def test_the_real_key_error_record_is_valid_and_names_only_dev_gold_items():
+    """The record in this checkout (working copy; its commit is the freeze round's) passes the harness's own validation, and each id is a real dev item."""
+    from pathlib import Path
+    root = Path(G.__file__).resolve().parents[3]
+    path = root / G.DEV_KEY_ERRORS
+    ids = G.confirmed_key_errors(root, lambda _p: path.read_text(encoding="utf-8"))
+    dev = {json.loads(l)["itemId"] for s in G.STRATA for l in (root / G.DEV_GOLD.format(s)).read_text().splitlines() if l.strip()}
+    assert ids and ids <= dev

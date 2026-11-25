@@ -42,7 +42,7 @@ class Rehearsal:
 
 
 def confirm(repo, ids):
-    (repo / KE_RECORD).write_text(json.dumps({"schema": "ccg-dev-key-errors-v1", "confirmed": [{"itemId": i} for i in ids]}) + "\n")
+    (repo / KE_RECORD).write_text(json.dumps({"schema": "ccg-dev-key-errors-v1", "confirmed": [{"itemId": i, "confirmedBy": "user", "date": "2026-11-24"} for i in ids]}) + "\n")
     H.git(repo, "add", "-A")
     H.git(repo, "commit", "-qm", "confirm")
 
@@ -50,7 +50,7 @@ def confirm(repo, ids):
 def test_a_probe_written_from_an_all_hit_rehearsal_carries_its_bindings_and_every_hit_id(tmp_path):
     r = Rehearsal(tmp_path)
     doc = r.write()
-    assert doc["schema"] == G.DEV_PROBE_SCHEMA and doc["rehearsalId"] == "d" * 64 and doc["recordCommit"] == r.rc and doc["snapshotId"] == H.SNAP
+    assert doc["schema"] == G.DEV_PROBE_SCHEMA and "rehearsalId" not in doc and doc["recordCommit"] == r.rc and doc["snapshotId"] == H.SNAP
     assert doc["harnessSha256"] == r.run["preflight"]["harnessPin"]["sha256"]
     assert doc["devGoldSha256"] == {s: H.sha_of(r.repo / f"cpg/eval/dev/ac5-{s}.jsonl") for s in STRATA}
     assert {s: doc["byStratum"][s]["hitIds"] for s in STRATA} == {s: H.dev_ids(s) for s in STRATA}

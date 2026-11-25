@@ -1,4 +1,20 @@
 {
- "confirmed": [],
+ "confirmed": [
+  {
+   "confirmedBy": "user",
+   "date": "2026-11-24",
+   "itemId": "e8c36e15140be75bab4c3552c5e381c1"
+  },
+  {
+   "confirmedBy": "user",
+   "date": "2026-11-24",
+   "itemId": "f33cbe42358775055726731a9c1ecceb"
+  },
+  {
+   "confirmedBy": "user",
+   "date": "2026-11-24",
+   "itemId": "f7a509957611e2328bb39ac439749782"
+  }
+ ],
  "schema": "ccg-dev-key-errors-v1"
 }

@@ -26,6 +26,7 @@ import hashlib
 import json
 import math
 import contextlib
+import datetime
 import os
 import re
 import subprocess
@@ -1289,6 +1290,8 @@ DEV_KEY_ERRORS = Path("cpg") / "eval" / "decisions" / "ccg-dev-key-errors-v1.jso
 DEV_KEY_ERRORS_SCHEMA = "ccg-dev-key-errors-v1"
 DEV_GOLD = "cpg/eval/dev/ac5-{}.jsonl"
 _HEX64 = re.compile(r"[0-9a-f]{64}")
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+KEY_ERROR_CONFIRMER = "user"               # only the stakeholder confirms a dev key-error (``ccg-dev-key-errors-v1``): never an agent
 
 
 def read_dev_probe(path: Path) -> tuple[Any, str]:
@@ -1310,20 +1313,25 @@ def _dev_gold(repo: Path, stratum: str) -> tuple[list[dict], str]:
 
 
 def is_dev_rehearsal(repo: Path, records: Sequence[Mapping]) -> bool:
-    """True iff the list is non-empty and every item is a committed dev gold item: such a run cannot spend a held-out list, so it needs no probe (it is what
-    produces one)."""
-    ids = set()
+    """True iff the list is non-empty and EVERY record, canonicalised (``match_keys.canon``), equals a committed dev gold record: such a run cannot spend a
+    held-out list, so it needs no probe (it is what produces one). By content, never by ``itemId``: a record that reuses a dev id with other content is not
+    exempt, and neither is a list holding one honest copy beside such a twin."""
+    dev = set()
     for s in STRATA:
         try:
-            ids |= {r["itemId"] for r in _dev_gold(repo, s)[0]}
-        except (PrecheckRefusal, KeyError, TypeError):
+            dev |= {_mk.canon(r) for r in _dev_gold(repo, s)[0]}
+        except (PrecheckRefusal, KeyError, TypeError, ValueError):
             return False
-    return bool(records) and all(r.get("itemId") in ids for r in records)
+    try:
+        return bool(records) and all(_mk.canon(r) in dev for r in records)
+    except (TypeError, ValueError):
+        return False
 
 
 def confirmed_key_errors(repo: Path, committed_text: Callable[[Path], str] | None = None) -> set[str]:
     """The item ids the stakeholder confirmed as dev key-errors, from the COMMITTED record ``cpg/eval/decisions/ccg-dev-key-errors-v1.json``
-    (``{"schema", "confirmed": [{"itemId", ...}]}``; the working copy must equal HEAD's). Missing, uncommitted, edited or malformed -> :class:`PrecheckRefusal`."""
+    (``{"schema", "confirmed": [{"itemId", "confirmedBy": "user", "date": "YYYY-MM-DD"}]}``, ids distinct; the working copy must equal HEAD's). Missing,
+    uncommitted, edited or malformed (an entry with no stakeholder, no real date or a repeated id included) -> :class:`PrecheckRefusal`."""
     path = Path(repo) / DEV_KEY_ERRORS
     try:
         text = path.read_text(encoding="utf-8")
@@ -1331,8 +1339,12 @@ def confirmed_key_errors(repo: Path, committed_text: Callable[[Path], str] | Non
             raise ValueError
         doc = json.loads(text)
         ids = [c["itemId"] for c in doc["confirmed"]]
-        if doc["schema"] != DEV_KEY_ERRORS_SCHEMA or not all(isinstance(i, str) for i in ids):
+        if doc["schema"] != DEV_KEY_ERRORS_SCHEMA or not all(isinstance(i, str) for i in ids) or len(set(ids)) != len(ids):
             raise ValueError
+        for c in doc["confirmed"]:
+            if c.get("confirmedBy") != KEY_ERROR_CONFIRMER or not (isinstance(c.get("date"), str) and _ISO_DATE.fullmatch(c["date"])):
+                raise ValueError
+            datetime.date.fromisoformat(c["date"])
     except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError, Refusal, _ac.Refusal):
         raise PrecheckRefusal("the committed key-error confirmation record is missing, edited after its commit or malformed") from None
     return set(ids)
@@ -1344,11 +1356,11 @@ def _harness_sha(repo: Path) -> dict:
 
 def dev_probe_check(probe: Any, repo: Path, record_commit: str, gated: Sequence[str] = STRATA_GATED, committed_text: Callable[[Path], str] | None = None) -> None:
     """The pre-gate probe of ``docs/plans/connected-code-graph-p1-closeout.md`` §3.5, as an attestation. ``probe`` is ``{"schema": DEV_PROBE_SCHEMA,
-    "rehearsalId", "recordCommit", "snapshotId", "harnessSha256": {file: sha}, "devGoldSha256": {stratum: sha}, "byStratum": {stratum: {"hitIds": [...],
+    "recordCommit", "snapshotId", "harnessSha256": {file: sha}, "devGoldSha256": {stratum: sha}, "byStratum": {stratum: {"hitIds": [...],
     "keyErrorIds": [...]}}}``. The gate takes NOTHING countable from it: per gated stratum the dev items are those of the committed gold file, and
     ``hitIds`` plus ``keyErrorIds`` must be exactly that set, disjoint and duplicate-free, with every key-error id in the committed confirmation record. The
     file must carry the freeze (record) commit, the current harness sha map (the import-closure files, equal as a set), the hash of each gated gold file and
-    a 64-hex rehearsal id, and a snapshot id (compared with the gate's own build by :func:`check_probe_snapshot`). A stratum outside ``gated`` is not read.
+    a snapshot id (compared with the gate's own build by :func:`check_probe_snapshot`). A stratum outside ``gated`` is not read.
     Counts, strata and field names only in a refusal (dev data)."""
     if not isinstance(probe, Mapping) or probe.get("schema") != DEV_PROBE_SCHEMA or not isinstance(probe.get("byStratum"), Mapping):
         raise PrecheckRefusal(f"the dev-gold probe result is not a `{DEV_PROBE_SCHEMA}` document: the gate does not start without one")
@@ -1356,8 +1368,6 @@ def dev_probe_check(probe: Any, repo: Path, record_commit: str, gated: Sequence[
         raise PrecheckRefusal("the dev-gold probe is for another record commit than this run's: the rehearsal is not at the freeze commit")
     if not isinstance(probe.get("harnessSha256"), Mapping) or dict(probe["harnessSha256"]) != _harness_sha(repo):
         raise PrecheckRefusal("the dev-gold probe's harness file hashes differ from the current harness files: the rehearsal ran other harness code")
-    if not (isinstance(probe.get("rehearsalId"), str) and _HEX64.fullmatch(probe["rehearsalId"])):
-        raise PrecheckRefusal("the dev-gold probe carries no rehearsal run id (64 hex)")
     if not (isinstance(probe.get("snapshotId"), str) and probe["snapshotId"]):
         raise PrecheckRefusal("the dev-gold probe carries no snapshot id of the build it vouches for")
     gold_sha = probe.get("devGoldSha256") if isinstance(probe.get("devGoldSha256"), Mapping) else {}
@@ -1393,7 +1403,8 @@ def write_dev_probe(repo: Path, run: Mapping, snapshot, committed_text: Callable
     """The attestation, as the product of a dev rehearsal: ``run`` is the rehearsal's ``run.json`` (its ``answers`` are the ``answers.jsonl`` entries), scored by the
     SAME :func:`score_gate` path against the committed dev gold of ``gated_strata(run's flow flag)`` on ``snapshot`` (the live store; its snapshot id must be the
     run's). ``hitIds`` are the items scored ``hit``; ``keyErrorIds`` are the other items the committed record confirms. Everything else it carries is read from the run
-    (record commit and harness sha map from its preflight block, the list key as the rehearsal id) or from the repository (gold hashes)."""
+    (record commit and harness sha map from its preflight block) or from the repository (gold hashes). It is a file-level attestation: ``run`` is trusted for the rehearsal's having happened (a run file composed by hand
+    on a store holding that snapshot yields a probe), which is why the probe carries no run id: one would bind nothing."""
     repo = Path(repo)
     ctx, key = run.get("preflight"), run.get("listKey")
     if not isinstance(ctx, Mapping) or not ctx.get("recordCommit") or not isinstance((ctx.get("harnessPin") or {}).get("sha256"), Mapping) \
@@ -1414,7 +1425,7 @@ def write_dev_probe(repo: Path, run: Mapping, snapshot, committed_text: Callable
         ids = sorted(r["itemId"] for r in records if r["derivedStratum"] == s)
         hit = [i for i in ids if result["items"][i]["outcome"] == "hit"]
         by[s] = {"hitIds": hit, "keyErrorIds": [i for i in ids if i not in hit and i in confirmed]}
-    return {"schema": DEV_PROBE_SCHEMA, "rehearsalId": key, "recordCommit": ctx["recordCommit"], "snapshotId": run["snapshotId"],
+    return {"schema": DEV_PROBE_SCHEMA, "recordCommit": ctx["recordCommit"], "snapshotId": run["snapshotId"],
             "harnessSha256": dict(ctx["harnessPin"]["sha256"]), "devGoldSha256": shas, "byStratum": by}
 
 
