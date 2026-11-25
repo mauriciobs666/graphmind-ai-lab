@@ -482,3 +482,32 @@ def test_ordered_list_fence_markers():
 def test_hash_inside_a_word_is_not_a_comment_before_a_launcher():
     assert shape("FOO=a#b bash -c '\nx\n'\n", [2], "shell") == "I"
     assert shape("FOO=a#b python3 <<EOF\nx\nEOF\n", [2], "shell") == "M"
+
+
+# ---- killers, third round (Pass 2 survivors)
+def test_i_ksh_launcher():
+    assert shape("ksh -c '\necho a\n'\n", [2], "shell") == "I"
+    assert shape("/bin/ksh -c '\necho a\n'\n", [2], "shell") == "I"
+
+
+def test_crlf_fence_with_container_prefixes_and_closer():
+    t = "> ```bash\r\n> run.sh\r\n> ```\r\nrun.sh\r\n"
+    assert shape(t, [2], "markdown") == "B" and shape(t, [4], "markdown") is None
+    t = "~~~\r\nrun.sh\r\n~~~\r\nrun.sh\r\n"
+    assert shape(t, [2], "markdown") == "B" and shape(t, [4], "markdown") is None
+
+
+def test_crlf_shell_regions():
+    t = "python3 <<EOF\r\nimport os\r\nEOF\r\n\"$HERE/x.sh\"\r\n"
+    assert shape(t, [2], "shell") == "M" and shape(t, [4], "shell") is None
+    t = "bash -c '\r\necho a\r\n'\r\n\"$HERE/x.sh\"\r\n"
+    assert shape(t, [2], "shell") == "I" and shape(t, [4], "shell") is None
+    assert shape("bash -c 'echo a'\r\n", [1], "shell") == "I"
+    assert shape("bash -c 'echo a' ; \"$HERE/x.sh\"\r\n", [1], "shell") is None
+    assert shape("python3 - <<'PY'\r\nimport os\r\nPY\r\n", [2], "shell") == "M"
+
+
+def test_gold_line_zero_or_negative_never_wraps_to_the_last_line():
+    assert shape('exec "$PY" -m m', [1], "shell") == "J"
+    assert shape('exec "$PY" -m m', [0], "shell") is None
+    assert shape('exec "$PY" -m m', [-1], "shell") is None
