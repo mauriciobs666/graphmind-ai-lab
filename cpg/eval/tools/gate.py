@@ -1384,13 +1384,13 @@ def confirmed_key_errors(repo: Path, committed_text: Callable[[Path], str] | Non
     (``{"schema", "confirmed": [{"itemId", "confirmedBy": "user", "date": "YYYY-MM-DD"}]}``, ids distinct; the working copy must equal HEAD's). Missing,
     uncommitted, edited or malformed (an entry with no stakeholder, no real date or a repeated id included) -> :class:`PrecheckRefusal`. ``confirmedBy`` is a
     self-asserted string, not a signature: the control is the commit. With ``record_commit`` (the freeze commit the marker pins) the file at THAT commit must
-    equal the working copy too, so a commit made after the freeze that widens the record is refused (F4)."""
+    equal the working copy too; ``None`` is a refusal (the default never skips the check), so a commit made after the freeze that widens the record is refused (F4)."""
     path = Path(repo) / DEV_KEY_ERRORS
     try:
         text = path.read_text(encoding="utf-8")
         if (committed_text or _ac._git_head_text)(path) != text:
             raise ValueError
-        if record_commit is not None and _git_show_text(Path(repo), record_commit, DEV_KEY_ERRORS.as_posix()) != text:
+        if record_commit is None or _git_show_text(Path(repo), record_commit, DEV_KEY_ERRORS.as_posix()) != text:       # no record commit: fail closed
             raise ValueError
         doc = json.loads(text)
         ids = [c["itemId"] for c in doc["confirmed"]]

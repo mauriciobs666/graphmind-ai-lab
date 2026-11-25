@@ -258,7 +258,7 @@ def test_a_well_formed_entry_is_accepted_whether_or_not_a_probe_lists_it(tmp_pat
     H.git(e.repo, "add", "-A")
     H.git(e.repo, "commit", "-qm", "entry")
     check(e, probe(e))
-    assert G.confirmed_key_errors(e.repo) == {_ID}
+    assert G.confirmed_key_errors(e.repo, record_commit=H.head(e.repo)) == {_ID}
 
 
 def test_a_missing_confirmation_record_is_a_refusal(tmp_path):
@@ -494,14 +494,28 @@ def test_score_of_a_dev_only_list_needs_no_probe_and_the_marker_pins_none(tmp_pa
 
 
 # ------------------------------------------------------------------------------------------------ the real record
-def test_the_real_key_error_record_is_valid_and_names_only_dev_gold_items():
-    """The record in this checkout (working copy; its commit is the freeze round's) passes the harness's own validation, and each id is a real dev item."""
+def test_the_real_key_error_record_is_valid_and_names_only_dev_gold_items(tmp_path):
+    """The record in this checkout (working copy) passes the harness's own validation once committed (here: in a throwaway repo), and each id is a real dev item."""
     from pathlib import Path
+    import shutil
     root = Path(G.__file__).resolve().parents[3]
-    path = root / G.DEV_KEY_ERRORS
-    ids = G.confirmed_key_errors(root, lambda _p: path.read_text(encoding="utf-8"))
+    box = H.make_repo(tmp_path / "real")
+    shutil.copy(root / G.DEV_KEY_ERRORS, box / G.DEV_KEY_ERRORS)
+    H.git(box, "add", "-A")
+    H.git(box, "commit", "-qm", "real record")
+    ids = G.confirmed_key_errors(box, record_commit=H.head(box))
     dev = {json.loads(l)["itemId"] for s in G.STRATA for l in (root / G.DEV_GOLD.format(s)).read_text().splitlines() if l.strip()}
     assert ids and ids <= dev
+
+
+def test_with_no_record_commit_the_key_error_record_fails_closed(tmp_path):
+    """The default must not skip the check: no record commit is a refusal, for the reader and through the probe check."""
+    e = repo_of(tmp_path)
+    with pytest.raises(G.PrecheckRefusal, match="confirmation"):
+        G.confirmed_key_errors(e.repo)
+    with pytest.raises(G.PrecheckRefusal, match="confirmation"):
+        G.dev_probe_check(probe(e, record_commit=None, recordCommit=None), e.repo, None, G.STRATA_GATED)
+
 
 
 # ------------------------------------------------------------------------------------------------ F7: the exemption over every stratum
@@ -638,3 +652,31 @@ def test_the_default_file_reader_returns_text_of_the_tree_at_eval_commit(tmp_pat
     assert read("cpg/eval/tools/gate.py") == "# cpg/eval/tools/gate.py\n"
     assert read("no/such/file.md") is None
     assert G.eval_commit_reader(H.make_repo(tmp_path / "bare"))("cpg/README.md") is None            # no EVAL_COMMIT file: nothing is withheld
+
+
+class LockDouble:
+    instances = []
+
+    def __init__(self):
+        self.taken = False
+        LockDouble.instances.append(self)
+
+    def take(self, cust, key):
+        self.taken = True
+
+    def release(self):
+        pass
+
+
+def test_the_cap_refuses_before_the_lock_is_taken_and_a_run_under_it_takes_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(R, "_Lock", LockDouble)
+    LockDouble.instances.clear()
+    e = Env(tmp_path)
+    _scripts_list(e, 4)
+    monkeypatch.setattr(G, "eval_commit_reader", lambda repo: (lambda rel: FENCED))
+    assert run_main(e, monkeypatch) == R.EXIT_RESOLVE
+    assert [l.taken for l in LockDouble.instances] == [False]
+    monkeypatch.setattr(G, "eval_commit_reader", lambda repo: (lambda rel: None))
+    LockDouble.instances.clear()
+    assert run_main(e, monkeypatch) == R.EXIT_OK
+    assert [l.taken for l in LockDouble.instances] == [True]
