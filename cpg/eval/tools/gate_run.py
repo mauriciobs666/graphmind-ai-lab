@@ -621,7 +621,7 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     G.score_inputs_check(repo, gate_id, pf, all_records, committed_text=committed_text,           # every refusal `score` already knows, before the marker
                          dev_probe=probe_doc, gated=G.gated_strata(flag))
     records, withheld = G.withhold_strata(all_records, G.gated_strata(flag))
-    shapes = G.withheld_counts(records, G.eval_commit_reader(repo))
+    records, shapes = G.withhold_shapes(records, G.eval_commit_reader(repo))      # a withheld-shape scripts item is never asked or scored (the scoped AC-5 wording)
     G.check_withheld_cap(shapes)                                 # over the 25% cap: exit 5 here, before the lock, the build and the marker; nothing spent
     marker = _marker_path(cust, key)
     if lock is not None:
@@ -674,7 +674,7 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     persisting = _Persisting(ask, answers_path, recorded, stall)
     try:
         run = G.run_asks(records, snap, persisting, lambda: 0, probes=probes)
-        run.update({"preflight": ctx, "withheld": withheld, "flowFlag": bool(flag), "listKey": key})
+        run.update({"preflight": ctx, "withheld": withheld, "withheldShapes": shapes, "flowFlag": bool(flag), "listKey": key})
         doc["resumes"] = [*doc["resumes"][:-1], {**doc["resumes"][-1], "askedAfter": persisting.asked_now}] if resume else doc["resumes"]
         run["resume"] = {"resumed": bool(doc["resumes"]), "resumeCount": len(doc["resumes"]),
                          "answerCountsBefore": [r["answersBefore"] for r in doc["resumes"]], "answerCountsAfter": [r["askedAfter"] for r in doc["resumes"]],

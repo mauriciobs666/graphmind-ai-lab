@@ -1329,6 +1329,15 @@ def withheld_counts(records: Iterable[Mapping], file_text: Callable[[str], str |
     return {"scriptsCounting": len(rows), "withheld": sum(shapes.values()), "byShape": dict(sorted(shapes.items()))}
 
 
+def withhold_shapes(records: Sequence[Mapping], file_text: Callable[[str], str | None]) -> tuple[list, dict]:
+    """``(kept, counts)``: the counting scripts items of a Q8 withheld shape are NOT asked or scored (the scoped AC-5 wording: "every counting item outside the
+    named withheld shapes"; ruling on the prereg reviews' B1/M2). The decision is the predicate's alone, on the gold locator and the build tree's file text
+    (:func:`eval_commit_reader`): nothing in the record but its stratum, ``counting`` flag, impacted path and gold lines is read. ``counts`` is
+    :func:`withheld_counts` over ``records`` (the same set the cap is checked on); floors, bounds and the verdict are then over ``kept``."""
+    kept = [r for r in records if not (r.get("derivedStratum") == "scripts" and r.get("counting", True) and item_withheld_shape(r, file_text))]
+    return kept, withheld_counts(records, file_text)
+
+
 def check_withheld_cap(counts: Mapping) -> None:
     """Over the cap (``withheld`` more than :data:`WITHHELD_CAP` of the counting scripts items, i.e. 20 or more of 79) the scoped wording does not hold:
     :class:`PrecheckRefusal`, so ``run`` exits 5 before the lock, the build and the marker and the list is not spent. Counts only."""
@@ -1660,13 +1669,16 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         records, withheld = withhold_strata(records, gated)
         if withheld != run["withheld"]:
             raise Refusal("the lists do not reproduce the withheld set the run recorded: score refuses")
+        records, shapes = withhold_shapes(records, eval_commit_reader(repo))
+        if shapes != run.get("withheldShapes"):
+            raise Refusal("the lists do not reproduce the withheld-shape counts the run recorded: score refuses")
         flags = {r["itemId"]: r["flag"] for r in _jsonl(within_custodian(Path(a.flags), None, "--flags"))} if a.flags else None
         expo = _jsonl(within_custodian(Path(a.exposure), None, "--exposure")) if a.exposure else []
         res = score_gate(records, run, snapshot, chk["patterns"])
         dec = decide_gate(res, flags, moved_out, gated_strata=gated)
         label = "first-contact" if ctx["label"] == "first-contact" and pf["label"] == "first-contact" else "after-adaptation"
         rep = build_report(res, dec, flags=flags, exposure=expo, gated_strata=gated, withheld=withheld, flow_flag=flag,
-                           withheld_shapes=withheld_counts(records, eval_commit_reader(repo)),
+                           withheld_shapes=shapes,
                            context={"label": label, "preflight": ctx, "scoreLabel": pf["label"]})
         write_custodian(cust, "gate-outcomes.jsonl", [{"itemId": i, **o} for i, o in sorted(res["items"].items())])
         write_custodian(cust, "gate-exposure.jsonl", exposure_rows(res))

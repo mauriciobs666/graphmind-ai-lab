@@ -385,6 +385,7 @@ class ScoreEnv:
         monkeypatch.setenv("HOME", str(tmp_path))
         self.cust = tmp_path / ".local" / "share" / "ccg-eval" / "e12"
         self.cust.mkdir(parents=True)
+        self.shapes = {"scriptsCounting": 0, "withheld": 0, "byShape": {}}
         self.flow_flag, self.withheld = False, {}                  # what the run recorded; a test sets them before set_records/write_run
         self.repo = prepared(tmp_path / "r", **({"kind": "gate"} if record is None else record))
         self.w = H.World(qname="svc/SENTINEL_QNAME.py::SentinelFn")
@@ -403,7 +404,8 @@ class ScoreEnv:
         """The list changes, so its key does: the marker and the run file follow it (as they would for a run of that list)."""
         self.lists.write_text("".join(json.dumps(r) + "\n" for r in recs))
         self.key = G.list_key(recs)
-        self.withheld = G.withhold_strata(recs, G.gated_strata(self.flow_flag))[1]       # what a run of these lists would have recorded
+        kept, self.withheld = G.withhold_strata(recs, G.gated_strata(self.flow_flag))       # what a run of these lists would have recorded
+        self.shapes = G.withhold_shapes(kept, G.eval_commit_reader(self.repo))[1]
         self.write_marker("asked")
         self.write_run()
 
@@ -412,7 +414,7 @@ class ScoreEnv:
             json.dumps({"state": state, "pins": {"flowFlag": self.flow_flag, "devProbeSha256": H.sha_of(self.dev_probe)}}) + "\n")
 
     def write_run(self, pin=H.SNAP, **extra):
-        run = {**self.w.run(snapshot_id=pin), "preflight": self.ctx, "listKey": self.key, "flowFlag": self.flow_flag, "withheld": self.withheld, **extra}
+        run = {**self.w.run(snapshot_id=pin), "preflight": self.ctx, "listKey": self.key, "flowFlag": self.flow_flag, "withheld": self.withheld, "withheldShapes": self.shapes, **extra}
         self.run.write_text(json.dumps(run))
 
     def probe_doc(self, **kw):
