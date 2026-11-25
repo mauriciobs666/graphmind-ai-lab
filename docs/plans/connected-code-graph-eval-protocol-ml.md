@@ -323,8 +323,20 @@ Census scope is evaluated scope (plan §6.2). Every rule here goes into
   `claude/`, `skills/`, `cpg/` and `deprecated/` (counted 2026-10-29; S40 recounts at
   `EVAL_COMMIT`). Not every one of these is invoked. AC-4's own case, a `cypher-mcp` tool and
   its script and hook callers, is a subset. The config entries that invoke scripts (`settings.json` hooks) are `wiring`, by rule 2.
+- **Scope of the first held-out spend (stakeholder, 2026-11-24; `docs/plans/connected-code-graph-p1-closeout.md` §1).**
+  - The gated strata are `http`, `mcp` and `scripts` (151 counting items: 26, 46 and 79). `wiring` and `flow` are **withheld**
+    (§3.5, §3.6): not asked, not scored, counts reported beside the verdict.
+  - Within `scripts`, items of the named withheld shapes may be withheld by the custodian's build-invariant predicate. The shapes, the
+    cap (a withheld share above 25% of the held-out `scripts` items does not spend) and the scoped claim are in
+    `docs/plans/connected-code-graph-p1-gate-marker-ml.md`, last section.
 
 ### 3.5 `wiring`: configuration that names, binds or launches (AC-2; SQ-P0-1 option (d))
+
+**Withheld at the first held-out spend (stakeholder, 2026-11-24).** The engine cannot express a wiring item in P1 (dev: 0 of 11 expressible,
+`docs/plans/connected-code-graph-p1-closeout.md` §3.4), so `wiring` is not a gated stratum: its 8 held-out items stay blind, are not asked,
+scored or resolved, and AC-2 and AC-4's wiring halves stay open. The per-stratum floor of 8 is a gate floor for the **gated** strata only;
+for `wiring` the 8 is a draw-time supply figure (§9.1), carries no gate meaning, and no pass or fail sentence is written about `wiring`.
+The shapes below stay the census definition, for a later spend.
 
 There are two shapes, distinguished by the anchor:
 - **Per-contract config.** The anchor is a contract point. The impacted element is a
@@ -384,6 +396,9 @@ There are two shapes, distinguished by the anchor:
   is present in both P1 languages.
 - **Flow and AC-5's 75:** see §3.7. Most flow items are expected to stay inside one unit, so they
   will not count toward the 75.
+- **Withheld at the first held-out spend.** `python.flowAvailable` is false, so held-out `flow` is not asked, scored or exposed (its
+  count is reported); the "≥ 8 items per stratum" above is a draw-time figure, not a gate floor, for a withheld stratum
+  (`docs/plans/connected-code-graph-p1-gate-marker-ml.md` §4).
 
 ### 3.7 What counts as cross-boundary, toward AC-5's 75 (M6; stakeholder decision 2026-10-29)
 
@@ -402,8 +417,9 @@ the rule below. Every item, counting or not, is still tested, scored and reporte
   not count. With the 2-hop cap that case is negligible, and it errs toward not counting.
 - **Reporting.** Every held-out count, in S47's report and at every gate, is given twice: **all
   items** (`H_all`) and **counting items** (`H`). The 75 is tested on `H`. The per-stratum ≥ 8 is
-  tested on all items, so `flow` keeps its 8 even when none of them count. Flow still has to be
-  present and gated per stratum (ML §4.1).
+  tested on all items, so `flow` keeps its 8 even when none of them count. A **gated** `flow` stratum
+  has to be present and gated per stratum (ML §4.1); at the first held-out spend `flow` is withheld (§3.6).
+  The 75 and the per-stratum 8 are read over the gated strata only (`http`, `mcp`, `scripts`).
 
 ## 4. Item schemas
 
@@ -605,6 +621,7 @@ a check with no such input is not a check.
 | HA-3 | **Request echo.** `status == "resolved"`, and `request` equals the submitted one: `useCase`, `direction`, anchor id set (§2.2) equal to the asked anchor's, `scope` absent | Not resolved: a miss, reported with `lookups`. Resolved but unequal: a miss, and an engine defect is listed | a second anchor added; `scope` present; `direction` flipped; `status: "ambiguous"`. Each is a miss |
 | HA-4 | **Stamp** (answer spec §4.2, V11): `snapshotId` equals the id read from the `:Snapshot` node after the gate build and before the first question; `verdictLogOffset == 0`; `verdictLogHash == c482b1cf54631b37eb4572dc86a68fb1` (the literal, not `answer.EMPTY_VERDICT_LOG_HASH`; it is `ids.tuple_id(["verdictLog"])`, recomputed) | The answer is void; the run is reported | `snapshotId` with one hex digit changed; `verdictLogOffset: 1`; offset 0 with the hash's last digit changed. Each is void |
 | HA-5 | **Masking.** `answer.mask_identifier` is applied to both sides of the H1 config comparison; every comparison where masking changed a segment is listed | A non-empty list blocks the gate verdict until the method owner has reviewed each entry | a gold `keyPath` and an answer `keyPath` that differ in one failing segment under the same parent and mask to the same string: the entry must be listed |
+| HA-6 | **Engine exception on one anchor.** An exception raised inside the engine's `ask` after the harness built and validated the request is classified by its cause chain, never by its outer type or message (`docs/plans/connected-code-graph-p1-gate-marker-ml.md` §3 table). A raised exception is an answer the harness can judge: it is not a hit | A miss, reason `engine-error`, recorded as an answer (class name only) and never re-asked on resume; the verdict is `fail`. A connection or OS fault is `failed:transient` and resumable; a run-wide credential or store-state fault is `failed:deterministic` with no miss recorded | an engine stub that raises `ValueError` on one anchor: miss `engine-error`, verdict `fail`, `--resume` does not re-ask it; a harness error beside it gives `blocked`. The same stub raising a connection error: `failed:transient`. A stub raising `TimeoutError` on one anchor: `failed:transient` on stops 1 and 2, `engine-error` (`via: repeat-stall`) on stop 3 when the host-health canary answers, and `failed:transient` for good when the canary also fails or the failure is a connection error |
 
 - **HA-1 replay.** Each hop's `(kind, id)` must exist (label and id property: `Symbol.symbolId`,
   `CallSite.callSiteId`, `Param`/`Ret`/`Cond.pointId`, `ContractPoint.cpId`, `Link.linkId`,
@@ -660,7 +677,8 @@ All results are first run, never a post-fix rerun (ML §4.1):
 - **Anchor recall**, per stratum and pooled, over distinct anchors. An anchor counts only if all of
   its items are hits. This is the conservative figure.
 - **The pass condition is AC-5's:** every held-out item is a hit, over at least 75 **counting**
-  items (§3.7) pooled and at least 8 items per stratum (§9). The report gives `H` and `H_all`.
+  items (§3.7) pooled and at least 8 items per stratum (§9), both read over the **gated** strata (§3.4: `http`, `mcp`,
+  `scripts` at the first spend; a withheld stratum has no floor and no claim). The report gives `H` and `H_all`.
   Computed: 75/75 has a Wilson lower bound of **0.951**, and 8/8 has **0.676** per stratum.
   **The 0.951 is claimed only for a first gate.** A re-gate reports under §12.1's rules. Per-stratum claims at this size are smoke tests (ML §4.1). The P(pass)
   table in ML §8.2 still applies: a true recall of 0.99 passes 75 first-run items with
@@ -1452,7 +1470,7 @@ With `n_h` labelled in stratum *h*, `f_h` of them false and `t_h` real:
      - an item whose cluster is a kept cluster joins it. It is scored, but it does **not** count
        as fresh-anchor evidence, because its anchor already passed, which mildly conditions it;
      - every other item is on a **fresh cluster**: one never exposed at any gate.
-   - **Composition.** The list must reach `H ≥ 75` counting and every `H_s ≥ 8` (§3.7). For each
+   - **Composition.** The list must reach `H ≥ 75` counting and every gated `H_s ≥ 8` (§3.7). For each
      stratum that had a miss, it must include at least as many fresh-cluster items of that stratum
      as were moved out of it, where the supply allows. Any shortfall is reported.
    - **At a new `EVAL_COMMIT`,** the kept and reserve items are re-validated from source (§7.1) by
@@ -1835,7 +1853,7 @@ marked **v1.1** or **v1.2** are new since v1.0, and its §14 needs to absorb the
 | **S52** (agent definitions) | **Appendix B verbatim**, and bundle spec §4 and §6 | **v1.1:** quote Appendix B, **not** "§4.1/§4.2/§4.3 verbatim", which would carry JSON examples (M3) |
 | **S14 / S30** | §8.2's definition of "touched" | the lists must give **anchors** as locators, with the hops excluded. **v1.2 (S30):** take the server-binding walkthrough on `falkor-chat/server`, which the served-anchor rule sends to dev anyway, or on S35's fixture, and **not** on `cypher-mcp` or `mcp-monitor`. Walking `.mcp.json` → `cypher` costs `wiring` 3 of its at most 10 eligible items, and leaves it short of 8 (§9.1; §15 Q10) |
 | **S56** (golden flow methods) | §8.2: its methods are contact for flow anchors | **v1.1:** S56's output is an input to S47's contact set |
-| **P1 gate harness** | §5, §5.2.1 (HA-1 to HA-5, tie readings), §10.4 (status predicate, cap, cache bypass), §10.6, §11, §12.1 (floor, routing, exposure record), §12.3 (`coreTreeHash`; the AC-24 record) | **v1.1:** the floor, the exposure record and the four-field pre-registration comparison. **v1.2:** H1 always requires the span test, and §5.4 runs under `E`; both are imported from `match_keys.py` (P2-2) |
+| **P1 gate harness** | §5, §5.2.1 (HA-1 to HA-6, tie readings), §10.4 (status predicate, cap, cache bypass), §10.6, §11, §12.1 (floor, routing, exposure record), §12.3 (`coreTreeHash`; the AC-24 record) | **v1.1:** the floor, the exposure record and the four-field pre-registration comparison. **v1.2:** H1 always requires the span test, and §5.4 runs under `E`; both are imported from `match_keys.py` (P2-2) |
 
 ## 15. Risks and open questions
 

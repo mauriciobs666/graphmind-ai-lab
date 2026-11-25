@@ -572,7 +572,8 @@ A larger local model first, then a lower target from the same measurement, is so
   gated meanwhile.
 - **At n = 100**, a measured 0.20 has Wilson [0.133, 0.289], so a pooled value within about ±0.08 of
   the floor cannot be told apart from it.
-- **p90 burden** at gate 1 is the 56th smallest of 62 answers, reported with its bootstrap interval.
+- **p90 burden** at gate 1 is the ⌈0.9 *n*⌉-th smallest of the *n* gated answers (the 56th of 62 in the four-stratum draw;
+  *n* for the three-stratum draw is the custodian's count), reported with its bootstrap interval.
 
 ### 5.3 Noise thresholds (decided)
 
@@ -615,9 +616,20 @@ The rest of the record is EP §12.3.
   - An edit after the record makes the run "after adaptation".
   - The exception is a defect fix shown, by re-scoring with both versions, to change no item's
     score. It is reported.
-- **Report units.** Recall is given over items, distinct anchors and clusters. The zero-miss Wilson
-  lower bounds are 0.976 (159 items), 0.942 (62 anchors) and 0.938 (58 clusters). With misses,
-  P0-ML §7.3's cluster interval applies, with anchors as clusters.
+- **Report units.** Recall is given over items, distinct anchors and clusters, over the **gated**
+  strata: `http`, `mcp` and `scripts`. `wiring` and `flow` are withheld at the first spend (stakeholder,
+  2026-11-24); the withheld set, its counts and the shape predicate are in
+  `docs/plans/connected-code-graph-p1-gate-marker-ml.md`, last section.
+  - **The zero-miss Wilson 95% lower bound** over *n* units is *n* / (*n* + 1.96²).
+  - **Items:** 151 counting items (26 + 46 + 79, taken as given from `docs/plans/connected-code-graph-p1-closeout.md` §2): **0.975**
+    (recomputed). Per stratum, by item: `http` 26 gives 0.871, `mcp` 46 gives 0.923, `scripts` 79 gives
+    0.954 (recomputed).
+  - **Anchors and clusters:** the three-stratum counts are the custodian's (counts only) and are not known to this note. The
+    four-stratum draw had 62 anchors (0.942) and 58 clusters (0.938): the counts taken from the earlier text, the bounds
+    recomputed. A bound only falls as units are removed, so **0.938 is the ceiling** for the three-stratum cluster bound and holds
+    only if dropping `wiring` removed no cluster; the pre-registration states the custodian's three-stratum count *c* and the bound
+    *c* / (*c* + 3.84) beside it (recomputed examples: *c* = 56 gives 0.936, *c* = 50 gives 0.929).
+  - With misses, P0-ML §7.3's cluster interval applies, with anchors as clusters.
 - **Chain length** (ML §3.6's revisit): inter-function hop counts over hit items, median and p90 by
   stratum.
 
@@ -830,7 +842,7 @@ One stakeholder question is open: **S1**, which noise-reduction variant (kind-wi
       applies as written.
     - A held-out or reserve change means the custodian re-records and commits the held-out manifest
       (`split_manifest.py manifest`, then `verify`) **before** the `ac5-gate-1` record.
-    - **Shortfall.** If a removal takes a stratum below its floor of 8 (`wiring` is at 8), a reserve
+    - **Shortfall.** If a removal takes a **gated** stratum (`http`, `mcp`, `scripts`) below its floor of 8, a reserve
       cluster of that stratum moves to held-out, and the manifest is re-recorded. Reserve items are
       held-out and never exposed (EP §9.1 step 6).
       - **Cost:** each counting item moved leaves the reserve. That shrinks fill source 1 for
@@ -838,6 +850,9 @@ One stakeholder question is open: **S1**, which noise-reduction variant (kind-wi
       - Dev cannot top up, because builders have used it.
       - With no reserve cluster in that stratum, the stratum is reported below floor, not gated (as
         EP §9.1 step 4 treats a marked stratum).
+      - A **withheld** stratum (`wiring`, 8 held-out items; `flow`) has no gate floor at the first spend, so a removal from it moves
+        no reserve cluster; it is reported as withheld, with its count, not as below floor
+        (`docs/plans/connected-code-graph-p1-gate-marker-ml.md`, last section).
     - Counts by stratum and class go into the gate report.
 - **Noise thresholds (decided 2026-11-10):** §5.3.
 - **Flow-fallback labelling (decided 2026-11-09):** §6.6.
