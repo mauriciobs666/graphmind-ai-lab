@@ -92,3 +92,53 @@ None changes the numbers; each should be named in `devPassCaveat` or the note:
 3. Not yet executable (M2). A labelled dev Q above 4 is a rehearsal miss (item 3): fix, new F, new record, no spend.
 4. Ordering is valid, better as R, rehearsal, freeze-check, run (m1); disclosure items are listed there.
 5. Paths in m3; the entry rule's key-error leg is M5.
+
+## Pass 2
+
+Read: the revised record (last line of `cpg/eval/preregistration.jsonl`), `docs/plans/connected-code-graph-p1-closeout-prereg.md`, close-out plan §3.5, `cpg/eval/results/co6b/no_workaround_scan.py` (header and definition), the diff of harness commit `4aa24d09` (`gate.py` `withhold_shapes`; the 9 test names in `cpg/tests/test_gate_withheld_scoring.py`, which include the planted unlisted-withheld item, a decoy and forged shape fields; not run, `pytest` is not installed here). Recomputed: all 12 harness sha256 and the scan-script sha256 match the tree. No held-out read.
+
+**Verdict: approve with suggestions.** Every blocker and major of pass 1 is fixed in text or code; the stopping conditions S1 to S3 are met by the record. Four new majors below are rehearsal-protocol and successor-rule gaps that are fixable in the record or the rehearsal brief before R is committed; none blocks the pins.
+
+### Dispositions
+
+- **B1:** fixed. `withhold_shapes` drops withheld-shape counting scripts items before the ask and the score; floors, bounds and cap are over the kept set; `score` refuses a list that does not reproduce the recorded shape counts; the record's statement and `scoredSet` agree. My refutation condition is covered by a test name (planted unlisted withheld item is not a miss; a decoy is).
+- **B2:** fixed by the stakeholder decision: held-out noise not measured, the claim carries it, the AC-5 noise clause carries to P2, the verdict is the listing verdict only (`noise.whichBarsDecideWhat`). See N2 for the interactions.
+- **M1:** fixed (`overCapOutcomes`: closed set). See N3 for the fresh-draw branch.
+- **M2:** fixed in `devLabelling` (labeller, `gateId`/seed, two samples, point-estimate rule, absent Q = not met). See N1.
+- **M3:** fixed (only the listing verdict decides; S1 reported). Residual in N2.
+- **M4:** fixed as a disclosed reading, awaiting objection; the requirements log carries it.
+- **M5:** fixed (`keyErrorPrecedent`).
+- **m1:** fixed (order R, rehearsal, freeze-check once, ledger line, run; the contact-hit cost is stated).
+- **m2:** fixed (`c` and counts in a ledger line before the ask; bounds over the scored set). The `c <= 58` wording is judged in N5.
+- **m3:** fixed in part: the predicate is in the scan (3 hits, none in it), the flagged-versus-engine-status block exists, `devPassCaveat` names the dev-derived scope. The scan stays literal-only and is disclosed so.
+- **n:** fixed (`noiseRatifyCitation`: log entry, no hash, said so).
+
+### New findings
+
+**N1 (major). The rehearsal seed is re-rollable.** `gateIdAndSeed` makes `k` the rehearsal ordinal "at this tree" and judges bar 3 "on the last run at the tree". Re-running the labelled draw at an unchanged tree gives a new `k`, a new seed and a new sample; rerunning until a point estimate falls at or under 4 is optional stopping on a point-estimate gate. Pre-state: a rerun at an unchanged tree reuses the same seed and the same labels (so it cannot change Q), or bar 3 uses the **largest** Q over runs at the tree. Also: the two labellers are LLM agent roles, so a 18-of-20 agreement is agreement of correlated judges, not independent human validation; the larger-Q rule below the floor is the right conservatism. I accept the floor, and say in the record that the labelled Q is a dev fit statistic that carries nothing about held-out noise.
+
+**N2 (major). Dev bar 3 versus "noise not measured".** The pieces fit (listing-only verdict, claim sentence "noise not measured", ceiling B an upper bound never reported as noise), with three loose ends:
+- The dev labelled Q gates the spend, yet the claim does not rest on it; say in `claimSentence` or `noise` that dev Q is not noise evidence for the claimed draw.
+- The ratified S1 5x bar and the possible-precision and p90 bars become reported-not-gating at the rehearsal and, on held-out, "only if the custodian's baseline exists". `-p1-ml.md` §5.3 supports gate 1 on Q only, but the plan's §1 says S1 holds in both baselines; state that the bars are deferred to P2's first gate, not waived, and name the gate that enforces them.
+- `whichBarsDecideWhat` adds "no unreviewed masked comparison" with no definition in the note; cite the harness's `blocked` class.
+
+**N3 (major). The cap's fresh-draw branch and the Q4 re-gate interact in undefined ways.**
+- Outcome (b), "draw fresh scripts items", selects a new list because of a predicate count. State how many redraws are allowed, that each redraw and its count are reported (a redraw until under the cap is a forking path), what the fresh supply is, and whether the withheld old list's scripts items may return as fresh candidates (recommend: not).
+- The ledger line carries `w` by shape letter before the ask. If builders read it, an over-cap count tells them which unbuilt shape the held-out draw holds. Say that the shape-letter counts go to custodian and `teco` only and are not a builder input for the fresh draw (the record's "no builder dispatch reads held-out material after R" does not obviously cover a derived count).
+- For a re-gate, say whether the 35-item fresh floor and the 25% cap are over the scored set (they should be).
+
+**N4 (major). Successor rules leave two spent outcomes unassigned.** `q4` and `ordering` cover: rehearsal miss (new `gate`), spent miss (`re-gate` with `movedOut`), cap refusal (nothing spent). `gate_kind` accepts `re-gate` with `{}` counts, but the record does not say which kind follows a spent run with no verdict: `minimums-not-met`, a `blocked` run, or a harness error after the once-only marker. Pre-state: such a run is a re-gate with `movedOut` `{}` and the burned draw stated, or a first-gate successor if nothing was asked. Also two ordinals named `r<k>` (record ids `ac5-gate-1-r<k>`, rehearsal ids `ac5-gate-1-dev-r<k>`) mean different things; harmless to the harness, a trap for a reader. The freeze-check permission is "once" per stakeholder: a successor record needs its own permission; say so.
+
+**N5 (judgement on the author's `c <= 58` correction). Right in direction, conditional in fact.** The author is right that removing items cannot raise the bound's `c` **when `c` counts the original S47 clusters that still hold at least one scored item**: the set only shrinks, so 58 stays a ceiling. My earlier wording ("holds only if no cluster was removed") was wrong in that case. The ceiling fails in two cases the record's unconditional sentence does not exclude: (a) if the custodian **re-clusters** the scored set, a withheld item that bridged two anchors can split one cluster into two and raise `c`; (b) on any fresh draw (cap branch (b), a re-gate) there is no 58 at all. Fix the wording: `c` is the count of original S47 cluster ids with at least one scored item, 58 is a ceiling for the first list only, and a fresh draw states its own `c`. The formula itself holds for any `c` if clusters are independent units.
+
+**m4 (minor).** A contact hit after the rehearsal moves clusters to dev, changes the dev gold hash, and sends the record back through a rehearsal on a gold that now holds contacted items the engine was never fit to; a miss there is a new F, a new record and a new freeze-check. The record states the cost; say also that the `once` permission would then be renewed.
+
+**n2 (nit).** The no-workaround item still reads "the three are disclosed", while the criterion's letter ("finds no literal") is unmet; the record admits it and defers to the analyst. Keep that wording; do not let a later document call item 2 "met".
+
+### Stopping condition (revised)
+
+Do not ask the held-out list if any of these hold: no labelled dev `Q_pooled` and `Q_scripts` at the final tree, or either above 4 (and, per N1, the largest over reruns at that tree); a rehearsal miss; no clean freeze-check at R; no ledger line with `c`, `w` by shape letter and the run count; `w >= 20` (stop: closed outcomes (a) or (b)). Falsified if a re-run of the withheld-scoring tests with the planted unlisted withheld item and a decoy does not give "not a miss" and "miss" respectively.
+
+### Proposed REVIEW.md lines
+
+None proposed. Reason: the class of finding here (a gate scorer's behaviour for a scoped-out item differing from the claim text) is caught by the existing "every check can fail and pass" line, and the harness test now plants the item.
