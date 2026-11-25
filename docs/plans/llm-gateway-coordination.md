@@ -81,3 +81,10 @@ Blocked: D11/D12 (ccg switchover) need "ccg P1 phase exit closed" — `docs/plan
 2026-11-24 stakeholder decisions (AskUserQuestion): (1) ccg P1-38 exit: PAUSE — D11/D12/D13 held until the ccg coordination records P1 closed; (2) tier-2: prepare runbook now; (3) Anthropic `tools`: DEFER to the falkor-chat follow-on (backlog item owed: `llm-gateway/docs/BACKLOG.md`, with `Depends on`/`Priority`/`Touches`).
 | D14 prep | `coder` | `a6ee3133137f013e4` | accepted | `llm-gateway/tests/deploy/*`, `llm-gateway/deploy/RUNBOOK.md` (human runs with sudo) | `analyst` + `security-expert` → approve with suggestions x3 rounds (analyst Pass 17-19, security Pass 11-13); committed 580b12db, 979c944d, 2d7b92bf, 3c632f01 | 365k+ tokens |
 Owed backlog items (to `llm-gateway/docs/BACKLOG.md`): Anthropic tool-call translation (follow-on); `keyholder log` reading rotated `calls.log.1`; `calls.log`/ledger pruning of `reservations`; embeddings (FR-14 follow-on); per-copy sha pin for client consumers; two client-contract tests (call_id/raw dropped, GatewayError→refusal class); `BrokerClient.Response.close_reason` exposure (D10 uses private `_call`); `HolderClient` ctor uid check (optional defence in depth); one unexplained 15-min test hang in a combined cpg run (D13 to watch).
+
+## Paused 2026-11-24 — restart note (fresh session)
+
+No delegate is in flight. Everything built is committed (D14 prep final at `3c632f01`). Cold-start order:
+1. Human runs `llm-gateway/deploy/RUNBOOK.md` (sudo); first commit/stash the in-flight `cpg/` work, take `SHA` ≥ `3c632f01`; docker-group decision open (blocks AC-5/D14 and step 13c). Paste-back (step 16) routes to `analyst` + `security-expert`.
+2. D11/D12/D13 stay held until `docs/plans/connected-code-graph-coordination.md` records the ccg P1-38 phase exit closed; never close it from here.
+3. Owed: D15 docs (plan §7); `llm-gateway/docs/BACKLOG.md` (items listed above, `wi mint-legacy`); feature close (live spec, `-impl` check, `REVIEW.md`, `HISTORY.md`); milestone freeze list.
