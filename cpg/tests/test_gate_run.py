@@ -404,8 +404,8 @@ class ScoreEnv:
         """The list changes, so its key does: the marker and the run file follow it (as they would for a run of that list)."""
         self.lists.write_text("".join(json.dumps(r) + "\n" for r in recs))
         self.key = G.list_key(recs)
-        kept, self.withheld = G.withhold_strata(recs, G.gated_strata(self.flow_flag))       # what a run of these lists would have recorded
-        self.shapes = G.withhold_shapes(kept, G.eval_commit_reader(self.repo))[1]
+        self.withheld = G.withhold_strata(recs, G.gated_strata(self.flow_flag))[1]       # what a run of these lists would have recorded
+        self.shapes = {"scriptsCounting": sum(1 for r in recs if r["derivedStratum"] == "scripts" and r.get("counting")), "withheld": 0, "byShape": {}}   # literal: no list here holds a shape
         self.write_marker("asked")
         self.write_run()
 

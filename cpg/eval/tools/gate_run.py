@@ -623,6 +623,7 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     records, withheld = G.withhold_strata(all_records, G.gated_strata(flag))
     records, shapes = G.withhold_shapes(records, G.eval_commit_reader(repo))      # a withheld-shape scripts item is never asked or scored (the scoped AC-5 wording)
     G.check_withheld_cap(shapes)                                 # over the 25% cap: exit 5 here, before the lock, the build and the marker; nothing spent
+    G.check_floors_after_exclusion(records, shapes, G.gated_strata(flag))        # the exclusion left the floors unmet (N4): the same exit, nothing spent
     marker = _marker_path(cust, key)
     if lock is not None:
         lock.take(cust, key)

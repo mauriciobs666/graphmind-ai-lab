@@ -1317,25 +1317,39 @@ def item_withheld_shape(rec: Mapping, file_text: Callable[[str], str | None]) ->
     path = imp.get("path")
     lang = _ws.language_tag(path) if isinstance(path, str) else None
     text = file_text(path) if lang else None
-    if rec.get("derivedStratum") != "scripts" or text is None:
+    if rec.get("derivedStratum") != "scripts" or text is None or "\r" in text:           # a bare CR: the line numbering is ambiguous, so the item is asked (fail closed)
         return None
     return _ws.withheld_shape({"path": path, "lines": rec.get("lines") or []}, text, lang)
 
 
 def withheld_counts(records: Iterable[Mapping], file_text: Callable[[str], str | None]) -> dict:
     """``{"scriptsCounting": n, "withheld": n, "byShape": {letter: n}}``: counts only, over the counting scripts items."""
-    rows = [r for r in records if r.get("derivedStratum") == "scripts" and r.get("counting", True)]
+    rows = [r for r in records if r.get("derivedStratum") == "scripts" and r.get("counting")]
     shapes = Counter(x for x in (item_withheld_shape(r, file_text) for r in rows) if x)
     return {"scriptsCounting": len(rows), "withheld": sum(shapes.values()), "byShape": dict(sorted(shapes.items()))}
 
 
 def withhold_shapes(records: Sequence[Mapping], file_text: Callable[[str], str | None]) -> tuple[list, dict]:
-    """``(kept, counts)``: the counting scripts items of a Q8 withheld shape are NOT asked or scored (the scoped AC-5 wording: "every counting item outside the
+    """``(kept, counts)``: the scripts items of a Q8 withheld shape, counting or not, are NOT asked or scored (the scoped AC-5 wording: "every counting item outside the
     named withheld shapes"; ruling on the prereg reviews' B1/M2). The decision is the predicate's alone, on the gold locator and the build tree's file text
     (:func:`eval_commit_reader`): nothing in the record but its stratum, ``counting`` flag, impacted path and gold lines is read. ``counts`` is
-    :func:`withheld_counts` over ``records`` (the same set the cap is checked on); floors, bounds and the verdict are then over ``kept``."""
-    kept = [r for r in records if not (r.get("derivedStratum") == "scripts" and r.get("counting", True) and item_withheld_shape(r, file_text))]
+    :func:`withheld_counts` over ``records`` (the COUNTING items only: a record with no ``counting`` key is non-counting here and in the scorer; the same set the cap is
+    checked on); floors, bounds and the verdict are then over ``kept``."""
+    kept = [r for r in records if not item_withheld_shape(r, file_text)]
     return kept, withheld_counts(records, file_text)
+
+
+def check_floors_after_exclusion(kept: Sequence[Mapping], counts: Mapping, gated: Sequence[str]) -> None:
+    """N4: when the exclusion removed counting items, the KEPT list must still be able to meet the AC-5 floors (:data:`MIN_COUNTING` pooled counting items,
+    :data:`MIN_STRATUM` per gated stratum), else the run could only end in "floor not met": :class:`PrecheckRefusal`, so ``run`` exits 5 before the lock, the
+    build and the marker and the list is not spent. Counts only. A list the exclusion did not touch is not judged here (its floors are ``score``'s)."""
+    if not counts["withheld"]:
+        return
+    pooled = sum(1 for r in kept if r.get("derivedStratum") in gated and r.get("counting"))
+    low = sorted(s for s in gated if sum(1 for r in kept if r.get("derivedStratum") == s) < MIN_STRATUM)
+    if pooled < MIN_COUNTING or low:
+        raise PrecheckRefusal(f"after the Q8 exclusion ({counts['withheld']} withheld) the list holds {pooled} counting items (floor {MIN_COUNTING}) and "
+                              f"{len(low)} gated strata under {MIN_STRATUM} items ({', '.join(low) or 'none'}): the floors cannot be met, the list is not spent")
 
 
 def check_withheld_cap(counts: Mapping) -> None:
@@ -1381,11 +1395,13 @@ def is_dev_rehearsal(repo: Path, records: Sequence[Mapping]) -> bool:
 
 
 def _git_show_text(repo: Path, rev: str, rel: str) -> str | None:
-    """``git show <rev>:<rel>`` of ``repo`` (read-only), or ``None`` when it fails (no such commit or path)."""
+    """``git show <rev>:<rel>`` of ``repo`` (read-only), or ``None`` when it fails (no such commit or path). Decoded from the bytes with ``\\r\\n`` read as one
+    newline and a BARE ``\\r`` kept as it is (universal-newline decoding would turn it into a line break and shift every later line, N3)."""
     try:
-        return subprocess.run(["git", "-C", str(repo), "show", f"{rev}:{rel}"], capture_output=True, text=True, check=True).stdout
+        raw = subprocess.run(["git", "-C", str(repo), "show", f"{rev}:{rel}"], capture_output=True, check=True).stdout
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return None
+    return raw.decode("utf-8", errors="replace").replace("\r\n", "\n")
 
 
 def confirmed_key_errors(repo: Path, committed_text: Callable[[Path], str] | None = None, record_commit: str | None = None) -> set[str]:
@@ -1669,6 +1685,8 @@ def main(argv=None, snapshot=None, repo: Path | None = None, preflight_fn: Calla
         records, withheld = withhold_strata(records, gated)
         if withheld != run["withheld"]:
             raise Refusal("the lists do not reproduce the withheld set the run recorded: score refuses")
+        # The split is recomputed from the tree at EVAL_COMMIT and compared by COUNTS with the run's. A committed edit of cpg/eval/EVAL_COMMIT after the run is
+        # out of the threat model (it is in HARNESS_FILES, pinned by the record, and the owner's edit is a visible commit): no digest of the withheld ids.
         records, shapes = withhold_shapes(records, eval_commit_reader(repo))
         if shapes != run.get("withheldShapes"):
             raise Refusal("the lists do not reproduce the withheld-shape counts the run recorded: score refuses")
