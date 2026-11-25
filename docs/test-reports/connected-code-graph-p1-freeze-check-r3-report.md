@@ -71,3 +71,27 @@ Authorised by the user in-session; names and counts only. A script read the out-
 - Hash `c4e35747a8e0` maps to **1** item.
 - That item belongs to the **`ac24`** held-out list only. It is in none of `ac5-http`, `ac5-mcp`, `ac5-scripts`, `ac5-flow`, `ac5-wiring`, `ac5-reserve` (0 items in each).
 - Distinct ac5 clusters: **0** (the item is not on an ac5 list; the cluster question does not arise).
+
+## Custodian spend values and S47 probe map (2026-11-25)
+
+Authorised by the user in-session (probe-map generation; the single AC-24-only freeze-check hit accepted as AC-5-clean, so the held-out run proceeds). Run custodian-side, in memory; no verb of the gate or split tools was run beyond the library calls below; no itemId, path, literal or shape letter printed; nothing committed. Record `ac5-gate-1-r3` (`31f60bf9`).
+
+**S47 probe map.** Generated as `split_manifest.split(records, units, contact_ids, eval_commit)["probe"]` (the file `gate.read_probe_map` reads) at `~/.local/share/ccg-eval/cf7b2042cce7/s47-probe-map.json`, mode 0600, created exclusively (no overwrite), outside the repo. **Entries: 3. sha256 prefix: `31063f1f7b62`.** Inputs: `work/s45/match-corrected.json`, `work/s45-context.json`, `work/contact.jsonl` (6 contact anchors, unchanged), eval commit `cf7b2042cce7bad5d0ab7876940bcea00343d914` (`cpg/eval/EVAL_COMMIT`). The probe depends only on the in-scope records and units, not on the contact or the move, so it is the gate-1 population's map that S47 used.
+
+**Reproduction check (stop condition not triggered).** The re-derived gate-1 split hashed to the pre-move manifest (`backup-pre-contact-move/heldout-manifest.json`) with 0 problems (the `regate-list` check, `gate1_problems`). The 7 files under `heldout2/` hash to the current `cpg/eval/heldout-manifest.json`: 0 mismatches of 7.
+
+**Ledger values** (gated strata http, mcp, scripts; flow flag false, wiring and flow withheld; scored set after the Q8 shape exclusion):
+
+| Value | Result |
+|---|---|
+| Items on the three gated lists / scored after exclusion | 120 / 110 |
+| **c** (original S47 cluster ids holding at least one scored item) | **44** (ceiling 52: met) |
+| **total w** (counting scripts items withheld by shape, of 64 counting scripts items; cap refuses at 17) | **10** (under the cap) |
+| Fresh scripts items available (in-scope, counting or not, not on any `heldout2/` ac5 list including the reserve, not in dev) | **0** |
+| Reserve scripts items (unseen, on `heldout2/ac5-reserve.jsonl`; the only scripts supply beyond the list) | 25, all counting |
+| sha256 of the sorted counted cluster-id list (compact JSON array of the ascending integer ids, no spaces) | `2d297b097e41578ca84e3fad4e1825e1e5990c164f6bf7e1bc6b34162d9ebbbe` |
+| Run count | 0 so far (this is the first run at `ac5-gate-1-r3`) |
+
+**Pins re-hashed from the files against the R3 record** (last line of `cpg/eval/preregistration.jsonl`): `heldoutManifestSha256` match **yes**; `devGoldSha256` (flow, http, mcp, scripts, wiring files under `cpg/eval/dev/`) match **yes**, 5 of 5.
+
+**Notes.** The cluster-id list is not printed; its hash is the audit handle, and the id serialization above is what to re-hash. "Fresh scripts items available" is 0 beyond the reserve, so a cap refusal (w at 17 or more) would have no fresh draw outside the reserve; w is 10, so the cap does not bite. The script lives only in the session scratchpad, not in the repo.
