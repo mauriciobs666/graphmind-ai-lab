@@ -797,7 +797,7 @@ def _file_pack_mutant(pack: dict, path: tuple):
 
 # The packs that are files only: id -> (the test module whose `behaviour_failures` is the pack's contract, the leaf count).
 # P1-49 registers `python-http-client`: its contract also carries the `httpx.Client` base-URL binding and `negatives.yaml`.
-FILE_PACKS = {"shell-mcp-call": ("test_pack_shell_mcp_call", 24), "python-http-client": ("test_pack_python_http_client", 162),
+FILE_PACKS = {"shell-mcp-call": ("test_pack_shell_mcp_call", 24), "shell-http-client": ("test_pack_shell_http_client", 64), "python-http-client": ("test_pack_python_http_client", 162),
               "ts-mcp-client": ("test_pack_ts_mcp_client", 26)}
 
 

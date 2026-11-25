@@ -566,8 +566,12 @@ not a P1 language).
 - **Behaviours:** Markdown is classified `prompt-md` or `doc` by the manifest's globs, so census scope equals
   evaluated scope (EP Q3); a `doc` produces a `<document>` symbol and no mentions (documentation snippets are not
   callers); a `prompt-md` file's mentions of a tool, script or command become call sites of kind `mention`,
-  `possible`/`prompt-mention`; fenced code in a prompt is not a call; the loader fails if the manifest is
-  absent or its glob list changed shape (a schema check).
+  `possible`/`prompt-mention`; fenced code in a prompt is not a call; a mention carries only its name, except the
+  `curl` URL carrier: the `curl` mention of an **inline** span also writes the span's first `http://` or `https://` token
+  as the `a0` literal `valueSet` of its call site (quotes dropped), nothing for a fence, a token with no host or with
+  userinfo, one failing `bundle.screen_fails` or past `NAME_CAP`, and nothing for `wget` (not a mention); the
+  `shell-http-client` pack reads it (`docs/plans/connected-code-graph-p1-closeout.md` section 3.3; no bundle-schema
+  change); the loader fails if the manifest is absent or its glob list changed shape (a schema check).
 - **Bare tool names.** A mention also names a tool by its bare name (`get_item` in prose, `reindex` in a table cell), but only
   against a vocabulary: `extract_markdown(..., known_tools: frozenset[str] = frozenset())` matches a bare name, on word
   boundaries in prose, inline spans and table cells and never in fenced code or front matter, only when it is in `known_tools`;

@@ -19,6 +19,13 @@ A mention is, outside fenced code (a fence is not a call, whatever it says):
 - **command**: the first word of an inline code span when it is one of ``COMMANDS`` (a closed list of CLI launchers),
   unless the span names a script (``bash x.sh`` mentions ``x.sh``, not ``bash``).
 
+A mention carries only its name, with one exception (CO-3, the URL carrier): the ``curl`` command mention of an *inline* span
+also carries the span's first ``http://`` or ``https://`` token as the ``a0`` literal ``valueSet`` of its call site
+(``curl -sf http://127.0.0.1:8200/health``), so a pack can read the URL it names. A fence is not a call, so a fenced ``curl``
+has no call site and no carrier. No carrier is written when the token has no host, has userinfo (``user:pw@``) in its
+authority, fails the token screen (``bundle.screen_fails``) or is over ``NAME_CAP`` characters; a surrounding ``"`` or ``'``
+pair is dropped; any other scheme (``ftp://``, ``file://``) is not a URL here.
+
 A front-matter ``disallowedTools:`` entry (a deny-list) is never a mention; ``tools:`` entries are.
 
 Not recognised, by design: indented code blocks (indistinguishable from list continuation without a full CommonMark
@@ -28,7 +35,7 @@ or followed; no regular expression here can backtrack beyond linear in a capped 
 ``MAX_MENTIONS`` call sites.
 
 This module writes none of the fields guarded by ``extractors/common/writer_rules.py`` (``command``, ``args``,
-``bindValue``, ``default``, ``valueHash``, ``defaultHash``): a mention carries only its name.
+``bindValue``, ``default``, ``valueHash``, ``defaultHash``): a mention carries its name and, for ``curl`` only, that one URL literal.
 """
 from __future__ import annotations
 
@@ -37,7 +44,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
-from ccg import ids
+from ccg import bundle, ids
 
 from .globs import Globs
 
@@ -52,6 +59,9 @@ COMMANDS = frozenset({
     "make", "claude", "opencode", "kiro-cli", "joern", "bash", "sh", "python", "python3", "node",
 })
 _SCRIPT_EXT = (".sh", ".py", ".js", ".mjs", ".ts")
+#: The command whose inline span carries its URL (CO-3). ``wget`` is not in ``COMMANDS``: no mention, so no carrier.
+_URL_CARRIERS = frozenset({"curl"})
+_URL_SCHEMES = ("http://", "https://")
 
 _MCP = re.compile(r"mcp__[A-Za-z0-9][A-Za-z0-9-]{0,63}__[A-Za-z0-9_][A-Za-z0-9_-]{0,63}")
 _SCRIPT = re.compile(r"(?:\.{1,2}/)?(?:[A-Za-z0-9_.-]{1,80}/){0,8}[A-Za-z0-9_-][A-Za-z0-9_.-]{0,80}")
@@ -138,8 +148,24 @@ def _is_script(token: str) -> bool:
     return (token.lower().endswith(_SCRIPT_EXT) and len(token) <= NAME_CAP and _SCRIPT.fullmatch(token) is not None)
 
 
+def _carried_url(text: str) -> str | None:
+    """The first ``http(s)://`` token of an inline span's text, unquoted, when it may be written as a literal: it has a host and no
+    userinfo in its authority, passes the token screen and is at most ``NAME_CAP`` characters; else ``None``."""
+    for raw in text.split():
+        tok = raw[1:-1] if len(raw) > 2 and raw[0] == raw[-1] and raw[0] in "\"'" else raw
+        if not tok.startswith(_URL_SCHEMES):
+            continue
+        authority = tok.split("//", 1)[1]
+        for stop in "/?#":
+            authority = authority.split(stop, 1)[0]
+        if not authority or "@" in authority or len(tok) > NAME_CAP or bundle.screen_fails(tok):
+            return None
+        return _norm(tok)
+    return None
+
+
 def _span_mentions(content: str, col: int):
-    """(name, column) for the script and command mentions of one inline code span."""
+    """(name, column, url) for the script and command mentions of one inline code span; ``url`` is the carried URL (``curl`` only)."""
     text = content.strip()
     if not text or len(text) > 300:
         return
@@ -160,10 +186,12 @@ def _span_mentions(content: str, col: int):
             tokens.append((text[s:pos], base + s))
     scripts = [(t, c) for t, c in tokens if _is_script(t)]
     if scripts:
-        yield from scripts
+        for t, c in scripts:
+            yield t, c, None
         return
     if tokens and tokens[0][0] in COMMANDS:
-        yield tokens[0]
+        name, c = tokens[0]
+        yield name, c, (_carried_url(text) if name in _URL_CARRIERS else None)
 
 
 def _check_path(name: str, p: str) -> None:
@@ -219,8 +247,8 @@ def _bare_ok(line: str, start: int, end: int) -> bool:
 
 
 def _scan(lines: list[str], capped: list[int], known: frozenset[str]):
-    """The mentions ``(line, column, name)`` of an already-split file, in source order, outside fences."""
-    out: list[tuple[int, int, str]] = []
+    """The mentions ``(line, column, name, url)`` of an already-split file, in source order, outside fences."""
+    out: list[tuple[int, int, str, str | None]] = []
     fence: tuple[str, int] | None = None
     fm_end = _front_matter_end(lines)
     key = ""
@@ -234,7 +262,7 @@ def _scan(lines: list[str], capped: list[int], known: frozenset[str]):
                 key = m.group()[:-1].lower()
             if key == "disallowedtools":
                 continue
-            out.extend((n, mm.start(), mm.group()) for mm in _MCP.finditer(line[:LINE_CAP]))
+            out.extend((n, mm.start(), mm.group(), None) for mm in _MCP.finditer(line[:LINE_CAP]))
             continue
         if len(line) > LINE_CAP:
             line = line[:LINE_CAP]
@@ -247,13 +275,16 @@ def _scan(lines: list[str], capped: list[int], known: frozenset[str]):
         if run and not (run[0] == "`" and "`" in run[2]):
             fence = (run[0], run[1])
             continue
-        found = [(m.start(), m.group()) for m in _MCP.finditer(line)]
+        found: dict[tuple[int, str], str | None] = {(m.start(), m.group()): None for m in _MCP.finditer(line)}
         for content, col in _spans(line):
-            found.extend((c, t) for t, c in _span_mentions(content, col))
+            for t, c, url in _span_mentions(content, col):
+                found.setdefault((c, t), url)
         if known:
-            found.extend((w.start(), w.group()) for w in _WORD.finditer(line) if w.group() in known and _bare_ok(line, w.start(), w.end()))
-        for col, name in sorted(set(found)):
-            out.append((n, col, name))
+            for w in _WORD.finditer(line):
+                if w.group() in known and _bare_ok(line, w.start(), w.end()):
+                    found.setdefault((w.start(), w.group()), None)
+        for (col, name), url in sorted(found.items()):
+            out.append((n, col, name, url))
     return out
 
 
@@ -305,12 +336,16 @@ def extract_markdown(repo_path: str, data: bytes, *, repo_id: str, unit_id: str,
         mentions = mentions[:MAX_MENTIONS]
         ex.mentions_capped = True
     seen: dict[str, int] = {}
-    for line, _col, name in mentions:         # source order is the (line, column) order of §5.7
+    for line, _col, name, url in mentions:    # source order is the (line, column) order of §5.7
         name = _norm(name)
         ordinal = seen.get(name, 0)
         seen[name] = ordinal + 1
         records.append({"type": "callsite", "id": ids.callsite_id(sid, name, ordinal), "symbolId": sid,
                         "calleeName": name, "ordinal": ordinal, "callKind": "mention", "line": line,
                         "resolution": "unresolved", "targets": [], "status": "possible", "reason": "prompt-mention"})
+        if url is not None:
+            site = records[-1]["id"]
+            records.append({"type": "valueSet", "id": ids.value_set_id(site, "a0"), "callSiteId": site, "arg": "a0",
+                            "values": [{"const": url}]})
         ex.names.append(name)
     return ex

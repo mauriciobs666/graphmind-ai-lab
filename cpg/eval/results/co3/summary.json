@@ -1,0 +1,41 @@
+{
+ "files": 1332,
+ "items": 6,
+ "truncated": null,
+ "devTargets": [
+  {
+   "path": "claude/teco/coordination-techniques.md",
+   "family": "http-md-inline-span",
+   "hit": true,
+   "status": "possible"
+  },
+  {
+   "path": "falkor-chat/scripts/load_test.sh",
+   "family": "L",
+   "hit": true,
+   "status": "possible"
+  },
+  {
+   "path": "falkor-chat/scripts/seed_nlq_eval_corpus.sh",
+   "family": "L",
+   "hit": true,
+   "status": "possible"
+  },
+  {
+   "path": "claude/teco/hooks/ensure-environment.sh",
+   "family": "L",
+   "hit": true,
+   "status": "possible"
+  }
+ ],
+ "consumersByRuleStatusReason": {
+  "command/confirmed/lifted-role": 7,
+  "command/possible/partial-key": 7,
+  "command/possible/runtime-built": 1,
+  "mention/possible/prompt-mention": 5
+ },
+ "consumersByKeyShape": {
+  "other": 15,
+  "GET /health": 5
+ }
+}

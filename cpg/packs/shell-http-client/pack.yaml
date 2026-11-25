@@ -1,0 +1,49 @@
+# CO-3 (DEF-1): the shell `curl`/`wget` consumer of an HTTP contract, and the inline Markdown `curl` span that names a URL.
+# Plan: docs/plans/connected-code-graph-p1-closeout.md section 3.3. Not in the rule-pack spec (docs/plans/connected-code-graph-rule-pack-spec.md):
+# `status: paper` is the only value the v1 format allows, not a claim that no runtime exists.
+# `callKind: command` is the shell extractor's call kind (bundle spec3 section 5.6); `callKind: mention` is the Markdown extractor's.
+# The URL is not at a fixed position (`curl -sf URL`, `curl -sf -m 5 URL`, `curl -s -o /dev/null -w FMT --max-time 2 URL`), and a rule
+# `args` value matcher reads constants only (a template URL with a dynamic port is not one), so each argument position a0..a9 is a seed
+# of one lifting and `urlLike` keeps the URL-like alternatives (`http://...`, a dynamic origin then `/`, a leading `/`): a flag, a number
+# or a word names no URL. The host is dropped by the key normalizer (the runtime's rule 1, as for `python-http-client`).
+# The verb is `GET`: the format has no flag grammar. Known limits, pinned in tests/test_pack_shell_http_client.py: `-X POST` is keyed GET;
+# `urlLike` also keeps `-o /tmp/out` and a constant `ftp://` URL (the Markdown carrier writes only `http(s)`).
+# Markdown: the extractor writes the span's first `http(s)://` token as the `a0` literal of its `curl` call site (inline span only;
+# a fence is not a call; no flow reaches a Markdown call site, so no `ownSite`), so the mention rule reads `a0` only and is always `possible`/`prompt-mention` (a prose mention proves nothing).
+packFormat: 1
+id: shell-http-client
+version: 0.1.0
+kind: protocol
+vocabVersion: "1.0"
+status: paper
+link: [{kind: http, matcher: path-template}]
+liftings:
+  - id: command-url
+    role: {kind: http, slot: url}
+    seeds:
+      - {call: {callee: {regex: "curl|wget"}, callKind: command}, arg: a0}
+      - {call: {callee: {regex: "curl|wget"}, callKind: command}, arg: a1}
+      - {call: {callee: {regex: "curl|wget"}, callKind: command}, arg: a2}
+      - {call: {callee: {regex: "curl|wget"}, callKind: command}, arg: a3}
+      - {call: {callee: {regex: "curl|wget"}, callKind: command}, arg: a4}
+      - {call: {callee: {regex: "curl|wget"}, callKind: command}, arg: a5}
+      - {call: {callee: {regex: "curl|wget"}, callKind: command}, arg: a6}
+      - {call: {callee: {regex: "curl|wget"}, callKind: command}, arg: a7}
+      - {call: {callee: {regex: "curl|wget"}, callKind: command}, arg: a8}
+      - {call: {callee: {regex: "curl|wget"}, callKind: command}, arg: a9}
+    ownSite: true
+    urlLike: true
+  - id: mention-url
+    role: {kind: http, slot: url}
+    seeds:
+      - {call: {callee: {regex: "curl|wget"}, callKind: mention}, arg: a0}
+    urlLike: true
+rules:
+  - id: command
+    match: {lifted: {lifting: command-url}}
+    extract: {url: {lifted: url}, verb: {literal: GET}}
+    emit: [{consumes: {kind: http, key: "{verb} {url}"}}]
+  - id: mention
+    match: {lifted: {lifting: mention-url}}
+    extract: {url: {lifted: url}, verb: {literal: GET}}
+    emit: [{consumes: {kind: http, key: "{verb} {url}", status: possible, reason: prompt-mention}}]

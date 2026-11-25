@@ -1,0 +1,75 @@
+# CO-3: text the pack must NOT turn into an http consumer, per rule id. Each text goes through the real extractor (tests/
+# test_pack_shell_http_client.py): `command` through the shell extractor, `mention` through the Markdown extractor on a prompt path,
+# so a comment is a comment to the parser and a fence is a fence to the scanner, not to a regex. One decoy per axis: every text holds
+# a `curl`/`wget` word (or, for `word-in-prose`, the bare word) so a rule that matched on the word alone would fire.
+# Known limits (not negatives; pinned in the test file): `curl -X POST` is keyed GET, `-o /tmp/out` and a constant `ftp://` URL in a
+# shell script are URL-like to the runtime's `urlLike`, a shell URL with plain `user:pw@` userinfo keeps its path key.
+negatives:
+  command:
+    unrelated-url: |
+      curl -sf -m 5 example.com/health
+      curl --version
+      wget -q -O out.txt
+      curl -sf -m 5 "$1"
+    scheme-less-host: |
+      curl -sf localhost:8200/health
+      curl -sf 127.0.0.1:8200/health
+    comment: |
+      # curl -sf http://127.0.0.1:8200/health
+      echo done  # wget http://127.0.0.1:8200/health
+    quoted-example: |
+      echo "poll curl -sf http://127.0.0.1:8200/health until 200"
+      printf '%s\n' 'wget -qO- http://127.0.0.1:8200/health'
+      msg='curl -sf http://127.0.0.1:8200/health'
+    heredoc: |
+      cat <<'EOF'
+      curl -sf http://127.0.0.1:8200/health
+      EOF
+      cat <<DOC
+      wget -qO- http://127.0.0.1:8200/health
+      DOC
+    token-shaped-userinfo: |
+      curl -sf http://svc:ghp_a1B2c3D4e5F6g7H8i9J0@127.0.0.1:8200/health
+      curl -sf "http://tok:0123456789abcdef0123456789abcdef@127.0.0.1:8200/health"
+    curl-as-argument-of-another-command: |
+      command -v curl
+      which curl
+      type -P wget
+      xargs curl http://127.0.0.1:8200/health
+      ssh host curl http://127.0.0.1:8200/health
+    similar-name: |
+      curls -sf http://127.0.0.1:8200/health
+      xcurl http://127.0.0.1:8200/health
+      ./curl http://127.0.0.1:8200/health
+      wget2 http://127.0.0.1:8200/health
+  mention:
+    unrelated-url: |
+      Probe with `curl -sf example.com/health` first.
+      Or `curl --version`.
+    fenced-block: |
+      Start it, then:
+
+      ```bash
+      curl -sf http://127.0.0.1:8200/health
+      ```
+
+      ~~~
+      wget -qO- http://127.0.0.1:8200/health
+      ~~~
+    word-in-prose: |
+      Use curl to poll the server; curl is installed everywhere. wget is not.
+      The health URL is http://127.0.0.1:8200/health, fetched by curl.
+    non-http-scheme: |
+      Fetch it with `curl ftp://127.0.0.1/health`.
+      Or `curl file:///etc/health` or `curl redis://127.0.0.1:6379/health`.
+    credentials: |
+      Probe `curl -sf http://admin:hunter2@127.0.0.1:8200/health` first.
+    token-shaped-userinfo: |
+      Probe `curl -sf http://svc:ghp_a1B2c3D4e5F6g7H8i9J0@127.0.0.1:8200/health` first.
+      Or `curl -sf http://tok:0123456789abcdef0123456789abcdef@127.0.0.1:8200/health`.
+    token-shaped-path: |
+      Probe `curl -sf http://127.0.0.1:8200/ghp_a1B2c3D4e5F6g7H8i9J0k1L2` first.
+    url-outside-the-span: |
+      The server answers at http://127.0.0.1:8200/health; run `curl -sf` against it.
+    similar-name: |
+      Probe `curls -sf http://127.0.0.1:8200/health` or `xcurl http://127.0.0.1:8200/health`.

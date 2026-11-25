@@ -676,3 +676,108 @@ def test_empty_dot_and_dotdot_segments_are_refused_so_no_separate_slash_check_is
     from ccg.globs import check_block
     with pytest.raises(ManifestError, match="unsupported glob"):
         check_block({"include": [glob]})
+
+
+# --- CO-3: the URL carrier of an inline `curl` span (`docs/plans/connected-code-graph-p1-closeout.md` section 3.3) ---------------------
+
+URL = "http://127.0.0.1:8200/health"
+
+
+def value_sets(ex):
+    return [r for r in ex.records if r["type"] == "valueSet"]
+
+
+def curl_site(ex, ordinal=0):
+    return [c for c in callsites(ex) if c["calleeName"] == "curl"][ordinal]
+
+
+def test_an_inline_curl_span_carries_its_first_http_url_as_the_a0_literal_of_its_call_site(globs):
+    ex = run(PROMPT_PATH, f"Poll `curl -sf {URL}` until 200.\n".encode(), globs)
+    (vs,) = value_sets(ex)
+    cs = curl_site(ex)
+    assert (vs["callSiteId"], vs["arg"], vs["values"], vs["id"]) == (cs["id"], "a0", [{"const": URL}], ids.value_set_id(cs["id"], "a0"))
+    assert cs["callKind"] == "mention" and (cs["status"], cs["reason"]) == ("possible", "prompt-mention")
+    assert [r["type"] for r in ex.records[:2]] == ["file", "symbol"]
+
+
+@pytest.mark.parametrize("span, url", [
+    ("curl https://example.org/health", "https://example.org/health"),
+    ("$ curl -sf -m 5 http://localhost:8200/health", "http://localhost:8200/health"),
+    ("curl -sf http://a.test/x http://b.test/y", "http://a.test/x"),             # the first one
+    ('curl -sf "http://127.0.0.1:8200/health"', "http://127.0.0.1:8200/health"),   # a quoted token is unquoted
+    ("curl -sf 'http://127.0.0.1:8200/health'", "http://127.0.0.1:8200/health"),
+    ("curl -sf -H x http://127.0.0.1:8200/health?x=1", "http://127.0.0.1:8200/health?x=1"),
+])
+def test_the_first_http_or_https_token_of_the_span_is_the_literal(globs, span, url):
+    ex = run(PROMPT_PATH, f"See `{span}`.\n".encode(), globs)
+    assert [v["values"] for v in value_sets(ex)] == [[{"const": url}]]
+
+
+@pytest.mark.parametrize("span", [
+    "curl ftp://127.0.0.1/health", "curl file:///etc/passwd", "curl redis://127.0.0.1:6379/0", "curl HTTP://127.0.0.1/health",
+    "curl -sf 127.0.0.1:8200/health", "curl example.com/health", "curl --version", "curl",
+    "curl -sf http://", "curl -sf https://",                                        # no host: not a URL
+    "curl -sf http://admin:hunter2@127.0.0.1:8200/health",                           # credentials in the authority
+    "curl -sf http://admin@127.0.0.1:8200/health",
+    "curl -sf http://svc:ghp_a1B2c3D4e5F6g7H8i9J0@127.0.0.1:8200/health",            # token-shaped userinfo (screen T1)
+    "curl -sf http://127.0.0.1:8200/ghp_a1B2c3D4e5F6g7H8i9J0k1L2",                   # token-shaped path (screen T1)
+    "curl -sf http://127.0.0.1:8200/0123456789abcdef0123456789abcdef",               # a hex run (screen T3)
+    "curl -sf http://127.0.0.1:8200" + "/ab" * 70,                                    # past the cap (210 characters, no screen hit)
+])
+def test_no_carrier_for_a_non_http_scheme_credentials_a_token_shaped_url_or_no_url(globs, span):
+    ex = run(PROMPT_PATH, f"See `{span}`.\n".encode(), globs)
+    assert value_sets(ex) == []
+    assert [c["calleeName"] for c in callsites(ex)] == ["curl"]            # the mention itself is unchanged
+
+
+def test_a_fenced_curl_has_no_call_site_and_so_no_carrier(globs):
+    text = f"Run:\n\n```bash\ncurl -sf {URL}\n```\n\n~~~\ncurl -sf {URL}\n~~~\n"
+    ex = run(PROMPT_PATH, text.encode(), globs)
+    assert callsites(ex) == [] and value_sets(ex) == []
+
+
+def test_curl_as_a_word_of_prose_or_a_url_outside_the_span_has_no_carrier(globs):
+    ex = run(PROMPT_PATH, f"Use curl to poll {URL} until 200; wget works too.\nProbe `curl -sf` against {URL}.\n".encode(), globs)
+    assert value_sets(ex) == []
+
+
+def test_each_curl_span_carries_its_own_url_by_ordinal(globs):
+    text = "A `curl -sf http://127.0.0.1:8200/health`, B `curl --version`, C `curl http://127.0.0.1:8200/channels`.\n"
+    ex = run(PROMPT_PATH, text.encode(), globs)
+    by_site = {v["callSiteId"]: v["values"] for v in value_sets(ex)}
+    assert by_site == {curl_site(ex, 0)["id"]: [{"const": "http://127.0.0.1:8200/health"}],
+                       curl_site(ex, 2)["id"]: [{"const": "http://127.0.0.1:8200/channels"}]}
+    assert [c["ordinal"] for c in callsites(ex)] == [0, 1, 2]
+
+
+def test_a_span_that_names_a_script_or_another_command_carries_no_url(globs):
+    ex = run(PROMPT_PATH, f"`bash x.sh {URL}`, `docker run {URL}`, `git clone https://example.org/r.git`.\n".encode(), globs)
+    assert [c["calleeName"] for c in callsites(ex)] == ["x.sh", "docker", "git"] and value_sets(ex) == []
+
+
+def test_a_known_tool_named_curl_does_not_drop_the_carrier(globs):
+    ex = run(PROMPT_PATH, f"Poll `curl -sf {URL}`.\n".encode(), globs, known_tools=frozenset({"curl"}))
+    assert [c["calleeName"] for c in callsites(ex)] == ["curl"] and [v["values"] for v in value_sets(ex)] == [[{"const": URL}]]
+
+
+def test_a_url_of_exactly_the_cap_is_carried_and_one_more_is_not(globs):
+    at = "http://127.0.0.1:8200" + "/ab" * 59 + "/a"          # 21 + 177 + 2 = 200
+    assert len(at) == mdx.NAME_CAP
+    assert [v["values"] for v in value_sets(run(PROMPT_PATH, f"`curl {at}`\n".encode(), globs))] == [[{"const": at}]]
+    assert value_sets(run(PROMPT_PATH, f"`curl {at}a`\n".encode(), globs)) == []
+
+
+def test_a_doc_class_file_has_neither_call_site_nor_carrier(globs):
+    ex = run(DOC_PATH, f"Poll `curl -sf {URL}`.\n".encode(), globs)
+    assert [r["type"] for r in ex.records] == ["file", "symbol"]
+
+
+def test_a_bundle_with_the_carrier_validates_and_counts_it(globs):
+    recs = as_bundle([run(PROMPT_PATH, f"Poll `curl -sf {URL}`.\n".encode(), globs)])
+    bundle.validate(recs)
+    assert recs[0]["counts"]["valueSet"] == 1 and recs[0]["counts"]["callsite"] == 1
+
+
+def test_the_carrier_is_a_pure_function_of_the_bytes(globs):
+    data = f"Poll `curl -sf {URL}` and `curl -sf {URL}`.\n".encode()
+    assert run(PROMPT_PATH, data, globs).records == run(PROMPT_PATH, data, globs).records
