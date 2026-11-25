@@ -2,6 +2,11 @@
  "confirmed": [
   {
    "confirmedBy": "user",
+   "date": "2026-11-25",
+   "itemId": "7fc6a23c205a1a82a393d0918dbae59c"
+  },
+  {
+   "confirmedBy": "user",
    "date": "2026-11-24",
    "itemId": "e8c36e15140be75bab4c3552c5e381c1"
   },
