@@ -616,7 +616,7 @@ def test_the_candidate_names_keep_their_meaning_and_v_both_is_the_shipped_table(
 
 def test_the_default_walk_and_definition_are_the_v_both_table_with_the_mention_bound_at_1_3_and_the_caller_only_table_keeps_1_1():
     """P1-39d flips the default to V-both (P1-23d added the table and the pin); the mention bound makes the default ``1.3``, the explicit V-both table stays ``1.2``."""
-    assert {k: v for k, v in bfs.definition().items() if k != "mentionBound"} == bfs.definition(bfs.SHIPPED_ROWS) != bfs.definition(bfs.ROWS)
+    assert {k: v for k, v in bfs.definition().items() if k not in ("mentionBound", "mentionReasons")} == bfs.definition(bfs.SHIPPED_ROWS) != bfs.definition(bfs.ROWS)
     assert bfs.definition()["mentionBound"] == 1
     assert bfs.algorithm_version() == "1.3" and bfs.algorithm_version(bfs.definition(bfs.SHIPPED_ROWS)) == "1.2"
     assert bfs.algorithm_version(bfs.definition(bfs.ROWS)) == "1.1"

@@ -6,8 +6,8 @@ DEFAULT_DEPTH_BOUND = 2
 #: the mention bound: a hop whose reason is in ``MENTION_REASONS`` is never followed to an arrival past this distance (``min(request bound, MENTION_BOUND)``), by the walk's
 #: ``unexplored`` cut; read by ``ccg.engine.bfs.walk`` for the shipped table and part of its definition's version (``docs/plans/connected-code-graph-p1-noise-fix.md`` §4)
 MENTION_BOUND = 1
-#: the mention class: the edge reasons of a name that occurs in prose (it asserts no call, data or control dependence); read by ``ccg.engine.bfs.walk``. Not part of the definition's
-#: fingerprint (the reason set is code, like the cost order: a change here is a version bump by review, not by the fingerprint)
+#: the mention class: the edge reasons of a name that occurs in prose (it asserts no call, data or control dependence); read by ``ccg.engine.bfs.walk`` and part of its definition's version
+#: (``mentionReasons``). A cut mention edge is counted in ``Walk.unexplored`` even when its target is already reached closer (the back edge to the anchor of a callee run): the count is of cut stored edges
 MENTION_REASONS: frozenset[str] = frozenset({"prompt-mention"})
 #: the level-synchronous walk's guard (a cycle that escapes the visited set raises, never loops); read by ``ccg.engine.bfs.walk``, not part of its algorithm version
 LEVEL_GUARD = 64

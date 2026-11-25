@@ -1278,3 +1278,27 @@ def test_a_contract_anchor_whose_walk_reaches_flag_false_code_carries_the_notice
     assert len(doc["items"]) == 2 and doc["notices"] == notice("javascript", "python")
     depends, _ = built(g, ids_, cp_anchor, "cp1", question="depends-on")
     assert depends["items"] == [] and "notices" not in depends          # nothing of the contract is a dependency: no code node is visited
+
+
+def _callee_world(status):
+    """``C`` calls the anchor ``A`` (confirmed) and, from a second site, ``B`` by ``status``: ``B`` is a callee run at distance 2 in the flag-false unit."""
+    g = caller_world_g(flow=False, lang="markdown")
+    g.sym("B", "svc/b.py::B", path="svc/b.py", start=1, end=5, unit="u2")
+    g.site("cB", "C", line=14, callee="B", path="svc/c.py", unit="u2")
+    g.calls("cB", "B", status=status[0], reason=status[1])
+    return hexify(g)
+
+
+def test_a_mention_cut_is_a_valid_1_3_answer_whose_unexplored_count_the_render_states():
+    """The mention bound (``-p1-noise-fix.md`` §4) reaches the answer as ``depthBound.unexplored``; the render words it by the request bound (``Reach stopped at distance 2``)."""
+    from ccg.render.text import render_text
+    g, ids_ = _callee_world(("possible", "prompt-mention"))
+    doc, _ = built(g, ids_, sym_anchor, "A")
+    answer.validate(doc)
+    assert doc["recipe"]["algorithm"] == {"id": "bfs-v1", "version": "1.3"}
+    assert {subject_id(i) for i in doc["items"]} == {ids_["C"]}                  # ``B`` is not listed: the mention hop was cut
+    assert doc["depthBound"]["bound"] == 2 and doc["depthBound"]["unexplored"] == 1
+    assert "Reach stopped at distance 2 with 1 unexplored edges." in render_text(doc)
+    g2, ids2 = _callee_world(("confirmed", "resolved-call"))                      # the same shape with a confirmed hop is listed and cuts nothing
+    doc2, _ = built(g2, ids2, sym_anchor, "A")
+    assert ids2["B"] in {subject_id(i) for i in doc2["items"]} and doc2["depthBound"]["unexplored"] == 0

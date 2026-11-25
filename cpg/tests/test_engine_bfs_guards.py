@@ -23,8 +23,8 @@ from test_engine_bfs_rows import caller_chain, contract_graph, depends_graph, wi
 PINNED_1_1 = "5cf047c14e43da44d0363707d3036080"
 #: ``bfs.fingerprint(bfs.definition(bfs.SHIPPED_ROWS))``: computed once from the record of the V-both table (53 rows, ``DEFAULT_DEPTH_BOUND``), then pinned as a literal (P1-23d)
 PINNED_1_2 = "39e7ab0280ea38fcba30754caa2595b0"
-#: ``bfs.fingerprint(bfs.definition())``: the V-both table with ``depthBound`` 2 and ``mentionBound`` 1 (the mention bound, ``docs/plans/connected-code-graph-p1-noise-fix.md`` §4), pinned as a literal
-PINNED_1_3 = "0d5d961ea53c3217468ed1e9ed148a28"
+#: ``bfs.fingerprint(bfs.definition())``: the V-both table with ``depthBound`` 2 and ``mentionBound`` 1 and ``mentionReasons`` (the mention bound, ``docs/plans/connected-code-graph-p1-noise-fix.md`` §4), pinned as a literal
+PINNED_1_3 = "67939d6475b8f414b0489e17a053e0a5"
 
 
 # --------------------------------------------------------------------------- the level guard (a cycle that escapes the visited set raises, never loops)
@@ -539,3 +539,18 @@ def test_an_explicit_mention_bound_larger_than_the_request_bound_is_capped_by_th
     assert items_by_id(run(g, ("Symbol", "A"), bound=2, mention_bound=5))["B"].distance == 2
     assert items_by_id(run(g, ("Symbol", "A"), bound=2, mention_bound=None))["B"].distance == 2
     assert "B" not in items_by_id(run(g, ("Symbol", "A"), bound=2, mention_bound=1))
+
+
+@pytest.mark.parametrize("reasons", [frozenset({"prompt-mention", "name-match"}), frozenset(), frozenset({"runtime-built"})])
+def test_a_changed_mention_reason_set_leaves_no_version_mapped(monkeypatch, reasons):
+    """The reason set is part of the shipped definition (``mentionReasons``): widening, narrowing or emptying it needs a new version."""
+    monkeypatch.setattr(config, "MENTION_REASONS", reasons)
+    with pytest.raises(bfs.WalkError, match="no algorithm version maps"):
+        bfs.algorithm_version()
+    with pytest.raises(bfs.WalkError, match="no algorithm version maps"):
+        run(caller_chain(1), ("Symbol", "S0")).version()
+
+
+def test_the_definition_lists_the_mention_reasons_sorted():
+    assert bfs.definition()["mentionReasons"] == ["prompt-mention"]
+    assert "mentionReasons" not in bfs.definition(bfs.SHIPPED_ROWS)

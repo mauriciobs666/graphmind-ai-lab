@@ -22,7 +22,7 @@ cycles, cond-to-cond ``CONTROLLED_BY``, recursion; F-12, C1).
 (``config.DEFAULT_DEPTH_BOUND``) never cuts an increment-0 row; an increment-1 row from an arrival already at the bound is not followed, its stored edges are kept on
 that arrival, and :attr:`Walk.unexplored` counts the distinct stored edges of the final kept arrivals (``-answer-spec2.md`` §4.2). **The mention bound** (``config.MENTION_BOUND``,
 ``config.MENTION_REASONS``; ``docs/plans/connected-code-graph-p1-noise-fix.md`` §4) cuts the same way a hop of any increment whose edge reason is in the mention class and whose arrival would be
-past distance 1: a name in prose is a sound first hop and no premise for a second. It is the one rule keyed on a reason, in either column, and part of the shipped definition (``mentionBound``).
+past distance 1: a name in prose is a sound first hop and no premise for a second. It is the one rule keyed on a reason, in either column, and part of the shipped definition (``mentionBound``, ``mentionReasons``).
 
 **A config entry reaches only the sites it binds** (``-p1-graph.md`` G7, §5): ``BOUND_BY <-`` enters the ``Link`` in a ``site(siteId)`` state and ``VIA <-`` from it lists
 that site's ``CallSite`` only. A ``Link`` is never an anchor (:class:`WalkError`).
@@ -212,13 +212,13 @@ def _mention_bound(table: Sequence[Row] | None, mention_bound: Any) -> int | Non
 
 def definition(table: Sequence[Row] | None = None, *, bound: int | None = None, mention_bound: Any = _SHIPPED_MENTION) -> dict[str, Any]:
     """The walk definition record (``-answer-spec2.md`` §1.2): the table plus one identifier per part that is code, the depth bound (index D3) and, when the walk has one,
-    the mention bound (``mentionBound``: ``config.MENTION_BOUND`` for the shipped table, none for an explicit one, so ``definition(ROWS)`` is ``1.1`` and
+    the mention bound and class (``mentionBound``, ``mentionReasons``: ``config.MENTION_BOUND`` and the sorted ``config.MENTION_REASONS`` for the shipped table, none for an explicit one, so ``definition(ROWS)`` is ``1.1`` and
     ``definition(SHIPPED_ROWS)`` is ``1.2``)."""
     rows = SHIPPED_ROWS if table is None else tuple(table)
     mb = _mention_bound(table, mention_bound)
     return {**{"id": "bfs-v1", "rows": [r.record() for r in rows], "items": {c: sorted([*k, v] for k, v in _ITEM_RULES[c].items()) for c in COLUMNS},
             "extraReads": {k: list(v) for k, v in sorted(EXTRA_READS.items())}, "costOrder": COST_ORDER, "flowFallback": FLOW_FALLBACK, "unexplored": UNEXPLORED_RULE,
-            "depthBound": config.DEFAULT_DEPTH_BOUND if bound is None else bound}, **({} if mb is None else {"mentionBound": mb})}
+            "depthBound": config.DEFAULT_DEPTH_BOUND if bound is None else bound}, **({} if mb is None else {"mentionBound": mb, "mentionReasons": sorted(config.MENTION_REASONS)})}
 
 
 def fingerprint(record: Mapping[str, Any]) -> str:
@@ -230,7 +230,7 @@ def fingerprint(record: Mapping[str, Any]) -> str:
 #: flag gates, the ``function`` state and its labelled rows, ``flow:r``, ``Row.item``; the V-both-only item rules left the shipped record) because no answer carrying ``1.1`` has been emitted on ``main``: the
 #: builder (P1-39b, ``ccg.engine.answer_build``) is the first thing that emits it: from its first commit on ``main`` ``1.1`` is published and a change is ``1.2`` (``-answer-spec2.md`` §1.2).
 ALGORITHM_VERSIONS: dict[str, str] = {"1.1": "5cf047c14e43da44d0363707d3036080", "1.2": "39e7ab0280ea38fcba30754caa2595b0",
-                                    "1.3": "0d5d961ea53c3217468ed1e9ed148a28"}
+                                    "1.3": "67939d6475b8f414b0489e17a053e0a5"}
 
 
 def algorithm_version(record: Mapping[str, Any] | None = None) -> str:
