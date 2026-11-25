@@ -95,6 +95,8 @@ class Env:
         self.table: dict[str, tuple[str, str]] = {}
         self.overrides: dict[str, dict] = {}
         self.engine_sid = H.SNAP
+        self.content_sid = H.CONTENT                                                         # what the content-id seam reads off the "built" store
+        self.content_calls = []
         self.snap = self.w.snap
         self.ask_hook = None
         self.set_records([self.w.rec])
@@ -111,6 +113,10 @@ class Env:
             req = G.build_request(rec, aid, locators)
             a = req["anchors"][0]
             self.table[spec_key(R.cli_request(req)["anchor"])] = (a["type"], aid)
+
+    def content_id(self, snap, work_root, system):
+        self.content_calls.append((snap, work_root, system))
+        return self.content_sid
 
     def refresh_probe(self, **kw):
         """A new rehearsal's attestation for the repo as it is now (after a harness edit, a changed record commit or snapshot)."""
@@ -146,7 +152,7 @@ class Env:
         kw = dict(repo=self.repo, gate_id=GATE, lists=[self.lists], custodian=self.cust, home=self.home, observed=OBS, refresh_fn=self.refresh,
                   snapshot_factory=lambda built: self.snap, ask_factory=lambda built, snap: self.ask, cache_len=lambda: 0,
                   resolve_factory=lambda built, snap: self.resolve, probe_map=self.probes, engine_snapshot_id=lambda: self.engine_sid,
-                  dev_probe=self.dev_probe)
+                  dev_probe=self.dev_probe, content_id_factory=self.content_id)
         kw.update(over)
         return R.run_gate(**kw)
 
@@ -155,7 +161,7 @@ class Env:
 
     def deps(self, **over):
         d = dict(observed=OBS, refresh_fn=self.refresh, snapshot_factory=lambda b: self.snap, ask_factory=lambda b, s: self.ask,
-                 cache_len=lambda: 0, resolve_factory=lambda b, s: self.resolve, engine_snapshot_id=lambda: self.engine_sid)
+                 cache_len=lambda: 0, resolve_factory=lambda b, s: self.resolve, engine_snapshot_id=lambda: self.engine_sid, content_id_factory=self.content_id)
         d.update(over)
         return d
 

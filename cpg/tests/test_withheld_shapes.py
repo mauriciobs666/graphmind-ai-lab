@@ -175,10 +175,10 @@ def _dev_items():
 
 def test_dev_family_counts_match_the_ruling():
     items = _dev_items()
-    assert len(items) == 49
+    assert len(items) == 64  # 49 + the 15 items moved from the held-out side by the contact move (R2)
     got = Counter(W.withheld_shape(loc, text, lang) for _, loc, text, lang in items)
-    assert {k: v for k, v in got.items() if k} == {"J": 2, "K": 1, "M": 1, "C": 2, "B": 2, "I": 2}
-    assert sum(v for k, v in got.items() if k) == 10
+    assert {k: v for k, v in got.items() if k} == {"J": 2, "K": 1, "M": 1, "C": 6, "B": 2, "I": 2}
+    assert sum(v for k, v in got.items() if k) == 14
 
 
 def test_dev_g_and_h_one_segment_items_are_built_not_withheld():

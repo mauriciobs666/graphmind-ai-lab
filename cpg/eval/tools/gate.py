@@ -437,6 +437,18 @@ class StoreSnapshot:
             raise HarnessError(f"snapshot: {len(rows)} Snapshot nodes, expected 1")
         return rows[0][0]
 
+    def snapshot_inputs(self) -> dict:
+        """The ``:Snapshot`` node's identity inputs, for :func:`store_content_id`."""
+        rows = self._run("MATCH (s:Snapshot) RETURN s.snapshotId, s.manifestHash, s.packSetHash, s.codeHash", None)
+        if len(rows) != 1:
+            raise HarnessError(f"snapshot: {len(rows)} Snapshot nodes, expected 1")
+        return dict(zip(("snapshotId", "manifestHash", "packSetHash", "codeHash"), rows[0]))
+
+    def unit_rows(self) -> list:
+        """``[unitId, buildStatus, builtCommit, flowAvailable, failReason]`` of every ``:Unit`` node, sorted by id."""
+        rows = self._run("MATCH (u:Unit) RETURN u.unitId, u.buildStatus, u.builtCommit, u.flowAvailable, u.failReason", None)
+        return sorted(([r[0], r[1], r[2], bool(r[3]), r[4] or ""] for r in rows), key=lambda r: r[0])
+
     def node_exists(self, label: str, nid: str) -> bool:
         return bool(self._q(f"MATCH (n:{label} {{{LABELS[label]}: $id}}) RETURN count(n)", {"id": nid})[0][0])
 
@@ -1286,8 +1298,8 @@ class PrecheckRefusal(Refusal):
 # itself before its marker. Asking dev at ``run`` would need a built store and an engine ask before the marker, so a dev miss would strand a ~30 minute build
 # (the list stays unspent but the store is lost) where a bad probe now refuses at exit 5 before the lock, the build and the marker, and it would turn the CO-9
 # rehearsal into a gate-internal step instead of the separately reported run it is meant to be. The attestation is made forgery-resistant instead: the gate
-# computes the dev items from the committed gold, compares the record commit, the harness sha map, the gold hashes and (after its own build) the snapshot id the
-# file carries, checks every key-error id against the committed stakeholder record, and pins the file's sha256 in the marker. A list made only of dev items is a
+# computes the dev items from the committed gold, compares the record commit, the harness sha map, the gold hashes and (after its own build) the CONTENT snapshot id the
+# file carries (:func:`content_snapshot_id`: the stamped snapshot id minus the per-build HMAC-keyed bundle fields, which no two builds share), checks every key-error id against the committed stakeholder record, and pins the file's sha256 in the marker. A list made only of dev items is a
 # dev rehearsal and needs no probe (it cannot spend a held-out list); every other list does.
 
 DEV_KEY_ERRORS = Path("cpg") / "eval" / "decisions" / "ccg-dev-key-errors-v1.json"
@@ -1437,11 +1449,11 @@ def _harness_sha(repo: Path) -> dict:
 def dev_probe_check(probe: Any, repo: Path, record_commit: str, gated: Sequence[str] = STRATA_GATED, committed_text: Callable[[Path], str] | None = None,
                     file_text: Callable[[str], str | None] | None = None) -> None:
     """The pre-gate probe of ``docs/plans/connected-code-graph-p1-closeout.md`` §3.5, as an attestation. ``probe`` is ``{"schema": DEV_PROBE_SCHEMA,
-    "recordCommit", "snapshotId", "harnessSha256": {file: sha}, "devGoldSha256": {stratum: sha}, "byStratum": {stratum: {"hitIds": [...],
+    "recordCommit", "snapshotId", "contentSnapshotId", "harnessSha256": {file: sha}, "devGoldSha256": {stratum: sha}, "byStratum": {stratum: {"hitIds": [...],
     "keyErrorIds": [...]}}}``. The gate takes NOTHING countable from it: per gated stratum the dev items are those of the committed gold file, and
     ``hitIds`` plus ``keyErrorIds`` must be exactly that set, disjoint and duplicate-free, with every key-error id in the committed confirmation record. The
     file must carry the freeze (record) commit, the current harness sha map (the import-closure files, equal as a set), the hash of each gated gold file and
-    a snapshot id (compared with the gate's own build by :func:`check_probe_snapshot`). A stratum outside ``gated`` is not read.
+    a snapshot id (informational) and a ``contentSnapshotId`` (:func:`content_snapshot_id`; compared with the gate's own build by :func:`check_probe_snapshot`). A stratum outside ``gated`` is not read.
     A dev item the Q8 predicate withholds (:func:`item_withheld_shape`, computed here from the committed gold and the build tree's file text, never taken from
     the probe) is EXCUSED from the hit requirement: every dev item must be a hit, a withheld shape or a committed key-error. Counts, strata and field names
     only in a refusal (dev data)."""
@@ -1453,6 +1465,9 @@ def dev_probe_check(probe: Any, repo: Path, record_commit: str, gated: Sequence[
         raise PrecheckRefusal("the dev-gold probe's harness file hashes differ from the current harness files: the rehearsal ran other harness code")
     if not (isinstance(probe.get("snapshotId"), str) and probe["snapshotId"]):
         raise PrecheckRefusal("the dev-gold probe carries no snapshot id of the build it vouches for")
+    if not (isinstance(probe.get("contentSnapshotId"), str) and probe["contentSnapshotId"]):
+        raise PrecheckRefusal("the dev-gold probe carries no content snapshot id: it was written by an older harness; re-run the dev rehearsal on the current "
+                              "harness and write a new probe with `gate.py dev-probe`")
     gold_sha = probe.get("devGoldSha256") if isinstance(probe.get("devGoldSha256"), Mapping) else {}
     confirmed = confirmed_key_errors(repo, committed_text, record_commit)       # the record must be usable whenever a probe is accepted, key-errors or not
     file_text = file_text or eval_commit_reader(repo)
@@ -1477,24 +1492,96 @@ def dev_probe_check(probe: Any, repo: Path, record_commit: str, gated: Sequence[
                                   f"{len(excused - set(listed))} withheld shapes): every dev item of a gated stratum must be a hit, a withheld shape or a key-error before the gate starts")
 
 
-def check_probe_snapshot(probe: Mapping, built_snapshot_id: str) -> None:
-    """The probe must vouch for the build the gate made: its ``snapshotId`` equals the built graph's. Raised after the build, so the caller's stranded-store
-    remedy applies; the list is not spent."""
-    if probe.get("snapshotId") != built_snapshot_id:
-        raise Refusal("the dev-gold probe vouches for another snapshot than the one this run built: rehearse again on this build")
+#: The HMAC-keyed fields of a bundle (``ccg/valuehash.py``, ``ccg/atrest.py`` ``bind_key_check``): the system key is random per build, so they
+#: differ between two builds of one commit. The record fields ``valueHash`` (``configEntry``), ``defaultHash`` (``launchFact``) and the header's ``bindKeyCheck`` are left
+#: out of the content id's bundle hashes, and so are the keyed members of ``bindParts`` (:data:`KEYED_BIND_PARTS`); nothing else is. No answer path reads them
+#: (``tests/test_gate_content_snapshot_id.py`` guards ``ccg/engine``, ``ccg/front``, ``ccg/store``, ``clients/``), and the linker only compares keyed hashes with each other inside one build.
+KEYED_BUNDLE_FIELDS = ("valueHash", "defaultHash", "bindKeyCheck")
+#: The keyed members of a ``configEntry``'s ``bindParts`` (``ccg/valuehash.py`` ``BIND_HOST_TAG`` / ``BIND_PATH_TAG``): only these two are removed; the object, its
+#: presence and the clear ``scheme``, ``hostKind``, ``host`` and ``port`` stay in the content id, and ``pathHmacs`` is replaced by its length (``pathSegments``,
+#: which ``ccg/linker/bind.py`` reads) so the segment count is kept.
+KEYED_BIND_PARTS = ("hostHmac", "pathHmacs")
+
+
+def content_bundle_hash(records: Sequence[Mapping]) -> str:
+    """``ccg.assemble.snapshot.bundle_hash`` of ``records`` with :data:`KEYED_BUNDLE_FIELDS` removed from every record (the header's §8.5 exempt fields are
+    removed by that function as before)."""
+    from ccg.assemble import snapshot as SN
+    def strip(r: Mapping) -> dict:
+        out = {k: v for k, v in r.items() if k not in KEYED_BUNDLE_FIELDS}
+        if isinstance(out.get("bindParts"), Mapping):
+            parts = out["bindParts"]
+            out["bindParts"] = {**{k: v for k, v in parts.items() if k not in KEYED_BIND_PARTS},
+                                "pathSegments": len(parts["pathHmacs"]) if isinstance(parts.get("pathHmacs"), (list, tuple)) else None}   # the count is clear; the binder reads it
+        return out
+
+    return SN.bundle_hash([strip(r) for r in records])
+
+
+def content_snapshot_id(system: str, pack_set: str, code: str, units: Iterable[Sequence]) -> str:
+    """The identity the dev-gold probe vouches for (``docs/reviews/connected-code-graph-p1-gate-snapshot-rca.md`` §5 (b)): the stamped snapshot id's own
+    inputs (``ccg.assemble.snapshot.manifest_hash``: graph model version, ``packSetHash``, ``codeHash`` and every unit's id, status, flow flag and fail
+    reason) with each unit's bundle hashed by :func:`content_bundle_hash`, so a different key does not change it and a different commit, pack set, code
+    state or bundle content does. ``units`` are ``[unitId, buildStatus, records | None, flowAvailable, failReason | ""]``; ``None`` records (a unit with no
+    bundle) hash to ``""`` as in the stamped id. The tag differs from the stamped id's, so the two are never confused. The stamped ``snapshotId`` is not touched."""
+    from ccg import ids
+    from ccg.assemble import snapshot as SN
+    rows = [[uid, status, "" if records is None else content_bundle_hash(records), bool(flow), fail or ""] for uid, status, records, flow, fail in units]
+    return ids.tuple_id(["contentSnapshot", system, SN.manifest_hash(pack_set, code, rows)])
+
+
+def _stored_bundle(system: str, unit: str, build: str, root: Path) -> list[dict]:
+    """One stored bundle as the refresh read it (``ccg.refresh._gate``: the at-rest custody read, then the validator)."""
+    from ccg import atrest, bundle
+    return bundle.loads(atrest.read_bundle(system, unit, build, root))
+
+
+def store_content_id(snap, system: str, work_root: Path, read_bundle: Callable[..., list[dict]] | None = None) -> str:
+    """The content id of the build ``snap`` reads: its ``:Snapshot`` and ``:Unit`` rows plus the stored bundles under ``work_root`` (the build's private
+    work area). The stamped id is recomputed from the same bundles first and must equal the stored one, else :class:`HarnessError`: the bundles read are
+    exactly the ones the store was built from. ``read_bundle(system, unit, build, root)`` is injected in tests."""
+    from ccg.assemble import snapshot as SN
+    read_bundle = read_bundle or _stored_bundle
+    inputs = snap.snapshot_inputs()
+    units, plain = [], []
+    for uid, status, built, flow, fail in snap.unit_rows():
+        try:
+            records = None if status == "not-mapped" else read_bundle(system, uid, built, Path(work_root))
+        except (OSError, ValueError):                                  # AtRestError is a PermissionError; BundleError a ValueError: neither carries a path or value out
+            raise HarnessError("the build's stored bundle of a unit is missing or unreadable under its work root: the content id cannot be computed. " + STORE_REMEDY) from None
+        units.append([uid, status, records, flow, fail])
+        plain.append([uid, status, "" if records is None else SN.bundle_hash(records), bool(flow), fail or ""])
+    stamped = SN.snapshot_id(system, SN.manifest_hash(inputs["packSetHash"], inputs["codeHash"], plain))
+    if stamped != inputs["snapshotId"]:
+        raise HarnessError("the stored bundles do not reproduce the stored snapshot id: they are not the bundles this graph was built from")
+    return content_snapshot_id(system, inputs["packSetHash"], inputs["codeHash"], units)
+
+
+def check_probe_snapshot(probe: Mapping, built_content_id: str) -> None:
+    """The probe must vouch for what the gate built: its ``contentSnapshotId`` equals :func:`store_content_id` of the built graph. The stamped
+    ``snapshotId`` is never compared (it embeds a per-build random key, so two builds of one commit differ). Raised after the build, so the caller's
+    stranded-store remedy applies; the list is not spent."""
+    vouched = probe.get("contentSnapshotId")
+    if not (isinstance(vouched, str) and vouched):
+        raise Refusal("the dev-gold probe carries no content snapshot id: it was written by an older harness. Re-run the dev rehearsal on the current "
+                      "harness and write a new probe with `gate.py dev-probe`")
+    if vouched != built_content_id:
+        raise Refusal("the dev-gold probe vouches for another build content than this run built (its commit, pack set, code or unit bundles differ): "
+                      "the rehearsal must be run at this EVAL_COMMIT with this harness, and its probe written with `gate.py dev-probe`")
 
 
 def write_dev_probe(repo: Path, run: Mapping, snapshot, committed_text: Callable[[Path], str] | None = None) -> dict:
     """The attestation, as the product of a dev rehearsal: ``run`` is the rehearsal's ``run.json`` (its ``answers`` are the ``answers.jsonl`` entries), scored by the
     SAME :func:`score_gate` path against the committed dev gold of ``gated_strata(run's flow flag)`` on ``snapshot`` (the live store; its snapshot id must be the
     run's). ``hitIds`` are the items scored ``hit``; ``keyErrorIds`` are the other items the committed record confirms. Everything else it carries is read from the run
-    (record commit and harness sha map from its preflight block) or from the repository (gold hashes). It is a file-level attestation: ``run`` is trusted for the rehearsal's having happened (a run file composed by hand
+    (record commit and harness sha map from its preflight block, the content snapshot id the run recorded off its own build) or from the repository (gold hashes). It is a file-level attestation: ``run`` is trusted for the rehearsal's having happened (a run file composed by hand
     on a store holding that snapshot yields a probe), which is why the probe carries no run id: one would bind nothing."""
     repo = Path(repo)
     ctx, key = run.get("preflight"), run.get("listKey")
     if not isinstance(ctx, Mapping) or not ctx.get("recordCommit") or not isinstance((ctx.get("harnessPin") or {}).get("sha256"), Mapping) \
-            or not (isinstance(key, str) and _HEX64.fullmatch(key)) or not isinstance(run.get("snapshotId"), str):
-        raise Refusal("the run file is not a rehearsal run: it carries no preflight block, list key or snapshot id")
+            or not (isinstance(key, str) and _HEX64.fullmatch(key)) or not isinstance(run.get("snapshotId"), str) \
+            or not (isinstance(run.get("contentSnapshotId"), str) and run["contentSnapshotId"]):
+        raise Refusal("the run file is not a rehearsal run: it carries no preflight block, list key, snapshot id or content snapshot id (a rehearsal run by an older harness)")
     if snapshot.snapshot_id() != run["snapshotId"]:
         raise Refusal("the live :Snapshot node differs from the run file's snapshot id: the probe is written on the store the rehearsal ran against")
     strata = gated_strata(bool(run.get("flowFlag")))
@@ -1511,7 +1598,7 @@ def write_dev_probe(repo: Path, run: Mapping, snapshot, committed_text: Callable
         hit = [i for i in ids if result["items"][i]["outcome"] == "hit"]
         by[s] = {"hitIds": hit, "keyErrorIds": [i for i in ids if i not in hit and i in confirmed]}
     return {"schema": DEV_PROBE_SCHEMA, "recordCommit": ctx["recordCommit"], "snapshotId": run["snapshotId"],
-            "harnessSha256": dict(ctx["harnessPin"]["sha256"]), "devGoldSha256": shas, "byStratum": by}
+            "contentSnapshotId": run["contentSnapshotId"], "harnessSha256": dict(ctx["harnessPin"]["sha256"]), "devGoldSha256": shas, "byStratum": by}
 
 
 def score_inputs_check(repo: Path, gate_id: str, pf: Mapping, records: Sequence[Mapping], *, flags_given: bool | None = None, committed_text=None,

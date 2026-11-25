@@ -357,10 +357,13 @@ def test_score_inputs_check_needs_no_probe_for_a_dev_rehearsal_list(tmp_path):
 
 
 # ------------------------------------------------------------------------------------------------ the snapshot of the build
-def test_the_probe_must_vouch_for_the_snapshot_of_the_build_the_gate_made():
-    G.check_probe_snapshot({"snapshotId": "s" * 32}, "s" * 32)
-    with pytest.raises(G.Refusal, match="snapshot"):
-        G.check_probe_snapshot({"snapshotId": "s" * 32}, "t" * 32)
+@pytest.mark.parametrize("value", [None, "", 7])
+def test_the_content_snapshot_id_must_be_present_and_an_older_probe_is_refused_with_the_way_forward(tmp_path, value):
+    e = repo_of(tmp_path)
+    refuses(e, probe(e, contentSnapshotId=value), "content snapshot id")
+    doc = probe(e)
+    del doc["contentSnapshotId"]
+    refuses(e, doc, "dev-probe")                                                                               # names the verb that writes a current one
 
 
 # ------------------------------------------------------------------------------------------------ the run verb
@@ -394,10 +397,26 @@ def test_run_without_a_probe_file_or_with_a_foreign_commit_is_refused_before_the
 def test_run_refuses_a_probe_that_vouches_for_another_build_after_the_build_with_the_remedy_and_no_marker(tmp_path, monkeypatch, capsys):
     e = Env(tmp_path)
     many_world(e, 1)
-    e.dev_probe.write_text(json.dumps(dev_probe_doc(e.repo, record_commit=e.record_commit, snapshot_id="9" * 32)))
+    e.dev_probe.write_text(json.dumps(dev_probe_doc(e.repo, record_commit=e.record_commit, content_id="9" * 32)))
     assert run_main(e, monkeypatch) == R.EXIT_REFUSED
     err = capsys.readouterr().err
-    assert "snapshot" in err and "new empty store" in err and not e.markers() and not e.asked
+    assert "content" in err and "new empty store" in err and "rehearse again on this build" not in err and not e.markers() and not e.asked
+
+
+def test_run_accepts_a_probe_whose_stamped_snapshot_id_differs_when_the_content_id_matches(tmp_path, monkeypatch):
+    e = Env(tmp_path)
+    many_world(e, 1)
+    e.dev_probe.write_text(json.dumps(dev_probe_doc(e.repo, record_commit=e.record_commit, snapshot_id="9" * 32)))        # another build's key: another stamped id
+    assert run_main(e, monkeypatch) == R.EXIT_OK and e.asked
+
+
+def test_the_content_id_is_read_off_the_build_in_its_private_work_root_and_recorded_in_the_run_file(tmp_path, monkeypatch):
+    e = Env(tmp_path)
+    many_world(e, 1)
+    assert run_main(e, monkeypatch) == R.EXIT_OK
+    ((snap, work_root, system),) = e.content_calls
+    assert snap is e.snap and work_root == e.refresh_kw["work_root"] and system == "ccg"
+    assert json.loads(e.run_files()[0].read_text())["contentSnapshotId"] == H.CONTENT
 
 
 def test_the_marker_pins_the_probes_sha256(tmp_path, monkeypatch):

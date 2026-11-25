@@ -113,7 +113,8 @@ def test_live_the_resolve_dry_run_and_the_whole_run_verb_over_the_default_wiring
     assert deps["live_graph_present"]() is True                      # round C (N4): the real probe sees that graph, so the guard would refuse a real build here
     deps["live_graph_present"] = lambda: False                       # this test stands the graph up itself and replaces the build with a no-op
     deps["engine_snapshot_id"] = None                                # needs the raw ACL role
-    e.refresh_probe(snapshot_id=deps["snapshot_factory"](None).snapshot_id())     # the attestation vouches for THIS store's snapshot (its id is a real content hash)
+    deps["content_id_factory"] = lambda snap, work_root, system: H.CONTENT      # this build has no bundles on disk (the refresh above is a no-op): the content id is stood in
+    e.refresh_probe(snapshot_id=deps["snapshot_factory"](None).snapshot_id(), content_id=H.CONTENT)     # the attestation vouches for THIS store's snapshot (its id is a real content hash)
     out = R.run_gate(e.repo, "ac5-gate-1", [e.lists], e.cust, home=e.home, observed={"algorithm": {"id": "bfs-v1", "version": "1.2"}, "defaultDepthBound": 2},
                      probe_map=e.probes, dev_probe=e.dev_probe, **deps)
     assert out["asked"] == 1

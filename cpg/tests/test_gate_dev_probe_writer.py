@@ -34,7 +34,7 @@ class Rehearsal:
         H.git(repo, "add", "-A")
         H.git(repo, "commit", "-qm", "dev gold")
         self.rc = H.head(repo)
-        self.run = {**self.w.run(), "listKey": "d" * 64, "flowFlag": flow_flag, "withheld": {},
+        self.run = {**self.w.run(), "contentSnapshotId": H.CONTENT, "listKey": "d" * 64, "flowFlag": flow_flag, "withheld": {},
                     "preflight": {"recordCommit": self.rc, "harnessPin": {"sha256": {rel: "e" * 64 for rel in G.HARNESS_FILES}}}}
 
     def write(self, **kw):
@@ -148,4 +148,22 @@ def test_the_writer_reads_the_record_at_the_runs_record_commit_so_a_later_wideni
     r = Rehearsal(tmp_path, miss_in="scripts")
     confirm(r.repo, [H.dev_ids("scripts")[0]])                          # committed AFTER r.rc, the commit the rehearsal's run recorded
     with pytest.raises(G.PrecheckRefusal, match="confirmation"):
+        r.write()
+
+
+def test_the_written_probe_carries_the_content_snapshot_id_the_rehearsal_recorded(tmp_path):
+    r = Rehearsal(tmp_path)
+    r.run["contentSnapshotId"] = "5" * 32
+    doc = r.write()
+    assert doc["contentSnapshotId"] == "5" * 32 and doc["snapshotId"] == H.SNAP
+
+
+@pytest.mark.parametrize("value", [None, "", 3])
+def test_the_writer_refuses_a_run_that_recorded_no_content_snapshot_id(tmp_path, value):
+    r = Rehearsal(tmp_path)
+    r.run["contentSnapshotId"] = value
+    with pytest.raises(G.Refusal, match="content snapshot id"):
+        r.write()
+    del r.run["contentSnapshotId"]
+    with pytest.raises(G.Refusal, match="content snapshot id"):
         r.write()

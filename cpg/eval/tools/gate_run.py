@@ -9,7 +9,7 @@
   anchor IN the graph that does not resolve is a :class:`~gate.HarnessError` (never a synthesized document).
 * :func:`resolve_preflight`: the read-only dry-run ``resolve`` of every asked in-graph anchor before the marker (counts by status only).
 * :func:`run_gate` and the ``run`` verb: refuse unless the preflight is first-contact and clean (``G.run_context``), the list was not run, the probe
-  map and the lists lie under the custodian area, the dev-gold probe result (``--dev-probe``, written by ``gate.py dev-probe`` from a dev rehearsal and bound to this commit, harness and build) attests every dev item of each gated
+  map and the lists lie under the custodian area, the dev-gold probe result (``--dev-probe``, written by ``gate.py dev-probe`` from a dev rehearsal and bound to this commit, harness and build content: ``contentSnapshotId``, not the stamped snapshot id) attests every dev item of each gated
   stratum a hit (``gate.dev_probe_check``; exit 5), the store does not already hold the gate system's live graph, the resolve dry-run passes; build the
   refresh Target at ``EVAL_COMMIT`` with PRIVATE ``work_root`` / ``keys_root`` / ``audit_dir`` under the custodian root (the developer's ``ccg`` area is
   never touched); take the marker (``started``: temp file + ``os.link``, so it is never empty or torn) under a per-list ``flock``; persist every answer
@@ -587,6 +587,11 @@ def run_gate(*args, **kw) -> dict:
         lock.release()
 
 
+def _store_content_id(snap, work_root: Path, system: str) -> str:
+    """The production content-id seam: :func:`gate.store_content_id` over the built store and the build's private work root."""
+    return G.store_content_id(snap, system, work_root)
+
+
 def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, *, snapshot_factory: Callable[[Path], Any],
              ask_factory: Callable[[Path, Any], Callable[[dict], Mapping]], resolve_factory: Callable[[Path, Any], Callable[[dict], Mapping]],
              probe_map: Path | None = None, home: Path | None = None, observed: Mapping | None = None, tree: Mapping | None = None,
@@ -594,6 +599,7 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
              cache_len: Callable[[], int] = lambda: 0, system: str = "ccg", engine_snapshot_id: Callable[[], str] | None = None,
              allow_after_adaptation: bool = False, resume: bool = False, flow_decision: Path | None = None, dev_probe: Path | None = None,
               live_graph_present: Callable[[], bool] | None = None, lock: _Lock | None = None, canary: Callable[[], Any] | None = None,
+              content_id_factory: Callable[[Any, Path, str], str] | None = None,
               stall_k: int = STALL_K, stall_deadline_s: float = STALL_DEADLINE_S, canary_request: str = CANARY_REQUEST) -> dict:
     """The AC-5 gate run: every refusal happens before the marker and the first question. -> counts only."""
     repo = Path(repo)
@@ -647,8 +653,9 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     with _stranded_on_exit(not resume):                          # the build has loaded the live graph: every exit before the marker leaves the store stranded
         snap = snapshot_factory(built)
         sid = snap.snapshot_id()
+        content_id = (content_id_factory or _store_content_id)(snap, cust / f"gate-{PRIVATE_AREAS[0]}-{key}", system)    # the build's own content, off its work root
         if probe_doc is not None:
-            G.check_probe_snapshot(probe_doc, sid)             # the attestation vouches for THIS build (after the build: the stranded-store remedy applies)
+            G.check_probe_snapshot(probe_doc, content_id)      # the attestation vouches for THIS build's content (after the build: the stranded-store remedy applies)
         if engine_snapshot_id is not None and engine_snapshot_id() != sid:
             raise Refusal("the engine reader's :Snapshot id differs from the snapshot reader's: the store or system is not the one the run reads")
         answers_path = cust / f"run-{key}.answers.jsonl"
@@ -675,7 +682,7 @@ def _run_gate(repo: Path, gate_id: str, lists: Sequence[Path], custodian: Path, 
     persisting = _Persisting(ask, answers_path, recorded, stall)
     try:
         run = G.run_asks(records, snap, persisting, lambda: 0, probes=probes)
-        run.update({"preflight": ctx, "withheld": withheld, "withheldShapes": shapes, "flowFlag": bool(flag), "listKey": key})
+        run.update({"contentSnapshotId": content_id, "preflight": ctx, "withheld": withheld, "withheldShapes": shapes, "flowFlag": bool(flag), "listKey": key})
         doc["resumes"] = [*doc["resumes"][:-1], {**doc["resumes"][-1], "askedAfter": persisting.asked_now}] if resume else doc["resumes"]
         run["resume"] = {"resumed": bool(doc["resumes"]), "resumeCount": len(doc["resumes"]),
                          "answerCountsBefore": [r["answersBefore"] for r in doc["resumes"]], "answerCountsAfter": [r["askedAfter"] for r in doc["resumes"]],
