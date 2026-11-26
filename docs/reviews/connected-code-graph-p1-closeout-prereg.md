@@ -217,3 +217,130 @@ Each item ran, with the result.
 ### Appendix: recompute (counts only, dev data and the record)
 
 Scratch repo from `git archive HEAD` plus the working-tree record, `python3 -I`: `observe_tree(repo)` equals the record on `coreTreeHash` and `packSetHash`; `harness mismatch []`; `bfs.ALGORITHM_VERSIONS['1.3'] == 67939d6475b8f414b0489e17a053e0a5`; scan `files 137, hitLiterals 4, byClass {id 310, key 21, path 89, qname 114}`. Live tree: predicate `flagged 14`; t2 probe minus the four named ids `= 50` scripts hits, flagged still listed 4 (C×4). Arithmetic: `1-e^-2 = 0.8647`, `e^-2 = 0.1353` (7.39-fold), `0.35*e^-2 = 0.0474`, `0.96^52 = 0.1197`, `0.94^52 = 0.0401`, `0.95^52 = 0.0694`.
+
+## Pass 6 (record R4, `ac5-gate-1-r4`, before commit; HEAD `df350d22`)
+
+**Scope.** The uncommitted 14th (last) line of `cpg/eval/preregistration.jsonl` and the in-place revision of `docs/plans/connected-code-graph-p1-closeout-prereg.md` (`git diff`), against `docs/reviews/connected-code-graph-p1-gate-snapshot-rca.md`, `docs/reviews/connected-code-graph-p1-gate-content-id-impl.md`, the t3 report and the ledger. Executed in a throwaway `git clone` of HEAD with the working-tree line and note committed as a simulated R4 (the real tree untouched); no held-out file, custodian directory, `freeze-check`, `gate_run` or marker verb. Root `REVIEW.md` applied; `cpg/` has no `REVIEW.md`.
+
+CPG: considered, not relevant — a pre-registration record checked by recomputation and by running the harness's own preflight, not by a code-graph question.
+
+**Verdict: approve with suggestions.** Every pin recomputes and the harness accepts R4 as a record commit. One major (M1: the identity test that carries the t3 result is not falsifiable as written); minors are wording. The line is uncommitted, so M1 costs a text edit now and a new record after.
+
+**Stopping condition (falsifiable).** Closed when, at the R4 commit: (a) `git diff --name-only <parent> R4 -- cpg` lists only `cpg/eval/preregistration.jsonl`; (b) the Appendix script prints `True` throughout against `git show R4:...`; (c) M1: record and note define the compared object identically and the record pins a hash of t3's baseline; (d) `gate.preflight`/`run_context` in a clone at R4 return label `first-contact`. Wrong if (b) or (d) differ at R4.
+
+### Dispositions of carried items (Pass 1-5)
+
+- Pass 5 B1 (counters/stop route): still fixed; `fixCounters` and `stoppingRule` carry two counters, one route; the R4 exception is M1/m1 below.
+- Pass 5 M1 (one cost model), M2 (spot-check from new pairs): fixed at R3, text unchanged here (`heldoutCost` 7.4-fold; `agreementFloor` at least 10 of 20 new); not re-argued.
+- Pass 5 m1-m3, n1: m1 (prediction wording) and m2 (Q below 1.49 a disclosure) fixed at R3 as before; m3 (growth) recurs, see m4.
+- Pass 1-4 items: unchanged lines, not re-opened; the scan result re-run (below).
+
+### Checks run (executed)
+
+1. **Pins.** Clone at R4sim: `HARNESS_FILES` 12 and equal to the record's keys; all 12 shas equal (`gate.py` `d8b84097…`, `gate_run.py` `275c258b…`); five dev gold shas, `heldoutManifestSha256`, key-error file sha `28848412…`, scan script sha, three decision shas equal; `ac24_smoke.observe_tree(core, repo=clone)`: `coreTreeHash` `dc967511…`, `packSetHash` `4149abd2…` equal, clean, F2 ancestor; `bfs.fingerprint(bfs.definition())` `67939d64…`, `algorithm` 1.3. `git diff --name-only 31f60bf9 HEAD -- cpg` = `gate.py`, `gate_run.py`, eight `cpg/tests` files (matches `unchangedSinceR`); `git diff --name-only cccf3328 HEAD -- cpg` outside `eval/` and `tests/`: none; `cpg/ccg|packs|extractors|clients`: 0 files. Lines 1-13 byte-identical to HEAD (`cmp` of the prefix). Scan re-run: 534 literals, 137 files, 4 hit literals, predicate 14 flagged: equal.
+2. **Harness acceptance.** In the clone, `preflight(…, "ac5-gate-1-r4")`: label `first-contact`, `harnessPin.differ []`, `run_context` ok. Record commit = `git log --reverse -S<line> -- cpg/eval/preregistration.jsonl` oldest hit, i.e. the commit that adds the line; `harness_pin` compares the files with `git show <that commit>:<path>`, so R4 must be the single commit adding the line, and it must change only the jsonl and `*.md` (the note does not move a pin). Same clone, `ac5-gate-1-r3`: `after-adaptation`, `run_context` refuses ("8 files under cpg/ outside cpg/eval/ changed"): the supersession is needed. Dev probe: `dev_probe_check` refuses a probe whose `recordCommit` differs (`gate.py:1462`) or that lacks `contentSnapshotId` (`:1468`), so "never the t3 probe" is harness-enforced as well as stated.
+3. **Planted wrong pin.** Changing one hex digit of `harnessPin.sha256[gate.py]` in the committed line: `preflight` and `run_context` still pass (no code reads the record's table; `gate.py:1259`, `harness_pin` reads git). The table is procedural; its only check is recomputation (done, above) — see m3.
+
+### New findings
+
+### M1 (major): the identity test that carries the t3 result is not falsifiable as written
+
+Evidence: `noiseFix.probeRehearsal`, note §5a "The R4 rehearsal", `entryCriterion.readings.4`; t3 artifacts under the session scratchpad.
+1. **Object ambiguous.** The test is "listed `(anchorId, itemId)` set item-for-item identical", defined by its parenthetical (50, 18, 36 hits, four items): that is the hit set, 104 items. The t3 listed set is 503 answer items (`labelling/pooled/answers.jsonl`: 34 answers, 503 items; every label and Q is over those). The probe the harness writes holds only `hitIds`. A changed non-hit answer passes as "identical".
+2. **Note and record disagree on chain.** The record stops on "a pair whose chain changed"; note §5a defines identity on `(anchorId, itemId)` only, reports a changed chain as information, and stops only "if the set differs". Under the note a changed chain passes, which is exactly the case where the carried label is wrong (label reuse is by the `(anchorId, itemId, chain)` triple).
+3. **No durable baseline.** t3's answers, probe and labels exist only in the session scratchpad; the t3 report holds counts and says "S/ directory". The record pins no hash of t3's listed set, so the comparator's baseline can be lost, regenerated or chosen after the R4 run, and nobody can show it red.
+**Suggested change (before the line is committed).** (a) Define the compared object once, in the record, as the full listed answer set: every `(anchorId, itemId, sha256 of canonical chain)` over all dev anchors (503 at t3, group members included if any), and make the note cite it. (b) Add `t3ListedSetSha256` (and the count) over the sorted triples of the t3 answers, computed now from the t3 run, and copy the t3 answers file to a durable home (a `cpg/eval/results/` path is allowed after R; the hash must be in the record). (c) The rehearsal report recomputes the hash from the R4 run's answers and compares it; this belongs in the rehearsal step, the pinned hash in the record round before it. Evidence of falsifiability: run the comparator on a copy of the t3 answers with one item deleted and one chain edited; both must read different.
+
+### m1 (minor): "not a fourth tree" reads as a carve-out written after t3
+
+`noiseFix.stoppingRule` ends "the one exception is the probe-producing rehearsal … not a tree while its listed set equals t3's"; the note says "is **not a fourth tree** when …". A stakeholder can read a new exposure of the dev items bought by an exception. The footing already exists: the R3 line's `devLabelling.gateIdAndSeed` defines a rerun at an unchanged tree as reusing the seed and labels, and a tree is the engine tree (F2, dev gold, key-errors), all pinned and enforced by `run_context`. Nothing is drawn or labelled at R4, and the seed stays `a965482a…` (t3's stamped id); `its own build's stamped snapshotId is not a seed` is procedural only (no harness code derives the seed). Wording: replace "the one exception" with "a rerun at the unchanged tree is not a tree (R3's `gateIdAndSeed`); the identity check is a tripwire for a build or engine difference, and any difference stops, with a second rehearsal then counting as exposure 4". It does not contradict `stoppingRule`'s counters (t1-t3, cap 3): the counter is unchanged and a difference routes to the same stop.
+
+### m2 (minor): AC-24 residual: record consistent, but the claim sentence has no clause for it
+
+Executed by reading every place: `entryCriterion.readings.6`, `freezeCheckDisclosure.permission`/`residualHit`, `q4.freezeCheckPermission`, `ordering.sequence[3]`/`spendChecklist`, note item 6, §4 checklist and §7 Q1 all say the R3 acceptance is not carried and is re-asked. `claimSentence` still says "a clean freeze-check at R4 means no probe literal in the path set". The R3 hit is deterministic (the ledger: same path and hash as one of the 7 at R), so R4's check most likely exits 1 again; if the user re-accepts, a report quoting "clean" describes an exit-1 check. Add to `claimSentence`: "a hit the user accepted (list, date) is named beside it".
+
+### m3 (minor): the pin table is checked by nobody at the run
+
+Evidence: check 3 above. The checklist makes `teco` compare `heldoutManifestSha256` and `devGoldSha256` only. Add the 12 `harnessPin.sha256` values to that comparison (the harness compares the files with git, not with the record).
+
+### m4 (minor): growth-stops check on the note
+
+Net +468 words (3,078 to 3,546). New scope: the R4 reason, probe identity, the rehearsal bullet. Rework/restatement: §1 "The probe's identity" restates `harnessBehaviour.probeIdentity` (the input list and the excluded fields); the opening paragraph restates `supersededBecause` (the RCA figures); the t3 Q figures (2.555, 3.437) now appear in §4 and §5a and twice in the record. Cite the record's field and keep the readings. No numeric threshold; not blocking.
+
+### n1 (nit): small stale or overstated text
+
+`ordering.recordCommitContents` "harness shas of its parent": `harness_pin` reads the record commit itself. Note item 6 "No builder reads held-out material after R3" should read R4 (record `afterR` says "after R"). `harnessBehaviour.probeIdentity` "a different commit … changes the content id": the inputs are `packSetHash` and `codeHash`, not a commit; the commit binding is the probe's `recordCommit`. `ordering.rule` omits the R4 rehearsal (`q4.onRehearsalMiss` has it).
+
+### What holds
+
+R3-era mechanics: `--dev-probe` path (the R4 rehearsal's probe), `--gate-id ac5-gate-1-r4`, no seed from the new stamped id, the two refused attempts named beside the run count and not counted, the supersession list (`-r3` not runnable), denominators (50/64, 18, 36, 14 + 4 + 46, successor `r5`) all read R4; no `rehearsalId` field exists in the record or harness. Key-error count 4 and the no-workaround result are current.
+
+### Proposed REVIEW.md lines (proposals only; target: root `REVIEW.md`, "Always check")
+
+- "A procedural check that carries a prior result forward (a labelled Q, a probe, a label reuse) states the object compared and its granularity, pins a hash of the baseline in the record before commit, keeps the baseline outside session scratch, and is shown red on a planted deletion and a planted edit." Source: Pass 6 M1.
+- "A pin table in a record that no code reads is rechecked by recomputation at the run, and the review plants one wrong value through the real harness to say so." Source: Pass 6 check 3 / m3. No prune: nothing in the file is now enforced elsewhere.
+
+### Appendix: recompute (counts and hashes only)
+
+Clone `git clone` of HEAD plus the working-tree line and note committed; `python3 -I`: `G.HARNESS_FILES` 12, all `sha256(file) == record`, `observe_tree` equal, `bfs.fingerprint` `67939d6475b8f414b0489e17a053e0a5`; `preflight` r4: `first-contact`, `differ []`; r3: `after-adaptation`, differ `gate.py`, `gate_run.py`; planted `d8b840971913d278…` in the pin: still `first-contact`. t3 answers: 34 answers, 503 items, 503 distinct `(anchorId, subject, chain-hash12)` triples, 0 groups.
+
+## Pass 7 (R4 revised in place; the comparator `cpg/eval/results/co9-t3/`, `cpg/tests/test_compare_listed.py`)
+
+**Scope.** Line 14 of `cpg/eval/preregistration.jsonl` and the reading as revised, the new untracked comparator, baseline and test. Executed on copies and in two throwaway clones; no gate verb, marker, freeze-check, service or held-out file. CPG: considered, not relevant (recomputation and harness execution). **Verdict: approve with suggestions.** M1 is closed for the label pair but leaves a Q-relevant gap (new M1'); two commit-order text fixes (m5, m6) before the line is committed.
+
+### Dispositions of Pass 6
+
+- **M1 (identity test):** fixed in substance. The object is one definition (every listed item incl. group members, `[anchorId, noise.item_id, sha256(canonical chain)]`), the record pins `t3ListedSet` (503, `374a2d47…`), the baseline is a repo file, record and reading say any difference stops. My independent recompute (own `item_id` map, own canonical JSON, sorted lines) gives 503 and `374a2d47d2354901d0dc3daa2acec5289fb34c5917b4a49ae2d7bccc978da905`, and the baseline file equals my body byte for byte. The key matches how labels are keyed (`unchanged.py`: `(anchorId, noise.item_id)` plus canonical `chain`). Planted on a copy (comparator exit): original 0; deleted item 1; added item 1; duplicate 1; edited symbolId 1; edited unitId 1; chain edit 1; chain reorder 1; anchor edit 1; answer order reversed 0 (intended); **status 0, distance 0, subject.lineStart 0, item moved into a group 0**. See M1' and m7.
+- **m1 (carve-out wording):** fixed. `stoppingRule` now says a rerun at the unchanged tree is not a tree (`devLabelling.gateIdAndSeed`) and a second rehearsal after a stop counts as exposure 4; the "one exception" is gone.
+- **m2 (claim sentence):** fixed. `claimSentence` names an accepted hit with list and date.
+- **m3 (pin table unchecked):** fixed. `spendChecklist` has `teco` compare the 12 `harnessPin.sha256` values; `recordCommitContents` says the table is read by no code.
+- **m4 (growth):** fixed. Note 3,546 to 3,314 words (HEAD 3,078, net +236, new scope only); §1 probe identity is one sentence citing the field; the t3 Q figures are cited from `devQAtT3`.
+- **n1 (stale text):** fixed in all four places (record commit, not parent; item 6 now "after R4"; `probeIdentity` binds by pack set, code state and `recordCommit`; `ordering.rule` names the R4 rehearsal).
+
+### New findings
+
+### M1' (major): the comparator does not read the fields the carried Q depends on
+
+Evidence: planted status, distance and a group move all exit 0. `compare_listed.py`'s docstring says a change there "does not move a label's pair". True for the label, not for the carried Q: the noise frame is built from `status`, `distance`, `reason`, `band` and `split` per listed item (`noise-frame.jsonl` keys; `noise.split_class` reads `status`/`reason`), and Q is a ratio over those strata and over group burden. An item turned from possible to confirmed, or moved into a group, with the same id and chain keeps every label and changes Q, while the rehearsal reports "identical" and Q 2.555 carries. The hit set is still guarded by the probe, so this is the non-hit tail. Verified by planting and by reading `noise._listed`/`split_class`; not run through `build_frame`.
+**Suggested change (before commit).** Add the frame fields to the triple (or a second pinned hash over `noise.build_frame(...)["frame"]` rows plus the group structure), so the definition is "everything the carried Q and labels read". Show the three plants above red. If the author wants to keep the narrow object, the record must say the carried Q is the t3 figure by decision, not recomputed, and drop "the t3 labels and Q carry" as a consequence of identity.
+
+### m5 (minor): the input shape needs a documented converter
+
+The comparator reads `{anchorId, items, groups}` lines. t3's file came from a scratch script (`co9-t3/prep_sample.py`: `run["answers"]` is `{anchorId: {"answer": {items, groups}} | {"harnessError": …}}`, filtered to entries with `answer`, groups defaulted to `[]`, sorted by anchor). That script is not in the repo; neither the record nor the reading says how the operator gets from `run.json` to the file. A harnessError anchor is silently dropped by that conversion (it then shows as removed items, so the comparator still fails, but the cause is hidden). Add a `--run run.json` mode to the comparator (same four lines, failing on any entry without `answer`), or a committed converter with a test, and name it in `probeRehearsal`.
+
+### m6 (minor): commit order is correct but not written, and two claims go stale at the first commit
+
+Simulated in clones. Commit 1 = `cpg/tests/test_compare_listed.py` + `cpg/eval/results/co9-t3/*`, commit 2 = jsonl + md: `preflight` for `ac5-gate-1-r4` is `first-contact`, `differ []`, `run_context` ok. Reverse order (R4 first, tests after): `run_context` refuses ("1 file under cpg/ outside cpg/eval/ changed after the record's commit"). So the coder's claim holds. But (a) neither the record nor the reading states the order; add it to `recordCommitContents` and the checklist; (b) `unchangedSinceR` says `git diff --name-only 31f60bf9 HEAD -- cpg` lists "gate.py, gate_run.py, eight files under cpg/tests and nothing else", and `recordCommitContents` says "nothing untracked remains under cpg/": after commit 1 the first lists nine test files plus the `eval/results/co9-t3` files, and the second is false today (untracked). Reword to the post-commit-1 state. **Skip guard:** a skip on the last case is advisable only in the narrow form (skip when zero R4 lines exist; fail on more than one), since the case reads the working-tree jsonl and is green now; a clean checkout of commit 1 would otherwise be red. A skip also makes the case unable to fail when the record goes missing, so `teco`'s post-R4 run must show 0 skipped.
+
+### m7 (nit): the planted-change test for "outside id and chain" pins the gap
+
+`test_a_change_outside_item_id_and_chain_is_not_read` asserts the behaviour M1' questions; it must flip with M1'.
+
+### Checks run
+
+`.venv/bin/python -m pytest tests/test_gate*.py tests/test_compare_listed.py` from `cpg/`: **966 passed, 15 deselected** (62.9 s), matching the coder's figure. Pins from Pass 6 still equal (no engine or harness file changed since). Not run: mutants on `compare_listed.py` beyond the planted inputs above.
+
+### Proposed REVIEW.md line (proposal only)
+
+Extend the Pass 6 line: "the compared object is every field the carried statistic reads (a frame's strata and group structure, not only the label key); the review plants a change in each."
+
+## Pass 8 (R4 final; `t3ListedSet` sha256 `3c00d9ac…`, comparator with full-item hashing and `--run`)
+
+**Scope.** Line 14 of `cpg/eval/preregistration.jsonl`, the reading, the untracked comparator/baseline/test; executed on copies and in a throwaway clone (no gate verb, marker, freeze-check, service or held-out file). CPG: considered, not relevant. **Verdict: approve.** No blocker, major or minor remains.
+
+### Dispositions of Pass 7
+
+- **M1' (fields Q reads):** fixed. Each entry is `[anchorId, itemId, chainSha256, itemSha256]` plus a `["group", …]` line per group. My own code (own item-id map, own canonical JSON) gives 503 entries and `3c00d9acfa12680cdbb9661d22d87703ee5ed3978d6aa7c8b43c3de454581dc1`; `listed-triples.jsonl` equals my sorted body byte for byte and `noiseFix.t3ListedSet.sha256` equals it. Planted on copies, exit: original 0; delete, add, duplicate, edited id, chain edit, **status, distance, reason, subject.lineStart, an unknown extra field, an item moved into a group, an empty extra group: all 1**; reversed answer order 0. The comparator reports `fieldsChanged`/`groupDiffs` separately.
+- **m5 (converter):** fixed. `--run run.json`: on the real t3 `run-7c7636da….json` (dev rehearsal run file in the scratchpad) exit 0, identical; planted harness-error entry exit 2 with `{"identical":false,"error":…}` (not dropped); planted status edit in run.json exit 1; the reading and `probeRehearsal` name the mode.
+- **m6 (commit order, stale claims):** fixed. Clone sim, commit 1 = test + `eval/results/co9-t3/*`, commit 2 = jsonl + md: `preflight` `first-contact`, `differ []`, `run_context` ok; commit 2 changes only the jsonl and the note. `test_compare_listed.py`: at commit 1 29 passed, 1 skipped (the last case, "no record yet"); after R4 **30 passed, 0 skipped**. The record states the order, the post-R4 0-skipped requirement (in `spendChecklist`) and the post-commit-1 file list (nine test files and the two results files; I count 13 files at that state).
+- **m7 (test pinned the gap):** gone; the case now plants status/distance/subject/group changes red (suite below).
+
+### Checks run
+
+- **Build independence (t2 vs t3).** Two real runs under two HMAC keys (snapshot ids `20d29e20…` vs `a965482a…`): t2 721 items, t3 503; 503 shared by (anchor, item), **491 shared by (anchor, item, chain), 491 equal in full JSON, 0 fields differing** (per-field counter empty). The claim holds. Fields that could legitimately vary between two builds of one tree at R4: none found among the item fields (no timestamp, build id or key-derived value appears in an item). The residual is untested: t2 and t3 differ by the engine fix, so no pair of builds of the *same* tree exists; an engine tie-break that depends on build order would show as a difference and stop the spend (a stakeholder decision), not pass a changed answer.
+- **Suite.** From `cpg/`, `.venv/bin/python -m pytest tests/test_gate*.py tests/test_compare_listed.py`: **982 passed, 15 deselected** (62.5 s), as the coder reports. Pins from Pass 6 unchanged (no engine or harness file changed since).
+- **Growth.** Reading 3,362 words (HEAD 3,078; Pass 7 3,314): +284 over HEAD, all R4 scope (probe identity, the rehearsal bullet, the commit order); no restated facts found beyond one-clause citations.
+
+### Stopping condition (falsifiable) and what remains
+
+Decision-changing findings: none known. This Pass closes the review when, at the R4 commit: (a) `git diff --name-only <commit 1> R4 -- cpg` lists only `cpg/eval/preregistration.jsonl`; (b) in a clone at R4, `preflight`/`run_context` for `ac5-gate-1-r4` return `first-contact`, `differ []`; (c) `python3 -I eval/results/co9-t3/compare_listed.py --run <t3 run.json>` exits 0 and `tests/test_compare_listed.py` shows 0 skipped; (d) lines 1-13 of the jsonl equal HEAD's. It is wrong if any differs. Further passes are sweep-class (re-running (a)-(d) on the committed state) unless the R4 rehearsal's comparator exits 1, which routes to the stakeholder under `probeRehearsal`, not to this review.
